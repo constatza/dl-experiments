@@ -1,0 +1,80 @@
+[mlflow.client]
+experiment_name = "cae"
+tracking_uri = "file:///M:/constantinos/data/dynamic/mlruns"
+
+[mlflow.server]
+host = "localhost"
+port = 10001
+backend_store_uri = "sqlite:///M:/constantinos/data/dynamic/mlruns/mlflow.db"
+artifacts_destination = "file:///M:/constantinos/data/dynamic/mlruns/artifacts"
+
+[trainer]
+max_epochs = 100
+enable_checkpointing = true
+#fast_dev_run = true
+#accelerator = "cpu"
+
+[[trainer.callbacks]]
+name = "NumpyWriter"
+module_path = "dlkit.callbacks"
+output_dir = "@format {this.paths.output_dir}"
+
+[[trainer.callbacks]]
+name = "ModelCheckpoint"
+dirpath = "@format {this.paths.output_dir}/checkpoints"
+filename = "cae"
+save_top_k = 1
+save_weights_only = true
+every_n_epoch = 50
+enable_version_counter = false
+
+[model]
+name = "cae.SkipCAE1d"
+input_shape = [300, 200]
+latent_channels = 200
+latent_width = 5
+latent_size = 4
+num_layers = 3
+kernel_size = 7
+is_autoencoder = true
+
+[model.optimizer]
+name = "RAdam"
+lr = 0.001
+
+[model.scheduler]
+name = "ReduceLROnPlateau"
+factor = 0.8
+patience = 15
+min_lr = 1e-6
+
+[[model.feature_transforms]]
+name = "MinMaxScaler"
+dim = [0, -1]
+
+[model.train_loss]
+name = "mase"
+module_path = "dlkit.metrics.temporal"
+
+
+[datamodule]
+val_size = 0.15
+test_size = 0.15
+
+[dataset]
+name = "NumpyDataset"
+
+[dataloader]
+num_workers = 5
+batch_size = 128
+persistent_workers = true
+pin_memory = true
+
+[paths]
+root = "M:\\shared\\Serafeim_Atzarakis\\results\\CantileverDynamicLinear"
+input_dir = "@format {this.paths.root}"
+output_dir = "@format {this.paths.root}"
+predictions_dir = "@format {this.paths.output_dir}"
+features = "@format {this.paths.input_dir}\\train_solutions.npy"
+latent = "@format {this.paths.output_dir}\\latent.npy"
+idx_split = "@format {this.paths.input_dir}\\idx_split.json"

@@ -1,0 +1,92 @@
+[mlflow.client]
+experiment_name = "P-CAE"
+tracking_uri = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
+
+[mlflow.server]
+host = "localhost"
+port = 35382
+backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
+default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns/artifacts"
+
+[trainer]
+max_epochs = 1000
+gradient_clip_val = 5
+#fast_dev_run = true
+accelerator = "gpu"
+
+#[[trainer.callbacks]]
+#name = "ModelCheckpoint"
+#monitor = "val_loss"
+#mode = "min"
+#save_top_k = 1
+#save_last = true
+#dirpath = "./"
+
+[model]
+name = "caes.SkipCAE1d"
+latent_size = 10
+num_layers = 5
+kernel_size = 5
+latent_channels = 1000
+latent_width = 738
+
+[model.optimizer]
+name = "RAdam"
+lr = 0.01
+weight_decay = 8e-6
+
+[model.scheduler]
+name = "ReduceLROnPlateau"
+factor = 0.8
+patience = 10
+min_lr = 1e-5
+
+
+
+
+[datamodule]
+name = "NumpyModule"
+test_size = 0.3
+
+
+[[datamodule.transforms]]
+name = "MinMaxScaler"
+dim = [0, -1]
+
+[[datamodule.transforms]]
+name = "Permutation"
+dims = [0, 2, 1]
+
+[[datamodule.transforms]]
+name = "PCA"
+n_components = 5
+
+[[datamodule.transforms]]
+name = "Permutation"
+dims = [0, 2, 1]
+
+[datamodule.dataloader]
+num_workers = 5
+batch_size = 128
+persistent_workers = true
+pin_memory = true
+
+[optuna]
+# (empty)
+
+[optuna.pruner]
+# (empty)
+
+[optuna.sampler]
+# (empty)
+
+[paths]
+dataroot = "M:\\constantinos\\data\\bio\\5-equations"
+input = "M:\\constantinos\\data\\bio\\5-equations\\input"
+features = "@format {this.paths.input}\\p.npy"
+output = "@format {this.paths.dataroot}\\output"
+latent = "@format {this.paths.output}\\latent.npy"
+figures = "@format {this.paths.output}\\figures\\"
+predictions = "@format {this.paths.output}\\p-predictions.npy"
+idx_split = "@format {this.paths.input}\\idx_split.json"
+checkpoints = "@format {this.paths.output}\\checkpoints\\"
