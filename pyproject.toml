@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "dlkit>=0.1.0",
-    "pytorch-forecasting>=1.3.0",
 ]
 
 [tool.uv.sources]
