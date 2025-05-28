@@ -25,7 +25,7 @@ dirpath = "@format {this.paths.output_dir}"
 filename = "cae"
 save_top_k = 1
 save_weights_only = true
-every_n_epoch = 50
+every_n_epoch = 10
 enable_version_counter = false
 
 [model]
@@ -34,7 +34,7 @@ latent_channels = {low=6, high=200}
 latent_width = {low=1, high=200}
 latent_size = {low=3, high=12}
 num_layers = {low=1, high=6, step=1}
-kernel_size = {low=3, high=11, step=2}
+kernel_size = {choices=[3, 5, 7]}
 is_autoencoder = true
 predict = false
 
