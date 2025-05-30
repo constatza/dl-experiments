@@ -1,17 +1,18 @@
+[mlflow]
+enable = true
 [mlflow.client]
 experiment_name = "cae"
 
 [mlflow.server]
 host = "localhost"
 port = 10001
-backend_store_uri = "sqlite:///M:/constantinos/data/dynamic/mlruns/mlflow.db"
-artifacts_destination = "file:///M:/constantinos/data/dynamic/mlruns/artifacts"
+backend_store_uri = "@format sqlite:///{this.paths.output_dir}/mlruns/cae/mlflow.db"
+artifacts_destination = "@format file:///{this.paths.output_dir}/mlruns/cae/artifacts"
 
 [trainer]
-max_epochs = 400
+max_epochs = 1000
 enable_checkpointing = true
 #fast_dev_run = true
-accelerator = "cpu"
 
 [[trainer.callbacks]]
 name = "NumpyWriter"
@@ -30,11 +31,11 @@ enable_version_counter = false
 
 [model]
 name = "cae.SkipCAE1d"
-latent_channels = {low=6, high=200}
-latent_width = {low=1, high=200}
-latent_size = {low=3, high=12}
-num_layers = {low=1, high=6, step=1}
-kernel_size = {choices=[3, 5, 7]}
+num_layers = 2
+latent_size = 10
+kernel_size  = 9
+latent_channels  =174
+latent_width = 72
 is_autoencoder = true
 predict = false
 
