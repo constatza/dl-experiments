@@ -1,4 +1,4 @@
-
+# noqa: D100
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -6,7 +6,6 @@ import numpy as np
 from dlkit.io.settings import load_validated_settings
 
 
-num_plots = 3
 dof_idx = 99
 variable = "latent"
 config_path = "config.toml"
@@ -17,11 +16,7 @@ features = np.load(paths.features)
 targets = np.load(paths.targets)
 predictions = np.load(paths.predictions)
 
-plt.scatter(features[:, 0], targets[:, 0],  label="Targets")
+plt.scatter(features[:, 0], targets[:, 0], label="Targets")
 plt.scatter(features[:, 1], predictions[:, 0], label="Predicted")
 plt.legend()
 plt.show()
-
-
-
-

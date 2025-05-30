@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path  # noqa: D100
 
 import matplotlib.pyplot as plt
 import numpy as np

@@ -1,17 +1,18 @@
+[mlflow]
+enable = true
 [mlflow.client]
 experiment_name = "cae"
 
 [mlflow.server]
 host = "localhost"
 port = 10001
-backend_store_uri = "sqlite:///M:/constantinos/data/dynamic/mlruns/mlflow.db"
-artifacts_destination = "file:///M:/constantinos/data/dynamic/mlruns/artifacts"
+backend_store_uri = "@format sqlite:///{this.paths.output_dir}/mlruns/cae/mlflow.db"
+artifacts_destination = "@format file:///{this.paths.output_dir}/mlruns/cae/artifacts"
 
 [trainer]
-max_epochs = 400
+max_epochs = 1000
 enable_checkpointing = true
 #fast_dev_run = true
-accelerator = "cpu"
 
 [[trainer.callbacks]]
 name = "NumpyWriter"
