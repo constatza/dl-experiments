@@ -31,11 +31,11 @@ enable_version_counter = false
 
 [model]
 name = "cae.SkipCAE1d"
-latent_channels = {low=6, high=200}
-latent_width = {low=1, high=200}
-latent_size = {low=3, high=12}
-num_layers = {low=1, high=6, step=1}
-kernel_size = {choices=[3, 5, 7]}
+num_layers = 2
+latent_size = 10
+kernel_size  = 9
+latent_channels  =174
+latent_width = 72
 is_autoencoder = true
 predict = false
 
