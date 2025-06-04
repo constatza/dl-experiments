@@ -5,6 +5,7 @@ import torch
 from dlkit.io.settings import load_validated_settings
 from dlkit.metrics.temporal import mase
 from dlkit.postprocessing import plot_pred_vs_true, plot_residuals
+from dlkit.io.index import load_split_indices
 
 num_plots = 3
 dof_idx = 99
@@ -18,12 +19,14 @@ figures_dir.mkdir(exist_ok=True, parents=True)
 features = np.load(paths.features, mmap_mode="r")
 parameters = np.load(paths.parameters, mmap_mode="r")
 predictions = np.load(paths.predictions_dir / "predictions.npy", mmap_mode="r")
+idx_split = load_split_indices(paths.idx_split or paths.input_dir / "idx_split.json")
+
 latent = np.load(paths.latent, mmap_mode="r")
 # stack first two axes
 predictions = predictions.reshape(-1, predictions.shape[-2], predictions.shape[-1])
 timesteps = np.arange(0, predictions.shape[-1])
 
-sample_idx = np.random.randint(0, features.shape[0], num_plots)
+sample_idx = np.random.choice(idx_split.test, num_plots, replace=False)
 
 
 selected_features = features[sample_idx, dof_idx : dof_idx + 1, :]

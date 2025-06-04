@@ -5,12 +5,12 @@ experiment_name = "TFT"
 [mlflow.server]
 host = "localhost"
 port = 35382
-backend_store_uri = "@format sqlite:///{this.paths.output_dir}/mlruns/tft/mlflow.db"
-artifacts_destination = "@format file:///{this.paths.output_dir}/mlruns/tft/artifacts"
+backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/tft/mlflow.db"
+artifacts_destination = "@format file:///{this.paths.mlruns_dir}/tft/artifacts"
 terminate_apps_on_port = true
 
 [trainer]
-max_epochs = 300
+max_epochs = 100
 gradient_clip_val = 5
 #fast_dev_run = true
 enable_checkpointing = true
@@ -31,10 +31,12 @@ name = "TemporalFusionTransformer"
 module_path = "pytorch_forecasting"
 hidden_size = 7
 lstm_layers = 2
-attention_head_size = 1
+attention_head_size = 4
+dropout = 0.1
 log_interval = 5
 predict = false
-learning_rate = 1e-7
+learning_rate = 1e-4
+checkpoint = "@format {this.paths.output_dir}\\checkpoints\\tft.ckpt"
 
 
 [datamodule]
@@ -46,9 +48,9 @@ validation_size = 0.15
 [dataset]
 name = "ForecastingDataset"
 time_idx = "step"
-max_encoder_length = 30
-prediction_length = 1
-target = "pc_0"
+max_encoder_length = 10
+prediction_length = 3
+target = "pc_1"
 time_varying_unknown_reals = ["pc_0", "pc_1", "pc_2"]
 time_varying_known_reals = ["time"]
 static_reals = ["param_0", "param_1", "param_2"]
@@ -64,6 +66,8 @@ pin_memory = true
 root = "M:\\constantinos\\data\\bio\\5-equations"
 input_dir = "M:\\constantinos\\data\\bio\\5-equations\\input"
 output_dir = "@format {this.paths.root}\\output"
+mlruns_dir = "@format {this.paths.output_dir}\\mlruns"
+predictions_dir = "@format {this.paths.output_dir}\\predictions"
 features = "@format {this.paths.input_dir}\\pca.parquet"
 parameters = "@format {this.paths.input_dir}\\parameters.npy"
 time = "@format {this.paths.input_dir}\\timeStepTotalTimes.txt"

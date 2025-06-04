@@ -7,7 +7,7 @@ from tomlkit import dumps
 
 from dlkit.io.settings import load_validated_settings
 from dlkit.transforms import PCA, MinMaxScaler
-from dlkit.transforms.pipeline import Pipeline
+from dlkit.transforms.chain import Pipeline
 
 
 def _only_ascending(time: np.array) -> np.array:
@@ -19,7 +19,7 @@ def _only_ascending(time: np.array) -> np.array:
     return time[: non_positive_idx + 1]
 
 
-def _repeat__time_until(time: np.array, target_timesteps: int):
+def _repeat_time_until(time: np.array, target_timesteps: int):
     """Repeat the last element of the input array until it has the desired length."""
     residual_length = target_timesteps - len(time)
     repeated_last_element = np.tile(time[-1], residual_length)
@@ -33,13 +33,14 @@ def _repeat__time_until(time: np.array, target_timesteps: int):
 
 def _process_time(
     time: np.array, target_timesteps: int, num_reps: int = 1
-) -> np.ndarray:
+) -> (np.ndarray, np.ndarray):
     """Process the time array to ensure it has the desired length and repeat it if necessary."""
     dt = np.diff(_only_ascending(time))
     dt = np.append(dt, dt[-1])
-    dt = _repeat__time_until(dt, target_timesteps)
+    dt = _repeat_time_until(dt, target_timesteps)
+    time = _repeat_time_until(time, target_timesteps)
     # repeat time to match the number of samples
-    return np.tile(dt, num_reps)
+    return np.tile(time, num_reps), np.tile(dt, num_reps)
 
 
 def _read_solutions(variables: tuple[str, ...], input_dir: dict[str, str]) -> np.array:
@@ -64,7 +65,7 @@ def main():
     parameters = np.repeat(parameters, T, axis=0)
 
     time = np.loadtxt(paths.time)
-    time = _process_time(time, T, N)
+    time, dt = _process_time(time, T, N)
 
     solutions_flat = solutions.reshape(-1, D)
 
@@ -74,13 +75,16 @@ def main():
             PCA(n_components=reduced_dims),
         ]
     )
-    parameters_chain = Pipeline([MinMaxScaler(dim=0)])
+    parameters_chain = Pipeline(
+        shape=parameters.shape[1:], feature_transforms=[MinMaxScaler(dim=0)]
+    )
 
     features_pca = chain.fit_transform(torch.from_numpy(solutions_flat)).numpy()
     parameters = parameters_chain.fit_transform(torch.from_numpy(parameters)).numpy()
 
     time_df = pl.LazyFrame(
-        data=time, schema={"time": pl.datatypes.Float32}
+        data={"time": time, "dt": dt},
+        schema={"time": pl.datatypes.Float32, "dt": pl.datatypes.Float32},
     ).with_columns(
         [
             pl.arange(0, N * T).alias("sample") // T,

@@ -1,24 +1,21 @@
-tmlflow.enable = true
+mlflow.enable = true
 [mlflow.client]
-experiment_name = "ffnn"
+experiment_name = "FFNN(E=22E6, ω=5, dt=0.01)"
 
 [mlflow.server]
-host = "localhost"
-port = 10001
 backend_store_uri = "sqlite:///M:/constantinos/data/dynamic/mlruns/mlflow.db"
 artifacts_destination = "file:///M:/constantinos/data/dynamic/mlruns/artifacts"
 
 [trainer]
-max_epochs = 500
+max_epochs = 1500
 enable_checkpointing = true
 #fast_dev_run = true
-#accelerator = "cpu"
 
 [[trainer.callbacks]]
 name = "NumpyWriter"
 module_path = "dlkit.callbacks"
 output_dir = "@format {this.paths.output_dir}"
-filenames = ["predictions_latent"]
+filenames = ["predictions_latent_ffnn"]
 
 [[trainer.callbacks]]
 name = "ModelCheckpoint"
@@ -33,25 +30,21 @@ enable_version_counter = false
 [model]
 name = "ConstantWidthFFNN"
 module_path = "dlkit.networks.ffnn"
-hidden_size = 100
-num_layers = 4
+hidden_size = 50
+num_layers = 5
 
 [model.optimizer]
 name = "RAdam"
-lr = 0.001
+lr = 0.01
 
-#[model.scheduler]
-#name = "ReduceLROnPlateau"
-#factor = 0.8
-#patience = 12
-#min_lr = 1e-5
+[model.scheduler]
+name = "ReduceLROnPlateau"
+factor = 0.5
+patience = 15
+min_lr = 1e-5
 
 [[model.feature_transforms]]
 name = "MinMaxScaler"
-
-[model.train_loss]
-name = "mse_loss"
-module_path = "torch.nn.functional"
 
 
 [datamodule]
@@ -63,16 +56,17 @@ name = "NumpyDataset"
 
 [dataloader]
 num_workers = 5
-batch_size = 128
+batch_size = 256
 persistent_workers = true
 pin_memory = true
 
 [paths]
-root = "M:\\shared\\Serafeim_Atzarakis\\results\\CantileverDynamicLinear"
-input_dir = "@format {this.paths.root}"
+root = "M:\\shared\\Serafeim_Atzarakis\\results\\CantileverDynamicLinear\\"
+input_dir = "@format {this.paths.root}\\python_experimenting\\E=22E6, ω=5, dt=0.01"
 output_dir = "@format {this.paths.root}"
+mlruns_dir = "M:\\constantinos\\data\\dynamic\\mlruns"
 predictions_dir = "@format {this.paths.output_dir}"
 features = "@format {this.paths.input_dir}\\train_model_params.npy"
 targets = "@format {this.paths.output_dir}\\predictions_latent.npy"
-predictions = "@format {this.paths.predictions_dir}\\predictions_latent.npy"
+predictions = "@format {this.paths.predictions_dir}\\predictions_latent_ffnn.npy"
 idx_split = "@format {this.paths.input_dir}\\idx_split.json"
