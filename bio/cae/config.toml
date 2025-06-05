@@ -1,92 +1,86 @@
+
+[mlflow]
+enable = true
+
 [mlflow.client]
 experiment_name = "P-CAE"
-tracking_uri = "@format http://{this.mlflow.server.host}:{this.mlflow.server.port}"
 
 [mlflow.server]
-host = "localhost"
-port = 35382
-backend_store_uri = "sqlite:///M:/constantinos/data/bio/5-equations/mlruns/mlflow.db"
-default_artifact_root = "file:///M:/constantinos/data/bio/5-equations/mlruns/artifacts"
+backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
+artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
 
 [trainer]
-max_epochs = 1000
-gradient_clip_val = 5
-#fast_dev_run = true
-accelerator = "gpu"
+max_epochs = 500
+enable_checkpointing = true
 
-#[[trainer.callbacks]]
-#name = "ModelCheckpoint"
-#monitor = "val_loss"
-#mode = "min"
-#save_top_k = 1
-#save_last = true
-#dirpath = "./"
+[[trainer.callbacks]]
+name = "NumpyWriter"
+module_path = "dlkit.callbacks"
+output_dir = "@format {this.paths.output_dir}"
+filenames = ["predictions", "predictions_latent"]
+
+[[trainer.callbacks]]
+name = "ModelCheckpoint"
+dirpath = "@format {this.paths.checkpoint_dir}"
+filename = "cae"
+save_top_k = 1
+save_weights_only = true
+every_n_epoch = 10
+enable_version_counter = false
 
 [model]
-name = "caes.SkipCAE1d"
-latent_size = 10
-num_layers = 5
-kernel_size = 5
-latent_channels = 1000
-latent_width = 738
+name = "cae.LinearCAE1d"
+num_layers = 2
+latent_size = 6
+kernel_size  = 7
+latent_channels = 100
+latent_width = 200
+is_autoencoder = true
 
 [model.optimizer]
 name = "RAdam"
-lr = 0.01
-weight_decay = 8e-6
+lr = 1e-3
 
 [model.scheduler]
 name = "ReduceLROnPlateau"
-factor = 0.8
-patience = 10
-min_lr = 1e-5
+factor = 0.5
+patience = 15
+min_lr = 1e-6
 
-
-
-
-[datamodule]
-name = "NumpyModule"
-test_size = 0.3
-
-
-[[datamodule.transforms]]
+[[model.feature_transforms]]
 name = "MinMaxScaler"
 dim = [0, -1]
 
-[[datamodule.transforms]]
-name = "Permutation"
-dims = [0, 2, 1]
+[model.train_loss]
+name = "mean_squared_error"
 
-[[datamodule.transforms]]
-name = "PCA"
-n_components = 5
+[[model.metrics]]
+name = "MeanAbsolutePercentageError"
 
-[[datamodule.transforms]]
-name = "Permutation"
-dims = [0, 2, 1]
 
-[datamodule.dataloader]
+[datamodule]
+val_size = 0.15
+test_size = 0.15
+
+[dataset]
+name = "NumpyDataset"
+
+[dataloader]
 num_workers = 5
 batch_size = 128
 persistent_workers = true
 pin_memory = true
 
-[optuna]
-# (empty)
-
-[optuna.pruner]
-# (empty)
-
-[optuna.sampler]
-# (empty)
-
 [paths]
-dataroot = "M:\\constantinos\\data\\bio\\5-equations"
-input = "M:\\constantinos\\data\\bio\\5-equations\\input"
-features = "@format {this.paths.input}\\p.npy"
-output = "@format {this.paths.dataroot}\\output"
-latent = "@format {this.paths.output}\\latent.npy"
-figures = "@format {this.paths.output}\\figures\\"
-predictions = "@format {this.paths.output}\\p-predictions.npy"
-idx_split = "@format {this.paths.input}\\idx_split.json"
-checkpoints = "@format {this.paths.output}\\checkpoints\\"
+root = "M:\\constantinos\\data\\bio\\5-equations"
+input_dir = "M:\\constantinos\\data\\bio\\5-equations\\input"
+features = "@format {this.paths.input_dir}\\p.npy"
+output_dir = "@format {this.paths.root}\\output"
+predictions_dir = "@format {this.paths.output_dir}"
+mlruns_dir = "@format {this.paths.output_dir}\\mlruns"
+latent = "@format {this.paths.output_dir}\\predictions_latent.npy"
+figures = "@format {this.paths.output_dir}\\figures\\"
+parameters = "@format {this.paths.input_dir}\\parameters.npy"
+predictions = "@format {this.paths.predictions_dir}\\p-predictions.npy"
+idx_split = "@format {this.paths.input_dir}\\idx_split.json"
+checkpoint_dir = "@format {this.paths.output_dir}\\checkpoints\\"
