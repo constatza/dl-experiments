@@ -8,9 +8,8 @@ backend_store_uri = "sqlite:///M:/constantinos/data/dynamic/mlruns/mlflow.db"
 artifacts_destination = "file:///M:/constantinos/data/dynamic/mlruns/artifacts"
 
 [trainer]
-max_epochs = 1500
+max_epochs = 500
 enable_checkpointing = true
-#fast_dev_run = true
 
 [[trainer.callbacks]]
 name = "NumpyWriter"
@@ -18,37 +17,22 @@ module_path = "dlkit.callbacks"
 output_dir = "@format {this.paths.output_dir}"
 filenames = ["predictions_latent_ffnn"]
 
-[[trainer.callbacks]]
-name = "ModelCheckpoint"
-dirpath = "@format {this.paths.output_dir}"
-filename = "ffnn"
-save_top_k = 1
-save_weights_only = true
-every_n_epoch = 50
-enable_version_counter = false
 
 [model]
 name = "ConstantWidthFFNN"
 module_path = "dlkit.networks.ffnn"
-hidden_size = 30
-num_layers = 8
+hidden_size = 100
+num_layers = 5
+checkpoint_monitor = "val_loss"
+checkpoint = "@format {this.paths.output_dir}\\ffnn.ckpt"
+train = false
+test = false
+predict = false
 
-
-[model.optimizer]
-name = "RAdam"
-lr = 0.01
-
-[model.scheduler]
-name = "ReduceLROnPlateau"
-factor = 0.5
-patience = 20
-min_lr = 1e-5
 
 [[model.feature_transforms]]
 name = "MinMaxScaler"
 
-[[model.metrics]]
-name = "MeanAbsolutePercentageError"
 
 [datamodule]
 val_size = 0.15

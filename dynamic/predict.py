@@ -1,4 +1,4 @@
-import json
+import json  # noqa: D100
 import sys
 
 import numpy as np  # noqa: D100
@@ -9,8 +9,8 @@ from loguru import logger
 
 
 def main(features_path, solution_path, decoder_path, ffnn_path):
-    # Load model and input array
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    """Main function to run the prediction script."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     cae = PipelineNetwork.load_from_checkpoint(decoder_path)
     ffnn = PipelineNetwork.load_from_checkpoint(ffnn_path)
@@ -23,9 +23,10 @@ def main(features_path, solution_path, decoder_path, ffnn_path):
     with torch.no_grad():
         x = torch.from_numpy(x).float().to(device)
         x = ffnn(x)
-        y = cae.model.decoder(x).cpu().numpy()
+        y_hat = cae.model.decode(x)
+        y_hat = cae.targets_chain.inverse_transform(y_hat).cpu().numpy()
 
-    np.save(solution_path, np.squeeze(y))
+    np.save(solution_path, np.squeeze(y_hat))
     logger.info(f"Prediction saved to {solution_path}")
 
 

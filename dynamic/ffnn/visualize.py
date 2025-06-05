@@ -19,6 +19,6 @@ targets = np.load(paths.targets)
 predictions = np.load(paths.predictions)
 
 plt.scatter(features[:, 0], targets[:, 0], label="Targets")
-plt.scatter(features[:, 1], predictions[:, 0], label="Predicted")
+plt.scatter(features[:, 0], predictions[:, 0], label="Predicted")
 plt.legend()
 plt.show()

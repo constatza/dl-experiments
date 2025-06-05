@@ -1,16 +1,19 @@
+name = "E=22E6, ω=5, dt=0.01, KLterms=1"
 [mlflow]
 enable = true
 [mlflow.client]
-experiment_name = "cae"
+experiment_name = "@format CAE({this.name})"
 
 [mlflow.server]
-host = "localhost"
-port = 10001
 backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
 artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
 
+[optuna]
+n_trials = 200
+enable = true
+
 [trainer]
-max_epochs = 1000
+max_epochs = 500
 enable_checkpointing = true
 #fast_dev_run = true
 
@@ -30,32 +33,34 @@ every_n_epoch = 10
 enable_version_counter = false
 
 [model]
-name = "cae.LinearCAE1d"
+name = "cae.SkipCAE1d"
 num_layers = {low=1, high=4}
-latent_size = {low=6, high=12}
-kernel_size  = {low=7, high=15, step=2}
-latent_channels = {low=50, high=200, step=10}
-latent_width = {low=30, high=100, step=10}
+latent_size = {low=3, high=6}
+kernel_size  = {low=5, high=11}
+latent_channels = {low=40, high=120, step=10}
+latent_width = {low=40, high=120, step=10}
 is_autoencoder = true
-predict = false
 
 [model.optimizer]
 name = "RAdam"
-lr = 0.001
+lr = 5e-3
 
 [model.scheduler]
 name = "ReduceLROnPlateau"
-factor = 0.6
-patience = 15
+factor = 0.5
+patience = 20
 min_lr = 1e-6
 
 [[model.feature_transforms]]
 name = "MinMaxScaler"
 dim = [0, -1]
 
-[model.train_loss]
-name = "mse_loss"
-module_path = "torch.nn.functional"
+[model.loss_function]
+name = "mean_squared_error"
+module_path = "torchmetrics.functional.regression"
+
+[[model.metrics]]
+name = "MeanAbsolutePercentageError"
 
 
 [datamodule]
@@ -71,22 +76,11 @@ batch_size = 128
 persistent_workers = true
 pin_memory = true
 
-[optuna]
-enable = true
-n_trials = 150
-
-[optuna.pruner]
-name = "MedianPruner"
-n_startup_trials=5
-n_warmup_steps=30
-interval_steps=10
-
-
 
 [paths]
 root = "M:\\shared\\Serafeim_Atzarakis\\results\\CantileverDynamicLinear"
 mlruns_dir = "M:\\constantinos\\data\\dynamic\\mlruns"
-input_dir = "@format {this.paths.root}"
+input_dir = "@format {this.paths.root}\\python_experimenting\\{this.name}"
 output_dir = "@format {this.paths.root}"
 predictions_dir = "@format {this.paths.output_dir}"
 features = "@format {this.paths.input_dir}\\train_solutions.npy"

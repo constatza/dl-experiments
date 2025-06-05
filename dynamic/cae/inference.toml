@@ -9,8 +9,9 @@ backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
 artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
 
 [trainer]
-max_epochs = 1500
+max_epochs = 500
 enable_checkpointing = true
+#fast_dev_run = true
 
 [[trainer.callbacks]]
 name = "NumpyWriter"
@@ -18,43 +19,25 @@ module_path = "dlkit.callbacks"
 output_dir = "@format {this.paths.output_dir}"
 filenames = ["predictions", "predictions_latent"]
 
-[[trainer.callbacks]]
-name = "ModelCheckpoint"
-dirpath = "@format {this.paths.output_dir}"
-filename = "cae"
-save_top_k = 1
-save_weights_only = true
-every_n_epoch = 10
-enable_version_counter = false
 
 [model]
 name = "cae.SkipCAE1d"
 num_layers = 3
 latent_size = 3
 kernel_size  = 9
-latent_channels = 300
+latent_channels = 100
 latent_width = 50
 is_autoencoder = true
+checkpoint = "@format {this.paths.output_dir}\\cae.ckpt"
+train = false
+test = false
+predict = false
 
-[model.optimizer]
-name = "RAdam"
-lr = 2e-3
-
-[model.scheduler]
-name = "ReduceLROnPlateau"
-factor = 0.5
-patience = 20
-min_lr = 1e-6
 
 [[model.feature_transforms]]
 name = "MinMaxScaler"
 dim = [0, -1]
 
-[model.train_loss]
-name = "mean_squared_error"
-
-[[model.metrics]]
-name = "MeanAbsolutePercentageError"
 
 
 [datamodule]
