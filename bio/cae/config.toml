@@ -1,4 +1,3 @@
-
 [mlflow]
 enable = true
 
@@ -29,12 +28,12 @@ every_n_epoch = 10
 enable_version_counter = false
 
 [model]
-name = "cae.LinearCAE1d"
-num_layers = 2
+name = "cae.SkipCAE1d"
+num_layers = 6
 latent_size = 6
 kernel_size  = 7
-latent_channels = 100
-latent_width = 200
+latent_channels = 150
+latent_width = 150
 is_autoencoder = true
 
 [model.optimizer]
