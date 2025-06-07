@@ -1,19 +1,21 @@
 import torch  # noqa: D100
-from dlkit.run.training import train_state_from_path
 from dlkit.utils.torch_utils import dataloader_to_tensor
+from dlkit.run.inference import model_state_from_path
 from pydantic import FilePath
 from matplotlib import pyplot as plt
 
 
 def predict(
-    ffnn_path: FilePath = "../ffnn/inference.toml",
-    cae_path: FilePath = "../cae/inference.toml",
+    ffnn_path: FilePath = "../ffnn/config.toml",
+    cae_path: FilePath = "../cae/config.toml",
 ):
     # Load model and input array
     device = torch.device("cuda")
 
-    ffnn_state, ffnn_config = train_state_from_path(ffnn_path)
-    cae_state, cae_config = train_state_from_path(cae_path)
+    ffnn_state = model_state_from_path(
+        ffnn_path,
+    )
+    cae_state = model_state_from_path(cae_path)
 
     ffnn = ffnn_state.model.to(device)
     cae = cae_state.model.to(device)

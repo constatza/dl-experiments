@@ -1,12 +1,12 @@
 from pytorch_forecasting import TemporalFusionTransformer  # noqa: D100
 
 from dlkit.io.settings import load_validated_settings
-from dlkit.run.vanilla_training import build_training_state
+from dlkit.run.vanilla_training import build_model_state
 
 
 if __name__ == "__main__":
     settings = load_validated_settings("./config.toml")
-    training_state = build_training_state(settings)
+    training_state = build_model_state(settings)
 
     module = training_state.datamodule
 
