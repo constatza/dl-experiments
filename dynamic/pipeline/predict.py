@@ -40,9 +40,10 @@ def predict(
 
 
 if __name__ == "__main__":
+    dof = 100
     predictions, targets, x = predict()
-    plt.plot(predictions[0, 0, :], label="Predicted")
-    plt.plot(targets[0, 0, :], label="True")
+    plt.plot(targets[0, dof, :], label="True")
+    plt.plot(predictions[0, dof, :], label="Predicted")
     plt.xlabel("Timesteps")
     plt.ylabel("Value")
     plt.legend()

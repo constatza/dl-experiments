@@ -4,7 +4,7 @@ import sys
 import numpy as np  # noqa: D100
 import torch
 
-from dlkit.networks.blocks.base import PipelineNetwork
+from dlkit.nn.primitives.base import PipelineNetwork
 from loguru import logger
 
 
@@ -31,11 +31,11 @@ def main(features_path, solution_path, decoder_path, ffnn_path):
 
 
 # click.command("main")
-# click.argument("settings_path", type=str, help="Path to the settings file")
+# click.argument("path", type=str, help="Path to the settings file")
 # click.argument("results_file", type=str, help="Path to the timings file")
 # click.argument("log_file", type=str, help="Path to the error log file")
 def main_cli(
-    # settings_path: str = r"M:\shared\Serafeim_Atzarakis\results\CantileverDynamicLinear\settings_sample.json",
+    # path: str = r"M:\shared\Serafeim_Atzarakis\results\CantileverDynamicLinear\settings_sample.json",
     settings_path,
     results_file,
     log_file,

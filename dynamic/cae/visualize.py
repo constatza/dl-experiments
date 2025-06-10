@@ -62,7 +62,7 @@ fig.savefig(figures_dir / f"{variable}_residuals.png", dpi=600)
 fig = plt.figure(figsize=(15, 10))
 for i in range(3):
     ax = fig.add_subplot(1, 3, i + 1, projection="3d")
-    scatter = ax.scatter(latent[:, 0], latent[:, 1], latent[:, 2], c=parameters[:, 0])
+    scatter = ax.scatter(latent[:, 0], latent[:, 1], latent[:, 0], c=parameters[:, 0])
     ax.set_xlabel("Latent 1")
     ax.set_ylabel("Latent 2")
     ax.set_zlabel("Latent 3")
