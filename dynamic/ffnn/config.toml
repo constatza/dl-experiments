@@ -1,6 +1,6 @@
 [run]
 name = "E=22E6, ω=5, dt=0.01, KLterms=1"
-mode = "inference"
+mode = "mlflow"
 
 [mlflow.client]
 experiment_name = "@format FFNN({this.run.name})"
@@ -10,7 +10,7 @@ backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
 artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
 
 [trainer]
-max_epochs = 1000
+max_epochs = 500
 enable_checkpointing = true
 gradient_clip_value = 2
 #fast_dev_run = true
@@ -25,6 +25,7 @@ filenames = ["predictions_latent"]
 name = "ModelCheckpoint"
 dirpath = "@format {this.paths.output_dir}"
 filename = "ffnn"
+monitor = "val_loss"
 save_top_k = 1
 save_weights_only = true
 every_n_epoch = 50
@@ -40,13 +41,13 @@ num_layers = 6
 
 [model.optimizer]
 name = "RAdam"
-lr = 5e-3
+lr = 1e-3
 
 [model.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
-patience = 30
-min_lr = 1e-5
+patience = 50
+min_lr = 1e-6
 
 [[model.feature_transforms]]
 name = "MinMaxScaler"
@@ -79,7 +80,6 @@ targets = "@format {this.paths.output_dir}\\latent.npy"
 predictions = "@format {this.paths.predictions_dir}\\predictions_latent.npy"
 idx_split = "@format {this.paths.input_dir}\\idx_split.json"
 checkpoint = "@format {this.paths.output_dir}\\ffnn.ckpt"
-
 
 [optuna]
 n_trials = 200

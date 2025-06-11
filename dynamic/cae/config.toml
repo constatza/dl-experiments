@@ -1,6 +1,6 @@
 [run]
 name = "E=22E6, ω=5, dt=0.01, KLterms=1"
-mode = "inference"
+mode = "mlflow"
 
 [mlflow]
 enable = true
@@ -34,22 +34,22 @@ monitor = "val_loss"
 
 [model]
 name = "cae.SkipCAE1d"
-num_layers = 4
+num_layers = 3
 latent_size = 2
 kernel_size  = 5
-latent_channels = 400
+latent_channels = 500
 latent_width = 20
 #dropout = 0.1
 is_autoencoder = true
 
 [model.optimizer]
 name = "RAdam"
-lr = 5e-4
+lr = 1e-3
 
 [model.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
-patience = 30
+patience = 20
 min_lr = 1e-6
 
 [[model.feature_transforms]]
@@ -68,7 +68,7 @@ name = "NumpyDataset"
 
 [dataloader]
 num_workers = 5
-batch_size = 128
+batch_size = 64
 persistent_workers = true
 pin_memory = true
 
@@ -83,4 +83,4 @@ predictions_dir = "@format {this.paths.output_dir}"
 features = "@format {this.paths.input_dir}\\train_solutions.npy"
 parameters = "@format {this.paths.input_dir}\\train_model_params.npy"
 latent = "@format {this.paths.output_dir}\\latent.npy"
-idx_split = "@format {this.paths.input_dir}\\idx_split.json"
+#idx_split = "@format {this.paths.input_dir}\\idx_split.json"

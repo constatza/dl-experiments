@@ -1,8 +1,8 @@
 import torch  # noqa: D100
-from dlkit.utils.torch_utils import dataloader_to_tensor
-from dlkit.run.inference import model_state_from_path
 from pydantic import FilePath
 from matplotlib import pyplot as plt
+from dlkit.utils.torch_utils import dataloader_to_tensor
+from dlkit.run import run_from_path
 
 
 def predict(
@@ -12,10 +12,8 @@ def predict(
     # Load model and input array
     device = torch.device("cuda")
 
-    ffnn_state = model_state_from_path(
-        ffnn_path,
-    )
-    cae_state = model_state_from_path(cae_path)
+    ffnn_state = run_from_path(ffnn_path, mode="inference")
+    cae_state = run_from_path(cae_path, mode="inference")
 
     ffnn = ffnn_state.model.to(device)
     cae = cae_state.model.to(device)
