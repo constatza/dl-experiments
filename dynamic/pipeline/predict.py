@@ -38,7 +38,7 @@ def predict(
 
 
 if __name__ == "__main__":
-    dof = 100
+    dof = 200
     predictions, targets, x = predict()
     plt.plot(targets[0, dof, :], label="True")
     plt.plot(predictions[0, dof, :], label="Predicted")

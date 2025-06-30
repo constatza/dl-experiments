@@ -1,9 +1,6 @@
-[run]
-name = "E=22E6, ω=5, dt=0.01, KLterms=1, sin"
-#mode = "mlflow"
 
 [mlflow.client]
-experiment_name = "@format FFNN({this.run.name})"
+experiment_name = "GraphCG"
 
 [mlflow.server]
 backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
@@ -64,7 +61,12 @@ val_size = 0.15
 test_size = 0.15
 
 [dataset]
-name = "NumpyDataset"
+name = "GraphDataset"
+root = "@format {this.paths.root}"
+x = "@format {this.paths.features}"
+y = "@format {this.paths.targets}"
+edge_index = "@format {this.paths.edge_index}"
+
 
 [dataloader]
 num_workers = 5
@@ -73,16 +75,16 @@ persistent_workers = true
 pin_memory = true
 
 [paths]
-root = "M:\\shared\\Serafeim_Atzarakis\\results\\CantileverDynamicLinear\\"
-input_dir = "@format {this.paths.root}\\python_experimenting\\{this.run.name}"
+root = "M:\\shared\\graph-cg"
+input_dir = "@format {this.paths.root}\\raw"
 output_dir = "@format {this.paths.root}"
 mlruns_dir = "M:\\constantinos\\data\\dynamic\\mlruns"
 predictions_dir = "@format {this.paths.output_dir}"
-features = "@format {this.paths.input_dir}\\train_model_params.npy"
-targets = "@format {this.paths.output_dir}\\latent.npy"
-predictions = "@format {this.paths.predictions_dir}\\predictions_latent.npy"
-idx_split = "@format {this.paths.input_dir}\\idx_split.json"
-checkpoint = "@format {this.paths.output_dir}\\ffnn.ckpt"
+features = "@format {this.paths.input_dir}\\rhs.npy"
+targets = "@format {this.paths.input_dir}\\solution.npy"
+edge_index = "@format {this.paths.input_dir}\\matrix.npy"
+#idx_split = "@format {this.paths.input_dir}\\idx_split.json"
+#checkpoint = "@format {this.paths.output_dir}\\ffnn.ckpt"
 
 [optuna]
 n_trials = 200

@@ -8,6 +8,7 @@ dependencies = [
     "dlkit>=0.1.0",
     "seaborn>=0.13.2",
     "tcl>=0.2",
+    "torch-geometric>=2.6.1",
 ]
 
 [tool.uv.sources]

@@ -1,9 +1,7 @@
 [run]
-name = "E=22E6, ω=5, dt=0.01, KLterms=1"
+name = "E=22E6, ω=5, dt=0.01, KLterms=1, sin"
 mode = "mlflow"
 
-[mlflow]
-enable = true
 [mlflow.client]
 experiment_name = "@format CAE({this.run.name})"
 
@@ -14,7 +12,7 @@ artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
 [trainer]
 max_epochs = 500
 enable_checkpointing = true
-#grad_clip_norm = 0.01
+grad_clip_norm = 0.01
 
 [[trainer.callbacks]]
 name = "NumpyWriter"
@@ -33,11 +31,11 @@ enable_version_counter = false
 monitor = "val_loss"
 
 [model]
-name = "cae.SkipCAE1d"
+name = "cae.VAE1d"
 num_layers = 3
 latent_size = 2
 kernel_size  = 5
-latent_channels = 500
+latent_channels = 50
 latent_width = 20
 #dropout = 0.1
 is_autoencoder = true
@@ -49,7 +47,7 @@ lr = 1e-3
 [model.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
-patience = 20
+patience = 15
 min_lr = 1e-6
 
 [[model.feature_transforms]]
