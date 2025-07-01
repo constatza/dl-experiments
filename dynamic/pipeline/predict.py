@@ -1,7 +1,7 @@
 import torch  # noqa: D100
 from pydantic import FilePath
 from matplotlib import pyplot as plt
-from dlkit.utils.torch_utils import dataloader_to_tensor
+from dlkit.utils.torch_utils import dataloader_to_xy
 from dlkit.run import run_from_path
 
 
@@ -23,8 +23,8 @@ def predict(
     test_loader_ffnn = ffnn_state.datamodule.predict_dataloader()
     test_loader_cae = cae_state.datamodule.predict_dataloader()
 
-    x, _ = dataloader_to_tensor(test_loader_ffnn)
-    y, _ = dataloader_to_tensor(test_loader_cae)
+    x, _ = dataloader_to_xy(test_loader_ffnn)
+    y, _ = dataloader_to_xy(test_loader_cae)
 
     x = x.to(device)
     y = y.to(device)

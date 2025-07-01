@@ -13,7 +13,7 @@ artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
 max_epochs = 300
 enable_checkpointing = true
 gradient_clip_value = 2
-#fast_dev_run = true
+fast_dev_run = true
 
 [[trainer.callbacks]]
 name = "NumpyWriter"
@@ -58,13 +58,14 @@ name = "MinMaxScaler"
 [[model.metrics]]
 name = "MeanAbsolutePercentageError"
 
+[dataset]
+x = "@format {this.paths.input_dir}\\train_model_params.npy"
+y = "@format {this.paths.output_dir}\\latent.npy"
 
 [datamodule]
 val_size = 0.15
 test_size = 0.15
 
-[dataset]
-name = "NumpyDataset"
 
 [dataloader]
 num_workers = 5
@@ -78,17 +79,14 @@ input_dir = "@format {this.paths.root}\\python_experimenting\\{this.run.name}"
 output_dir = "@format {this.paths.root}"
 mlruns_dir = "M:\\constantinos\\data\\dynamic\\mlruns"
 predictions_dir = "@format {this.paths.output_dir}"
-features = "@format {this.paths.input_dir}\\train_model_params.npy"
-targets = "@format {this.paths.output_dir}\\latent.npy"
 predictions = "@format {this.paths.predictions_dir}\\predictions_latent.npy"
 idx_split = "@format {this.paths.input_dir}\\idx_split.json"
 checkpoint = "@format {this.paths.output_dir}\\ffnn.ckpt"
 
 [optuna]
-n_trials = 200
+n_trials = 3
 
 [optuna.model]
-module_path = "dlkit.networks.ffnn"
 hidden_size = {low=5, high=1000, step= 100}
 num_layers = {low=1, high=8, step=1}
 normalize = {choices=["none", "layer", "batch"]}
