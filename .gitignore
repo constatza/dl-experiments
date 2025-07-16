@@ -175,4 +175,8 @@ cython_debug/
 
 .qodo
 
+# checkpoints and logs
 lightning_logs/
+.ckpt
+.log
+
