@@ -4,7 +4,7 @@ import sys
 import numpy as np  # noqa: D100
 import torch
 
-from dlkit.nn.primitives.base import PipelineNetwork
+from dlkit.nn.primitives.pipeline import TransformsNetwork
 from loguru import logger
 
 
@@ -12,8 +12,8 @@ def main(features_path, solution_path, decoder_path, ffnn_path):
     """Main function to run the prediction script."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    cae = PipelineNetwork.load_from_checkpoint(decoder_path)
-    ffnn = PipelineNetwork.load_from_checkpoint(ffnn_path)
+    cae = TransformsNetwork.load_from_checkpoint(decoder_path)
+    ffnn = TransformsNetwork.load_from_checkpoint(ffnn_path)
     cae = cae.to(device)
     ffnn = ffnn.to(device)
 

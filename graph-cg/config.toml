@@ -1,93 +1,110 @@
+[run]
+mode = "mlflow"
+name = "PlaneStress20x20dofSystem"
 
 [mlflow.client]
-experiment_name = "GraphCG"
+experiment_name = "@format GraphCG-{this.run.name}-Krylov"
 
 [mlflow.server]
 backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
 artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
 
 [trainer]
-max_epochs = 300
+max_epochs = 500
 enable_checkpointing = true
-gradient_clip_value = 2
+default_root_dir = "@format {this.paths.output_dir}"
+accelerator = "cpu"
 #fast_dev_run = true
 
-[[trainer.callbacks]]
-name = "NumpyWriter"
-module_path = "dlkit.callbacks"
-output_dir = "@format {this.paths.output_dir}"
-filenames = ["predictions_latent"]
+#[[trainer.callbacks]]
+#name = "NumpyWriter"
+#module_path = "dlkit.callbacks"
+#output_dir = "@format {this.paths.output_dir}"
 
 [[trainer.callbacks]]
 name = "ModelCheckpoint"
 dirpath = "@format {this.paths.output_dir}"
-filename = "ffnn"
+filename = "graph"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = true
-every_n_epoch = 50
+every_n_epochs = 50
 enable_version_counter = false
 
+[pipeline]
+name = "dlkit.gnn:GraphNetwork"
+lr = 1e-3
+
 [model]
-name = "ConstantWidthFFNN"
-module_path = "dlkit.nn.ffnn"
-hidden_size = 50
-num_layers = 6
-#dropout = 0.1
+name = "GATv2Projection"
+module_path = "dlkit.gnn"
+hidden_size = 32
+num_layers = 10
+dropout = 0.1
 
-[model.loss_function]
-name = "mse_loss"
-module_path = "torch.nn.functional"
 
-[model.optimizer]
+[pipeline.optimizer]
 name = "RAdam"
-lr = 5e-2
 
-[model.scheduler]
+[pipeline.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
-patience = 20
+patience = 30
 min_lr = 1e-6
 
-[[model.feature_transforms]]
-name = "MinMaxScaler"
-
-[[model.metrics]]
-name = "MeanAbsolutePercentageError"
-
+#[[pipeline.metrics]]
+#name = ""
 
 [datamodule]
 name = "GraphDataModule"
-val_size = 0.15
-test_size = 0.15
-#idx_split = "@format {this.paths.input_dir}\\idx_split.json"
 
-[dataset]
+[datamodule.split]
+val_ratio = 0.15
+test_ratio = 0.15
+#filepath = "@format {this.paths.input_dir}\\idx_split.json"
+
+[datamodule.dataset]
 name = "GraphDataset"
 root = "@format {this.paths.root}"
+features = "@format {this.paths.input_dir}\\{this.run.name}-rhs.npy"
+targets = "@format {this.paths.input_dir}\\{this.run.name}-solution.npy"
+edge_index = "@format {this.paths.input_dir}\\{this.run.name}.txt"
+force_reload = true
 
-features = "@format {this.paths.input_dir}\\rhs.npy"
-targets = "@format {this.paths.input_dir}\\solution.npy"
-edge_index = "@format {this.paths.input_dir}\\matrix.npy"
 
-[dataloader]
+[[datamodule.dataset.pre_transform]]
+name = "SpectralRadiusNorm"
+module_path = "dlkit.transforms"
+
+[[datamodule.dataset.pre_transform]]
+name = "MinMaxTransform"
+module_path = "dlkit.gnn.transforms"
+attrs = ["x", "y"]
+
+[datamodule.dataloader]
 num_workers = 5
-batch_size = 256
+batch_size = 64
 persistent_workers = true
 pin_memory = true
+shuffle = true
+follow_batch = ["x", "edge_index"]
 
 [paths]
 root = "M:\\shared\\graph-cg"
 input_dir = "@format {this.paths.root}\\raw"
-output_dir = "@format {this.paths.root}"
-mlruns_dir = "M:\\constantinos\\data\\dynamic\\mlruns"
+output_dir = "@format {this.paths.root}\\output"
+mlruns_dir = "@format {this.paths.root}\\mlruns"
 
 [optuna]
-n_trials = 200
+n_trials = 100
+
+[optuna.pruner]
+name = "MedianPruner"
+n_warmup_steps = 100
+n_min_trials = 5
+
 
 [optuna.model]
-module_path = "dlkit.networks.ffnn"
-hidden_size = {low=5, high=1000, step= 100}
-num_layers = {low=1, high=8, step=1}
-normalize = {choices=["none", "layer", "batch"]}
-drop = {low=0, high=0.5, step=0.1}
+hidden_size = {low=16, high=1000, step= 100}
+num_layers = {low=4, high=12, step=1}
+dropout = {low=0, high=0.5, step=0.1}

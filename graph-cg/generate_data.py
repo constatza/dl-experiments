@@ -1,167 +1,178 @@
-# !/usr/bin/env python3
-"""Created on Mon Jun 16 00:22:39 2025
+#!/usr/bin/env python3
+"""Created on Mon Jul 21 23:49:07 2025
 
 @author: ioannis
 """
 
 import numpy as np
+import scipy.sparse
+import scipy.sparse.linalg
 from pathlib import Path
-from scipy.sparse.linalg import spilu
-from scipy.linalg import norm
 
 
-def preconditioned_cg(A, b, x0, tol=1e-6, max_iter=1000, preconditioner=None):
-    n = len(b)
-    x = x0.copy()
+def eigenspace_projection(
+    matrix: np.ndarray, rhs: np.ndarray, num_vectors: int
+) -> np.ndarray:
+    # Generate a small symmetric positive definite (SPD) matrix A
+    n = matrix.shape[0]
 
-    # Preconditioner setup
-    if preconditioner == "ilu":
-        ilu = spilu(A)
-        Mx = lambda x: ilu.solve(x)
-    elif preconditioner == "jacobi":
-        D_inv = 1.0 / A.diagonal()
-        Mx = lambda x: D_inv * x
-    elif preconditioner is None or preconditioner == "none":
-        Mx = lambda x: x
-    else:
-        raise ValueError("Unknown preconditioner type. Use 'ilu', 'jacobi', or None.")
+    # Generate a right-hand side vector b
 
-    # Initialize
-    r = b - A.dot(x)
-    z = Mx(r)
-    p = z.copy()
-    rz_old = np.dot(r, z)
+    # === Dimensionality Reduction via Eigenvectors ===
+    # Compute the r smallest eigenvectors of A
+    eigvals, eigvecs = scipy.sparse.linalg.eigsh(
+        matrix, k=num_vectors, which="SM"
+    )  # Smallest magnitude
 
-    residuals = [norm(r)]
-
-    for k in range(max_iter):
-        Ap = A.dot(p)
-        alpha = rz_old / np.dot(p, Ap)
-        x += alpha * p
-        r -= alpha * Ap
-        residual_norm = norm(r)
-        residuals.append(residual_norm)
-
-        if residual_norm < tol:
-            print(f"Converged at iteration {k + 1}, residual: {residual_norm:.2e}")
-            break
-
-        z = Mx(r)
-        rz_new = np.dot(r, z)
-        beta = rz_new / rz_old
-        p = z + beta * p
-        rz_old = rz_new
-
-    return x, {
-        "converged": residual_norm < tol,
-        "iterations": k + 1,
-        "residual": residual_norm,
-        "residual_history": residuals,
-    }
+    # Reduced basis
+    V_eig = eigvecs  # n x r
+    A_r_eig = V_eig.T @ matrix @ V_eig  # r x r reduced matrix
+    b_r_eig = V_eig.T @ rhs
+    x_r_eig = V_eig @ np.linalg.solve(A_r_eig, b_r_eig)  # approximate solution
+    return V_eig
 
 
-def generate_training_data(
-    A, b, x0, tol=1e-6, cg_iter=10, noOfRandomVectors_Krylov=100, noOfRandomVectors=100
-):
-    n = len(b)
-    x = x0.copy()
+# === Dimensionality Reduction via CG-based Krylov Subspace ===
+def conjugate_gradient_krylov(matrix: np.ndarray, rhs: np.ndarray, num_iterations: int):
+    """Returns the CG basis vectors up to num_iterations (orthonormalized).
 
-    # Initialize
-    r = b - A.dot(x)
-    z = r
-    p = z.copy()
-    rz_old = np.dot(r, z)
+    Args:
+        matrix (np.ndarray): The matrix A.
+        rhs (np.ndarray): The right-hand side vector b.
+        num_iterations (int): The number of iterations.
 
-    matrixOfKrylovVectors = np.zeros((n, cg_iter))
-    matrixOfKrylovVectors[:, 0] = p / norm(p)  # probably these shouldn't be normalized
+    Returns:
+        np.ndarray: The CG basis vectors.
+    """
+    n = len(rhs)
+    Q = []
+    P = []
+    x = np.zeros_like(rhs)
+    r_vec = rhs.copy()
+    p = r_vec.copy()
+    Q.append(r_vec / np.linalg.norm(r_vec))
+    P.append(p / np.linalg.norm(p))
 
-    residuals = [norm(r)]
+    for k in range(num_iterations - 1):
+        Ap = matrix @ p
+        alpha = (r_vec @ r_vec) / (p @ Ap)
+        x = x + alpha * p
+        r_new = r_vec - alpha * Ap
+        beta = (r_new @ r_new) / (r_vec @ r_vec)
+        p = r_new + beta * p
+        r_vec = r_new
+        q_new = r_vec / np.linalg.norm(r_vec)
+        Q.append(q_new)
+        P.append(p / np.linalg.norm(p))
 
-    for k in range(cg_iter - 1):
-        Ap = A.dot(p)
-        alpha = rz_old / np.dot(p, Ap)
-        x += alpha * p
-        r -= alpha * Ap
-        residual_norm = norm(r)
-        residuals.append(residual_norm)
+    return np.column_stack(Q), np.column_stack(P)
 
-        if residual_norm < tol:
-            print(f"Converged at iteration {k + 1}, residual: {residual_norm:.2e}")
-            break
 
-        z = r
-        rz_new = np.dot(r, z)
-        beta = rz_new / rz_old
-        p = z + beta * p
-        rz_old = rz_new
-        matrixOfKrylovVectors[:, k + 1] = p / norm(
-            p
-        )  # probably these shouldn't be normalized
+def generate_krylov_samples(
+    *,
+    matrix: np.ndarray,
+    rhs: np.ndarray,
+    num_samples: int,
+    num_krylov_iterations: int,
+) -> tuple[np.ndarray, np.ndarray]:  # np.ndarray:
+    """Generate samples from the approximate inverse of a matrix using CG-based Krylov vectors.
 
-    inputVectors_Krylov = np.zeros((n, noOfRandomVectors_Krylov))
-    outputVectors_Krylov = np.zeros((n, noOfRandomVectors_Krylov))
-    for k in range(noOfRandomVectors_Krylov):
-        epsilon = np.random.normal(0, 1, size=cg_iter)
-        inputVectors_Krylov[:, k] = matrixOfKrylovVectors @ epsilon
-        outputVectors_Krylov[:, k] = A @ (matrixOfKrylovVectors @ epsilon)
+    Args:
+        matrix (np.ndarray): The matrix A.
+        rhs (np.ndarray): The right-hand side vector b.
+        num_samples (int): The number of samples to generate.
+        num_krylov_iterations (int): The number of iterations for CG-based Krylov vectors.
+    """
+    # Generate standard multivariate Gaussian samples ε ~ N(0, I)
+    n = matrix.shape[0]
+    epsilon_samples = np.random.randn(n, num_samples)
+    V_cg, _ = conjugate_gradient_krylov(matrix, rhs, num_krylov_iterations)  # n x r
+    A_r_cg = V_cg.T @ matrix @ V_cg
 
-    inputVectors_Random = np.zeros((n, noOfRandomVectors))
-    outputVectors_Random = np.zeros((n, noOfRandomVectors))
-    for k in range(noOfRandomVectors_Krylov):
-        epsilon = np.random.normal(0, 1, size=n)
-        inputVectors_Random[:, k] = epsilon
-        outputVectors_Random[:, k] = A @ epsilon
+    # Approximate inverse from CG-based Krylov vectors
+    M_r = V_cg @ np.linalg.inv(A_r_cg) @ V_cg.T  # Low-rank approximation of A^{-1}
 
-    inputTrainingData = np.hstack((inputVectors_Krylov, inputVectors_Random))
-    outputTrainingData = np.hstack((outputVectors_Krylov, outputVectors_Random))
-    return inputTrainingData, outputTrainingData
+    # Generate samples x = M_r * ε
+    x_samples = M_r @ epsilon_samples  # Shape: (n, num_samples)
+    rhs_samples = matrix @ x_samples
+
+    return x_samples, rhs_samples
+
+
+def generate_simple_samples(
+    *,
+    matrix: np.ndarray,
+    num_samples: int,
+    shuffle: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    # Generate standard multivariate Gaussian samples ε ~ N(0, I)
+    n = matrix.shape[0]
+    epsilon_samples = np.random.randn(n, num_samples)
+
+    # Generate samples x = A  * ε
+    rhs_samples = matrix @ epsilon_samples  # Shape: (n, num_samples)
+
+    return epsilon_samples, rhs_samples
+
+
+def generate_samples(
+    *,
+    matrix: np.ndarray,
+    rhs: np.ndarray,
+    num_samples_krylov: int,
+    num_samples_simple: int,
+    num_krylov_iterations: int,
+    shuffle: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    num_samples = num_samples_krylov + num_samples_simple
+    x_krylov, rhs_krylov = generate_krylov_samples(
+        matrix=matrix,
+        rhs=rhs,
+        num_samples=num_samples_krylov,
+        num_krylov_iterations=num_krylov_iterations,
+    )
+    x_simple, rhs_simple = generate_simple_samples(
+        matrix=matrix, num_samples=num_samples_simple
+    )
+    # stack samples
+    x_all = np.hstack((x_krylov, x_simple)).T
+    rhs_all = np.hstack((rhs_krylov, rhs_simple)).T
+
+    if shuffle:
+        indices = np.random.permutation(num_samples)
+        x_all = x_all[indices, :]
+        rhs_all = rhs_all[indices, :]
+    return x_all, rhs_all
 
 
 def main():
-    output_dir = Path(r"M:\shared\graph-cg\raw")
-    output_dir.mkdir(exist_ok=True)
-    matrix = np.loadtxt(output_dir / "matrix.txt")
+    # Parameters
+    num_samples_simple = 3000
+    num_samples_krylov = 3000
+    num_krylov_iterations = 5
 
-    n = len(matrix)
-    rhs = np.loadtxt(output_dir / "RHSs.txt")
-    rhs = rhs[:, 0]
-    x0 = np.zeros_like(rhs)
+    # Paths
+    matrix_path = Path(r"M:\shared\graph-cg\raw") / "PlaneStress20x20dofSystem.txt"
+    rhs_path = matrix_path.with_name(f"{matrix_path.stem}-rhs.npy")
+    x_path = matrix_path.with_name(f"{matrix_path.stem}-solution.npy")
 
-    # Run with no preconditioner
-    x, info = preconditioned_cg(
-        matrix, rhs, x0, tol=1e-8, max_iter=1000, preconditioner=None
+    matrix = np.loadtxt(matrix_path)
+    rhs = np.ones_like(matrix[:, 0])  # Artificial right-hand side
+
+    x_samples, rhs_samples = generate_samples(
+        matrix=matrix,
+        rhs=rhs,
+        num_samples_simple=num_samples_simple,
+        num_samples_krylov=num_samples_krylov,
+        num_krylov_iterations=num_krylov_iterations,
+        shuffle=True,
     )
 
-    # Run with Jacobi
-    x_jacobi, info_jacobi = preconditioned_cg(
-        matrix, rhs, x0, tol=1e-8, max_iter=1000, preconditioner="jacobi"
-    )
-
-    # Run with ILU
-    x_ilu, info_ilu = preconditioned_cg(
-        matrix, rhs, x0, tol=1e-8, max_iter=1000, preconditioner="ilu"
-    )
-
-    cg_iter = 10
-    noOfRandomVectors_Krylov = 100
-    noOfTotallyRandomVectors = 100
-    tol = 1e-6
-
-    NN_RHS_output, NN_Solution_input = generate_training_data(
-        matrix,
-        rhs,
-        x0,
-        tol,
-        cg_iter,
-        noOfRandomVectors_Krylov,
-        noOfTotallyRandomVectors,
-    )
-
-    np.save(output_dir / "rhs.npy", NN_RHS_output.T)
-    np.save(output_dir / "solution.npy", NN_Solution_input.T)
-    np.save(output_dir / "matrix.npy", matrix)
+    np.save(rhs_path, rhs_samples)
+    np.save(x_path, x_samples)
 
 
 # Example usage
 if __name__ == "__main__":
+    np.random.seed(0)
     main()

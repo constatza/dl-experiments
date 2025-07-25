@@ -2,7 +2,7 @@ import numpy as np  # noqa: D100
 import torch
 import matplotlib.pyplot as plt
 
-from dlkit.io.settings import load_validated_settings
+from dlkit.settings import Settings
 from dlkit.metrics.temporal import mase
 from dlkit.postprocessing import plot_pred_vs_true, plot_residuals
 from dlkit.io.index import load_split_indices
@@ -11,7 +11,7 @@ num_plots = 3
 dof_idx = 99
 variable = "P"
 config_path = "./config.toml"
-config = load_validated_settings(config_path)
+config = Settings.from_file(config_path)
 paths = config.PATHS
 figures_dir = paths.output_dir / "figures"
 figures_dir.mkdir(exist_ok=True, parents=True)

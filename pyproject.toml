@@ -5,14 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13.1"
 dependencies = [
-    "dlkit>=0.1.0",
+    "dlkit[gpu]",
     "seaborn>=0.13.2",
     "tcl>=0.2",
-    "torch-geometric>=2.6.1",
 ]
-
-[tool.uv.sources]
-dlkit = { path = "../dlkit", editable = true }
 
 [tool.ruff.lint]
 extend-select = [
@@ -22,3 +18,6 @@ extend-select = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.uv.sources]
+dlkit = { path = "../dlkit" }
