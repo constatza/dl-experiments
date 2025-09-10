@@ -8,6 +8,7 @@ import numpy as np
 import scipy.sparse
 import scipy.sparse.linalg
 from pathlib import Path
+from dynaconf import Dynaconf
 
 
 def eigenspace_projection(
@@ -145,19 +146,21 @@ def generate_samples(
     return x_all, rhs_all
 
 
-def main():
+def main(rhs_generated_path, x_generated_path, matrix_path, rhs_path):
     # Parameters
     num_samples_simple = 3000
     num_samples_krylov = 3000
-    num_krylov_iterations = 5
-
-    # Paths
-    matrix_path = Path(r"M:\shared\graph-cg\raw") / "PlaneStress20x20dofSystem.txt"
-    rhs_path = matrix_path.with_name(f"{matrix_path.stem}-rhs.npy")
-    x_path = matrix_path.with_name(f"{matrix_path.stem}-solution.npy")
+    num_krylov_iterations = 15
 
     matrix = np.loadtxt(matrix_path)
-    rhs = np.ones_like(matrix[:, 0])  # Artificial right-hand side
+    # rhs = np.loadtxt(rhs_path)
+    size = matrix.shape[0]
+    rhs = np.ones(size)
+    print(f"Matrix shape: {matrix.shape}")
+    scale = np.linalg.norm(matrix, ord=1)
+    matrix = matrix / scale
+
+    rhs = rhs / scale
 
     x_samples, rhs_samples = generate_samples(
         matrix=matrix,
@@ -168,11 +171,29 @@ def main():
         shuffle=True,
     )
 
-    np.save(rhs_path, rhs_samples)
-    np.save(x_path, x_samples)
+    np.save(rhs_generated_path, rhs_samples)
+    np.save(x_generated_path, x_samples)
+    print(f"Saved to {rhs_generated_path}")
 
 
 # Example usage
 if __name__ == "__main__":
     np.random.seed(0)
-    main()
+    name = ""
+
+    settings = Dynaconf(
+        settings_file="./config.toml",
+    )
+    # Paths
+    matrix_path = Path(settings.PATHS.matrix_template)
+    rhs_path = Path(settings.PATHS.rhs_template)
+
+    generated_dir = Path(settings.PATHS.generated_dir)
+    generated_dir.mkdir(exist_ok=True)
+    if name is None or name == "":
+        rhs_generated_path = generated_dir / f"{matrix_path.stem}-rhs.npy"
+        x_generated_path = generated_dir / f"{matrix_path.stem}-solution.npy"
+    else:
+        rhs_generated_path = generated_dir / f"{name}-rhs.npy"
+        x_generated_path = generated_dir / f"{name}-solution.npy"
+    main(rhs_generated_path, x_generated_path, matrix_path, rhs_path)

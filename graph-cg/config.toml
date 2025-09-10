@@ -1,19 +1,19 @@
 [run]
 mode = "mlflow"
-name = "PlaneStress20x20dofSystem"
+name = "@format {this.paths.matrix_name}"
 
 [mlflow.client]
-experiment_name = "@format GraphCG-{this.run.name}-Krylov"
+experiment_name = "@format GraphCG-Krylov-{this.run.name}"
 
 [mlflow.server]
 backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
 artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
 
 [trainer]
-max_epochs = 500
+max_epochs = 300
 enable_checkpointing = true
 default_root_dir = "@format {this.paths.output_dir}"
-accelerator = "cpu"
+#accelerator = "cpu"
 #fast_dev_run = true
 
 #[[trainer.callbacks]]
@@ -28,23 +28,24 @@ filename = "graph"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = true
-every_n_epochs = 50
+every_n_epochs = 10
 enable_version_counter = false
 
 [pipeline]
 name = "dlkit.gnn:GraphNetwork"
-lr = 1e-3
+checkpoint = "@format {this.paths.output_dir}\\graph.ckpt"
 
 [model]
 name = "GATv2Projection"
 module_path = "dlkit.gnn"
 hidden_size = 32
-num_layers = 10
+num_layers = 12
 dropout = 0.1
 
 
 [pipeline.optimizer]
 name = "RAdam"
+lr = 1e-3
 
 [pipeline.scheduler]
 name = "ReduceLROnPlateau"
@@ -66,20 +67,16 @@ test_ratio = 0.15
 [datamodule.dataset]
 name = "GraphDataset"
 root = "@format {this.paths.root}"
-features = "@format {this.paths.input_dir}\\{this.run.name}-rhs.npy"
-targets = "@format {this.paths.input_dir}\\{this.run.name}-solution.npy"
-edge_index = "@format {this.paths.input_dir}\\{this.run.name}.txt"
+features = "@format {this.paths.generated_dir}\\{this.paths.matrix_name}-rhs.npy"
+targets = "@format {this.paths.generated_dir}\\{this.paths.matrix_name}-solution.npy"
+edge_index = "@format {this.paths.matrix_template}"
 force_reload = true
 
 
 [[datamodule.dataset.pre_transform]]
 name = "SpectralRadiusNorm"
-module_path = "dlkit.transforms"
-
-[[datamodule.dataset.pre_transform]]
-name = "MinMaxTransform"
 module_path = "dlkit.gnn.transforms"
-attrs = ["x", "y"]
+
 
 [datamodule.dataloader]
 num_workers = 5
@@ -94,6 +91,11 @@ root = "M:\\shared\\graph-cg"
 input_dir = "@format {this.paths.root}\\raw"
 output_dir = "@format {this.paths.root}\\output"
 mlruns_dir = "@format {this.paths.root}\\mlruns"
+matrix_name = "Scc_assembly_no_0_column_no_0_Krr"
+template_dir = "@format {this.paths.input_dir}\\vectors\\"
+generated_dir = "@format {this.paths.template_dir}\\generated\\"
+matrix_template = "@format {this.paths.template_dir}\\{this.paths.matrix_name}.txt"
+rhs_template = "@format {this.paths.template_dir}\\Krr_inversion_no_0_RHS.txt"
 
 [optuna]
 n_trials = 100

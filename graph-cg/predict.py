@@ -1,28 +1,11 @@
 import torch
-from matplotlib import pyplot as plt
 from dlkit.settings import Settings
 from dlkit.run import run
 
+import matplotlib.pyplot as plt
 
-if __name__ == "__main__":
-    settings_path = "./config.toml"
-    settings = Settings.from_file(settings_path)
-    train_state = run(
-        settings,
-        mode="inference",
-        checkpoint=settings.PATHS.output_dir / "graph.ckpt",
-    )
-    model = train_state.model.to("cuda")
-    dataset = train_state.datamodule.dataset
 
-    dataloader = train_state.datamodule.test_dataloader()
-    model.eval()
-    data = next(iter(dataloader)).to("cuda")
-    sample = torch.randint(low=0, high=len(dataset) - 1, size=(1,))[0]
-    # data = dataset[sample].to("cuda")
-    with torch.inference_mode():
-        y_hat = model(data).cpu().numpy()
-        y = data.y.cpu().numpy()
+def plot_pred_vs_true(y_hat, y):
     plt.figure(figsize=(10, 5))
     plt.scatter(y, y_hat)
     # plot y =x
@@ -47,3 +30,30 @@ if __name__ == "__main__":
     plt.title(f"Sample {sample}")
     plt.grid()
     plt.show()
+
+
+if __name__ == "__main__":
+    settings_path = "./config.toml"
+    settings = Settings.from_file(settings_path)
+    train_state = run(
+        settings,
+        mode="inference",
+        checkpoint=settings.PIPELINE.checkpoint,
+    )
+    model = train_state.model.to("cuda")
+    dataset = train_state.datamodule.dataset
+
+    dataloader = train_state.datamodule.test_dataloader()
+    model.eval()
+    data = next(iter(dataloader)).to("cuda")
+    sample = torch.randint(low=0, high=len(data) - 1, size=(1,))[0]
+    # data = dataset[sample].to("cuda")
+    with torch.inference_mode():
+        y_hat = (
+            model(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr)
+            .cpu()
+            .numpy()
+        )
+        y = data.y.cpu().numpy()
+
+    plot_pred_vs_true(y_hat, y)
