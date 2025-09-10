@@ -1,0 +1,103 @@
+[SESSION]
+# Human-readable run/session name (for logs and tracking)
+name = "FFNN-Experiment"
+# Random seed for reproducibility
+seed = 42
+# Computation precision preset (e.g., medium, high)
+precision = "medium"
+
+[MODEL]
+# Model class path - using ConstantWidthFFNN from dlkit
+name = "ConstantWidthFFNN"
+module_path = "dlkit.nn.ffnn"
+hidden_size = 64
+num_layers = 6
+#dropout = 0.1
+
+[TRAINING]
+# Number of epochs for convenience
+
+[TRAINING.trainer]
+# Maximum number of epochs (Lightning Trainer)
+max_epochs = 300
+# Hardware accelerator: cpu | gpu | auto | tpu
+accelerator = "auto"
+# Enable checkpointing
+enable_checkpointing = true
+# Default root directory for trainer outputs
+default_root_dir = "./outputs"
+
+[TRAINING.optimizer]
+# Optimizer name and settings
+name = "RAdam"
+lr = 5e-2
+
+[TRAINING.scheduler]
+name = "ReduceLROnPlateau"
+factor = 0.5
+patience = 20
+min_lr = 1e-6
+
+# Model checkpoint callback configuration
+[[TRAINING.trainer.callbacks]]
+name = "ModelCheckpoint"
+dirpath = "./outputs"
+filename = "ffnn"
+monitor = "val_loss"
+save_top_k = 1
+save_weights_only = false
+every_n_epochs = 1
+
+[DATAMODULE]
+# DataModule class for array data
+name = "InMemoryModule"
+
+[DATAMODULE.dataloader]
+num_workers = 5
+batch_size = 256
+persistent_workers = true
+pin_memory = true
+shuffle = true
+
+[DATASET]
+# Flexible dataset class for array data
+name = "FlexibleDataset"
+
+[[DATASET.features]]
+name = "x"
+path = "/data/projects/graph-cg/data/raw/Scc_assembly_no_0_column_no_0_Krr-rhs.npy"
+
+[[DATASET.targets]]
+name = "y"
+path = "/data/projects/graph-cg/data/raw/Scc_assembly_no_0_column_no_0_Krr-solution.npy"
+
+[DATASET.split]
+val_ratio = 0.15
+test_ratio = 0.15
+
+[MLFLOW]
+# Enable MLflow tracking
+enabled = true
+
+[MLFLOW.server]
+# MLflow server configuration
+backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
+artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
+
+[MLFLOW.client]
+# MLflow client configuration
+experiment_name = "FFNN-Experiment"
+
+[OPTUNA]
+# Hyperparameter optimization settings
+enabled = false
+n_trials = 100
+
+[PATHS]
+# Base directory for resolving relative paths
+root_dir = "/data/projects/graph-cg"
+# Input data directory
+data_dir = "./data"
+# Output directory for artifacts/logs
+output_dir = "./outputs"
+mlruns_dir = "~/projects/dl-experiments/graph-cg/mlruns"

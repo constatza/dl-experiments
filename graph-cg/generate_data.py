@@ -146,22 +146,39 @@ def generate_samples(
     return x_all, rhs_all
 
 
-def main(rhs_generated_path, x_generated_path, matrix_path, rhs_path):
+def main(rhs_generated_path: Path, x_generated_path: Path, matrix_path: Path, rhs_path: Path):
+    """Main function to generate training data from matrix and RHS.
+    
+    Args:
+        rhs_generated_path: Output path for generated RHS samples
+        x_generated_path: Output path for generated solution samples  
+        matrix_path: Input path to matrix file (.txt format)
+        rhs_path: Input path to RHS vector file (.npy format)
+    """
     # Parameters
     num_samples_simple = 3000
     num_samples_krylov = 3000
     num_krylov_iterations = 15
 
+    # Load matrix and RHS
+    print(f"Loading matrix from: {matrix_path}")
     matrix = np.loadtxt(matrix_path)
-    # rhs = np.loadtxt(rhs_path)
-    size = matrix.shape[0]
-    rhs = np.ones(size)
+    
+    print(f"Loading RHS from: {rhs_path}")
+    if rhs_path.suffix == '.npy':
+        rhs = np.load(rhs_path)
+    else:
+        rhs = np.loadtxt(rhs_path)
+    
     print(f"Matrix shape: {matrix.shape}")
+    print(f"RHS shape: {rhs.shape}")
+    
+    # Normalize matrix and RHS consistently
     scale = np.linalg.norm(matrix, ord=1)
     matrix = matrix / scale
-
     rhs = rhs / scale
 
+    # Generate training samples
     x_samples, rhs_samples = generate_samples(
         matrix=matrix,
         rhs=rhs,
@@ -171,29 +188,58 @@ def main(rhs_generated_path, x_generated_path, matrix_path, rhs_path):
         shuffle=True,
     )
 
+    # Ensure output directory exists
+    rhs_generated_path.parent.mkdir(parents=True, exist_ok=True)
+    x_generated_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save generated data
     np.save(rhs_generated_path, rhs_samples)
     np.save(x_generated_path, x_samples)
-    print(f"Saved to {rhs_generated_path}")
+    print(f"Saved RHS samples to: {rhs_generated_path}")
+    print(f"Saved solution samples to: {x_generated_path}")
+
+
+def main_from_config(config_path: str = "./config_new.toml") -> None:
+    """Generate data using paths from the new config structure.
+    
+    Args:
+        config_path: Path to the configuration file
+    """
+    settings = Dynaconf(settings_file=config_path)
+    
+    # Get base paths
+    root_dir = Path(settings.PATHS.root_dir)
+    
+    # Check for actual source data files that exist
+    raw_data_dir = root_dir / "data/raw"
+    matrix_path = raw_data_dir / "Scc_assembly_no_0_column_no_0_Krr.txt"  # Matrix file
+    rhs_source_path = raw_data_dir / "Scc_assembly_no_0_column_no_0_RHS.txt"  # Source RHS file
+    
+    # Generate output paths based on config structure (relative to root_dir)
+    x_config_path = settings.DATASET.x.lstrip('./')  # Remove leading './'  
+    y_config_path = settings.DATASET.y.lstrip('./')  # Remove leading './'
+    
+    rhs_generated_path = root_dir / x_config_path  # RHS samples go to x path
+    x_generated_path = root_dir / y_config_path    # Solutions go to y path
+    
+    print(f"Using config: {config_path}")
+    print(f"Root directory: {root_dir}")
+    print(f"Matrix path: {matrix_path}")
+    print(f"Source RHS path: {rhs_source_path}")
+    print(f"Output paths - x: {rhs_generated_path}, y: {x_generated_path}")
+    
+    # Verify source files exist
+    if not matrix_path.exists():
+        raise FileNotFoundError(f"Matrix file not found: {matrix_path}")
+    if not rhs_source_path.exists():
+        raise FileNotFoundError(f"RHS file not found: {rhs_source_path}")
+    
+    main(rhs_generated_path, x_generated_path, matrix_path, rhs_source_path)
 
 
 # Example usage
 if __name__ == "__main__":
-    np.random.seed(0)
-    name = ""
-
-    settings = Dynaconf(
-        settings_file="./config.toml",
-    )
-    # Paths
-    matrix_path = Path(settings.PATHS.matrix_template)
-    rhs_path = Path(settings.PATHS.rhs_template)
-
-    generated_dir = Path(settings.PATHS.generated_dir)
-    generated_dir.mkdir(exist_ok=True)
-    if name is None or name == "":
-        rhs_generated_path = generated_dir / f"{matrix_path.stem}-rhs.npy"
-        x_generated_path = generated_dir / f"{matrix_path.stem}-solution.npy"
-    else:
-        rhs_generated_path = generated_dir / f"{name}-rhs.npy"
-        x_generated_path = generated_dir / f"{name}-solution.npy"
-    main(rhs_generated_path, x_generated_path, matrix_path, rhs_path)
+    np.random.seed(42)  # Match config seed
+    
+    # Use new config structure by default
+    main_from_config("./config_new.toml")

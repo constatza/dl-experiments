@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13.1"
 dependencies = [
-    "dlkit[gpu]",
+    "dlkit",
     "seaborn>=0.13.2",
     "tcl>=0.2",
 ]
@@ -20,4 +20,4 @@ extend-select = [
 convention = "google"
 
 [tool.uv.sources]
-dlkit = { path = "../dlkit" }
+dlkit = { path = "../dlkit", editable = true }
