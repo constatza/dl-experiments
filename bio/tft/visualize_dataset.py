@@ -4,14 +4,14 @@ import seaborn as sns
 import polars as pl
 from matplotlib import pyplot as plt
 
-from dlkit.io.settings import load_validated_settings
+from dlkit.settings.environment import env as dl_env
 
 
 if __name__ == "__main__":
     sns.set_theme("paper")
 
-    config = load_validated_settings("./config.toml")
-    df = pl.read_parquet(config.PATHS.features)
+    root = dl_env.get_root_path()
+    df = pl.read_parquet(root / "input" / "pca.parquet")
 
     g = sns.PairGrid(
         df,

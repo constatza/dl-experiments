@@ -2,7 +2,8 @@ import torch  # noqa: D100
 from pydantic import FilePath
 from matplotlib import pyplot as plt
 from dlkit.utils.torch_utils import dataloader_to_xy
-from dlkit.run import run_from_path
+from dlkit.api import infer
+from dlkit.core.general_settings import GeneralSettings
 
 
 def predict(

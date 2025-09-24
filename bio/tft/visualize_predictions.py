@@ -4,18 +4,21 @@ import polars as pl
 import torch
 from matplotlib import pyplot as plt
 
-from dlkit.io.settings import load_validated_settings
+from pathlib import Path
+
+from dlkit.io.locations import predictions_dir
+from dlkit.settings.environment import env as dl_env
 
 
 if __name__ == "__main__":
     sns.set_theme("paper")
 
-    config = load_validated_settings("./config.toml")
-    df = pl.read_parquet(config.PATHS.features)
+    root = dl_env.get_root_path()
+    input_dir = root / "input"
+    df = pl.read_parquet(input_dir / "pca.parquet")
 
-    predictions = (
-        torch.load(config.PATHS.predictions_dir / "predictions_0.pt").cpu().numpy()
-    )
+    pred_path = predictions_dir() / "predictions_0.pt"
+    predictions = torch.load(pred_path).cpu().numpy()
 
     plt.scatter(df["time"].to_numpy(), predictions)
     plt.show()

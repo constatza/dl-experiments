@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.13.1"
 dependencies = [
     "dlkit",
+    "scipy-stubs==1.16.2.0",
     "seaborn>=0.13.2",
     "tcl>=0.2",
+    "typer>=0.17.4",
 ]
 
 [tool.ruff.lint]

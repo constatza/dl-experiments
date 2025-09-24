@@ -1,112 +1,127 @@
-[run]
-mode = "mlflow"
-name = "@format {this.paths.matrix_name}"
+[SESSION]
+# Human-readable run/session name (for logs and tracking)
+name = "GraphCG-Krylov"
+# Random seed for reproducibility
+seed = 42
+# Computation precision preset (e.g., medium, high)
+precision = "32"
+# Optional root directory for path resolution
+root_dir = "/data/projects/graph-cg"
 
-[mlflow.client]
-experiment_name = "@format GraphCG-Krylov-{this.run.name}"
-
-[mlflow.server]
-backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
-artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
-
-[trainer]
-max_epochs = 300
-enable_checkpointing = true
-default_root_dir = "@format {this.paths.output_dir}"
-#accelerator = "cpu"
-#fast_dev_run = true
-
-#[[trainer.callbacks]]
-#name = "NumpyWriter"
-#module_path = "dlkit.callbacks"
-#output_dir = "@format {this.paths.output_dir}"
-
-[[trainer.callbacks]]
-name = "ModelCheckpoint"
-dirpath = "@format {this.paths.output_dir}"
-filename = "graph"
-monitor = "val_loss"
-save_top_k = 1
-save_weights_only = true
-every_n_epochs = 10
-enable_version_counter = false
-
-[pipeline]
-name = "dlkit.gnn:GraphNetwork"
-checkpoint = "@format {this.paths.output_dir}\\graph.ckpt"
-
-[model]
+[MODEL]
+# Model class path - using new dlkit GATv2Projection
 name = "GATv2Projection"
-module_path = "dlkit.gnn"
-hidden_size = 32
+module_path = "dlkit.nn.graph.projection"
+hidden_size = 16
 num_layers = 12
-dropout = 0.1
+#dropout = 0.1
+checkpoint = "output/checkpoints/gnn.ckpt"
 
+[TRAINING]
+# Number of epochs for convenience
 
-[pipeline.optimizer]
+[TRAINING.trainer]
+# Maximum number of epochs (Lightning Trainer)
+max_epochs = 700
+# Hardware accelerator: cpu | gpu | auto | tpu
+accelerator = "auto"
+# Enable checkpointing
+enable_checkpointing = true
+# Default root directory for trainer outputs
+default_root_dir = "output"
+
+[TRAINING.optimizer]
+# Optimizer name and settings
 name = "RAdam"
-lr = 1e-3
+lr = 1e-1
 
-[pipeline.scheduler]
+[TRAINING.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
 patience = 30
-min_lr = 1e-6
+min_lr = 1e-14
 
-#[[pipeline.metrics]]
-#name = ""
+# Model checkpoint callback configuration
+[[TRAINING.trainer.callbacks]]
+name = "ModelCheckpoint"
+dirpath = "output/checkpoints"
+filename = "gnn"
+monitor = "val_loss"
+save_top_k = 1
+save_weights_only = false
+every_n_epochs = 1
+enable_version_counter = false
 
-[datamodule]
+[DATAMODULE]
+# DataModule class for graph data
 name = "GraphDataModule"
 
-[datamodule.split]
-val_ratio = 0.15
-test_ratio = 0.15
-#filepath = "@format {this.paths.input_dir}\\idx_split.json"
-
-[datamodule.dataset]
-name = "GraphDataset"
-root = "@format {this.paths.root}"
-features = "@format {this.paths.generated_dir}\\{this.paths.matrix_name}-rhs.npy"
-targets = "@format {this.paths.generated_dir}\\{this.paths.matrix_name}-solution.npy"
-edge_index = "@format {this.paths.matrix_template}"
-force_reload = true
-
-
-[[datamodule.dataset.pre_transform]]
-name = "SpectralRadiusNorm"
-module_path = "dlkit.gnn.transforms"
-
-
-[datamodule.dataloader]
+[DATAMODULE.dataloader]
 num_workers = 5
 batch_size = 64
 persistent_workers = true
 pin_memory = true
 shuffle = true
-follow_batch = ["x", "edge_index"]
 
-[paths]
-root = "M:\\shared\\graph-cg"
-input_dir = "@format {this.paths.root}\\raw"
-output_dir = "@format {this.paths.root}\\output"
-mlruns_dir = "@format {this.paths.root}\\mlruns"
-matrix_name = "Scc_assembly_no_0_column_no_0_Krr"
-template_dir = "@format {this.paths.input_dir}\\vectors\\"
-generated_dir = "@format {this.paths.template_dir}\\generated\\"
-matrix_template = "@format {this.paths.template_dir}\\{this.paths.matrix_name}.txt"
-rhs_template = "@format {this.paths.template_dir}\\Krr_inversion_no_0_RHS.txt"
+[DATASET]
+# Graph dataset class
+name = "GraphDataset"
+# Graph data paths (absolute paths to avoid resolution issues)
+root = "data"
+x = "data/raw/Scc_assembly_no_0_column_no_0_Krr-rhs.npy"
+y = "data/raw/Scc_assembly_no_0_column_no_0_Krr-solution.npy"
+edge_index = "data/raw/Scc_assembly_no_0_column_no_0_Krr.txt"
 
-[optuna]
-n_trials = 100
+[DATASET.split]
+val_ratio = 0.15
+test_ratio = 0.15
 
-[optuna.pruner]
-name = "MedianPruner"
-n_warmup_steps = 100
-n_min_trials = 5
+[MLFLOW]
+# Enable MLflow tracking
+enabled = true
 
+[MLFLOW.server]
+# MLflow server configuration
+# Using DLKit defaults derived from environment root:
+# - backend SQLite at <root>/output/mlruns/mlflow.db
+# - artifacts at <root>/output/mlartifacts/
 
-[optuna.model]
-hidden_size = {low=16, high=1000, step= 100}
-num_layers = {low=4, high=12, step=1}
-dropout = {low=0, high=0.5, step=0.1}
+[MLFLOW.client]
+# MLflow client configuration
+experiment_name = "GraphCG-Krylov"
+
+[OPTUNA]
+# Hyperparameter optimization settings
+enabled = false
+n_trials = 40
+
+[OPTUNA.model]
+hidden_size = {low=2, high=100, step= 10}
+num_layers = {low=1, high=10, step=1}
+drop = {low=0, high=0.5, step=0.1}
+
+[EXTRAS]
+# Non-dlkit configuration for custom analysis scripts
+
+[EXTRAS.paths]
+# Unified path configuration
+output_dir = "output"
+matrix_path = "data/raw/matrix.txt"
+rhs_path = "data/raw/rhs.txt"
+
+[EXTRAS.noise_analysis]
+# Configuration for noise robustness analysis
+enabled = true
+#noise_levels = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+# Available strategies: "global", "single_dim", "blockwise", "load_redistribution", "missing_data", "corrupted_data", "extreme_magnitude"
+strategies = ["global", "single_dim", "blockwise", "load_redistribution", "missing_data", "extreme_magnitude"]
+seed = 42
+
+[EXTRAS.solver]
+# CG solver configuration
+tolerance = 1e-8
+max_iterations = 30
+normalize_system = true
+# Stopping criterion: "tolerance" (stop when residual < tolerance) or "fixed_iterations" (run exactly max_iterations)
+# For fair preconditioner comparison, use "tolerance" to measure iterations needed to reach the same accuracy
+stopping_criterion = "tolerance"

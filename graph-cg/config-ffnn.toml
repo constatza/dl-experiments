@@ -1,52 +1,55 @@
 [SESSION]
 # Human-readable run/session name (for logs and tracking)
-name = "FFNN-Experiment"
+name = "FFNN-Experiment-512"
 # Random seed for reproducibility
 seed = 42
 # Computation precision preset (e.g., medium, high)
-precision = "medium"
+precision = "32"
+# Optional root directory for path resolution
+root_dir = "/data/projects/graph-cg"
 
 [MODEL]
 # Model class path - using ConstantWidthFFNN from dlkit
 name = "ConstantWidthFFNN"
 module_path = "dlkit.nn.ffnn"
-hidden_size = 64
-num_layers = 6
+hidden_size = 512
+num_layers = 5
 #dropout = 0.1
+checkpoint = "/data/projects/graph-cg/output/checkpoints/ffnn.ckpt"
 
 [TRAINING]
-# Number of epochs for convenience
 
 [TRAINING.trainer]
 # Maximum number of epochs (Lightning Trainer)
-max_epochs = 300
+max_epochs = 700
 # Hardware accelerator: cpu | gpu | auto | tpu
 accelerator = "auto"
 # Enable checkpointing
 enable_checkpointing = true
 # Default root directory for trainer outputs
-default_root_dir = "./outputs"
+default_root_dir = "/data/projects/graph-cg/output"
 
 [TRAINING.optimizer]
 # Optimizer name and settings
 name = "RAdam"
-lr = 5e-2
+lr = 1e-5
 
 [TRAINING.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
-patience = 20
-min_lr = 1e-6
+patience = 30
+min_lr = 1e-14
 
 # Model checkpoint callback configuration
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-dirpath = "./outputs"
+dirpath = "/data/projects/graph-cg/output/checkpoints"
 filename = "ffnn"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
 every_n_epochs = 1
+enable_version_counter = false
 
 [DATAMODULE]
 # DataModule class for array data
@@ -65,11 +68,11 @@ name = "FlexibleDataset"
 
 [[DATASET.features]]
 name = "x"
-path = "/data/projects/graph-cg/data/raw/Scc_assembly_no_0_column_no_0_Krr-rhs.npy"
+path = "/data/projects/graph-cg/data/generated/rhs-samples.npy"
 
 [[DATASET.targets]]
 name = "y"
-path = "/data/projects/graph-cg/data/raw/Scc_assembly_no_0_column_no_0_Krr-solution.npy"
+path = "/data/projects/graph-cg/data/generated/solution-samples.npy"
 
 [DATASET.split]
 val_ratio = 0.15
@@ -81,8 +84,9 @@ enabled = true
 
 [MLFLOW.server]
 # MLflow server configuration
-backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
-artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
+# Using DLKit defaults derived from environment root:
+# - backend SQLite at <root>/output/mlruns/mlflow.db
+# - artifacts at <root>/output/mlartifacts/
 
 [MLFLOW.client]
 # MLflow client configuration
@@ -91,13 +95,35 @@ experiment_name = "FFNN-Experiment"
 [OPTUNA]
 # Hyperparameter optimization settings
 enabled = false
-n_trials = 100
+n_trials = 40
+
+[OPTUNA.model]
+hidden_size = {low=2, high=100, step= 10}
+num_layers = {low=1, high=10, step=1}
+drop = {low=0, high=0.5, step=0.1}
 
 [PATHS]
-# Base directory for resolving relative paths
-root_dir = "/data/projects/graph-cg"
-# Input data directory
-data_dir = "./data"
-# Output directory for artifacts/logs
-output_dir = "./outputs"
-mlruns_dir = "~/projects/dl-experiments/graph-cg/mlruns"
+# Path configuration for analysis scripts
+output_dir = "/data/projects/graph-cg/output"
+matrix_path = "/data/projects/graph-cg/data/raw/matrix-512.txt"
+rhs_path = "/data/projects/graph-cg/data/raw/rhs.txt"
+
+[EXTRAS]
+# Non-dlkit configuration for custom analysis scripts
+
+[EXTRAS.noise_analysis]
+# Configuration for noise robustness analysis
+enabled = true
+#noise_levels = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+# Available strategies: "global", "single_dim", "blockwise", "load_redistribution", "missing_data", "corrupted_data", "extreme_magnitude"
+strategies = ["global", "single_dim", "blockwise", "load_redistribution", "missing_data", "extreme_magnitude"]
+seed = 42
+
+[EXTRAS.solver]
+# CG solver configuration
+tolerance = 1e-8
+max_iterations = 30
+normalize_system = true
+# Stopping criterion: "tolerance" (stop when residual < tolerance) or "fixed_iterations" (run exactly max_iterations)
+# For fair preconditioner comparison, use "tolerance" to measure iterations needed to reach the same accuracy
+stopping_criterion = "tolerance"

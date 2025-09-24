@@ -5,7 +5,9 @@ import polars as pl
 import torch
 from tomlkit import dumps
 
-from dlkit.io.settings import load_validated_settings
+from pathlib import Path
+
+from dlkit.settings.environment import env as dl_env
 from dlkit.transforms import PCA, MinMaxScaler
 from dlkit.transforms.chain import Pipeline
 
@@ -54,17 +56,16 @@ def _read_solutions(variables: tuple[str, ...], input_dir: dict[str, str]) -> np
 def main():
     """Read solutions from files and preprocess the data."""
     variables = ("u", "p", "cox", "tcell")
-    settings_path = "./config.toml"
-    settings = load_validated_settings(settings_path)
-    paths = settings.PATHS
+    root = dl_env.get_root_path()
+    input_dir = root / "input"
     reduced_dims = 3
-    solutions = _read_solutions(variables, paths.input_dir)
+    solutions = _read_solutions(variables, str(input_dir))
     N, T, D = solutions.shape
-    parameters = np.load(paths.parameters)
+    parameters = np.load(input_dir / "parameters.npy")
     # repeat each parameter T times for each timestep
     parameters = np.repeat(parameters, T, axis=0)
 
-    time = np.loadtxt(paths.time)
+    time = np.loadtxt(input_dir / "timeStepTotalTimes.txt")
     time, dt = _process_time(time, T, N)
 
     solutions_flat = solutions.reshape(-1, D)
@@ -116,15 +117,12 @@ def main():
 
     # write to parquet file
 
-    df.collect().write_parquet(
-        settings.PATHS.input_dir / "pca.parquet",
-        compression="snappy",
-    )
+    df.collect().write_parquet(input_dir / "pca.parquet", compression="snappy")
 
     schema = {key: str(value) for key, value in df.collect_schema().items()}
     # write to toml
 
-    with open(settings.PATHS.input_dir / "pca-schema.toml", "w") as f:
+    with open(input_dir / "pca-schema.toml", "w") as f:
         f.write(dumps(schema))
 
     print("Preprocessing completed successfully.")

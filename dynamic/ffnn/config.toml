@@ -6,8 +6,9 @@ name = "E=22E6, ω=5, dt=0.01, KLterms=1, sin"
 experiment_name = "@format FFNN({this.run.name})"
 
 [mlflow.server]
-backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/mlflow.db"
-artifacts_destination = "@format file:///{this.paths.mlruns_dir}/artifacts"
+# Storage paths now follow DLKit defaults based on DLKIT_ROOT_DIR:
+# - backend: <root>/output/mlruns/mlflow.db
+# - artifacts: <root>/output/mlartifacts/
 
 [trainer]
 max_epochs = 300
@@ -18,12 +19,12 @@ fast_dev_run = true
 [[trainer.callbacks]]
 name = "NumpyWriter"
 module_path = "dlkit.callbacks"
-output_dir = "@format {this.paths.output_dir}"
+output_dir = "./outputs"
 filenames = ["predictions_latent"]
 
 [[trainer.callbacks]]
 name = "ModelCheckpoint"
-dirpath = "@format {this.paths.output_dir}"
+dirpath = "./outputs"
 filename = "ffnn"
 monitor = "val_loss"
 save_top_k = 1
@@ -59,8 +60,8 @@ name = "MinMaxScaler"
 name = "MeanAbsolutePercentageError"
 
 [dataset]
-x = "@format {this.paths.input_dir}\\train_model_params.npy"
-y = "@format {this.paths.output_dir}\\latent.npy"
+x = "./input/train_model_params.npy"
+y = "./outputs/latent.npy"
 
 [datamodule]
 val_size = 0.15
@@ -73,15 +74,11 @@ batch_size = 256
 persistent_workers = true
 pin_memory = true
 
-[paths]
-root = "M:\\shared\\Serafeim_Atzarakis\\results\\CantileverDynamicLinear\\"
-input_dir = "@format {this.paths.root}\\python_experimenting\\{this.run.name}"
-output_dir = "@format {this.paths.root}"
-mlruns_dir = "M:\\constantinos\\data\\dynamic\\mlruns"
-predictions_dir = "@format {this.paths.output_dir}"
-predictions = "@format {this.paths.predictions_dir}\\predictions_latent.npy"
-idx_split = "@format {this.paths.input_dir}\\idx_split.json"
-checkpoint = "@format {this.paths.output_dir}\\ffnn.ckpt"
+# PATHS removed. Use DLKIT_ROOT_DIR for base. Conventional locations:
+# - Input under ./input, outputs under ./outputs
+# predictions = "./outputs/predictions_latent.npy"
+# idx_split = "./input/idx_split.json"
+# checkpoint = "./outputs/ffnn.ckpt"
 
 [optuna]
 n_trials = 3

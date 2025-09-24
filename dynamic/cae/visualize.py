@@ -2,7 +2,9 @@ import matplotlib.pyplot as plt  # noqa: D100
 import numpy as np
 import torch
 
-from dlkit.io.settings import load_validated_settings
+from pathlib import Path
+
+from dlkit.settings.environment import env as dl_env
 from dlkit.metrics.temporal import mase
 from dlkit.postprocessing import plot_pred_vs_true, plot_residuals
 from dlkit.io.index import load_split_indices
@@ -10,18 +12,18 @@ from dlkit.io.index import load_split_indices
 num_plots = 3
 dof_idx = 99
 variable = "U"
-config_path = "./config.toml"
-config = load_validated_settings(config_path)
-paths = config.PATHS
-figures_dir = paths.output_dir / "figures"
+root = dl_env.get_root_path()
+output_dir = root / "outputs"
+input_dir = root / "input"
+figures_dir = output_dir / "figures"
 figures_dir.mkdir(exist_ok=True, parents=True)
 
-features = np.load(paths.features, mmap_mode="r")
-parameters = np.load(paths.parameters, mmap_mode="r")
-predictions = np.load(paths.predictions_dir / "predictions.npy", mmap_mode="r")
-idx_split = load_split_indices(paths.idx_split or paths.input_dir / "idx_split.json")
+features = np.load(input_dir / "train_solutions.npy", mmap_mode="r")
+parameters = np.load(input_dir / "train_model_params.npy", mmap_mode="r")
+predictions = np.load(output_dir / "predictions.npy", mmap_mode="r")
+idx_split = load_split_indices(input_dir / "idx_split.json")
 
-latent = np.load(paths.latent, mmap_mode="r")
+latent = np.load(output_dir / "latent.npy", mmap_mode="r")
 # stack first two axes
 predictions = predictions.reshape(-1, predictions.shape[-2], predictions.shape[-1])
 timesteps = np.arange(0, predictions.shape[-1])

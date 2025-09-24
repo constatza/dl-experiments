@@ -5,9 +5,10 @@ experiment_name = "TFT"
 [mlflow.server]
 host = "localhost"
 port = 35382
-backend_store_uri = "@format sqlite:///{this.paths.mlruns_dir}/tft/mlflow.db"
-artifacts_destination = "@format file:///{this.paths.mlruns_dir}/tft/artifacts"
 terminate_apps_on_port = true
+# Storage paths now follow DLKit defaults based on DLKIT_ROOT_DIR:
+# - backend: <root>/output/mlruns/mlflow.db
+# - artifacts: <root>/output/mlartifacts/
 
 [trainer]
 max_epochs = 100
@@ -24,7 +25,7 @@ save_top_k = 1
 save_last = true
 every_n_epoch = 10
 enable_version_counter = false
-dirpath = "@format {this.paths.output_dir}\\checkpoints"
+dirpath = "./outputs/checkpoints"
 
 [model]
 name = "TemporalFusionTransformer"
@@ -36,7 +37,7 @@ dropout = 0.1
 log_interval = 5
 predict = false
 learning_rate = 1e-4
-checkpoint = "@format {this.paths.output_dir}\\checkpoints\\tft.ckpt"
+checkpoint = "./outputs/checkpoints/tft.ckpt"
 
 
 [datamodule]
@@ -62,13 +63,11 @@ batch_size = 1000
 persistent_workers = true
 pin_memory = true
 
-[paths]
-root = "M:\\constantinos\\data\\bio\\5-equations"
-input_dir = "M:\\constantinos\\data\\bio\\5-equations\\input"
-output_dir = "@format {this.paths.root}\\output"
-mlruns_dir = "@format {this.paths.output_dir}\\mlruns"
-predictions_dir = "@format {this.paths.output_dir}\\predictions"
-features = "@format {this.paths.input_dir}\\pca.parquet"
-parameters = "@format {this.paths.input_dir}\\parameters.npy"
-time = "@format {this.paths.input_dir}\\timeStepTotalTimes.txt"
-idx_split = "@format {this.paths.input_dir}\\idx_split.json"
+# PATHS removed. Use DLKIT_ROOT_DIR for base. Conventional locations:
+# - Input files under ./input (relative to root)
+# - Outputs under ./outputs (relative to root)
+# Example inputs used by helper scripts:
+# features = "./input/pca.parquet"
+# parameters = "./input/parameters.npy"
+# time = "./input/timeStepTotalTimes.txt"
+# idx_split = "./input/idx_split.json"
