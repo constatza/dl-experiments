@@ -1,0 +1,24 @@
+# Data config for ingesting an archive of solution vectors (x) and generating RHS pairs.
+# Usage: uv run python generate_data.py data-configs/solution-bank-example.toml
+
+[flow]
+
+[source]
+matrix_path = "/data/projects/graph-cg/data/raw/matrix-90.txt"
+solutions_path = "/data/projects/graph-cg/data/raw/solutions/x_*.txt"
+
+[generation]
+# Normalization method matched with other workflows: "matrix", "rhs", "spectral", or "none"
+normalize = "matrix"
+# Shuffle the solution archive before saving the dataset
+shuffle = true
+# Optional seed for deterministic shuffling (omit for random)
+seed = 123
+
+[[generation.strategy]]
+name = "solution_archive"
+percentage = 1.0
+solutions_glob = "/data/projects/graph-cg/data/raw/solutions/x_*.txt"
+
+[output]
+processed_dir = "/data/projects/graph-cg/data/processed"

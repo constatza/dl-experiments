@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 from pathlib import Path
-import numpy as np
+from typing import Any, Dict, List
+
+import matplotlib
+
+matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
-from typing import Dict, Any, List
+import numpy as np
 
 
 def plot_parity_and_residuals(y_true: np.ndarray, y_pred: np.ndarray,
@@ -53,11 +57,11 @@ def plot_parity_and_residuals(y_true: np.ndarray, y_pred: np.ndarray,
 
     # Residuals plot
     ax = axes[1]
-    ax.scatter(y_true, residuals, s=10, alpha=0.7, color=plt.cm.Set1(0.0))
+    ax.scatter(y_pred, residuals, s=10, alpha=0.7, color=plt.cm.Set1(0.0))
     ax.axhline(0.0, color=plt.cm.Set1(0.1), linestyle='dashed', label='residual = 0')
-    ax.set_xlabel("True")
+    ax.set_xlabel("Predicted")
     ax.set_ylabel("Residual (Pred - True)")
-    ax.set_title("Residuals vs True")
+    ax.set_title("Residuals vs Predicted")
     ax.grid(True, alpha=0.3)
     ax.legend()
 
@@ -94,8 +98,8 @@ def plot_residual_history(results: Dict[str, Dict[str, Any]],
             ax.semilogy(iterations, residuals, 'o-', label=method_name, markersize=4)
 
     ax.set_xlabel('Iteration')
-    ax.set_ylabel('Residual Norm')
-    ax.set_title('Convergence History')
+    ax.set_ylabel('Relative Residual $\\|r\\| / \\|b\\|$')
+    ax.set_title('Convergence History (Relative)')
     ax.grid(True, alpha=0.3)
     ax.legend()
 
@@ -121,57 +125,19 @@ def plot_convergence_comparison(results: Dict[str, Dict[str, Any]],
         save_path: Path to save plot
         show: Whether to show plot
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-
-    methods: List[str] = []
-    iterations: List[int] = []
-    final_residuals: List[float] = []
-    converged: List[bool] = []
-    skipped: List[str] = []
+    fig, ax = plt.subplots(figsize=(10, 6))
 
     for method_name, result in results.items():
-        res_val = result.get('residual', float('inf'))
-        if not np.isfinite(res_val):
-            skipped.append(method_name)
-            continue
+        residuals = result.get('residual_history') or result.get('residuals')
+        if residuals:
+            iterations = range(len(residuals))
+            ax.semilogy(iterations, residuals, 'o-', label=method_name, markersize=4)
 
-        methods.append(method_name)
-        iterations.append(result.get('iterations', 0))
-        final_residuals.append(res_val)
-        converged.append(result.get('converged', False))
-
-    # Iterations comparison
-    colors = ['green' if c else 'red' for c in converged]
-    bars1 = ax1.bar(methods, iterations, color=colors, alpha=0.7)
-    ax1.set_ylabel('Iterations to Convergence')
-    ax1.set_title('Iterations Required')
-    ax1.tick_params(axis='x', rotation=45)
-
-    # Add value labels on bars
-    for bar, iters, conv in zip(bars1, iterations, converged):
-        height = bar.get_height()
-        label = str(iters) if conv else f"{iters}*"
-        ax1.text(bar.get_x() + bar.get_width()/2., height,
-                label, ha='center', va='bottom')
-
-    # Final residuals comparison
-    if final_residuals:
-        bars2 = ax2.bar(methods, final_residuals, color=colors, alpha=0.7)
-        ax2.set_ylabel('Final Residual')
-        ax2.set_title('Final Residual Norms')
-        ax2.set_yscale('log')
-        ax2.tick_params(axis='x', rotation=45)
-
-        for bar, res in zip(bars2, final_residuals):
-            ax2.text(bar.get_x() + bar.get_width()/2., bar.get_height(),
-                     f"{res:.2e}", ha='center', va='bottom')
-    else:
-        ax2.axis('off')
-        ax2.text(0.5, 0.5, 'No finite residuals to plot', ha='center', va='center')
-
-    if skipped:
-        note = ", ".join(skipped)
-        ax2.text(0.5, 0.05, f"Skipped: {note}", ha='center', va='bottom', transform=ax2.transAxes)
+    ax.set_xlabel('Iteration')
+    ax.set_ylabel('Relative Residual $\\|r\\| / \\|b\\|$')
+    ax.set_title('Convergence Comparison (Relative Residual)')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
 
     plt.tight_layout()
 
@@ -185,3 +151,74 @@ def plot_convergence_comparison(results: Dict[str, Dict[str, Any]],
         plt.show()
     else:
         plt.close(fig)
+
+
+def plot_data_norms(
+    data_dir: str | Path,
+    save_path: str | Path | None = None,
+    show: bool = False
+) -> None:
+    """Plot RHS and solution norm distributions for a dataset.
+
+    Args:
+        data_dir: Path to dataset directory containing .npy files
+        save_path: Path to save figure (optional)
+        show: Whether to display the plot
+
+    Returns:
+        None
+    """
+    data_dir = Path(data_dir)
+
+    # Load data
+    rhs_samples = np.load(data_dir / "rhs-samples.npy")
+    sol_samples = np.load(data_dir / "sol-samples.npy")
+
+    # Calculate norms
+    rhs_norms = np.linalg.norm(rhs_samples, axis=1)
+    sol_norms = np.linalg.norm(sol_samples, axis=1)
+
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+    # Plot RHS norms histogram
+    ax1.hist(rhs_norms, bins=50, alpha=0.7, edgecolor="black")
+    ax1.axvline(np.mean(rhs_norms), color="r", linestyle="--", linewidth=2,
+                label=f"Mean: {np.mean(rhs_norms):.3e}")
+    ax1.axvline(np.median(rhs_norms), color="g", linestyle="--", linewidth=2,
+                label=f"Median: {np.median(rhs_norms):.3e}")
+    ax1.set_xlabel("||b|| (RHS Norm)", fontsize=12)
+    ax1.set_ylabel("Count", fontsize=12)
+    ax1.set_title("RHS Norm Distribution", fontsize=14, fontweight="bold")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    # Plot solution norms histogram
+    ax2.hist(sol_norms, bins=50, alpha=0.7, edgecolor="black", color="orange")
+    ax2.axvline(np.mean(sol_norms), color="r", linestyle="--", linewidth=2,
+                label=f"Mean: {np.mean(sol_norms):.3e}")
+    ax2.axvline(np.median(sol_norms), color="g", linestyle="--", linewidth=2,
+                label=f"Median: {np.median(sol_norms):.3e}")
+    ax2.set_xlabel("||x|| (Solution Norm)", fontsize=12)
+    ax2.set_ylabel("Count", fontsize=12)
+    ax2.set_title("Solution Norm Distribution", fontsize=14, fontweight="bold")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    # Add dataset info as suptitle
+    dataset_name = data_dir.name
+    fig.suptitle(f"Data Norms: {dataset_name}", fontsize=16, fontweight="bold", y=1.02)
+
+    plt.tight_layout()
+
+    if save_path:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"Saved data norms plot to: {save_path}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+

@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 from pathlib import Path
-import matplotlib.pyplot as plt
+
+import matplotlib
+
+matplotlib.use("Agg", force=True)
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_residual_history(results: dict[str, dict], save_path: str | Path | None = None) -> None:
+def plot_residual_history(
+    results: dict[str, dict],
+    save_path: str | Path | None = None,
+    show: bool = False,
+) -> None:
     """Plot residual history for all methods.
 
     Args:
         results: Dictionary mapping method name -> info dict with residual_history
         save_path: Optional path to save the plot
     """
-    plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(12, 8))
 
     for name, info in results.items():
         residual_history = info.get("residual_history", [])
@@ -22,8 +30,8 @@ def plot_residual_history(results: dict[str, dict], save_path: str | Path | None
             plt.semilogy(residual_history, label=name, marker='o', markersize=4)
 
     plt.xlabel('CG Iteration')
-    plt.ylabel('Residual Norm')
-    plt.title('Convergence History Comparison')
+    plt.ylabel('Relative Residual $\\|r\\| / \\|b\\|$')
+    plt.title('Convergence History Comparison (Relative)')
     plt.legend()
     plt.grid(True, alpha=0.3)
 
@@ -32,49 +40,36 @@ def plot_residual_history(results: dict[str, dict], save_path: str | Path | None
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=200, bbox_inches='tight')
 
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
-def plot_convergence_comparison(results: dict[str, dict], save_path: str | Path | None = None) -> None:
+def plot_convergence_comparison(
+    results: dict[str, dict],
+    save_path: str | Path | None = None,
+    show: bool = False,
+) -> None:
     """Plot convergence comparison between different methods.
 
     Args:
         results: Dictionary mapping method name -> info dict from solver
         save_path: Optional path to save the plot
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    fig, ax = plt.subplots(figsize=(12, 7))
 
-    # Plot 1: Iterations needed for convergence
-    names = list(results.keys())
-    iterations = [results[name].get("iterations", 0) for name in names]
-    converged = [results[name].get("converged", False) for name in names]
+    for name, info in results.items():
+        residual_history = info.get("residual_history") or []
+        if residual_history:
+            iterations = range(len(residual_history))
+            ax.semilogy(iterations, residual_history, 'o-', label=name, markersize=4)
 
-    colors = ['green' if conv else 'red' for conv in converged]
-    bars = ax1.bar(names, iterations, color=colors, alpha=0.7)
-    ax1.set_ylabel('Iterations to Convergence')
-    ax1.set_title('Method Performance (Lower is Better)')
-    ax1.tick_params(axis='x', rotation=45)
-
-    # Add value labels on bars
-    for bar, iters, conv in zip(bars, iterations, converged):
-        height = bar.get_height()
-        status = "✓" if conv else "✗"
-        ax1.text(bar.get_x() + bar.get_width()/2., height + 0.5,
-                f'{iters} {status}', ha='center', va='bottom', fontsize=10)
-
-    # Plot 2: Final residual norms
-    residuals = [results[name].get("residual", float('inf')) for name in names]
-    bars2 = ax2.bar(names, residuals, color=colors, alpha=0.7)
-    ax2.set_ylabel('Final Residual Norm')
-    ax2.set_title('Final Residual Comparison (Log Scale)')
-    ax2.set_yscale('log')
-    ax2.tick_params(axis='x', rotation=45)
-
-    # Add value labels on bars
-    for bar, res in zip(bars2, residuals):
-        height = bar.get_height()
-        ax2.text(bar.get_x() + bar.get_width()/2., height * 1.1,
-                f'{res:.1e}', ha='center', va='bottom', fontsize=10, rotation=45)
+    ax.set_xlabel('Iteration')
+    ax.set_ylabel('Relative Residual $\\|r\\| / \\|b\\|$')
+    ax.set_title('Convergence History Comparison (Relative)')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
 
     plt.tight_layout()
 
@@ -83,10 +78,18 @@ def plot_convergence_comparison(results: dict[str, dict], save_path: str | Path 
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=200, bbox_inches='tight')
 
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
-def plot_parity_residuals(y_pred: np.ndarray, y_true: np.ndarray, save_path: str | Path | None = None) -> None:
+def plot_parity_residuals(
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    save_path: str | Path | None = None,
+    show: bool = False,
+) -> None:
     """Create a parity (y_true vs y_pred) and residuals plot.
 
     Args:
@@ -124,9 +127,9 @@ def plot_parity_residuals(y_pred: np.ndarray, y_true: np.ndarray, save_path: str
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
     # Residuals plot
-    axes[1].scatter(y_true, residuals, alpha=0.6, s=20)
+    axes[1].scatter(y_pred, residuals, alpha=0.6, s=20)
     axes[1].axhline(y=0, color='k', linestyle='--', alpha=0.8)
-    axes[1].set_xlabel('True')
+    axes[1].set_xlabel('Predicted')
     axes[1].set_ylabel('Residuals (Pred - True)')
     axes[1].set_title('Residuals Plot')
 
@@ -137,10 +140,17 @@ def plot_parity_residuals(y_pred: np.ndarray, y_true: np.ndarray, save_path: str
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=200, bbox_inches='tight')
 
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
-def plot_noise_robustness(noise_results: dict[str, dict[str, dict]], save_path: str | Path | None = None) -> None:
+def plot_noise_robustness(
+    noise_results: dict[str, dict[str, dict]],
+    save_path: str | Path | None = None,
+    show: bool = False,
+) -> None:
     """Plot noise robustness analysis results.
 
     Args:
@@ -157,7 +167,7 @@ def plot_noise_robustness(noise_results: dict[str, dict[str, dict]], save_path: 
     colors = cm.Set1(np.linspace(0, 1, max(len(methods), 3)))
     method_colors = {method: colors[i % len(colors)] for i, method in enumerate(methods)}
 
-    plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(12, 8))
 
     for method in methods:
         iterations = []
@@ -184,4 +194,7 @@ def plot_noise_robustness(noise_results: dict[str, dict[str, dict]], save_path: 
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=200, bbox_inches='tight')
 
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)

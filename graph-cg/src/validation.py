@@ -74,6 +74,49 @@ def validate_config(config: dict) -> None:
         raise ValueError("DATASET section missing 'name' field")
 
 
+def validate_data_exists(
+    data_dir: Path | str,
+    required_files: list[str],
+) -> None:
+    """Validate that required data files exist in a directory.
+
+    This is an action function (performs I/O: file system checks).
+
+    Args:
+        data_dir: Directory to check for files.
+        required_files: List of filenames that must exist (e.g.,
+            ["rhs-samples.npy", "sol-samples.npy"]).
+
+    Raises:
+        FileNotFoundError: If any required file is missing, with a descriptive
+            error message listing all missing file paths.
+
+    Example:
+        >>> validate_data_exists(
+        ...     Path("/data/projects/graph-cg/data/processed/generate-90-norm"),
+        ...     ["rhs-samples.npy", "sol-samples.npy"],
+        ... )
+        # Raises FileNotFoundError if any file missing
+
+    Notes:
+        - This function has side effects (file system access).
+        - Use tmp_path fixture in tests (never tempfile module).
+    """
+    data_dir = Path(data_dir)
+    missing_files = []
+
+    for filename in required_files:
+        filepath = data_dir / filename
+        if not filepath.exists():
+            missing_files.append(str(filepath))
+
+    if missing_files:
+        files_str = "\n  - ".join(missing_files)
+        raise FileNotFoundError(
+            f"Required data files not found in {data_dir}:\n  - {files_str}"
+        )
+
+
 def validate_file_exists(path: str | Path, description: str = "File") -> Path:
     """Validate that a file exists.
 
@@ -89,7 +132,7 @@ def validate_file_exists(path: str | Path, description: str = "File") -> Path:
     """
     path = Path(path)
     if not path.exists():
-        FileNotFoundError(f"{description} not found: {path}")
+        raise FileNotFoundError(f"{description} not found: {path}")
     return path
 
 

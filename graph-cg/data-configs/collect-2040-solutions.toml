@@ -1,0 +1,24 @@
+# Solution archive config conjugate to spectral 93×31 data: uses displacement (x) vectors to synthesize RHS.
+
+[flow]
+
+[source]
+matrix_path = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements/stiffness/subdomain_1_Kaa.txt"
+solutions_path = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[generation]
+normalize = "spectral"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "solution_archive"
+percentage = 1.0
+solutions_glob = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[output]
+processed_dir = "/data/projects/graph-cg/data/processed"
+
+[test]
+# Test solutions (ua vectors) - system will compute b_test = A @ x_test
+solutions_path = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements/UaVectorsFromSpectral_0_5_b/ua_vector from_spectral_no_realization_100.txt"
