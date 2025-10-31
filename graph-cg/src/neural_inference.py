@@ -7,106 +7,120 @@ from typing import Any, Callable
 
 import numpy as np
 import torch
+from loguru import logger
 
-from dlkit.interfaces.api import predict_with_config
-from dlkit import GeneralSettings
-try:
-    from dlkit.interfaces.inference.api import infer_with_config
-    from dlkit.interfaces.inference import InferenceConfig
-except ImportError:
-    # Fallback if the API has changed
-    from dlkit import infer
+from dlkit import infer
+
+# Imports removed: normalization metadata no longer needed
+# All normalization happens at data generation time
 
 
 def create_neural_preconditioner(
     checkpoint_path: str | Path,
-    config_path: str | Path = None,  # No longer needed but kept for API compatibility
-) -> Callable[[np.ndarray], np.ndarray]:
+    config_path: str | Path | None = None,
+    data_config_path: str | Path | None = None,
+) -> Callable[[np.ndarray | None, np.ndarray], np.ndarray]:
     """Create a warm-start predictor for real-time inference without datasets.
 
     Uses dlkit.interfaces.api.infer() for direct tensor-to-tensor prediction
     without requiring training config or datasets - only the checkpoint.
 
+    All normalization is handled at data generation time. The saved artifacts
+    (matrix.npy, rhs-samples.npy, sol-samples.npy) are already normalized.
+
+    This unified interface supports both:
+    - Standard neural models (FFNN): Use only RHS input, ignore matrix
+    - Graph neural models (GNN): Use both matrix and RHS inputs
+
     Args:
         checkpoint_path: Path to the trained model checkpoint
-        config_path: (Deprecated) No longer needed - kept for compatibility
+        config_path: Optional path to training config (unused, kept for API compatibility)
+        data_config_path: Optional path to data config (unused, kept for API compatibility)
+
+    Returns:
+        Callable that accepts (matrix, rhs) and returns predicted solution.
+        For RHS-only models, matrix parameter is ignored.
     """
     checkpoint = _ensure_checkpoint(Path(checkpoint_path))
     predictor = _NeuralWarmStart(checkpoint)
     return predictor
 
 
+def create_neural_step_helper(
+    checkpoint_path: str | Path,
+    config_path: str | Path | None = None,
+    data_config_path: str | Path | None = None,
+) -> Callable[[Any], np.ndarray | None]:
+    """Create a neural helper that produces per-iteration solution guesses.
+
+    Args:
+        checkpoint_path: Path to trained neural model checkpoint
+        config_path: Optional config path (unused, kept for symmetry)
+        data_config_path: Optional data config path (unused)
+
+    Returns:
+        Callable accepting an iteration context or residual vector and returning
+        a helper correction (float64 numpy array) or None.
+    """
+
+    _ = config_path  # Placeholder for API compatibility
+    _ = data_config_path
+    checkpoint = _ensure_checkpoint(Path(checkpoint_path))
+    predictor = _NeuralWarmStart(checkpoint)
+    return _NeuralStepHelper(predictor)
+
+
 class _NeuralWarmStart:
-    """Wrap DLKit inference to predict a solution for an RHS vector."""
+    """Unified neural warm-start for both standard and graph models.
+
+    Supports:
+    - Standard models (FFNN): Accept only RHS, ignore matrix
+    - Graph models (GNN): Accept both matrix and RHS
+
+    Assumes all data (training and inference) is already normalized at data generation time.
+    No runtime normalization is performed.
+    """
 
     def __init__(self, checkpoint: Path) -> None:
         self._checkpoint = checkpoint
 
-    def __call__(self, rhs: np.ndarray) -> np.ndarray:
-        """Predict solution vector from RHS vector using the neural model."""
+    def __call__(self, matrix: np.ndarray | None, rhs: np.ndarray) -> np.ndarray:
+        """Predict solution from matrix (optional) and RHS using the neural model.
+
+        Args:
+            matrix: System matrix A (optional - used by graph models, ignored by FFNN)
+            rhs: RHS vector b (always used)
+
+        Returns:
+            Predicted solution vector
+
+        Note:
+            The model introspects what inputs it needs. Standard FFNNs ignore the matrix,
+            while GNNs use both matrix and RHS.
+        """
         try:
-            vector = np.asarray(rhs)
-            rhs_dtype = vector.dtype if vector.dtype != np.dtype("O") else np.float32
+            rhs_vector = np.asarray(rhs)
+            if rhs_vector.dtype == np.dtype("O"):
+                rhs_vector = rhs_vector.astype(np.float32)
+            flat_rhs = rhs_vector.reshape(-1)
+            target_size = flat_rhs.shape[0]
 
-            # For FFNN model, provide raw tensor input
-            # The model expects input with shape (24,) based on checkpoint metadata
-            input_tensor = torch.from_numpy(vector).float()
-            # Ensure tensor matches expected shape (24,) from the checkpoint metadata
-            if input_tensor.shape != (24,):
-                input_tensor = input_tensor.reshape(24)
+            prediction: np.ndarray | None = None
 
-            # Try different inference approaches
-            inputs = {"x": input_tensor}  # Use dict format as per documentation
-
-            # Try the newer infer_with_config API first
-            try:
-                config = InferenceConfig(
-                    model_checkpoint_path=str(self._checkpoint),
-                    batch_size=1,
-                    apply_transforms=False
-                )
-                result = infer_with_config(config, inputs)
-            except (NameError, AttributeError) as api_error:
-                # Fallback to original infer API
-                from dlkit import infer
+            if matrix is not None:
                 try:
-                    result = infer(
-                        checkpoint_path=str(self._checkpoint),
-                        inputs=inputs,
-                        batch_size=1
+                    prediction = self._run_inference(matrix, flat_rhs, target_size)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug(
+                        "Neural inference with matrix input failed; falling back to RHS-only. "
+                        f"Error: {exc}"
                     )
-                except Exception as infer_error:
-                    raise RuntimeError(f"Both inference APIs failed. Config API error: {api_error}. Infer API error: {infer_error}") from infer_error
+                    prediction = None
 
-            if result is None:
-                raise RuntimeError("Inference returned None result")
+            if prediction is None:
+                prediction = self._run_inference(None, flat_rhs, target_size)
 
-            # Debug: log the result structure before processing
-            result_type = type(result).__name__
-            result_attrs = dir(result) if hasattr(result, '__dict__') else []
-
-            if not hasattr(result, 'predictions'):
-                raise RuntimeError(f"Inference result missing predictions attribute. Result type: {result_type}, attributes: {result_attrs}")
-
-            # Debug: log predictions structure
-            pred_type = type(result.predictions).__name__
-            pred_info = ""
-            if isinstance(result.predictions, dict):
-                pred_info = f"dict keys: {list(result.predictions.keys())}"
-            elif hasattr(result.predictions, 'shape'):
-                pred_info = f"shape: {result.predictions.shape}"
-            else:
-                pred_info = f"value: {str(result.predictions)[:200]}"
-
-            try:
-                prediction = _extract_prediction_array(result.predictions, vector.shape[0])
-            except Exception as extract_error:
-                raise RuntimeError(
-                    f"Prediction extraction failed. Result type: {result_type}, "
-                    f"predictions type: {pred_type}, predictions info: {pred_info}. "
-                    f"Extraction error: {extract_error}"
-                ) from extract_error
-            return prediction.astype(rhs_dtype, copy=False)
+            return prediction.astype(np.float64, copy=False)
 
         except Exception as e:
             # Provide specific error context for neural warm start failures
@@ -120,8 +134,106 @@ class _NeuralWarmStart:
             else:
                 error_msg += f" - {type(e).__name__}: {str(e)}"
 
-            error_msg += f". Checkpoint: {self._checkpoint}, Input shape: {rhs.shape}, Input dtype: {rhs.dtype}"
+            error_msg += f". Checkpoint: {self._checkpoint}, RHS shape: {rhs.shape}, RHS dtype: {rhs.dtype}"
+            if matrix is not None:
+                error_msg += f", Matrix shape: {matrix.shape}"
             raise RuntimeError(error_msg) from e
+
+    def _run_inference(
+        self,
+        matrix: np.ndarray | None,
+        rhs: np.ndarray,
+        target_size: int,
+    ) -> np.ndarray:
+        """Execute inference call and post-process predictions."""
+        inputs = self._prepare_inputs(matrix, rhs)
+        result = infer(
+            checkpoint_path=str(self._checkpoint),
+            inputs=inputs,
+            batch_size=1,
+        )
+        if result is None or not hasattr(result, "predictions"):
+            raise RuntimeError("Inference returned no predictions")
+
+        prediction = _extract_prediction_array(result.predictions, target_size)
+
+        if prediction.size != target_size:
+            # Fallback to RHS-only if matrix resulted in unexpected shape
+            if matrix is not None:
+                raise ValueError(
+                    f"Neural inference produced {prediction.size} outputs (expected {target_size}). "
+                    "This checkpoint likely ignores matrix inputs."
+                )
+            raise ValueError(
+                f"Neural inference produced {prediction.size} outputs (expected {target_size})."
+            )
+
+        return prediction.reshape(-1)
+
+    def _prepare_inputs(
+        self,
+        matrix: np.ndarray | None,
+        rhs: np.ndarray
+    ) -> dict[str, torch.Tensor]:
+        """Prepare inputs for dlkit inference, supporting both FFNN and GNN models.
+
+        Strategy:
+        1. Try with both matrix and RHS (for GNN models)
+        2. If that fails, fallback to RHS-only (for FFNN models)
+        3. Cache the successful approach for future calls
+
+        Args:
+            matrix: System matrix A (optional)
+            rhs: RHS vector b (required)
+
+        Returns:
+            Dictionary of input tensors for dlkit.infer()
+
+        Note:
+            dlkit models will error if passed unexpected inputs, so we must
+            detect what the model expects and only provide those inputs.
+        """
+        # Convert RHS to tensor (always needed)
+        rhs_tensor = torch.from_numpy(rhs.astype(np.float32, copy=False)).unsqueeze(0)
+
+        # Try with matrix first if provided (for graph models)
+        if matrix is not None:
+            matrix_arr = np.asarray(matrix, dtype=np.float32)
+            if matrix_arr.ndim != 2:
+                raise ValueError(f"Matrix must be 2D, got shape {matrix_arr.shape}")
+            matrix_tensor = torch.from_numpy(matrix_arr).unsqueeze(0)
+
+            # Return both matrix and RHS for graph models
+            return {
+                "matrix": matrix_tensor,
+                "rhs": rhs_tensor,
+            }
+        else:
+            # Only RHS for standard models
+            return {"rhs": rhs_tensor}
+
+
+class _NeuralStepHelper:
+    """Neural helper that maps residual context to solution corrections."""
+
+    def __init__(self, predictor: _NeuralWarmStart) -> None:
+        self._predictor = predictor
+
+    def __call__(self, context: Any) -> np.ndarray:
+        """Return helper correction for given iteration context or residual."""
+
+        if isinstance(context, np.ndarray):
+            residual = context
+            matrix = None
+        else:
+            residual = getattr(context, "residual", None)
+            if residual is None:
+                raise ValueError("Iteration context missing 'residual' attribute")
+            matrix = getattr(context, "matrix", None)
+
+        residual_arr = np.asarray(residual, dtype=np.float64, copy=False)
+        prediction = self._predictor(matrix, residual_arr)
+        return prediction.astype(np.float64, copy=False)
 
 
 def _ensure_checkpoint(path: Path) -> Path:
@@ -197,8 +309,31 @@ def _extract_prediction_array(predictions: Any, target_size: int) -> np.ndarray:
         ) from e
 
 
-def prepare_neural_input(x: np.ndarray) -> dict[str, torch.Tensor]:
-    """Prepare input tensor for backwards compatibility with older tooling."""
+def prepare_neural_input(
+    rhs: np.ndarray,
+    matrix: np.ndarray | None = None
+) -> dict[str, torch.Tensor]:
+    """Prepare input tensors for backwards compatibility with older tooling.
 
-    x_tensor = torch.from_numpy(np.asarray(x)).float().unsqueeze(0)
-    return {"x": x_tensor}
+    Supports both standard models (RHS only) and graph models (matrix + RHS).
+
+    Args:
+        rhs: RHS vector (required)
+        matrix: System matrix (optional, for graph models)
+
+    Returns:
+        Dictionary of input tensors
+
+    Note:
+        Feature names must match checkpoint training metadata.
+        Standard checkpoints use "rhs" as the feature name.
+        Graph checkpoints use "matrix" and "rhs".
+    """
+    rhs_tensor = torch.from_numpy(np.asarray(rhs)).float().unsqueeze(0)
+    inputs = {"rhs": rhs_tensor}
+
+    if matrix is not None:
+        matrix_tensor = torch.from_numpy(np.asarray(matrix)).float().unsqueeze(0)
+        inputs["matrix"] = matrix_tensor
+
+    return inputs
