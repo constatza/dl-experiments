@@ -1,45 +1,71 @@
-# dl-experiments
+# Graph-CG: Neural Preconditioners for Conjugate Gradient Solvers
 
-This monorepo hosts experimentation sandboxes for structured linear solvers and
-bio-signal models. Most day-to-day work currently lives under `graph-cg/`, which
-contains tooling to collect datasets, train neural preconditioners, and benchmark
-conjugate-gradient variants.
+Graph-CG explores neural networks as preconditioners and warm-starts for Conjugate Gradient (CG) on graph-structured systems. The repository is organized around a three-config system and a unified data-generation pipeline.
 
-## Key entry points
+## Project Layout
 
-- `graph-cg/collect_data.py`: materialise datasets defined via TOML templates in
-  `graph-cg/data-configs/`.
-- `graph-cg/generate_data.py`: synthesise matrices / RHS pairs for training and
-  evaluation.
-- `graph-cg/train_model.py`: train FFNN or GNN checkpoints specified by configs in
-  `graph-cg/configs/`.
-- `graph-cg/compare_methods.py`: run flexible CG comparisons across classical and
-  neural configurations. Defaults spin up Jacobi / ILU baselines, neural-only
-  preconditioning, neural warm-starts, and the combined warm-start + neural
-  preconditioner while seeding CG with the warm-start output.
+- `configs/` – Model templates (FFNN, GNN, linear) and the experiment matrix `experiments.toml`.
+- `data-configs/` – Data templates (e.g., `collect-504-solutions.toml`, `collect-2040-solutions.toml`, `test-solutions.toml`, eigenvector-based tests).
+- `solver-configs/` – CG settings decoupled from models (`default.toml`, `cg.toml`, `pcg.toml`).
+- `scripts/` – Automation entry points for data processing, training, comparison, and workflow orchestration.
+- `src/` – Library code (configuration, generation, solver, diagnostics, workflows).
+- `tests/` – End-to-end and unit coverage across CLI, configuration, generation, solver, and workflows.
 
-All orchestration scripts should be launched through `uv run python …` to ensure we
-share the same dependency environment.
+## Three-Config System
 
-## Neural comparison workflow
+Configurations are loaded together to keep models, data, and solver settings independent:
 
-`compare_methods.py` now builds a configurable combination plan:
+```python
+from src.configuration import load_config, get_solver_params
 
-1. Warm-start only runs (`neural_warm_start`, etc.)
-2. Classical preconditioners without warm-starts (Jacobi, ILU)
-3. Neural preconditioner alone (`neural`)
-4. Neural warm-start + neural preconditioner
+settings, context = load_config(
+    "configs/ffnn.toml",
+    data_config_path="data-configs/collect-504-solutions.toml",
+    solver_config_path="solver-configs/default.toml",
+)
 
-Additional tuples can be added at runtime with repeated `--combo` arguments in the
-form `WARM:PRECONDITIONER[:HELPER]`.
+params = get_solver_params(settings)
+features = context.data.features_file
+checkpoint_dir = context.training.checkpoint_dir
+```
 
-When a data config provides `test.solutions_path`, the script derives the RHS via
-`b_test = A @ x_test` before running comparisons, ensuring all methods evaluate the
-same system. Each run records its initial guess so downstream consumers can inspect
-the warm-start seed actually used by CG.
+- **Model configs (`configs/`):** architecture and training hyperparameters.
+- **Data configs (`data-configs/`):** data sources and generation strategy.
+- **Solver configs (`solver-configs/`):** CG tolerances, iteration limits, and preconditioner set.
 
-## Repository hygiene
+`configs/experiments.toml` pairs these configs for batch workflows.
 
-Large artifacts (datasets, checkpoints, figures) remain under `/data/projects/graph-cg`
-and per-project `output/` folders. Do not modify `.venv/` or `.ruff_cache/`, and keep
-changes focused within the workspace roots provided by the harness.
+## Workflows and CLI
+
+- Process data (collection or generation):
+  ```bash
+  uv run python scripts/process_data.py data-configs/collect-504-solutions.toml --solve
+  ```
+- Train a model:
+  ```bash
+  uv run python scripts/train_model.py \
+    --config configs/ffnn.toml \
+    --data-config data-configs/collect-504-solutions.toml \
+    --solver-config solver-configs/default.toml
+  ```
+- Compare preconditioners:
+  ```bash
+  uv run python scripts/compare_methods.py --experiments configs/experiments.toml
+  ```
+- Run the full experiment matrix (data + train + compare):
+  ```bash
+  uv run python scripts/run_experiments.py --config configs/experiments.toml
+  ```
+
+Prefect orchestration lives in `src/workflows/workflow_prefect.py` (also exposed via the scripts above).
+
+## Tests and Tooling
+
+- Run all tests: `uv run pytest tests -v`
+- Targeted suites:
+  - Generation: `uv run pytest tests/generation -v`
+  - Solver: `uv run pytest tests/solver -v`
+  - CLI/workflows: `uv run pytest tests/cli tests/workflows -v`
+- Type checking: `uv run pyright src`
+
+Outputs and large artifacts should stay under `/data/projects/graph-cg` or per-project `output/` directories referenced by the configs.
