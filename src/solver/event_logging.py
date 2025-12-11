@@ -1,0 +1,344 @@
+"""Event sourcing system for solver iteration logging.
+
+This module provides orthogonal event logging for solver iterations without
+coupling to solver implementation. Follows event sourcing pattern where all
+iteration events are stored as immutable history.
+
+Design Principles:
+    - Single Responsibility: Only handles logging, not solver logic
+    - Orthogonal Design: Can be used or not used without affecting solver
+    - Immutable Events: All values copied to prevent mutation
+    - Open/Closed: Easy to extend with new event types
+
+Theory:
+    Event sourcing captures all state changes as a sequence of events.
+    This enables:
+    1. Full iteration history reconstruction
+    2. Post-hoc analysis and debugging
+    3. Zero overhead when not used (optional dependency)
+    4. Separation of logging concerns from algorithm logic
+
+Usage:
+    >>> logger = VectorLogger()
+    >>> logger.log("residual", r0)
+    >>> logger.log("residual", r1)
+    >>> logger.log("solution", x0)
+    >>>
+    >>> residuals = logger.get_history("residual")  # [r0, r1]
+    >>> solutions = logger.get_history("solution")  # [x0]
+    >>> latest_r = logger.get_latest("residual")     # r1
+
+References:
+    - Event Sourcing: Martin Fowler (2005)
+    - SOLID Principles: Single Responsibility, Open/Closed
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
+
+class VectorLogger:
+    """Event sourcing logger for solver iteration values.
+
+    This class provides orthogonal logging of iteration values without
+    coupling to solver implementation. Each log() call creates an immutable
+    event by copying the value. Supports both vector (NDArray) and scalar
+    (float) events.
+
+    Design Pattern:
+        Event Sourcing - Store all state changes as immutable events
+
+    Attributes:
+        _events: Dictionary mapping event names to lists of vector values
+        _scalar_events: Dictionary mapping event names to lists of scalar values
+
+    Mathematical Background:
+        For iterative solvers, we typically want to log:
+        - Residual vectors: r_k = b - A x_k at each iteration k
+        - Solution vectors: x_k at each iteration k
+        - Search directions: p_k at each iteration k
+        - Residual norms: ||r_k|| at each iteration k
+        - Step lengths: α_k at each iteration k
+
+    Usage Patterns:
+        1. Log vectors (residuals, solutions):
+            logger.log("residual", r_k)
+
+        2. Log scalars (norms, step lengths):
+            logger.log("residual_norm", norm(r_k))
+
+        3. Retrieve full history:
+            all_residuals = logger.get_history("residual")
+
+        4. Retrieve latest value:
+            latest_norm = logger.get_latest("residual_norm")
+
+    Examples:
+        >>> logger = VectorLogger()
+        >>> logger.log("residual", np.array([1.0, 2.0, 3.0]))
+        >>> logger.log("residual", np.array([0.5, 1.0, 1.5]))
+        >>> logger.log("residual_norm", 2.5)
+        >>> logger.log("residual_norm", 1.25)
+        >>>
+        >>> residuals = logger.get_history("residual")
+        >>> assert len(residuals) == 2
+        >>> norms = logger.get_history("residual_norm")
+        >>> assert norms == [2.5, 1.25]
+    """
+
+    def __init__(self) -> None:
+        """Initialize empty event log.
+
+        Creates empty dictionaries for vector and scalar events.
+        No memory allocated until first log() call.
+
+        Theory:
+            Starting with empty logs ensures zero overhead if logger
+            is created but never used (optional dependency pattern).
+        """
+        self._events: dict[str, list[NDArray]] = {}
+        self._scalar_events: dict[str, list[float]] = {}
+
+    def log(self, event_name: str, value: NDArray | float | int) -> None:
+        """Log an iteration value as an immutable event.
+
+        This method creates a new event by copying the value to prevent
+        external mutation. Automatically detects whether value is a vector
+        or scalar and stores in appropriate dictionary.
+
+        Args:
+            event_name: Name of the event (e.g., "residual", "solution",
+                "residual_norm"). Recommended naming:
+                - Vectors: descriptive name ("residual", "solution")
+                - Scalars: name with unit/type ("residual_norm", "step_length")
+            value: Vector (NDArray) or scalar (float/int) to log.
+                - Vectors are copied via np.asarray(...).copy()
+                - Scalars are converted to float
+
+        Theory:
+            Immutability is enforced by copying:
+            1. Vectors: np.asarray(value).copy() creates independent copy
+            2. Scalars: float(value) creates new Python object
+            3. External mutations to original value don't affect log
+
+            Why separate storage for vectors vs scalars?
+            - Memory efficiency: scalars stored as Python floats, not arrays
+            - Type safety: get_history() returns appropriate type
+            - Performance: avoid unnecessary array creation for scalars
+
+        Examples:
+            >>> logger = VectorLogger()
+            >>> r = np.array([1.0, 2.0])
+            >>> logger.log("residual", r)
+            >>> r[0] = 999.0  # Mutate original
+            >>> logged = logger.get_history("residual")[0]
+            >>> assert logged[0] == 1.0  # Log unchanged (immutable)
+        """
+        if isinstance(value, (int, float)):
+            # Scalar event
+            if event_name not in self._scalar_events:
+                self._scalar_events[event_name] = []
+            self._scalar_events[event_name].append(float(value))
+        else:
+            # Vector event
+            if event_name not in self._events:
+                self._events[event_name] = []
+            # Copy to ensure immutability
+            self._events[event_name].append(np.asarray(value, dtype=np.float64).copy())
+
+    def prepend(self, event_name: str, value: NDArray | float | int) -> None:
+        """Prepend an event to the beginning of the history.
+
+        This is useful for adding the initial state (iteration 0) when the
+        logging system starts recording after the first iteration.
+
+        Args:
+            event_name: Name of the event (e.g., "residual", "residual_norm")
+            value: Vector (NDArray) or scalar (float/int) to prepend
+
+        Theory:
+            Maintains event sourcing guarantees by:
+            1. Copying the value to ensure immutability
+            2. Inserting at index 0 to preserve chronological order
+            3. Following the same type detection as log()
+
+            This method is needed because scipy's CG callback starts at iteration 1,
+            not iteration 0. We compute the initial residual separately and prepend
+            it to the history to get complete convergence data.
+
+        Examples:
+            >>> logger = VectorLogger()
+            >>> logger.log("residual_norm", 0.5)
+            >>> logger.log("residual_norm", 0.25)
+            >>> logger.prepend("residual_norm", 1.0)  # Add initial residual
+            >>> assert logger.get_history("residual_norm") == [1.0, 0.5, 0.25]
+
+            >>> # Vector prepending
+            >>> logger.log("residual", np.array([0.5, 0.3]))
+            >>> logger.prepend("residual", np.array([1.0, 0.8]))
+            >>> residuals = logger.get_history("residual")
+            >>> assert len(residuals) == 2
+            >>> assert np.allclose(residuals[0], [1.0, 0.8])
+        """
+        if isinstance(value, (int, float)):
+            # Scalar event
+            if event_name not in self._scalar_events:
+                self._scalar_events[event_name] = []
+            self._scalar_events[event_name].insert(0, float(value))
+        else:
+            # Vector event
+            if event_name not in self._events:
+                self._events[event_name] = []
+            # Copy to ensure immutability
+            self._events[event_name].insert(0, np.asarray(value, dtype=np.float64).copy())
+
+    def get_history(self, event_name: str) -> list[NDArray] | list[float]:
+        """Retrieve full history for an event.
+
+        Returns a copy of the event list to maintain immutability of the log.
+
+        Args:
+            event_name: Name of the event to retrieve.
+
+        Returns:
+            List of all logged values for this event:
+            - For vector events: list[NDArray]
+            - For scalar events: list[float]
+            - For non-existent events: empty list []
+
+        Theory:
+            Returning a copy (via .copy()) prevents external code from
+            modifying the internal event log. This maintains the event
+            sourcing invariant: events are immutable once logged.
+
+        Examples:
+            >>> logger = VectorLogger()
+            >>> logger.log("residual_norm", 1.0)
+            >>> logger.log("residual_norm", 0.5)
+            >>> logger.log("residual_norm", 0.25)
+            >>> norms = logger.get_history("residual_norm")
+            >>> assert norms == [1.0, 0.5, 0.25]
+            >>> assert len(logger.get_history("nonexistent")) == 0
+        """
+        if event_name in self._scalar_events:
+            # Scalar events: return copy of list
+            return self._scalar_events[event_name].copy()
+        # Vector events: return copy of list (vectors already copied in log())
+        return self._events.get(event_name, []).copy()
+
+    def get_latest(self, event_name: str) -> NDArray | float | None:
+        """Get most recent value for an event.
+
+        Returns the last value logged for the given event name, or None
+        if no values have been logged.
+
+        Args:
+            event_name: Name of the event to retrieve.
+
+        Returns:
+            - For vector events: Copy of latest NDArray
+            - For scalar events: Latest float value
+            - For non-existent events: None
+
+        Theory:
+            Returning the latest value is useful for checking current state
+            without retrieving full history. Common use cases:
+            - Check latest residual norm before next iteration
+            - Retrieve final solution after solver completes
+            - Get current step length for adaptive algorithms
+
+        Examples:
+            >>> logger = VectorLogger()
+            >>> logger.log("residual_norm", 1.0)
+            >>> logger.log("residual_norm", 0.5)
+            >>> latest = logger.get_latest("residual_norm")
+            >>> assert latest == 0.5
+            >>> assert logger.get_latest("nonexistent") is None
+        """
+        if event_name in self._scalar_events:
+            history = self._scalar_events[event_name]
+            return history[-1] if history else None
+
+        history = self._events.get(event_name, [])
+        # Return copy to maintain immutability
+        return history[-1].copy() if history else None
+
+    def clear(self) -> None:
+        """Clear all logged events.
+
+        Removes all events from both vector and scalar logs. Useful for
+        reusing logger across multiple solver runs.
+
+        Theory:
+            Clearing the log enables logger reuse without creating new
+            objects. This is memory-efficient for repeated solves.
+
+        Examples:
+            >>> logger = VectorLogger()
+            >>> logger.log("residual", np.array([1.0, 2.0]))
+            >>> logger.clear()
+            >>> assert len(logger.get_history("residual")) == 0
+        """
+        self._events.clear()
+        self._scalar_events.clear()
+
+    def has_event(self, event_name: str) -> bool:
+        """Check if event has been logged.
+
+        Args:
+            event_name: Name of the event to check.
+
+        Returns:
+            True if at least one value logged for this event, False otherwise.
+
+        Examples:
+            >>> logger = VectorLogger()
+            >>> assert not logger.has_event("residual")
+            >>> logger.log("residual", np.array([1.0]))
+            >>> assert logger.has_event("residual")
+        """
+        return (
+            event_name in self._scalar_events and len(self._scalar_events[event_name]) > 0
+        ) or (event_name in self._events and len(self._events[event_name]) > 0)
+
+    def event_count(self, event_name: str) -> int:
+        """Get number of times event has been logged.
+
+        Args:
+            event_name: Name of the event to count.
+
+        Returns:
+            Number of values logged for this event (0 if never logged).
+
+        Examples:
+            >>> logger = VectorLogger()
+            >>> logger.log("residual_norm", 1.0)
+            >>> logger.log("residual_norm", 0.5)
+            >>> assert logger.event_count("residual_norm") == 2
+            >>> assert logger.event_count("nonexistent") == 0
+        """
+        if event_name in self._scalar_events:
+            return len(self._scalar_events[event_name])
+        return len(self._events.get(event_name, []))
+
+    def get_all_event_names(self) -> list[str]:
+        """Get names of all logged events.
+
+        Returns:
+            List of event names that have been logged (both vector and scalar).
+
+        Examples:
+            >>> logger = VectorLogger()
+            >>> logger.log("residual", np.array([1.0]))
+            >>> logger.log("residual_norm", 1.0)
+            >>> names = logger.get_all_event_names()
+            >>> assert "residual" in names
+            >>> assert "residual_norm" in names
+        """
+        return list(set(self._events.keys()) | set(self._scalar_events.keys()))
