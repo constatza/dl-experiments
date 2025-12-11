@@ -1,0 +1,9 @@
+[general]
+rtol = 1.0e-6
+atol = 1.0e-14
+max_iterations = 100
+stopping_criterion = "residual_norm"
+
+
+[data_generation]
+normalize = "matrix"

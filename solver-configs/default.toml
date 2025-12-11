@@ -1,0 +1,27 @@
+[general]
+rtol = 1.0e-6
+atol = 1.0e-14
+max_iterations = 200
+stopping_criterion = "residual_norm"  # "residual_norm" or "fixed_iterations"
+matrix = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz"
+rhs = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz"
+
+# Solver entries (names are display labels; type must map to a known solver/preconditioner key)
+[[solvers]]
+name = "none"
+type = "none"
+
+[[solvers]]
+name = "jacobi"
+type = "jacobi"
+
+[[solvers]]
+name = "ilu"
+type = "ilu"
+
+[[solvers]]
+name = "neural"
+type = "neural"
+limit_iters = 5
+fallback = "jacobi"
+apply_every = 1
