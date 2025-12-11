@@ -9,7 +9,7 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from .constants import (
+from ..constants import (
     ConfigKeys,
     ConfigSections,
     DEFAULT_KRYLOV_ITERATIONS,
@@ -19,10 +19,11 @@ from .constants import (
     DEFAULT_RESIDUAL_TRACE_ITERS,
     DEFAULT_SHUFFLE,
 )
-from .generation_plan import GenerationPlan, StrategySpec, parse_generation_plan
-from .paths import ProjectRoots, FlowPaths, DataPaths, parse_flow_keys
-from .data_collection import collect_case, generate_case, solution_archive_case
-from .sample_builders import build_solution_archive_samples
+from .plan import GenerationPlan, StrategySpec, parse_generation_plan
+from ..paths import ProjectRoots, FlowPaths, DataPaths, parse_flow_keys
+from ..io.base import load_matrix
+from .orchestration import build_dataset
+from .runner import run_generation
 
 
 @dataclass(frozen=True)
@@ -84,7 +85,7 @@ def _build_context(
         raise ValueError(
             f"Invalid normalize value in config: {normalize_value} (bool). "
             f"The 'normalize' parameter expects one of "
-            "'spectral', 'matrix', 'rhs', or 'none'."
+            "'spectral', 'matrix', 'rhs', 'diagonal', or 'none'."
         )
     normalize = str(normalize_value)
 
@@ -190,18 +191,28 @@ def _derive_rhs_from_solution_archive(
             f"{solutions_glob}"
         )
 
+    # Use solution_archive strategy to load one solution and compute RHS
     representative = candidates[0]
-    raw_samples = build_solution_archive_samples(
-        matrix_path=Path(matrix_path),
-        solution_files=[representative],
-        shuffle=False,
-        seed=None,
-    )
-    rhs_vector = raw_samples.rhs[0]
+    matrix = load_matrix(Path(matrix_path))
 
+    # Load single solution using solution_archive strategy
+    samples = run_generation(
+        "solution_archive",
+        matrix,
+        None,
+        cfg={
+            "solutions_glob": str(representative),
+            "samples": 1,
+        }
+    )
+
+    if samples.rhs is None or len(samples.rhs) == 0:
+        raise ValueError(f"Failed to load solution from {representative}")
+
+    rhs_vector = samples.rhs[0]
     dataset_dir.mkdir(parents=True, exist_ok=True)
-    output_path = dataset_dir / "auto-mother-rhs.npy"
-    np.save(output_path, rhs_vector.astype(np.float64, copy=False))
+    output_path = dataset_dir / "mother-rhs.txt"
+    np.savetxt(output_path, rhs_vector, fmt="%.18e")
     return output_path
 
 
@@ -250,6 +261,7 @@ def _execute_solution_archive(
     context: DataGenerationContext,
     strategy: StrategySpec,
 ) -> Path:
+    """Execute solution archive using new build_dataset() with solution_archive strategy."""
     resolved_solutions_path = _resolve_solution_archive_path(strategy, context)
     if resolved_solutions_path is None:
         raise ValueError(
@@ -266,14 +278,26 @@ def _execute_solution_archive(
         ConfigKeys.SEED, context.generation_cfg.get(ConfigKeys.SEED, DEFAULT_RANDOM_SEED)
     )
 
-    return solution_archive_case(
+    # Use new build_dataset with solution_archive strategy
+    from .data_types import NormalizeType
+    from typing import cast
+
+    dataset_path = build_dataset(
         matrix_path=context.matrix_path,
-        solutions_path=resolved_solutions_path,
-        dataset_dir=context.dataset_dir,
-        normalize=context.normalize,
+        dataset_dir=str(context.dataset_dir),
+        counts={"solution_archive": strategy.samples},
+        normalize=cast(NormalizeType, context.normalize),
         shuffle=bool(shuffle_value),
-        seed=_coerce_optional_int(seed_value),
+        seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
+        strategy_overrides={
+            "solution_archive": {
+                "solutions_glob": resolved_solutions_path,
+                "shuffle": bool(shuffle_value),
+                "seed": seed_value,
+            }
+        },
     )
+    return Path(dataset_path)
 
 
 def _execute_synthetic_generation(
@@ -282,10 +306,9 @@ def _execute_synthetic_generation(
     rhs_archive_strategy: StrategySpec | None,
     solution_archive_strategy: StrategySpec | None,
 ) -> Path:
+    """Execute mixed generation using new build_dataset() with all strategies."""
     generation_cfg = context.generation_cfg
 
-    num_samples_raw = generation_cfg.get(ConfigKeys.NUM_SAMPLES, DEFAULT_NUM_SAMPLES)
-    num_samples = int(num_samples_raw)
     krylov_iters = int(generation_cfg.get(ConfigKeys.KRYLOV_ITERS, DEFAULT_KRYLOV_ITERATIONS))
     residual_iters = int(
         generation_cfg.get(ConfigKeys.RESIDUAL_ITERS, DEFAULT_RESIDUAL_TRACE_ITERS)
@@ -297,37 +320,36 @@ def _execute_synthetic_generation(
     seed = int(seed_value)
     shuffle_value = generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE)
 
-    mix: dict[str, float] = {}
+    # Build counts dict with ALL strategies (synthetic + archives)
+    counts: dict[str, int] = {}
     strategy_overrides: dict[str, dict[str, Any]] = {}
+
+    # Add synthetic strategies
     for name, spec in synthetic_strategies.items():
-        mix[name] = spec.percentage
+        counts[name] = spec.samples
         if spec.options:
             strategy_overrides[name] = dict(spec.options)
 
-    solution_archive_options: dict[str, Any] | None = None
+    # Add solution archive strategy
     if solution_archive_strategy is not None:
-        mix[ConfigKeys.TYPE_SOLUTION_ARCHIVE] = solution_archive_strategy.percentage
-        solution_archive_options = dict(solution_archive_strategy.options)
-        if ConfigKeys.SOLUTIONS_GLOB not in solution_archive_options:
-            fallback = context.source_cfg.get(ConfigKeys.SOLUTIONS_PATH)
-            if isinstance(fallback, str) and fallback:
-                solution_archive_options[ConfigKeys.SOLUTIONS_GLOB] = fallback
-        if ConfigKeys.SHUFFLE not in solution_archive_options:
-            solution_archive_options[ConfigKeys.SHUFFLE] = context.generation_cfg.get(
-                ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE
-            )
-        if ConfigKeys.SEED not in solution_archive_options:
-            solution_archive_options[ConfigKeys.SEED] = context.generation_cfg.get(
-                ConfigKeys.SEED, DEFAULT_RANDOM_SEED
-            )
+        counts["solution_archive"] = solution_archive_strategy.samples
+        solutions_glob = _resolve_solution_archive_path(solution_archive_strategy, context)
+        if solutions_glob:
+            strategy_overrides["solution_archive"] = {
+                "solutions_glob": solutions_glob,
+                "shuffle": solution_archive_strategy.options.get(
+                    ConfigKeys.SHUFFLE,
+                    generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE)
+                ),
+                "seed": solution_archive_strategy.options.get(
+                    ConfigKeys.SEED,
+                    seed_value
+                ),
+            }
 
-    provide_rhs_option = None
-    if solution_archive_options is not None:
-        provide_rhs_option = solution_archive_options.pop(ConfigKeys.PROVIDE_RHS, None)
-
-    rhs_archive_glob: str | None = None
+    # Add RHS archive strategy
     if rhs_archive_strategy is not None:
-        mix[ConfigKeys.TYPE_RHS_ARCHIVE] = rhs_archive_strategy.percentage
+        counts["rhs_archive"] = rhs_archive_strategy.samples
         rhs_archive_glob = _resolve_rhs_archive_glob(rhs_archive_strategy, context)
         if rhs_archive_glob is None:
             raise ValueError(
@@ -336,38 +358,52 @@ def _execute_synthetic_generation(
                 f"or 'generation.{ConfigKeys.RHS_ARCHIVE_GLOB}'."
             )
 
+        rhs_archive_opts = _merge_rhs_archive_options(rhs_archive_strategy, context)
+        strategy_overrides["rhs_archive"] = {
+            "rhs_glob": rhs_archive_glob,
+            **rhs_archive_opts,
+        }
+
+    # Resolve RHS source path (for synthetic strategies that need it)
     rhs_source_path = _resolve_rhs_source(
         context=context,
-        solution_archive_options=solution_archive_options,
-        provide_rhs_option=provide_rhs_option,
+        solution_archive_options=solution_archive_strategy.options if solution_archive_strategy else None,
+        provide_rhs_option=None,
     )
-    if rhs_source_path is None:
-        raise ValueError(
-            "Missing 'source.rhs_path' for synthetic data generation. "
-            "Provide one in the config or set provide_rhs on the solution_archive strategy."
-        )
 
-    return generate_case(
+    # Use new unified build_dataset()
+    from .data_types import NormalizeType
+    from typing import cast
+
+    # Add global strategy config for krylov and residual iterations
+    # These apply to all strategies unless overridden per-strategy
+    for strategy_name in counts.keys():
+        if strategy_name not in strategy_overrides:
+            strategy_overrides[strategy_name] = {}
+        # Set defaults if not already specified
+        if "krylov_iters" not in strategy_overrides[strategy_name]:
+            strategy_overrides[strategy_name]["krylov_iters"] = krylov_iters
+        if "residual_iters" not in strategy_overrides[strategy_name]:
+            strategy_overrides[strategy_name]["residual_iters"] = residual_iters
+
+    dataset_path = build_dataset(
         matrix_path=context.matrix_path,
+        dataset_dir=str(context.dataset_dir),
+        counts=counts,
         rhs_path=rhs_source_path,
-        num_samples=num_samples,
-        dataset_dir=context.dataset_dir,
-        mix=mix,
-        krylov_iters=krylov_iters,
-        residual_iters=residual_iters,
-        seed=seed,
-        normalize=context.normalize,
+        normalize=cast(NormalizeType, context.normalize),
         shuffle=bool(shuffle_value),
-        rhs_archive_glob=rhs_archive_glob,
-        solution_archive_options=solution_archive_options,
+        seed=seed,
         strategy_overrides=strategy_overrides,
     )
+    return Path(dataset_path)
 
 
 def _execute_rhs_archive_only(
     context: DataGenerationContext,
     strategy: StrategySpec,
 ) -> Path:
+    """Execute RHS archive using new build_dataset() with rhs_archive strategy."""
     rhs_glob = _resolve_rhs_archive_glob(strategy, context)
     if rhs_glob is None:
         raise ValueError(
@@ -377,13 +413,26 @@ def _execute_rhs_archive_only(
 
     collection_kwargs = _merge_rhs_archive_options(strategy, context)
 
-    return collect_case(
+    seed_value = context.generation_cfg.get(ConfigKeys.SEED, DEFAULT_RANDOM_SEED)
+
+    # Use new build_dataset with rhs_archive strategy
+    from .data_types import NormalizeType
+    from typing import cast
+
+    dataset_path = build_dataset(
         matrix_path=context.matrix_path,
-        rhs_path=rhs_glob,
-        dataset_dir=context.dataset_dir,
-        normalize=context.normalize,
-        **collection_kwargs,
+        dataset_dir=str(context.dataset_dir),
+        counts={"rhs_archive": strategy.samples},
+        normalize=cast(NormalizeType, context.normalize),
+        seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
+        strategy_overrides={
+            "rhs_archive": {
+                "rhs_glob": rhs_glob,
+                **collection_kwargs,
+            }
+        },
     )
+    return Path(dataset_path)
 
 
 def _execute_plan(
@@ -416,6 +465,29 @@ def _execute_plan(
 
 
 def process_config(config: dict[str, Any], config_path: Path | str | None = None) -> Path:
-    """Process a data config and execute the declared generation plan."""
+    """Process a data config and execute the declared generation plan.
+
+    After generating the main dataset, this also checks for a [test] section
+    and generates comparison.npz if test solutions are specified.
+    """
+    # TODO: Move persist_comparison_samples to generation module
+    # For now, skip comparison sample generation
+    # from ..data_pipeline import persist_comparison_samples
+
     context, plan = _build_context(config=config, config_path=config_path)
-    return _execute_plan(context, plan)
+    dataset_dir = _execute_plan(context, plan)
+
+    # Generate comparison data if [test] section is present
+    # TODO: Re-implement persist_comparison_samples in generation module
+    test_config = config.get("test", {})
+    if test_config:
+        solutions_glob = test_config.get("solutions_glob")
+        if solutions_glob:
+            print(f"\n=== Skipping comparison.npz generation (not yet migrated) ===")
+            # persist_comparison_samples(
+            #     dataset_dir=dataset_dir,
+            #     test_solutions_glob=solutions_glob,
+            #     max_samples=max_samples,
+            # )
+
+    return dataset_dir

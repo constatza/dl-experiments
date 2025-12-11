@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.linalg import norm
 
-from src.data_generation import normal_strategy, krylov_strategy, rng_from_seed
+from src.generation.base import normal_strategy, krylov_strategy, rng_from_seed
 def test_normal_strategy_normalization():
     """Test that normal_strategy generates RHS with consistent norms."""
     print("Testing normal_strategy normalization...")
