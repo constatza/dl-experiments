@@ -186,4 +186,5 @@ mlartifacts*/
 
 # Claude Code specific
 CLAUDE.md
-
+.claude/
+AGENTS.md

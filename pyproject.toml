@@ -5,11 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13.1"
 dependencies = [
+    "bokeh>=3.8.0",
     "dlkit",
+    "prefect>=3.4.23",
+    "prefect-dask>=0.3.6",
+    "pydantic>=2.12.5",
     "scipy-stubs==1.16.2.0",
     "seaborn>=0.13.2",
     "tcl>=0.2",
-    "typer>=0.17.4",
+    "tomli-w>=1.0.0",
+    "typer>=0.19.2",
 ]
 
 [tool.ruff.lint]
@@ -20,6 +25,18 @@ extend-select = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.407",
+    "pytest>=9.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = [
+    "tests",
+]
 
 [tool.uv.sources]
 dlkit = { path = "../dlkit", editable = true }
