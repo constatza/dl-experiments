@@ -1,7 +1,0 @@
-from dlkit.io.settings import load_validated_settings  # noqa: D100
-from dlkit.scripts.training import train
-
-if __name__ == "__main__":
-    settings_path = "./config.toml"
-    settings = load_validated_settings(settings_path)
-    train(settings)
