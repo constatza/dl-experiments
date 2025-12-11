@@ -1,0 +1,150 @@
+"""File and directory operations.
+
+This module provides simple file system operations like directory creation
+and path manipulation utilities.
+
+Functions in this module perform I/O operations and are not pure.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+
+from dlkit import GeneralSettings
+
+from .paths import FlowContext
+
+
+def ensure_dir(path: str | Path) -> Path:
+    """Ensure directory exists, creating it if necessary.
+
+    I/O action - creates directory on disk.
+
+    Args:
+        path: Directory path to ensure exists
+
+    Returns:
+        Path object for the directory
+    """
+    p = Path(path)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def sanitize_identifier(value: str, default: str = "run") -> str:
+    """Convert arbitrary identifier text into a filesystem-friendly slug.
+
+    Pure function - transforms string without I/O.
+
+    Args:
+        value: Identifier to sanitize
+        default: Default value if sanitized result is empty
+
+    Returns:
+        Filesystem-safe identifier string
+    """
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return default
+
+    cleaned = cleaned.replace("/", "-").replace("\\", "-")
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", cleaned)
+    cleaned = cleaned.strip("_-.")
+
+    return cleaned or default
+
+
+def derive_model_identifier(
+    settings: GeneralSettings,
+    context: FlowContext,
+    config_path: str | Path,
+) -> str:
+    """Derive a stable model identifier for artifact naming.
+
+    Pure function - extracts identifier from settings and context.
+
+    Preference order:
+        1. ``MODEL.name`` from the config settings
+        2. ``SESSION.name`` if present and not the DLKit default
+        3. Context ``run_id``
+        4. Config filename stem
+
+    Args:
+        settings: General settings
+        context: Flow context
+        config_path: Path to config file
+
+    Returns:
+        Sanitized model identifier string
+    """
+    config_path = Path(config_path)
+
+    candidates: list[str | None] = []
+    model = getattr(settings, "MODEL", None)
+    if model is not None:
+        model_name = getattr(model, "name", None)
+        if model_name is not None:
+            candidates.append(str(model_name))
+
+    session = getattr(settings, "SESSION", None)
+    if session is not None:
+        candidates.append(getattr(session, "name", None))
+
+    candidates.append(getattr(context, "run_id", None))
+    candidates.append(config_path.stem)
+
+    for candidate in candidates:
+        if isinstance(candidate, str):
+            normalized = candidate.strip()
+            if normalized and not normalized.lower().startswith("dlkit-session"):
+                return sanitize_identifier(normalized, default="model")
+
+    return sanitize_identifier(config_path.stem, default="model")
+
+
+def parse_data_dir_name(dir_name: str) -> dict[str, Any]:
+    """Parse data directory name to extract parameters.
+
+    Pure function - extracts metadata from string.
+
+    Args:
+        dir_name: Directory name (e.g., "collect-504-norm", "generate-90-krylov50-norm")
+
+    Returns:
+        Dictionary with parsed parameters
+
+    Examples:
+        >>> parse_data_dir_name("collect-504-norm")
+        {'source': 'collect', 'dimension': 504, 'normalized': True, 'krylov_percent': None}
+        >>> parse_data_dir_name("generate-90-krylov50-norm")
+        {'source': 'generate', 'dimension': 90, 'normalized': True, 'krylov_percent': 50}
+    """
+    parts = dir_name.split("-")
+
+    if len(parts) < 3:
+        return {"source": "unknown", "dimension": None, "normalized": False, "krylov_percent": None}
+
+    result = {
+        "source": parts[0],
+        "dimension": None,
+        "normalized": parts[-1] == "norm",
+        "krylov_percent": None,
+    }
+
+    # Extract dimension (second part)
+    try:
+        result["dimension"] = int(parts[1])
+    except (ValueError, IndexError):
+        pass
+
+    # Check for krylov tag (if present, it's the second-to-last or third part)
+    for part in parts[2:-1]:
+        if part.startswith("krylov"):
+            try:
+                result["krylov_percent"] = int(part.replace("krylov", ""))
+            except ValueError:
+                pass
+
+    return result

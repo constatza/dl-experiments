@@ -12,14 +12,18 @@ else:  # pragma: no cover
 
 import pytest
 
-from src.common import load_config_with_context
+from src.configuration import load_config
+
+
+# Get project root (repo root directory)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 @pytest.mark.parametrize(
     "config_path", [
-        Path("graph-cg/configs/ffnn.toml"),
-        Path("graph-cg/configs/linear.toml"),
-        Path("graph-cg/configs/gnn.toml"),
+        PROJECT_ROOT / "configs/ffnn.toml",
+        PROJECT_ROOT / "configs/linear.toml",
+        PROJECT_ROOT / "configs/gnn.toml",
     ]
 )
 def test_training_sections_round_trip(monkeypatch: pytest.MonkeyPatch, config_path: Path) -> None:
@@ -66,7 +70,7 @@ def test_training_sections_round_trip(monkeypatch: pytest.MonkeyPatch, config_pa
     raw_metrics = tuple(raw_training.get("metrics", ()))
     expected_metric_names = tuple(m.get("name") for m in raw_metrics)
 
-    settings, _ = load_config_with_context(config_path, None)
+    settings, _ = load_config(config_path, None)
     training = settings.TRAINING
     assert training is not None, "TRAINING section missing"
 

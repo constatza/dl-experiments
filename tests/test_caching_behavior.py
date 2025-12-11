@@ -9,58 +9,47 @@ This script tests that:
 
 from pathlib import Path
 import shutil
+import tomllib
+from typing import Any, Mapping
 
-from src.config_utils import resolve_data_dir
 from src.validation import validate_data_exists
+from src.paths.core import DataPaths, FlowPaths, ProjectRoots, parse_flow_keys
 
 
-def test_data_sharing_pattern():
-    """Verify that experiments share data configs correctly."""
-    print("=" * 70)
-    print("Testing Data Sharing Pattern")
-    print("=" * 70)
+# Get project root (graph-cg directory)
+PROJECT_ROOT = Path(__file__).parent.parent
 
-    # Map data configs to experiments that use them
-    data_config_usage = {
-        "graph-cg/data-configs/generate-90-krylov50.toml": [
-            "ffnn-normscaled-on-generate-90-krylov50",
-            "ffnn-constant-on-generate-90-krylov50",
-        ],
-        "graph-cg/data-configs/generate-280-krylov50.toml": [
-            "ffnn-normscaled-on-generate-280-krylov50",
-            "ffnn-constant-on-generate-280-krylov50",
-        ],
-        "graph-cg/data-configs/collect-504.toml": [
-            "ffnn-normscaled-on-collect-504",
-            "ffnn-constant-on-collect-504",
-        ],
-        "graph-cg/data-configs/collect-2040.toml": [
-            "ffnn-normscaled-on-collect-2040",
-            "ffnn-constant-on-collect-2040",
-        ],
-        "graph-cg/data-configs/solution-bank-example.toml": [
-            "solution-archive-baseline",
-            "solution-archive-ablated",
-        ],
-    }
 
-    print(f"\nData sharing pattern:")
-    print(f"  Unique data configs: {len(data_config_usage)}")
-    print(f"  Total experiments: {sum(len(exps) for exps in data_config_usage.values())}")
-    print()
+def _coerce_mapping(value: Any) -> Mapping[str, Any]:
+    """Coerce value to mapping, return empty dict if not a mapping."""
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
 
-    for data_config, experiments in data_config_usage.items():
-        data_dir = resolve_data_dir(Path(data_config))
-        print(f"  {data_config}")
-        print(f"    → {data_dir.name}")
-        print(f"    → Shared by {len(experiments)} experiments:")
-        for exp in experiments:
-            print(f"       - {exp}")
-        print()
 
-    print("✓ Data sharing is correctly configured")
-    print(f"  Each of 5 data directories will be generated once")
-    print(f"  and shared across 2 experiments each")
+def resolve_data_dir(data_config_path: Path | str) -> Path:
+    """Return the processed data directory declared by a data config.
+
+    Extracts the data directory path from a data configuration TOML file
+    by parsing flow ID, dataset ID, and project roots.
+    """
+    config_path = Path(data_config_path)
+    with open(config_path, "rb") as handle:
+        raw_config = tomllib.load(handle)
+
+    output_cfg = _coerce_mapping(raw_config.get("output", {}))
+    flow_id, dataset_id = parse_flow_keys(raw_config, config_path=config_path)
+
+    roots = ProjectRoots.from_overrides(
+        project_root=output_cfg.get("project_root"),
+        processed_root=output_cfg.get("processed_dir"),
+        output_root=output_cfg.get("output_root"),
+        figures_root=output_cfg.get("figures_root"),
+    )
+    flow_paths = FlowPaths(flow_id=flow_id, roots=roots)
+    data_paths = DataPaths(flow=flow_paths, dataset_id=dataset_id)
+
+    return data_paths.base_dir
 
 
 def test_selective_regeneration():
@@ -71,9 +60,9 @@ def test_selective_regeneration():
 
     # Define test data configs
     test_configs = [
-        "graph-cg/data-configs/generate-90-krylov50.toml",
-        "graph-cg/data-configs/generate-280-krylov50.toml",
-        "graph-cg/data-configs/collect-504.toml",
+        str(PROJECT_ROOT / "data-configs/collect-504-solutions.toml"),
+        str(PROJECT_ROOT / "data-configs/collect-2040-solutions.toml"),
+        str(PROJECT_ROOT / "data-configs/test-solutions.toml"),
     ]
 
     print("\nChecking which data directories exist:")
@@ -81,7 +70,7 @@ def test_selective_regeneration():
         full_path = Path(config_path)
         if full_path.exists():
             data_dir = resolve_data_dir(full_path)
-            required_files = ["rhs-samples.npy", "sol-samples.npy", "matrix.npy"]
+            required_files = ["normalized.npz"]
 
             try:
                 validate_data_exists(data_dir, required_files)
@@ -109,7 +98,7 @@ def test_cache_invalidation_scenario():
 
     print("\nScenario:")
     print("  1. All 5 data directories exist")
-    print("  2. User deletes 1 data directory (e.g., generate-90-norm)")
+    print("  2. User deletes 1 data directory (e.g., collect-504-solutions)")
     print("  3. User runs workflow again")
     print()
     print("Expected behavior:")
@@ -125,7 +114,6 @@ def test_cache_invalidation_scenario():
 
 if __name__ == "__main__":
     try:
-        test_data_sharing_pattern()
         test_selective_regeneration()
         test_cache_invalidation_scenario()
 
