@@ -96,19 +96,23 @@ class DataPaths:
 
     @property
     def features_file(self) -> Path:
-        return self.base_dir / "rhs-samples.npy"
+        """Path to features data (RHS samples in normalized.npz)."""
+        return self.base_dir / "normalized.npz"
 
     @property
     def targets_file(self) -> Path:
-        return self.base_dir / "sol-samples.npy"
+        """Path to targets data (solutions in normalized.npz)."""
+        return self.base_dir / "normalized.npz"
 
     @property
     def matrix_file(self) -> Path:
-        return self.base_dir / "matrix.npy"
+        """Path to dataset directory for matrix loading."""
+        return self.base_dir
 
     @property
     def mother_rhs_file(self) -> Path:
-        return self.base_dir / "rhs-mother.npy"
+        """Path to dataset directory for RHS loading."""
+        return self.base_dir
 
     @property
     def normalization_file(self) -> Path:

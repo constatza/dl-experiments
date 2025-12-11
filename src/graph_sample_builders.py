@@ -8,11 +8,12 @@ graph-based training and inference.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from typing import Literal, Sequence
 
 import numpy as np
 
-from .data_pipeline import RawSamples
+from .generation.types import RawSamples
+from .normalization import IScale
 from .sample_builders import (
     build_rhs_archive_samples,
     build_generated_samples,
@@ -27,8 +28,10 @@ def build_graph_rhs_archive_samples(
     solve_systems: bool,
     cg_tolerance: float,
     cg_max_iters: int,
-) -> RawSamples:
-    """Build graph samples from RHS archives and solved systems.
+    normalize_type: Literal["none", "matrix", "diagonal", "spectral"] = "none",
+    spectral_radius_bound: float | None = None,
+) -> tuple[RawSamples, IScale | list[IScale] | None]:
+    """Build graph samples from RHS archives and solved NORMALIZED systems.
 
     This is a wrapper around build_rhs_archive_samples that ensures the
     matrix is properly included for graph neural network training.
@@ -39,13 +42,18 @@ def build_graph_rhs_archive_samples(
         solve_systems: Whether to solve systems for solutions
         cg_tolerance: CG solver tolerance
         cg_max_iters: CG solver max iterations
+        normalize_type: Type of normalization ("none", "matrix", "diagonal", "spectral")
+        spectral_radius_bound: For matrix normalization (computed if None)
 
     Returns:
-        RawSamples with matrix, rhs, solutions, and mother_rhs
+        Tuple of (normalized_samples, scale):
+            - normalized_samples: RawSamples with normalized matrix/RHS/solutions
+            - scale: IScale object, list[IScale] (spectral), or None (no normalization)
 
     Note:
         For graph models, the matrix will be saved alongside the RHS samples
         during persistence, unlike standard models where matrix is saved once.
+        Solutions are in normalized space: x_norm solves A_norm @ x_norm = b_norm.
     """
     # Reuse existing builder - graph vs non-graph difference is only in persistence
     return build_rhs_archive_samples(
@@ -54,6 +62,8 @@ def build_graph_rhs_archive_samples(
         solve_systems=solve_systems,
         cg_tolerance=cg_tolerance,
         cg_max_iters=cg_max_iters,
+        normalize_type=normalize_type,
+        spectral_radius_bound=spectral_radius_bound,
     )
 
 
@@ -67,8 +77,9 @@ def build_graph_generated_samples(
     residual_iters: int,
     seed: int,
     shuffle: bool,
-    normalize_mode: str,
-) -> RawSamples:
+    normalize_type: Literal["none", "matrix", "rhs", "spectral", "diagonal"] = "none",
+    spectral_radius_bound: float | None = None,
+) -> tuple[RawSamples, IScale | list[IScale] | None]:
     """Build graph samples using synthetic generation strategies.
 
     This is a wrapper around build_generated_samples that ensures the
@@ -80,12 +91,16 @@ def build_graph_generated_samples(
         num_samples: Number of samples to generate
         mix: Dictionary of generation strategies and their proportions
         krylov_iters: Number of Krylov iterations for Krylov-based generation
+        residual_iters: Number of CG iterations for residual trace strategies
         seed: Random seed for reproducibility
         shuffle: Whether to shuffle samples
-        normalize_mode: Normalization strategy
+        normalize_type: Type of normalization ("none", "matrix", "diagonal", "spectral", "rhs")
+        spectral_radius_bound: For matrix normalization (computed if None)
 
     Returns:
-        RawSamples with matrix, rhs, solutions, and mother_rhs
+        Tuple of (normalized_samples, scale):
+            - normalized_samples: RawSamples with normalized matrix/RHS/solutions
+            - scale: IScale object, list[IScale] (spectral), or None (no normalization)
 
     Note:
         For graph models, the matrix will be saved alongside the RHS samples
@@ -101,7 +116,8 @@ def build_graph_generated_samples(
         residual_iters=residual_iters,
         seed=seed,
         shuffle=shuffle,
-        normalize_mode=normalize_mode,
+        normalize_type=normalize_type,
+        spectral_radius_bound=spectral_radius_bound,
     )
 
 
@@ -111,7 +127,9 @@ def build_graph_solution_archive_samples(
     *,
     shuffle: bool,
     seed: int | None,
-) -> RawSamples:
+    normalize_type: Literal["none", "matrix", "diagonal", "spectral"] = "none",
+    spectral_radius_bound: float | None = None,
+) -> tuple[RawSamples, IScale | list[IScale] | None]:
     """Build graph samples from an archive of pre-computed solutions.
 
     This is a wrapper around build_solution_archive_samples that ensures the
@@ -122,9 +140,13 @@ def build_graph_solution_archive_samples(
         solution_files: Paths to solution vector files
         shuffle: Whether to shuffle samples
         seed: Random seed for shuffling
+        normalize_type: Type of normalization ("none", "matrix", "diagonal", "spectral")
+        spectral_radius_bound: For matrix normalization (computed if None)
 
     Returns:
-        RawSamples with matrix, rhs, solutions, and mother_rhs
+        Tuple of (normalized_samples, scale):
+            - normalized_samples: RawSamples with normalized matrix/RHS/solutions
+            - scale: IScale object, list[IScale] (spectral), or None (no normalization)
 
     Note:
         For graph models, the matrix will be saved alongside the RHS samples
@@ -136,6 +158,8 @@ def build_graph_solution_archive_samples(
         solution_files=solution_files,
         shuffle=shuffle,
         seed=seed,
+        normalize_type=normalize_type,
+        spectral_radius_bound=spectral_radius_bound,
     )
 
 

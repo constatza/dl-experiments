@@ -10,9 +10,9 @@ import numpy as np
 
 def _load_array(file: Path) -> np.ndarray:
     if file.suffix == ".npy":
-        return np.load(file)
+        return np.load(file).astype(np.float64, copy=False)
     if file.suffix == ".txt":
-        return np.loadtxt(file)
+        return np.loadtxt(file, dtype=np.float64)
     raise ValueError(f"Unsupported file type: {file.suffix}")
 
 

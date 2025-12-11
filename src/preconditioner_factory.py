@@ -2,26 +2,52 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
 from loguru import logger
-from scipy.sparse.linalg import spilu
+from scipy.sparse.linalg import LinearOperator, spilu
 
 from .math_utils import _to_csc
 from .neural_inference import create_neural_preconditioner, create_neural_step_helper
 from .pca_training import load_pca_model, get_pca_components_matrix
+from .metadata_repository import extract_residual_iters
+
+
+@dataclass(frozen=True)
+class NeuralPreconditionerMetadata:
+    """Metadata for neural preconditioner.
+
+    Attributes:
+        residual_iters: Number of CG iterations the model was trained on (None if unknown)
+        applied_iters: Number of iterations to apply during inference (None = use residual_iters)
+    """
+
+    residual_iters: int | None
+    applied_iters: int | None = None
 
 
 def make_identity_preconditioner() -> Callable[[np.ndarray], np.ndarray]:
     return lambda x: x
 
 
+def _to_linear_operator(
+    matvec: Callable[[np.ndarray], np.ndarray],
+    A: np.ndarray,
+) -> LinearOperator:
+    dtype = np.asarray(A).dtype
+    return LinearOperator(shape=A.shape, dtype=dtype, matvec=lambda x: matvec(np.asarray(x, dtype=dtype, copy=False)))
+
+
 def make_jacobi_preconditioner(A: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
     diag = np.diag(A)
-    diag_inv = np.where(np.abs(diag) > 1e-10, 1.0 / diag, 1.0)
+    # Keep the preconditioner positive and avoid identity fallback on tiny entries.
+    eps = 1e-8
+    diag_safe = np.where(np.abs(diag) > eps, np.abs(diag), eps)
+    diag_inv = 1.0 / diag_safe
     return lambda x: diag_inv * x
 
 
@@ -32,12 +58,35 @@ def make_ilu_preconditioner(A: np.ndarray) -> Callable[[np.ndarray], np.ndarray]
     return lambda x: ilu.solve(x.astype(ilu_dtype, copy=False))
 
 
+def make_identity_preconditioner_operator(A: np.ndarray) -> LinearOperator:
+    return _to_linear_operator(make_identity_preconditioner(), A)
+
+
+def make_jacobi_preconditioner_operator(A: np.ndarray) -> LinearOperator:
+    return _to_linear_operator(make_jacobi_preconditioner(A), A)
+
+
+def make_ilu_preconditioner_operator(A: np.ndarray) -> LinearOperator:
+    return _to_linear_operator(make_ilu_preconditioner(A), A)
+
+
 def make_neural_preconditioner(
     A: np.ndarray,
     checkpoint_path: str | Path,
     config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
-) -> Callable[[np.ndarray], np.ndarray]:
+) -> tuple[Callable[[np.ndarray], np.ndarray], NeuralPreconditionerMetadata]:
+    """Create neural preconditioner with training metadata.
+
+    Args:
+        A: System matrix
+        checkpoint_path: Path to trained model checkpoint
+        config_path: Optional model config path
+        data_config_path: Optional data config path
+
+    Returns:
+        Tuple of (preconditioner_function, metadata)
+    """
     predictor = create_neural_preconditioner(
         checkpoint_path,
         config_path,
@@ -45,12 +94,68 @@ def make_neural_preconditioner(
     )
     matrix = np.asarray(A, dtype=np.float64, copy=False)
 
+    # Extract training metadata
+    try:
+        residual_iters = extract_residual_iters(
+            checkpoint_path=checkpoint_path,
+            data_config_path=data_config_path,
+        )
+    except ValueError:
+        logger.warning(
+            f"Could not extract residual_iters from checkpoint={checkpoint_path} "
+            f"or data_config={data_config_path}. Neural preconditioner will be applied for all iterations."
+        )
+        residual_iters = None
+
+    metadata = NeuralPreconditionerMetadata(
+        residual_iters=residual_iters,
+        applied_iters=None,  # Set by comparison layer
+    )
+
     def _precondition(residual: np.ndarray) -> np.ndarray:
         residual_vec = np.asarray(residual, dtype=np.float64, copy=False)
         solution = predictor(matrix, residual_vec)
         return np.asarray(solution, dtype=np.float64, copy=False)
 
-    return _precondition
+    return _precondition, metadata
+
+
+def make_hybrid_preconditioner(
+    A: np.ndarray,
+    neural_checkpoint_path: str | Path,
+    neural_iters: int = 5,
+    fallback: Literal["identity", "jacobi", "ilu"] = "jacobi",
+    config_path: str | Path | None = None,
+    data_config_path: str | Path | None = None,
+) -> tuple[Callable[[np.ndarray], np.ndarray], Callable[[np.ndarray], np.ndarray], NeuralPreconditionerMetadata]:
+    """Create neural preconditioner with cheaper fallback.
+
+    Returns a pair of preconditioners for use with flexible_pcg's
+    precond_iters parameter, plus metadata.
+
+    Args:
+        A: System matrix
+        neural_checkpoint_path: Path to neural network checkpoint
+        neural_iters: Number of iterations to use neural preconditioner
+        fallback: Type of fallback preconditioner ("identity", "jacobi", "ilu")
+        config_path: Optional model config path
+        data_config_path: Optional data config path
+
+    Returns:
+        Tuple of (neural_preconditioner, fallback_preconditioner, metadata)
+    """
+    neural_precond, metadata = make_neural_preconditioner(A, neural_checkpoint_path, config_path, data_config_path)
+
+    if fallback == "identity":
+        fallback_precond = make_identity_preconditioner()
+    elif fallback == "jacobi":
+        fallback_precond = make_jacobi_preconditioner(A)
+    elif fallback == "ilu":
+        fallback_precond = make_ilu_preconditioner(A)
+    else:
+        raise ValueError(f"Unknown fallback preconditioner: {fallback}")
+
+    return neural_precond, fallback_precond, metadata
 
 
 def make_neural_step_helper(
@@ -86,6 +191,10 @@ def make_pca_preconditioner(A: np.ndarray, pca_path: str | Path) -> Callable[[np
     return preconditioner
 
 
+def make_pca_preconditioner_operator(A: np.ndarray, pca_path: str | Path) -> LinearOperator:
+    return _to_linear_operator(make_pca_preconditioner(A, pca_path), A)
+
+
 def make_pca_warm_start(A: np.ndarray, pca_path: str | Path) -> Callable[[np.ndarray], np.ndarray]:
     pca, stats = load_pca_model(pca_path)
     V = get_pca_components_matrix(pca)
@@ -111,7 +220,18 @@ def create_preconditioner(
     name: Literal["none", "jacobi", "ilu", "pca", "neural"],
     A: np.ndarray,
     **kwargs,
-) -> Callable[[np.ndarray], np.ndarray]:
+) -> Callable[[np.ndarray], np.ndarray] | tuple[Callable[[np.ndarray], np.ndarray], NeuralPreconditionerMetadata]:
+    """Create a preconditioner by name.
+
+    Args:
+        name: Preconditioner type
+        A: System matrix
+        **kwargs: Additional arguments for specific preconditioners
+
+    Returns:
+        For classical preconditioners: just the preconditioner function
+        For neural preconditioner: tuple of (function, metadata)
+    """
     if name == "none":
         return make_identity_preconditioner()
     if name == "jacobi":
@@ -149,9 +269,6 @@ def create_warm_starts(
     checkpoint_path: str | Path | None = None,
     config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
-    warm_start_checkpoint_path: str | Path | None = None,
-    warm_start_config_path: str | Path | None = None,
-    warm_start_data_config_path: str | Path | None = None,
     pca_path: str | Path | None = None,
     A: np.ndarray | None = None,
 ) -> dict[str, Callable[[np.ndarray], np.ndarray | None]]:
@@ -159,9 +276,9 @@ def create_warm_starts(
         "none": lambda _: None,
     }
 
-    checkpoint_to_use = warm_start_checkpoint_path or checkpoint_path
-    config_to_use = warm_start_config_path or config_path
-    data_config_to_use = warm_start_data_config_path or data_config_path
+    checkpoint_to_use = checkpoint_path
+    config_to_use = config_path
+    data_config_to_use = data_config_path
 
     if checkpoint_to_use is not None:
         try:
@@ -210,17 +327,14 @@ def create_step_helpers(
     checkpoint_path: str | Path | None = None,
     config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
-    step_helper_checkpoint_path: str | Path | None = None,
-    step_helper_config_path: str | Path | None = None,
-    step_helper_data_config_path: str | Path | None = None,
 ) -> dict[str, Callable[..., np.ndarray | None]]:
     helpers: dict[str, Callable[..., np.ndarray | None]] = {
         "none": lambda *_args, **_kwargs: None,
     }
 
-    checkpoint_to_use = step_helper_checkpoint_path or checkpoint_path
-    config_to_use = step_helper_config_path or config_path
-    data_config_to_use = step_helper_data_config_path or data_config_path
+    checkpoint_to_use = checkpoint_path
+    config_to_use = config_path
+    data_config_to_use = data_config_path
 
     if checkpoint_to_use is not None:
         try:
@@ -246,55 +360,50 @@ def create_all_preconditioners(
     config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
     *,
-    warm_start_checkpoint_path: str | Path | None = None,
-    warm_start_config_path: str | Path | None = None,
-    warm_start_data_config_path: str | Path | None = None,
-    step_helper_checkpoint_path: str | Path | None = None,
-    step_helper_config_path: str | Path | None = None,
-    step_helper_data_config_path: str | Path | None = None,
     pca_path: str | Path | None = None,
 ) -> tuple[
     dict[str, Callable[[np.ndarray], np.ndarray]],
-    dict[str, Callable[[np.ndarray], np.ndarray | None]],
-    dict[str, Callable[..., np.ndarray | None]],
+    dict[str, NeuralPreconditionerMetadata | None],
 ]:
+    """Create all preconditioners with optional neural preconditioner metadata.
+
+    Args:
+        A: System matrix
+        checkpoint_path: Path to neural preconditioner checkpoint
+        config_path: Optional model config
+        data_config_path: Optional data config
+        pca_path: Optional PCA model path
+
+    Returns:
+        Tuple of (preconditioners_dict, metadata_dict)
+        - preconditioners_dict: Maps name -> preconditioner function
+        - metadata_dict: Maps name -> metadata (only for neural preconditioner)
+    """
     preconditioners = create_preconditioners(A)
+    metadata_dict: dict[str, NeuralPreconditionerMetadata | None] = {}
+
+    # Initialize metadata for classical preconditioners (no metadata)
+    for name in preconditioners:
+        metadata_dict[name] = None
 
     if checkpoint_path is not None:
         try:
-            preconditioners["neural"] = make_neural_preconditioner(
+            precond_fn, neural_metadata = make_neural_preconditioner(
                 A,
                 checkpoint_path,
                 config_path,
                 data_config_path,
             )
+            preconditioners["neural"] = precond_fn
+            metadata_dict["neural"] = neural_metadata
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Failed to create neural preconditioner: {exc}")
 
     if pca_path is not None:
         try:
             preconditioners["pca"] = make_pca_preconditioner(A, pca_path)
+            metadata_dict["pca"] = None
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Failed to create PCA preconditioner: {exc}")
 
-    warm_starts = create_warm_starts(
-        checkpoint_path=checkpoint_path,
-        config_path=config_path,
-        data_config_path=data_config_path,
-        warm_start_checkpoint_path=warm_start_checkpoint_path,
-        warm_start_config_path=warm_start_config_path,
-        warm_start_data_config_path=warm_start_data_config_path,
-        pca_path=pca_path,
-        A=A,
-    )
-
-    step_helpers = create_step_helpers(
-        checkpoint_path=checkpoint_path,
-        config_path=config_path,
-        data_config_path=data_config_path,
-        step_helper_checkpoint_path=step_helper_checkpoint_path,
-        step_helper_config_path=step_helper_config_path,
-        step_helper_data_config_path=step_helper_data_config_path,
-    )
-
-    return preconditioners, warm_starts, step_helpers
+    return preconditioners, metadata_dict

@@ -10,16 +10,21 @@ import numpy as np
 
 def analyze_dataset(data_dir: Path, name: str) -> Dict[str, Any]:
     """Compute descriptive statistics for a processed dataset."""
+    from ..io_utils import load_dataset
 
     print(f"\n{'=' * 70}")
     print(f"Dataset: {name}")
     print(f"Path: {data_dir}")
     print(f"{'=' * 70}")
 
-    A = np.load(data_dir / "matrix.npy")
-    rhs_samples = np.load(data_dir / "rhs-samples.npy")
-    sol_samples = np.load(data_dir / "sol-samples.npy")
-    rhs_mother = np.load(data_dir / "rhs-mother.npy")
+    # Load dataset using new .npz format
+    data = load_dataset(data_dir, variant="normalized")
+    A = data["matrix"]
+    rhs_samples = data["rhs"]
+    sol_samples = data["solutions"]
+
+    # For mother RHS, use first sample as reference
+    rhs_mother = rhs_samples[0]
 
     num_samples = rhs_samples.shape[0]
     dimension = A.shape[0]

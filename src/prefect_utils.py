@@ -160,9 +160,16 @@ def compute_data_files_hash(data_dir: Path | str) -> str:
 
     try:
         # Find all data files with stable sorting
-        npy_files = sorted(data_dir.glob("*.npy"))
-        json_files = sorted(data_dir.glob("metadata.json"))
-        all_files = sorted(npy_files + json_files)
+        candidates = []
+        for pattern in ("*.npy", "*.npz"):
+            candidates.extend(sorted(data_dir.glob(pattern)))
+
+        for filename in ("metadata.json", "normalization.json"):
+            candidate = data_dir / filename
+            if candidate.exists():
+                candidates.append(candidate)
+
+        all_files = sorted(candidates)
 
         if not all_files:
             return "empty"

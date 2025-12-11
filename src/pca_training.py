@@ -24,7 +24,7 @@ def fit_pca_from_solutions(
     """Fit PCA on solution samples and return fitted model with statistics.
 
     Args:
-        solution_samples_path: Path to solution samples .npy file
+        solution_samples_path: Path to solution samples (.npy or .npz file)
         n_components: Number of principal components to compute
         normalize: Whether to normalize solutions before PCA
 
@@ -32,11 +32,17 @@ def fit_pca_from_solutions(
         Tuple of (fitted PCA model, statistics dict)
     """
     # Load solution samples
-    solutions = np.load(solution_samples_path)
+    data = np.load(solution_samples_path)
+    if isinstance(data, np.lib.npyio.NpzFile):
+        # For .npz files, extract the "solutions" array
+        solutions = data["solutions"].astype(np.float64, copy=False)
+    else:
+        # For .npy files, use directly
+        solutions = data.astype(np.float64, copy=False)
     logger.info(f"Loaded solution samples: shape={solutions.shape}")
 
     # Convert to torch tensor
-    solutions_tensor = torch.from_numpy(solutions).float()
+    solutions_tensor = torch.from_numpy(solutions).double()
 
     # Normalize if requested
     if normalize:
@@ -46,7 +52,7 @@ def fit_pca_from_solutions(
         logger.info(f"Normalized solutions: mean={mean.mean().item():.3e}, std={std.mean().item():.3e}")
 
     # Create and fit PCA
-    pca = PCA(n_components=n_components, input_shape=solutions_tensor.shape)
+    pca = PCA(n_components=n_components)
     pca.fit(solutions_tensor)
 
     # Gather statistics

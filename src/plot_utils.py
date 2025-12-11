@@ -25,7 +25,14 @@ def plot_residual_history(
     fig = plt.figure(figsize=(12, 8))
 
     for name, info in results.items():
-        residual_history = info.get("residual_history", [])
+        # Handle both dict and dataclass results
+        if hasattr(info, 'residual_history'):
+            residual_history = info.residual_history
+        elif isinstance(info, dict):
+            residual_history = info.get("residual_history", [])
+        else:
+            residual_history = []
+
         if residual_history:
             plt.semilogy(residual_history, label=name, marker='o', markersize=4)
 
@@ -60,7 +67,14 @@ def plot_convergence_comparison(
     fig, ax = plt.subplots(figsize=(12, 7))
 
     for name, info in results.items():
-        residual_history = info.get("residual_history") or []
+        # Handle both dict and dataclass results
+        if hasattr(info, 'residual_history'):
+            residual_history = info.residual_history
+        elif isinstance(info, dict):
+            residual_history = info.get("residual_history") or []
+        else:
+            residual_history = []
+
         if residual_history:
             iterations = range(len(residual_history))
             ax.semilogy(iterations, residual_history, 'o-', label=name, markersize=4)
@@ -175,7 +189,14 @@ def plot_noise_robustness(
 
         for level in noise_levels:
             if method in noise_results[level]:
-                iters = noise_results[level][method].get("iterations", 0)
+                result = noise_results[level][method]
+                # Handle both dict and dataclass results
+                if hasattr(result, 'iterations'):
+                    iters = result.iterations
+                elif isinstance(result, dict):
+                    iters = result.get("iterations", 0)
+                else:
+                    iters = 0
                 iterations.append(iters)
                 levels_numeric.append(float(level))
 

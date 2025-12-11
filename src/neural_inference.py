@@ -9,24 +9,22 @@ import numpy as np
 import torch
 from loguru import logger
 
-from dlkit import infer
-
-# Imports removed: normalization metadata no longer needed
-# All normalization happens at data generation time
+from dlkit import load_predictor
+from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
 
 def create_neural_preconditioner(
     checkpoint_path: str | Path,
     config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
-) -> Callable[[np.ndarray | None, np.ndarray], np.ndarray]:
+) -> _NeuralWarmStart:
     """Create a warm-start predictor for real-time inference without datasets.
 
-    Uses dlkit.interfaces.api.infer() for direct tensor-to-tensor prediction
-    without requiring training config or datasets - only the checkpoint.
+    Uses dlkit.load_predictor() for efficient stateful prediction, loading the
+    model once and reusing it for multiple inferences without reloading the checkpoint.
 
-    All normalization is handled at data generation time. The saved artifacts
-    (matrix.npy, rhs-samples.npy, sol-samples.npy) are already normalized.
+    All normalization is handled at data generation time. Normalized data is saved
+    in normalized.npz. Unnormalized matrix is in matrix.npy for spectral analysis.
 
     This unified interface supports both:
     - Standard neural models (FFNN): Use only RHS input, ignore matrix
@@ -38,8 +36,13 @@ def create_neural_preconditioner(
         data_config_path: Optional path to data config (unused, kept for API compatibility)
 
     Returns:
-        Callable that accepts (matrix, rhs) and returns predicted solution.
+        _NeuralWarmStart instance that can be called with (matrix, rhs) to get predictions.
         For RHS-only models, matrix parameter is ignored.
+
+    Note:
+        The returned predictor holds resources and should be properly cleaned up:
+        - Use as context manager: `with create_neural_preconditioner(...) as pred:`
+        - Or call `predictor.unload()` when done
     """
     checkpoint = _ensure_checkpoint(Path(checkpoint_path))
     predictor = _NeuralWarmStart(checkpoint)
@@ -50,7 +53,7 @@ def create_neural_step_helper(
     checkpoint_path: str | Path,
     config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
-) -> Callable[[Any], np.ndarray | None]:
+) -> _NeuralStepHelper:
     """Create a neural helper that produces per-iteration solution guesses.
 
     Args:
@@ -59,8 +62,12 @@ def create_neural_step_helper(
         data_config_path: Optional data config path (unused)
 
     Returns:
-        Callable accepting an iteration context or residual vector and returning
-        a helper correction (float64 numpy array) or None.
+        _NeuralStepHelper instance that accepts iteration context or residual vector
+        and returns helper correction (float64 numpy array) or None.
+
+    Note:
+        The helper holds a predictor with resources that should be cleaned up.
+        Access the underlying predictor via helper._predictor to call unload().
     """
 
     _ = config_path  # Placeholder for API compatibility
@@ -77,12 +84,48 @@ class _NeuralWarmStart:
     - Standard models (FFNN): Accept only RHS, ignore matrix
     - Graph models (GNN): Accept both matrix and RHS
 
-    Assumes all data (training and inference) is already normalized at data generation time.
-    No runtime normalization is performed.
+    Models are trained with SampleNormL2 on both features and targets.
+    DLKit's load_predictor with apply_transforms=True handles normalization automatically.
+
+    Note:
+        This class manages a stateful predictor that should be properly cleaned up.
+        Use as a context manager or call unload() when done:
+            predictor = _NeuralWarmStart(checkpoint)
+            try:
+                result = predictor(matrix, rhs)
+            finally:
+                predictor.unload()
     """
 
     def __init__(self, checkpoint: Path) -> None:
         self._checkpoint = checkpoint
+        # Data is pre-normalized - no additional transforms needed
+        # Training was done on pre-normalized data WITHOUT DLKit transforms
+        # Therefore apply_transforms=False to avoid double-normalization
+        self._predictor = load_predictor(
+            str(checkpoint),
+            batch_size=1,
+            apply_transforms=False,
+            precision=PrecisionStrategy.FULL_64
+        )
+
+    def __enter__(self) -> _NeuralWarmStart:
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Context manager exit - unload predictor."""
+        self.unload()
+
+    def unload(self) -> None:
+        """Explicitly unload the predictor to free resources."""
+        if hasattr(self, "_predictor") and self._predictor is not None:
+            try:
+                self._predictor.unload()
+            except Exception as e:
+                logger.debug(f"Failed to unload predictor: {e}")
+            finally:
+                self._predictor = None
 
     def __call__(self, matrix: np.ndarray | None, rhs: np.ndarray) -> np.ndarray:
         """Predict solution from matrix (optional) and RHS using the neural model.
@@ -98,10 +141,16 @@ class _NeuralWarmStart:
             The model introspects what inputs it needs. Standard FFNNs ignore the matrix,
             while GNNs use both matrix and RHS.
         """
+        if self._predictor is None:
+            raise RuntimeError(
+                "Predictor has been unloaded. Create a new instance or ensure "
+                "unload() is not called before inference is complete."
+            )
+
         try:
             rhs_vector = np.asarray(rhs)
             if rhs_vector.dtype == np.dtype("O"):
-                rhs_vector = rhs_vector.astype(np.float32)
+                rhs_vector = rhs_vector.astype(np.float64)
             flat_rhs = rhs_vector.reshape(-1)
             target_size = flat_rhs.shape[0]
 
@@ -147,11 +196,8 @@ class _NeuralWarmStart:
     ) -> np.ndarray:
         """Execute inference call and post-process predictions."""
         inputs = self._prepare_inputs(matrix, rhs)
-        result = infer(
-            checkpoint_path=str(self._checkpoint),
-            inputs=inputs,
-            batch_size=1,
-        )
+        # Use loaded predictor for efficient inference
+        result = self._predictor.predict(inputs)
         if result is None or not hasattr(result, "predictions"):
             raise RuntimeError("Inference returned no predictions")
 
@@ -193,12 +239,12 @@ class _NeuralWarmStart:
             dlkit models will error if passed unexpected inputs, so we must
             detect what the model expects and only provide those inputs.
         """
-        # Convert RHS to tensor (always needed)
-        rhs_tensor = torch.from_numpy(rhs.astype(np.float32, copy=False)).unsqueeze(0)
+        # Convert RHS to tensor (DLKit handles normalization automatically)
+        rhs_tensor = torch.from_numpy(rhs.astype(np.float64, copy=False)).unsqueeze(0)
 
         # Try with matrix first if provided (for graph models)
         if matrix is not None:
-            matrix_arr = np.asarray(matrix, dtype=np.float32)
+            matrix_arr = np.asarray(matrix, dtype=np.float64)
             if matrix_arr.ndim != 2:
                 raise ValueError(f"Matrix must be 2D, got shape {matrix_arr.shape}")
             matrix_tensor = torch.from_numpy(matrix_arr).unsqueeze(0)
@@ -262,7 +308,7 @@ def _extract_prediction_array(predictions: Any, target_size: int) -> np.ndarray:
                     if isinstance(pred, torch.Tensor):
                         array = pred.detach().cpu().numpy()
                     else:
-                        array = np.asarray(pred, dtype=np.float32)
+                        array = np.asarray(pred, dtype=np.float64)
                     break
             else:
                 # Take first available value
@@ -271,10 +317,10 @@ def _extract_prediction_array(predictions: Any, target_size: int) -> np.ndarray:
                 if isinstance(first_val, torch.Tensor):
                     array = first_val.detach().cpu().numpy()
                 else:
-                    array = np.asarray(first_val, dtype=np.float32)
+                    array = np.asarray(first_val, dtype=np.float64)
 
         else:
-            array = np.asarray(predictions, dtype=np.float32)
+            array = np.asarray(predictions, dtype=np.float64)
 
         # Ensure proper shape (remove batch dimension if present)
         array = array.squeeze()

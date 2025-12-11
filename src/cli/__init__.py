@@ -7,8 +7,7 @@ scripts without duplicating behaviour.
 """
 
 from .data import (  # noqa: F401
-    collect_data_from_config,
-    generate_data_from_config,
+    process_data_from_config,
     load_data_config,
 )
 from .prediction import run_inference  # noqa: F401
@@ -21,8 +20,7 @@ from .analysis import analyze_dataset  # noqa: F401
 from .raw_data import standardize_raw_filenames  # noqa: F401
 
 __all__ = [
-    "collect_data_from_config",
-    "generate_data_from_config",
+    "process_data_from_config",
     "load_data_config",
     "run_inference",
     "train_model",

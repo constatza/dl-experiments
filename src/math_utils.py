@@ -75,6 +75,11 @@ def calculate_spectral_norm(A: np.ndarray) -> float:
     return float(np.linalg.norm(A, ord=2))
 
 
+def compute_dim_scale(dimension: int) -> float:
+    """Return sqrt(dimension) for normalization helpers."""
+    return float(np.sqrt(dimension))
+
+
 def get_dimension_scale(dimension: int) -> float:
     """Calculate dimension-based scaling factor sqrt(d).
 
@@ -253,6 +258,83 @@ def _auto_device(device: str | None = None) -> str:
         return "cpu"
 
 
+
+
+def compute_rhs_norm(rhs: np.ndarray) -> float:
+    """Compute L2 norm of RHS vector.
+
+    Args:
+        rhs: RHS vector
+
+    Returns:
+        L2 norm of rhs
+    """
+    return float(np.linalg.norm(rhs, ord=2))
+
+
+def compute_rhs_norms(rhs_samples: np.ndarray) -> np.ndarray:
+    """Compute L2 norms for batch of RHS vectors.
+
+    Args:
+        rhs_samples: Array of RHS vectors, shape (N, n)
+
+    Returns:
+        Array of L2 norms, shape (N,)
+    """
+    return np.array([compute_rhs_norm(rhs) for rhs in rhs_samples])
+
+
+def extract_diagonal(matrix: np.ndarray) -> np.ndarray:
+    """Extract diagonal from matrix.
+
+    Args:
+        matrix: Square matrix
+
+    Returns:
+        Diagonal as 1D array
+    """
+    return np.diag(matrix).astype(np.float64, copy=False)
+
+
+def validate_diagonal(diagonal: np.ndarray, threshold: float = 1e-15) -> None:
+    """Validate diagonal has no near-zero entries.
+
+    Args:
+        diagonal: Diagonal array
+        threshold: Minimum absolute value threshold
+
+    Raises:
+        ValueError: If any diagonal entry is below threshold
+    """
+    if np.any(np.abs(diagonal) < threshold):
+        raise ValueError(
+            f"Matrix contains near-zero diagonal entries; "
+            "cannot apply diagonal normalization."
+        )
+
+
+def compute_dim_scale(dimension: int) -> float:
+    """Compute dimension scale factor sqrt(d).
+
+    Args:
+        dimension: Matrix dimension
+
+    Returns:
+        sqrt(dimension)
+    """
+    return float(np.sqrt(dimension))
+
+
+def compute_spectral_bound(matrix: np.ndarray) -> float:
+    """Compute spectral radius bound using Gershgorin theorem.
+
+    Args:
+        matrix: System matrix
+
+    Returns:
+        Upper bound on spectral radius
+    """
+    return calculate_spectral_radius_bound(matrix)
 
 
 def _to_csc(A: np.ndarray | object) -> object:
