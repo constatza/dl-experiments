@@ -7,13 +7,14 @@ matrix_path = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements
 solutions_path = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [generation]
-normalize = "spectral"
+normalize = "none"
 shuffle = true
 seed = 42
 
 [[generation.strategy]]
-name = "solution_archive"
-percentage = 1.0
+name = "cg_residual_error"
+samples = 6000  # Final training pairs: 600 base solutions × 10 iters each
+residual_iters = 10
 solutions_glob = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]

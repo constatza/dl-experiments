@@ -1,4 +1,5 @@
 # Solution archive config conjugate to spectral 45×15 data: uses displacement (x) vectors to synthesize RHS.
+# Uses cg_residual strategy (50% archive-based, 50% random generation) for residual-based training data
 
 [flow]
 
@@ -6,24 +7,22 @@
 matrix_path = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
-normalize = "spectral"
+normalize = "matrix"
 shuffle = true
 seed = 42
 
 [[generation.strategy]]
-name = "solution_archive"
-percentage = 0.5
+name = "cg_residual_error"
+samples = 10000
+residual_iters = 50
 solutions_glob = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
-provide_rhs = true
 
-[[generation.strategy]]
-name = "cg_residual"
-percentage = 0.5
-residual_iters = 10
+#[[generation.strategy]]
+#name = "cg_residual"
+#samples = 10000
+#residual_iters = 250
+## No solutions_glob - uses random generation mode
 
 [output]
 processed_dir = "/data/projects/graph-cg/data/processed"
 
-[test]
-# Test solutions (ua vectors) - system will compute b_test = A @ x_test
-solutions_path = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral_0_5_b/ua_vector from_spectral_no_realization_100.txt"

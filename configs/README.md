@@ -25,7 +25,7 @@ id = "spectral-baseline"
 dataset = "collect-504-norm"
 ```
 
-All orchestrators (`train_model.py`, `predict.py`, `compare_methods.py`, PCA
+All orchestrators (`scripts/train_model.py`, `scripts/predict.py`, `scripts/compare_methods.py`, PCA
 helpers) accept a `--data-config` argument and call
 `load_config_with_context(model_config, data_config)` to resolve unified paths:
 
@@ -87,21 +87,21 @@ checkpoint = "/path/to/model.ckpt"  # For inference
 ### Basic Training
 ```bash
 # Train with default config (ffnn-normscaled)
-python train_model.py --data-config data-configs/collect-504.toml
+uv run python graph-cg/scripts/train_model.py --data-config graph-cg/data-configs/collect-504.toml
 
 # Train with specific config
-python train_model.py --config configs/linear.toml --data-config data-configs/collect-504.toml
-python train_model.py --config configs/ffnn.toml --data-config data-configs/generate-90-krylov50.toml
-python train_model.py --config configs/gnn.toml --data-config data-configs/collect-504.toml
+uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml
+uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/ffnn.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml
+uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/gnn.toml --data-config graph-cg/data-configs/collect-504.toml
 ```
 
 ### Prediction/Inference
 ```bash
 # Predict with default config
-python predict.py --data-config data-configs/collect-504.toml
+uv run python graph-cg/scripts/predict.py --data-config graph-cg/data-configs/collect-504.toml
 
 # Predict with specific config and checkpoint
-python predict.py --config configs/linear.toml --data-config data-configs/collect-504.toml --checkpoint /path/to/checkpoint.ckpt
+uv run python graph-cg/scripts/predict.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --checkpoint /path/to/checkpoint.ckpt
 ```
 
 ## Better Approaches to Config Management
@@ -120,14 +120,14 @@ Keep one config per model type, override hyperparameters via CLI:
 
 ```bash
 # Train linear model with different learning rates
-python train_model.py --config configs/linear.toml --data-config data-configs/collect-504.toml --lr 1e-3
-python train_model.py --config configs/linear.toml --data-config data-configs/collect-504.toml --lr 1e-4
+uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --lr 1e-3
+uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --lr 1e-4
 
 # Train constant-width with different sizes
-python train_model.py --config configs/ffnn.toml --data-config data-configs/generate-90-krylov50.toml --hidden-size 128 --num-layers 5
+uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/ffnn.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml --hidden-size 128 --num-layers 5
 ```
 
-**Implementation**: Add CLI arguments to `train_model.py` that override config values.
+**Implementation**: Add CLI arguments to `scripts/train_model.py` that override config values.
 
 #### 2. **Config Inheritance** (Most Flexible)
 Use a base config + specific overrides:
@@ -157,7 +157,7 @@ Use env vars for paths that change between environments:
 ```bash
 export GRAPH_CG_DATA_DIR=/data/projects/graph-cg
 export GRAPH_CG_OUTPUT_DIR=/data/projects/graph-cg/output
-python train_model.py --config configs/linear.toml
+uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml
 ```
 
 **Implementation**: Update config loading to substitute env vars.
@@ -182,7 +182,7 @@ name = "FFNN-NormScaled-504-lr1e3-exp1"  # Descriptive session name
 1. Keep one config per model architecture (current setup)
 2. Add CLI overrides for common hyperparameters:
    ```python
-   # In train_model.py
+   # In scripts/train_model.py
    def main(
        config: Path,
        lr: float | None = None,
@@ -201,10 +201,10 @@ name = "FFNN-NormScaled-504-lr1e3-exp1"  # Descriptive session name
 3. Use descriptive session names to track variations:
    ```bash
    # Experiment with different learning rates
-   python train_model.py --config configs/linear.toml --lr 1e-3
+   uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --lr 1e-3
    # Session name in config: "Linear-504-lr1e3"
 
-   python train_model.py --config configs/linear.toml --lr 1e-4
+   uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --lr 1e-4
    # Session name in config: "Linear-504-lr1e4"
    ```
 

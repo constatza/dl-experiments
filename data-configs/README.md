@@ -56,6 +56,8 @@ Supported overrides (all optional):
 - `cg_residual` / `residual`: `residual_iters`, `seed`
 - `rhs_archive`: `rhs_glob`, `solve_systems`, `cg_tolerance`, `cg_max_iters`
 - `solution_archive`: `solutions_glob`, `shuffle`, `seed`
+- `eigenvector_forward`: `which`, `seed`
+- `eigenvector_inverse`: `which`, `solution_tolerance`, `seed`
 
 Supported strategy identifiers:
 
@@ -64,6 +66,8 @@ Supported strategy identifiers:
 - `cg_residual` / `residual`: capture CG residual traces; produces `cg-residuals.npy`, `cg-solutions.npy`, and `cg-trace-meta.npz`
 - `rhs_archive`: reuse existing RHS files; requires `rhs_glob`
 - `solution_archive`: ingest pre-computed solution vectors; requires `solutions_glob`
+- `eigenvector_forward`: use eigenvectors as solutions, compute RHS as b = λ * v
+- `eigenvector_inverse`: use eigenvectors as RHS, solve for x = A^-1 @ v
 
 ### Solution Archive Data (pre-computed solutions)
 - Format: `solutions-{dim}-{norm|nonorm}` or similar
@@ -140,35 +144,35 @@ Alternatively, you can directly specify a test RHS vector and optionally a test 
 
 ## Usage
 
-### Collecting Data from SpectralData
+The unified `process_data.py` script handles both collection and generation:
 
 ```bash
-# Collect 504-dimensional case
-uv run python collect_data.py data-configs/collect-504.toml
+# Collect 504-dimensional case from archives
+uv run python graph-cg/scripts/process_data.py graph-cg/data-configs/collect-504.toml
 # Output: /data/projects/graph-cg/data/processed/collect-504-norm/
 
 # Collect 2040-dimensional case
-uv run python collect_data.py data-configs/collect-2040.toml
+uv run python graph-cg/scripts/process_data.py graph-cg/data-configs/collect-2040.toml
 # Output: /data/projects/graph-cg/data/processed/collect-2040-norm/
-```
 
-### Generating Synthetic Data
-
-```bash
-# Pure normal generation (no krylov)
-uv run python generate_data.py data-configs/generate-90.toml
+# Generate synthetic data (pure normal)
+uv run python graph-cg/scripts/process_data.py graph-cg/data-configs/generate-90.toml
 # Output: /data/projects/graph-cg/data/processed/generate-90-norm/
 
-# Mixed generation (50% krylov)
-  uv run python generate_data.py data-configs/generate-90-krylov50.toml
+# Generate mixed strategies (50% krylov)
+uv run python graph-cg/scripts/process_data.py graph-cg/data-configs/generate-90-krylov50.toml
 # Output: /data/projects/graph-cg/data/processed/generate-90-krylov50-norm/
 
-### Ingesting a Solution Bank
-
-```
-uv run python generate_data.py data-configs/solution-bank-example.toml
+# Ingest solution bank
+uv run python graph-cg/scripts/process_data.py graph-cg/data-configs/solution-bank-example.toml
 # Output: /data/projects/graph-cg/data/processed/solution-bank-example/
-```
+
+# Collection with custom CG parameters
+uv run python graph-cg/scripts/process_data.py graph-cg/data-configs/collect-504.toml \
+    --cg-tolerance 1e-8 --cg-max-iters 500
+
+# Collection without solving (RHS only)
+uv run python graph-cg/scripts/process_data.py graph-cg/data-configs/collect-504.toml --no-solve
 ```
 
 ## Output Structure
@@ -177,16 +181,25 @@ Each data directory contains:
 
 ```
 collect-504-norm/
-├── matrix.npy              # System matrix (original, unnormalized)
-├── rhs-samples.npy         # Right-hand side samples (shape: N × 504)
-├── sol-samples.npy         # Solutions (solved via CG)
-├── rhs-mother.npy          # Reference/first RHS sample
-├── cg-residuals.npy        # Optional residual traces (present when cg_residual strategy is used)
-├── cg-solutions.npy        # Optional per-iteration solution targets
-├── cg-trace-meta.npz       # Metadata (sample_idx, iteration_idx) for residual traces
-├── normalization.json      # Normalization metadata
-└── metadata.json           # General metadata
+├── normalized.npz          # Normalized dataset (always present)
+│   ├── matrix              # System matrix (n × n)
+│   ├── rhs                 # RHS samples (N × n)
+│   └── solutions           # Solution vectors (N × n)
+├── raw.npz                 # Raw unnormalized data (optional, when save_raw=true)
+│   └── (same structure)
+├── comparison.npz          # Comparison split (optional, when comparison_split configured)
+│   └── (same structure)
+└── metadata.json           # Dataset metadata
 ```
+
+**Key Changes**:
+- All data now stored in `.npz` format for atomic writes and cleaner organization
+- `normalized.npz` always contains normalized data (default)
+- `raw.npz` optionally stores unnormalized data for re-normalization experiments
+- `comparison.npz` optionally stores dedicated split for preconditioner comparison
+- Each `.npz` file contains exactly 3 arrays: `matrix`, `rhs`, `solutions`
+
+**Normalization**: When using strategies like `cg_residual_error`, the `rhs` array contains residuals and `solutions` contains error corrections. The file structure remains consistent across all strategies.
 
 ## Config File Structure
 
@@ -201,8 +214,13 @@ matrix_path = "/path/to/SpectralData/45x15/stiffness/subdomain_1_Kaa.txt"
 rhs_path = "/path/to/SpectralData/45x15/faVectorsFromSpectral/fa_*.txt"
 
 [generation]
-# Normalization method: "matrix" (spectral radius), "rhs" (per-sample), or "none"
+# Normalization method: "matrix" (spectral radius), "spectral" (spectral norm),
+# "rhs" (per-sample), "diagonal" (Jacobi preconditioning), or "none"
 normalize = "matrix"
+# Optional: save raw unnormalized data alongside normalized data
+save_raw = false
+# Optional: create dedicated comparison split (fraction of samples)
+comparison_split = 0.2
 
 [[generation.strategy]]
 name = "rhs_archive"
@@ -233,8 +251,13 @@ rhs_path = "/path/to/rhs.txt"
 
 [generation]
 num_samples = 5000
-# Normalization method: "matrix" (spectral radius), "rhs" (per-sample), or "none"
+# Normalization method: "matrix" (spectral radius), "spectral" (spectral norm),
+# "rhs" (per-sample), "diagonal" (Jacobi preconditioning), or "none"
 normalize = "matrix"
+# Optional: save raw unnormalized data alongside normalized data
+save_raw = false
+# Optional: create dedicated comparison split (fraction of samples)
+comparison_split = 0.2
 krylov_iters = 15
 residual_iters = 15
 seed = 42
@@ -288,14 +311,109 @@ manual path edits.
 
 1. **Generate/collect data once:**
    ```bash
-   uv run python collect_data.py data-configs/collect-504.toml
+   uv run python graph-cg/scripts/process_data.py graph-cg/data-configs/collect-504.toml
    ```
 
 2. **Train multiple models on same data:**
    ```bash
-   uv run python train.py config-ffnn-504.toml
-   uv run python train.py config-gat-504.toml
+   uv run python graph-cg/scripts/train_model.py --data-config graph-cg/data-configs/collect-504.toml --config graph-cg/configs/ffnn.toml
+   uv run python graph-cg/scripts/train_model.py --data-config graph-cg/data-configs/collect-504.toml --config graph-cg/configs/gnn.toml
    ```
 
 3. **Switch datasets:** Point both data and training configs to a new
    `[flow]` block (no manual path editing required)
+
+## Eigenvector-Based Strategies
+
+### eigenvector_forward
+
+Uses eigenvectors of the system matrix as solutions, computing b = λ_i * v_i using the eigenvalue equation.
+
+**Parameters:**
+- `samples` (required): Number of eigenvectors to use (must be ≤ matrix dimension)
+- `which` (optional): "smallest" (default), "largest", or "random"
+  - "smallest": Eigenvectors with k smallest eigenvalues
+  - "largest": Eigenvectors with k largest eigenvalues
+  - "random": Random selection without replacement
+- `seed` (optional): Random seed for reproducibility (used with "random" mode)
+
+**Use case:** Training on samples where solutions have known eigenstructure. Useful for testing CG performance on specific eigenspaces.
+
+**Requirements:** Matrix must be symmetric.
+
+**Accuracy:** Machine precision (relative residuals < 1e-14).
+
+### eigenvector_inverse
+
+Uses eigenvectors of the system matrix as RHS vectors, solving for x = A^-1 @ v_i using scipy direct solver for machine precision accuracy.
+
+**Parameters:**
+- `samples` (required): Number of eigenvectors to use (must be ≤ matrix dimension)
+- `eigenvalue_range` (optional): "smallest" (default), "largest", or "random"
+- `solution_tolerance` (optional): Tolerance for solution verification (default: 1e-14)
+- `seed` (optional): Random seed for reproducibility
+
+**Use case:** Training on samples with controlled RHS eigenstructure and high-precision solutions. Useful for validating network accuracy.
+
+**Requirements:** Matrix must be symmetric.
+
+**Accuracy:** Machine precision (relative residuals < 1e-14 by default).
+
+**Note:** No eigenvalue filtering applied. May produce numerical warnings for nearly singular matrices. Solution tolerance is configurable.
+
+### Random Linear Combinations
+
+Both eigenvector strategies now support generating random linear combinations of eigenvectors, enabling richer training data from eigenspaces:
+
+**New Parameters:**
+- `num_eigenvectors` (optional, default=-1 for all): Number of eigenvectors to use as basis for linear combinations
+  - Use -1 or omit to select all eigenvectors (default behavior)
+  - Selected using `which` ("smallest"/"largest"/"random")
+  - Must be ≤ matrix dimension
+- `include_eigenvectors` (optional, default=False): Whether to include original eigenvectors in samples
+  - If `True`: generates (samples - num_eigenvectors) random combinations + includes the num_eigenvectors themselves
+  - If `False`: generates samples random combinations from the basis
+  - When `True`, requires samples ≥ num_eigenvectors
+
+**Combination Generation:**
+- Coefficients sampled from N(0,1) and L2-normalized per sample for stability
+- Fully vectorized for performance
+- Maintains machine precision accuracy (< 1e-14)
+
+**Use Cases:**
+- Training on rich subspaces without duplicate eigenvectors
+- Exploring eigenspace structure with fewer basis vectors
+- Generating large datasets from small eigenspaces (e.g., 1000 samples from 50 eigenvectors)
+
+**Example:**
+```toml
+[[generation.strategy]]
+name = "eigenvector_forward"
+samples = 1000  # Generate 1000 samples
+num_eigenvectors = 50  # From basis of 50 eigenvectors
+which = "largest"  # Use k=50 largest eigenvalues
+include_eigenvectors = true  # Include 50 eigenvectors + 950 combinations
+```
+
+**Backward Compatibility:**
+- Omitting `num_eigenvectors` defaults to -1 (all eigenvectors, same as before)
+- Setting `num_eigenvectors=-1` explicitly selects all eigenvectors
+- Omitting `include_eigenvectors` defaults to False (combinations only)
+- Old configs work unchanged
+
+### Example Configuration
+
+```toml
+[[generation.strategy]]
+name = "eigenvector_forward"
+samples = 40
+which = "largest"  # Use k=40 largest eigenvalues
+
+[[generation.strategy]]
+name = "eigenvector_inverse"
+samples = 40
+which = "smallest"  # Use k=40 smallest eigenvalues
+solution_tolerance = 1.0e-13  # Custom tolerance (optional)
+```
+
+See `generate-eigenvector-example.toml` for a complete working example.
