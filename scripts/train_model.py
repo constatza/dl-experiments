@@ -3,29 +3,33 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+# Add graph-cg root to Python path so we can import from src
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from typing import Any
 
 import typer
 
-from src.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
+from src.constants import (
+    DEFAULT_MODEL_CONFIG,
+    DEFAULT_DATA_CONFIG,
+    EXIT_FAILURE,
+    EXIT_KEYBOARD_INTERRUPT,
+)
 from src.cli.training import train_model
 
 
 def main(
     config: Path = typer.Argument(
-        Path(__file__).parent / "configs" / "ffnn.toml",
+        None,
         help="Path to TOML config",
     ),
     data_config: Path = typer.Option(
-        Path(__file__).parent / "data-configs" / "collect-504.toml",
+        None,
         help="Path to data config providing dataset metadata",
-    ),
-    features: Path | None = typer.Option(
-        None, help="Override path to features (RHS) .npy"
-    ),
-    targets: Path | None = typer.Option(
-        None, help="Override path to targets (solution) .npy"
     ),
     out_dir: Path | None = typer.Option(
         None, help="Override Trainer default_root_dir and checkpoint dir"
@@ -35,14 +39,20 @@ def main(
     ),
 ):
     """Train model with optional dataset/output overrides."""
+    graph_cg_root = Path(__file__).resolve().parent.parent
+
+    # Resolve defaults
+    if config is None:
+        config = graph_cg_root / DEFAULT_MODEL_CONFIG
+    if data_config is None:
+        data_config = graph_cg_root / DEFAULT_DATA_CONFIG
+
     print(f"Loading configuration from: {config}")
 
     try:
         checkpoint_path = train_model(
             config_path=config,
             data_config_path=data_config,
-            features_path=features,
-            targets_path=targets,
             output_dir=out_dir,
             accelerator=accelerator,
         )

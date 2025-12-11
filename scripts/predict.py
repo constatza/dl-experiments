@@ -3,13 +3,23 @@
 
 from __future__ import annotations
 
-import os
+import sys
 from pathlib import Path
+
+# Add graph-cg root to Python path so we can import from src
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import os
 
 import typer
 from dlkit.core.postprocessing import summarize
 
-from src.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
+from src.constants import (
+    DEFAULT_MODEL_CONFIG,
+    DEFAULT_DATA_CONFIG,
+    EXIT_FAILURE,
+    EXIT_KEYBOARD_INTERRUPT,
+)
 from src.cli.prediction import run_inference
 
 os.environ.setdefault("MPLBACKEND", "Agg")
@@ -17,10 +27,10 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 
 def main(
     config: Path = typer.Option(
-        Path(__file__).parent / "configs" / "ffnn.toml", help="Path to config file"
+        None, help="Path to config file"
     ),
     data_config: Path = typer.Option(
-        Path(__file__).parent / "data-configs" / "collect-504.toml",
+        None,
         help="Path to data config providing dataset metadata",
     ),
     checkpoint: Path | None = typer.Option(None, help="Override checkpoint path"),
@@ -36,6 +46,14 @@ def main(
     ),
 ):
     """Run inference using a DLKit configuration."""
+    graph_cg_root = Path(__file__).resolve().parent.parent
+
+    # Resolve defaults
+    if config is None:
+        config = graph_cg_root / DEFAULT_MODEL_CONFIG
+    if data_config is None:
+        data_config = graph_cg_root / DEFAULT_DATA_CONFIG
+
     print(f"Loading configuration from: {config}")
 
     try:
@@ -57,7 +75,9 @@ def main(
         if results["y_true"] is not None and results["y_pred"] is not None:
             print(f"Generated predictions for {len(results['y_true'])} samples")
             if results["plot_path"]:
-                print(f"Saved plots to: {results['plot_path']}")
+                print(f"Saved parity plot to: {results['plot_path']}")
+            if results.get("diagnostic_plot_path"):
+                print(f"Saved diagnostic plot to: {results['diagnostic_plot_path']}")
         else:
             print("Could not extract matching prediction/target arrays for plotting.")
 

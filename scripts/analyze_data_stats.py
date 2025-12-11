@@ -3,23 +3,34 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+# Add graph-cg root to Python path so we can import from src
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import typer
 
+from src.constants import DEFAULT_PROCESSED_DATA_DIR
 from src.cli.analysis import analyze_dataset
 
 
 def main(
     generated_dir: Path = typer.Option(
-        Path("/data/projects/graph-cg/data/processed/synthetic-baseline/generate-280-krylov50"),
+        None,
         help="Path to generated dataset directory",
     ),
     collected_dir: Path = typer.Option(
-        Path("/data/projects/graph-cg/data/processed/spectral-baseline/collect-504"),
+        None,
         help="Path to collected dataset directory",
     ),
 ):
+    # Resolve defaults
+    if generated_dir is None:
+        generated_dir = DEFAULT_PROCESSED_DATA_DIR / "synthetic-baseline" / "generate-280-krylov50"
+    if collected_dir is None:
+        collected_dir = DEFAULT_PROCESSED_DATA_DIR / "spectral-baseline" / "collect-504"
+
     gen_stats = analyze_dataset(generated_dir, "Generated")
     col_stats = analyze_dataset(collected_dir, "Collected")
 

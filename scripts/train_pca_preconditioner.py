@@ -3,20 +3,30 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+# Add graph-cg root to Python path so we can import from src
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import typer
 
-from src.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT, SYMBOL_CHECKMARK
+from src.constants import (
+    DEFAULT_MODEL_CONFIG,
+    DEFAULT_DATA_CONFIG,
+    EXIT_FAILURE,
+    EXIT_KEYBOARD_INTERRUPT,
+    SYMBOL_CHECKMARK,
+)
 from src.cli.training import train_pca_preconditioner
 
 
 def main(
     config: Path = typer.Option(
-        Path(__file__).parent / "configs/ffnn.toml", help="Path to TOML config"
+        None, help="Path to TOML config"
     ),
     data_config: Path = typer.Option(
-        Path(__file__).parent / "data-configs/collect-504.toml",
+        None,
         help="Path to data config providing dataset metadata",
     ),
     n_components: int = typer.Option(..., help="Number of PCA components"),
@@ -27,6 +37,14 @@ def main(
     normalize: bool = typer.Option(True, help="Normalize solutions before PCA"),
 ):
     """Train PCA preconditioner from solution samples."""
+    graph_cg_root = Path(__file__).resolve().parent.parent
+
+    # Resolve defaults
+    if config is None:
+        config = graph_cg_root / DEFAULT_MODEL_CONFIG
+    if data_config is None:
+        data_config = graph_cg_root / DEFAULT_DATA_CONFIG
+
     try:
         output_path, plot_path = train_pca_preconditioner(
             config_path=config,

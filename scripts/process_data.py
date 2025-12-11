@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Process data for graph-cg: collection from archives or synthetic generation.
+
+This unified script handles both data collection (from existing RHS archives)
+and synthetic data generation through the same pipeline.
+
+Usage:
+    # Generate synthetic data
+    uv run python graph-cg/scripts/process_data.py data-configs/generate-90.toml
+
+    # Collect data from archives (with solving)
+    uv run python graph-cg/scripts/process_data.py data-configs/collect-504.toml
+
+    # Collect without solving (RHS only)
+    uv run python graph-cg/scripts/process_data.py data-configs/collect-504.toml --no-solve
+
+    # Override CG parameters
+    uv run python graph-cg/scripts/process_data.py data-configs/collect-504.toml \\
+        --cg-tolerance 1e-8 --cg-max-iters 500
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Add graph-cg root to Python path so we can import from src
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import typer
+
+from src.constants import (
+    DEFAULT_RTOL,
+    DEFAULT_CG_MAX_ITERATIONS,
+    EXIT_FAILURE,
+    EXIT_KEYBOARD_INTERRUPT,
+    SYMBOL_SUCCESS,
+    SYMBOL_ERROR,
+)
+from src.cli.data import process_data_from_config
+
+
+def main(
+    config: Path = typer.Argument(
+        ...,
+        help="Path to data-config file (TOML)",
+    ),
+    solve: bool = typer.Option(
+        True,
+        "--solve/--no-solve",
+        help="Solve linear systems via CG (for collection mode)",
+    ),
+    cg_tolerance: float | None = typer.Option(
+        None,
+        "--cg-tolerance",
+        help=f"CG solver tolerance (relative, default: {DEFAULT_RTOL})",
+    ),
+    cg_max_iters: int | None = typer.Option(
+        None,
+        "--cg-max-iters",
+        help=f"CG solver max iterations (default: {DEFAULT_CG_MAX_ITERATIONS})",
+    ),
+):
+    """Process data via unified pipeline (collection or generation).
+
+    This script automatically detects the data processing mode based on your
+    config file's strategy definitions. It handles:
+
+    - Synthetic generation (random, krylov, cg_residual strategies)
+    - Archive collection (rhs_archive, solution_archive strategies)
+    - Mixed strategies (combination of synthetic and archive)
+
+    The --solve and CG options only affect collection mode (rhs_archive).
+    """
+    try:
+        print(f"Loading data config: {config}")
+        output_path = process_data_from_config(
+            config,
+            solve_systems=solve,
+            cg_tolerance=cg_tolerance,
+            cg_max_iters=cg_max_iters,
+        )
+
+        print(f"\n{SYMBOL_SUCCESS} Data processing complete!")
+        print(f"  Output: {output_path}")
+        print("  Files:")
+        for file in sorted(output_path.glob("*")):
+            print(f"    - {file.name}")
+
+    except Exception as e:
+        print(f"\n{SYMBOL_ERROR} Error: {e}")
+        raise typer.Exit(code=EXIT_FAILURE)
+
+
+if __name__ == "__main__":
+    try:
+        typer.run(main)
+    except KeyboardInterrupt:
+        raise SystemExit(EXIT_KEYBOARD_INTERRUPT)
