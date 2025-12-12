@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import os
 
+import numpy as np
+import pandas as pd
 import typer
 from dlkit.core.postprocessing import summarize
 
@@ -24,6 +26,27 @@ from src.cli.prediction import run_inference
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
+
+def _save_sample_prediction_to_csv(y_true: np.ndarray, y_pred: np.ndarray) -> None:
+    """
+    Saves a random sample's true value, prediction, and error to a CSV file.
+    """
+    num_samples = len(y_true)
+    if num_samples > 0:
+        random_index = np.random.randint(0, num_samples)
+        true_val = y_true[random_index]
+        predicted_val = y_pred[random_index]
+        error_val = true_val - predicted_val
+
+        sample_data = pd.DataFrame({
+            'Target': [true_val],
+            'Prediction': [predicted_val],
+            'Error': [error_val]
+        })
+
+        output_path = Path("prediction_sample.csv")
+        sample_data.to_csv(output_path, index=False, float_format='%.6e')
+        print(f"Saved random sample prediction, target, and error to {output_path}")
 
 def main(
     config: Path = typer.Option(
@@ -74,6 +97,9 @@ def main(
 
         if results["y_true"] is not None and results["y_pred"] is not None:
             print(f"Generated predictions for {len(results['y_true'])} samples")
+
+            _save_sample_prediction_to_csv(results['y_true'], results['y_pred'])
+
             if results["plot_path"]:
                 print(f"Saved parity plot to: {results['plot_path']}")
             if results.get("diagnostic_plot_path"):
