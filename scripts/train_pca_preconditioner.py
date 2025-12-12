@@ -22,9 +22,7 @@ from src.cli.training import train_pca_preconditioner
 
 
 def main(
-    config: Path = typer.Option(
-        None, help="Path to TOML config"
-    ),
+    config: Path = typer.Option(None, help="Path to TOML config"),
     data_config: Path = typer.Option(
         None,
         help="Path to data config providing dataset metadata",

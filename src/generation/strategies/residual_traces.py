@@ -6,9 +6,14 @@ import numpy as np
 
 from ..interfaces import GeneratedSamples, IDataGenerationStrategy
 from ..runner import register_strategy
+from ..strategy_configs import ResidualTraceConfig
 from ..types import ArchiveData
 from ...solver import SolverResult, flexible_cg
-from ..helpers import _load_or_generate_solutions, _load_or_compute_rhs, _build_trace_indices
+from ..helpers import (
+    _load_or_generate_solutions,
+    _load_or_compute_rhs,
+    _build_trace_indices,
+)
 from ...normalization import ResidualTraceSamples
 
 
@@ -25,6 +30,7 @@ def _build_archive(
 @register_strategy
 class ResidualTraceStrategy(IDataGenerationStrategy):
     name = "cg_residual"
+    ConfigType = ResidualTraceConfig
 
     def requires_rhs(self) -> bool:
         return True
@@ -38,14 +44,16 @@ class ResidualTraceStrategy(IDataGenerationStrategy):
     ) -> GeneratedSamples:
         if rhs is None:
             raise ValueError("cg_residual requires rhs input")
-        count = int(cfg.get("samples", 0))
-        cg_iters = int(cfg.get("residual_iters", 8))
-        rng = np.random.default_rng(int(cfg.get("seed", 42)))
-        archive_solutions = cfg.get("archive_solutions")
-        archive_rhs = cfg.get("archive_rhs")
+
+        # Validate and convert to typed config
+        config = ResidualTraceConfig(**cfg)
+
+        count = config.samples
+        cg_iters = config.residual_iters
+        rng = np.random.default_rng(config.seed)
         archive = None
-        if archive_solutions is not None:
-            archive = _build_archive(archive_solutions, archive_rhs)
+        if config.archive_solutions is not None:
+            archive = _build_archive(config.archive_solutions, config.archive_rhs)
 
         n = matrix.shape[0]
         sols = _load_or_generate_solutions(count, n, rng, 1.0, archive)

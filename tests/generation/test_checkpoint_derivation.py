@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from src.system_loading import derive_checkpoint_path, extract_model_name
 
@@ -40,7 +39,9 @@ name = "SomeModel"
         model_name = extract_model_name(config_path)
         assert model_name == "ffnn"
 
-    def test_extract_from_filename_when_session_name_empty(self, tmp_path: Path) -> None:
+    def test_extract_from_filename_when_session_name_empty(
+        self, tmp_path: Path
+    ) -> None:
         """Test fallback to filename when SESSION.name is empty."""
         config_path = tmp_path / "linear.toml"
         config_path.write_text("""
@@ -98,7 +99,9 @@ name = "linear"
 
         checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
-        expected = output_root / "collect-504" / "linear" / "checkpoints" / "linear.ckpt"
+        expected = (
+            output_root / "collect-504" / "linear" / "checkpoints" / "linear.ckpt"
+        )
         assert checkpoint_path == expected
 
     def test_path_derivation_uses_model_name_not_filename(self, tmp_path: Path) -> None:
@@ -116,7 +119,13 @@ name = "custom_model_name"
         checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
         # Should use SESSION.name, not filename
-        expected = output_root / "test" / "custom_model_name" / "checkpoints" / "custom_model_name.ckpt"
+        expected = (
+            output_root
+            / "test"
+            / "custom_model_name"
+            / "checkpoints"
+            / "custom_model_name.ckpt"
+        )
         assert checkpoint_path == expected
 
     def test_path_derivation_with_absolute_paths(self, tmp_path: Path) -> None:
@@ -133,7 +142,9 @@ name = "ffnn"
 
         checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
-        expected = Path("/data/projects/graph-cg/output/test-eigenvector/ffnn/checkpoints/ffnn.ckpt")
+        expected = Path(
+            "/data/projects/graph-cg/output/test-eigenvector/ffnn/checkpoints/ffnn.ckpt"
+        )
         assert checkpoint_path == expected
 
     def test_path_derivation_with_string_paths(self, tmp_path: Path) -> None:
@@ -209,12 +220,14 @@ name = "test_model"
             model_config = tmp_path / f"{example['model_name']}.toml"
             model_config.write_text(f"""
 [SESSION]
-name = "{example['model_name']}"
+name = "{example["model_name"]}"
 """)
 
             data_config = tmp_path / f"{example['data_stem']}.toml"
 
-            checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
+            checkpoint_path = derive_checkpoint_path(
+                model_config, data_config, output_root
+            )
 
             expected = output_root / example["expected_suffix"]
             assert checkpoint_path == expected

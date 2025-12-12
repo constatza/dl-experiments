@@ -27,7 +27,9 @@ def main(
 ):
     # Resolve defaults
     if generated_dir is None:
-        generated_dir = DEFAULT_PROCESSED_DATA_DIR / "synthetic-baseline" / "generate-280-krylov50"
+        generated_dir = (
+            DEFAULT_PROCESSED_DATA_DIR / "synthetic-baseline" / "generate-280-krylov50"
+        )
     if collected_dir is None:
         collected_dir = DEFAULT_PROCESSED_DATA_DIR / "spectral-baseline" / "collect-504"
 

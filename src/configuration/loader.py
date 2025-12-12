@@ -297,12 +297,12 @@ def _get_default_solver_config_path() -> Path:
     Pure function - returns default solver config location.
 
     Returns:
-        Path to graph-cg/solver-configs/default.toml.
+        Path to configs/default/solver.toml.
     """
-    # Resolve relative to graph-cg directory (3 levels up from this module)
-    # This module is at: graph-cg/src/configuration/loader.py
-    module_dir = Path(__file__).parent  # graph-cg/src/configuration
-    return module_dir.parent.parent / "solver-configs" / "default.toml"
+    # This module is at: src/configuration/loader.py
+    # Project root is 3 levels up.
+    project_root = Path(__file__).parent.parent.parent
+    return project_root / "configs" / "default" / "solver.toml"
 
 
 def _ensure_training_dirs(context: FlowContext) -> None:
@@ -394,3 +394,91 @@ def load_config(
     settings = _inject_context_paths(settings, context)
 
     return settings, context  # type: ignore[return-value]
+
+
+def _resolve_experiment_config_path(
+    experiment_name: str,
+    config_filename: str,
+    experiments_dir: Path,
+    default_dir: Path,
+) -> Path:
+    """
+    Resolve a config file path using the experiment -> default fallback logic.
+    """
+    exp_path = experiments_dir / experiment_name / config_filename
+    if exp_path.exists():
+        return exp_path
+
+    default_path = default_dir / config_filename
+    if default_path.exists():
+        return default_path
+
+    raise FileNotFoundError(
+        f"Config file '{config_filename}' not found for experiment '{experiment_name}' "
+        f"in either '{exp_path.parent}' or '{default_dir}'"
+    )
+
+
+def load_experiments(
+    master_config_path: str | Path | None = None,
+) -> list[tuple[str, GeneralSettings, FlowContext, Path, Path, Path]]:
+    """
+    Load all active experiment configurations based on the master config file.
+
+    Returns:
+        A list of tuples, where each tuple contains:
+        (experiment_name, settings, context, model_path, data_gen_path, solver_path).
+    """
+    project_root = Path.cwd()
+    
+    if master_config_path is None:
+        master_config_path = project_root / "configs" / "experiments.toml"
+    else:
+        master_config_path = Path(master_config_path)
+
+    if not master_config_path.exists():
+        raise FileNotFoundError(f"Master config not found: {master_config_path}")
+
+    configs_root = master_config_path.parent
+    experiments_dir = configs_root / "experiments"
+    default_dir = configs_root / "default"
+
+    with open(master_config_path, "rb") as f:
+        master_config_data = tomllib.load(f)
+    
+    run_list = master_config_data.get("run", [])
+
+    resolved_experiments: list[tuple[str, GeneralSettings, FlowContext, Path, Path, Path]] = []
+    for exp_name in run_list:
+        # Resolve paths for all three config files
+        model_path = _resolve_experiment_config_path(
+            exp_name, "model.toml", experiments_dir, default_dir
+        )
+        data_pointer_path = _resolve_experiment_config_path(
+            exp_name, "data.toml", experiments_dir, default_dir
+        )
+        solver_path = _resolve_experiment_config_path(
+            exp_name, "solver.toml", experiments_dir, default_dir
+        )
+
+        # The data.toml file is a pointer to the actual data generation config.
+        with open(data_pointer_path, "rb") as f:
+            data_pointer_config = tomllib.load(f)
+        
+        data_gen_path_str = data_pointer_config.get("dataconfig")
+        if not data_gen_path_str:
+            raise ValueError(f"The data.toml for experiment '{exp_name}' is missing the 'dataconfig' key.")
+        
+        # The path in dataconfig is relative to the project root.
+        real_data_gen_path = project_root / data_gen_path_str
+
+        # Use the existing load_config function to get the settings and context
+        settings, context = load_config(
+            config_path=model_path,
+            data_config_path=real_data_gen_path,
+            solver_config_path=solver_path,
+        )
+        
+        resolved_experiments.append((exp_name, settings, context, model_path, real_data_gen_path, solver_path))
+
+    return resolved_experiments

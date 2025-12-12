@@ -76,25 +76,22 @@ def calculate_spectral_norm(A: np.ndarray) -> float:
 
 
 def compute_dim_scale(dimension: int) -> float:
-    """Return sqrt(dimension) for normalization helpers."""
-    return float(np.sqrt(dimension))
-
-
-def get_dimension_scale(dimension: int) -> float:
-    """Calculate dimension-based scaling factor sqrt(d).
+    """Calculate dimension-based scaling factor, sqrt(dimension).
 
     This scaling ensures consistent normalization across different matrix sizes.
 
     Args:
-        dimension: Matrix dimension
+        dimension: Matrix dimension.
 
     Returns:
-        sqrt(dimension)
+        sqrt(dimension).
     """
     return float(np.sqrt(dimension))
 
 
-def apply_dimension_scaling(A: np.ndarray, b: np.ndarray, dimension_scale: float) -> tuple[np.ndarray, np.ndarray]:
+def apply_dimension_scaling(
+    A: np.ndarray, b: np.ndarray, dimension_scale: float
+) -> tuple[np.ndarray, np.ndarray]:
     """Apply dimension scaling to matrix and RHS.
 
     Args:
@@ -129,7 +126,7 @@ def normalize_by_matrix(
     if scale <= 0:
         raise ValueError(f"Scale must be positive, got {scale}")
 
-    dimension_scale = get_dimension_scale(A.shape[0])
+    dimension_scale = compute_dim_scale(A.shape[0])
     A_scaled = A / scale
     b_scaled = b / scale
     return apply_dimension_scaling(A_scaled, b_scaled, dimension_scale)
@@ -154,7 +151,7 @@ def normalize_by_rhs(
     if rhs_norm < 1e-15:
         raise ValueError(f"RHS norm too small for normalization: {rhs_norm}")
 
-    dimension_scale = get_dimension_scale(A.shape[0])
+    dimension_scale = compute_dim_scale(A.shape[0])
     A_scaled = A / rhs_norm
     b_scaled = b / rhs_norm
     A_norm, b_norm = apply_dimension_scaling(A_scaled, b_scaled, dimension_scale)
@@ -192,7 +189,7 @@ def normalize_by_spectral(
     if rhs_norm < 1e-15:
         raise ValueError(f"RHS norm too small for normalization: {rhs_norm}")
 
-    dimension_scale = get_dimension_scale(b.shape[0])
+    dimension_scale = compute_dim_scale(b.shape[0])
 
     # Normalize matrix by spectral norm and dimension
     A_scaled = A / spectral_norm
@@ -258,8 +255,6 @@ def _auto_device(device: str | None = None) -> str:
         return "cpu"
 
 
-
-
 def compute_rhs_norm(rhs: np.ndarray) -> float:
     """Compute L2 norm of RHS vector.
 
@@ -308,21 +303,9 @@ def validate_diagonal(diagonal: np.ndarray, threshold: float = 1e-15) -> None:
     """
     if np.any(np.abs(diagonal) < threshold):
         raise ValueError(
-            f"Matrix contains near-zero diagonal entries; "
+            "Matrix contains near-zero diagonal entries; "
             "cannot apply diagonal normalization."
         )
-
-
-def compute_dim_scale(dimension: int) -> float:
-    """Compute dimension scale factor sqrt(d).
-
-    Args:
-        dimension: Matrix dimension
-
-    Returns:
-        sqrt(dimension)
-    """
-    return float(np.sqrt(dimension))
 
 
 def compute_spectral_bound(matrix: np.ndarray) -> float:

@@ -87,7 +87,9 @@ def build_preconditioners(
     return preconditioners
 
 
-def select_primary(preconditioners: dict[str, Any], checkpoint: Path | None, fallback: str) -> str:
+def select_primary(
+    preconditioners: dict[str, Any], checkpoint: Path | None, fallback: str
+) -> str:
     fallback_name = fallback.lower()
     if checkpoint is not None and "neural" in preconditioners:
         return "neural"
@@ -135,14 +137,21 @@ def plot_summary(
     figures_root: Path,
     log_scale: bool = True,
 ) -> Path:
-    labels = [f"{sanitize_identifier(r.dataset)} / {sanitize_identifier(r.config_name)}" for r in records]
+    labels = [
+        f"{sanitize_identifier(r.dataset)} / {sanitize_identifier(r.config_name)}"
+        for r in records
+    ]
     cond_maps = [r.all_conditions for r in records]
     default_order = ["none", "jacobi", "ilu", "neural"]
-    preconditioners = [name for name in default_order if any(name in m for m in cond_maps)]
+    preconditioners = [
+        name for name in default_order if any(name in m for m in cond_maps)
+    ]
     if not preconditioners:
         preconditioners = sorted({k for m in cond_maps for k in m})
     figure_path = figures_root / "preconditioner_condition_numbers.png"
-    return plot_condition_bars(labels, cond_maps, preconditioners, save_path=figure_path, log_scale=log_scale)
+    return plot_condition_bars(
+        labels, cond_maps, preconditioners, save_path=figure_path, log_scale=log_scale
+    )
 
 
 @app.command()
@@ -183,7 +192,9 @@ def main(
     cfg = read_toml(experiments)
     exp_entries = cfg.get("experiments") or []
     paths_section = cfg.get("paths") or {}
-    common_root = Path(paths_section.get("common_output_root") or "/data/projects/graph-cg/data")
+    common_root = Path(
+        paths_section.get("common_output_root") or "/data/projects/graph-cg/data"
+    )
     base_dir = experiments.parent
     records: list[ConditionRecord] = []
 
@@ -205,7 +216,9 @@ def main(
         label = f"{sanitize_identifier(dataset)} / {sanitize_identifier(model)}"
 
         if dry_run:
-            print(f"{label}: matrix={matrix_path} checkpoint={checkpoint or 'none'} -> {output_dir}")
+            print(
+                f"{label}: matrix={matrix_path} checkpoint={checkpoint or 'none'} -> {output_dir}"
+            )
             continue
 
         matrix = load_matrix(matrix_path)
@@ -218,7 +231,9 @@ def main(
             use_ilu=use_ilu,
         )
         primary = select_primary(preconditioners, checkpoint, fallback_preconditioner)
-        cond_original, cond_precond, conds = summarize_condition_numbers(matrix, preconditioners, primary)
+        cond_original, cond_precond, conds = summarize_condition_numbers(
+            matrix, preconditioners, primary
+        )
 
         record = ConditionRecord(
             dataset=dataset,

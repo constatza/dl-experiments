@@ -39,8 +39,8 @@ DEFAULT_EXPERIMENTS_CONFIG = "configs/experiments.toml"
 # =============================================================================
 # CG Solver Defaults
 # =============================================================================
-DEFAULT_ATOL = 1e-10  # Absolute tolerance for CG solves
 DEFAULT_RTOL = 1e-6  # Relative tolerance for CG solves
+DEFAULT_ATOL = 1e-14  # Absolute tolerance for convergence (in addition to relative tolerance)
 DEFAULT_CG_MAX_ITERATIONS = 1000
 DEFAULT_CG_STOPPING_CRITERION = "tolerance"
 
@@ -64,9 +64,6 @@ DEFAULT_RESIDUAL_REPLACEMENT_FREQ = (
 DEFAULT_DIVERGENCE_FACTOR = (
     1e10  # gamma_div: Declare divergence if ||r|| > gamma_div * ||b||
 )
-DEFAULT_ATOL = (
-    1e-14  # Absolute tolerance for convergence (in addition to relative tolerance)
-)
 
 # FCG (Flexible Conjugate Gradient) Algorithm Parameters
 # These control the truncated orthogonalization history for FCG variants
@@ -80,8 +77,14 @@ FCG_ORTHOG_EPSILON = 1e-14  # Threshold for near-zero inner products in Gram-Sch
 # Data Generation Defaults
 # =============================================================================
 DEFAULT_NUM_SAMPLES = 6000
+
+# Strategy-specific iteration parameters
+# These are now configured at the strategy level (not generation level):
+# - DEFAULT_KRYLOV_ITERATIONS: Used by krylov strategy for Krylov subspace dimension
+# - DEFAULT_RESIDUAL_TRACE_ITERS: Used by cg_residual and cg_residual_error strategies
 DEFAULT_KRYLOV_ITERATIONS = 15
 DEFAULT_RESIDUAL_TRACE_ITERS = 8
+
 DEFAULT_RANDOM_SEED = 42
 DEFAULT_NORMALIZE = "spectral"  # "none", "matrix", "rhs", "spectral", or "diagonal"
 DEFAULT_SHUFFLE = True

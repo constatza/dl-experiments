@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Tuple
+from collections.abc import Mapping
 
 from ..constants import (
     DEFAULT_FIGURES_DIR,
@@ -43,7 +43,7 @@ class ProjectRoots:
         processed_root: str | Path | None = None,
         output_root: str | Path | None = None,
         figures_root: str | Path | None = None,
-    ) -> "ProjectRoots":
+    ) -> ProjectRoots:
         base = Path(project_root or DEFAULT_PROJECT_ROOT)
         processed = Path(processed_root or DEFAULT_PROCESSED_DATA_DIR)
         output = Path(output_root or DEFAULT_OUTPUT_DIR)
@@ -151,7 +151,9 @@ class PredictionPaths:
 
     @property
     def base_dir(self) -> Path:
-        return self.training.data.flow.stage_dir("predict") / self.training.data.dataset_id
+        return (
+            self.training.data.flow.stage_dir("predict") / self.training.data.dataset_id
+        )
 
     @property
     def predictions_file(self) -> Path:
@@ -196,7 +198,7 @@ class FlowContext:
     test_matrix: Path | None = None
     test_solutions_path: str | None = None
 
-    def with_run_id(self, run_id: str) -> "FlowContext":
+    def with_run_id(self, run_id: str) -> FlowContext:
         training = TrainingPaths(data=self.data, run_id=run_id)
         prediction = PredictionPaths(training=training)
         return FlowContext(
@@ -219,7 +221,7 @@ class FlowContext:
 
 def parse_flow_keys(
     config: Mapping[str, object], config_path: Path | str | None = None
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """Extract ``(flow_id, dataset_id)`` from a config mapping.
 
     Accepts either lowercase ``flow``/``dataset`` or uppercase variants
@@ -243,7 +245,6 @@ def parse_flow_keys(
         ValueError: If [flow] section is missing or malformed, or if dataset_id
             cannot be determined from either config or filename
     """
-
     flow_section = config.get("flow") or config.get("FLOW") or {}
     if not isinstance(flow_section, Mapping):
         raise ValueError("[flow] section must be a mapping")

@@ -312,7 +312,9 @@ def identity_preconditioner() -> Callable[[NDArray, object], NDArray]:
 
 
 @pytest.fixture
-def jacobi_preconditioner_factory() -> Callable[[NDArray], Callable[[NDArray, object], NDArray]]:
+def jacobi_preconditioner_factory() -> Callable[
+    [NDArray], Callable[[NDArray, object], NDArray]
+]:
     """Factory for Jacobi preconditioner M = diag(A).
 
     Returns:
@@ -355,7 +357,9 @@ def jacobi_preconditioner_factory() -> Callable[[NDArray], Callable[[NDArray, ob
 @pytest.fixture
 def jacobi_preconditioner_tridiagonal(
     tridiagonal_spd_small: NDArray,
-    jacobi_preconditioner_factory: Callable[[NDArray], Callable[[NDArray, object], NDArray]],
+    jacobi_preconditioner_factory: Callable[
+        [NDArray], Callable[[NDArray, object], NDArray]
+    ],
 ) -> Callable[[NDArray, object], NDArray]:
     """Jacobi preconditioner for tridiagonal test matrix.
 

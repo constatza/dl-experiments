@@ -124,7 +124,12 @@ def parse_data_dir_name(dir_name: str) -> dict[str, Any]:
     parts = dir_name.split("-")
 
     if len(parts) < 3:
-        return {"source": "unknown", "dimension": None, "normalized": False, "krylov_percent": None}
+        return {
+            "source": "unknown",
+            "dimension": None,
+            "normalized": False,
+            "krylov_percent": None,
+        }
 
     result = {
         "source": parts[0],

@@ -276,7 +276,9 @@ def test_state_immutable_update_converged(initial_state: IterationState) -> None
     assert updated.iterations == initial_state.iterations
 
 
-def test_state_immutable_update_residual_history(state_with_history: IterationState) -> None:
+def test_state_immutable_update_residual_history(
+    state_with_history: IterationState,
+) -> None:
     """Test immutable update with new residual added to history.
 
     Args:
@@ -397,7 +399,9 @@ def test_state_validation_converged_without_history() -> None:
         - Residual value must be below tolerance
         - Empty history indicates invalid state
     """
-    with pytest.raises(ValueError, match="Cannot be converged with empty residual history"):
+    with pytest.raises(
+        ValueError, match="Cannot be converged with empty residual history"
+    ):
         IterationState(
             converged=True,
             residual_history=[],  # Invalid: converged but no history

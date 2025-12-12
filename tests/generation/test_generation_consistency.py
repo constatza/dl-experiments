@@ -92,9 +92,9 @@ def test_eigenvector_forward_consistency(tmp_path: Path, matrix_path: str) -> No
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert (
-        is_consistent
-    ), f"eigenvector_forward: A @ x != b, max error = {max_error:.2e}"
+    assert is_consistent, (
+        f"eigenvector_forward: A @ x != b, max error = {max_error:.2e}"
+    )
 
 
 def test_eigenvector_inverse_consistency(tmp_path: Path, matrix_path: str) -> None:
@@ -109,9 +109,9 @@ def test_eigenvector_inverse_consistency(tmp_path: Path, matrix_path: str) -> No
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert (
-        is_consistent
-    ), f"eigenvector_inverse: A @ x != b, max error = {max_error:.2e}"
+    assert is_consistent, (
+        f"eigenvector_inverse: A @ x != b, max error = {max_error:.2e}"
+    )
 
 
 def test_no_normalization_consistency(
@@ -134,9 +134,7 @@ def test_no_normalization_consistency(
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert (
-        is_consistent
-    ), f"normalize='none': A @ x != b, max error = {max_error:.2e}"
+    assert is_consistent, f"normalize='none': A @ x != b, max error = {max_error:.2e}"
 
 
 def test_mixed_strategies_consistency(
@@ -167,9 +165,7 @@ def test_mixed_strategies_consistency(
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert (
-        is_consistent
-    ), f"mixed strategies: A @ x != b, max error = {max_error:.2e}"
+    assert is_consistent, f"mixed strategies: A @ x != b, max error = {max_error:.2e}"
 
     # Verify we got the expected total count
     data = np.load(Path(dataset_dir) / "normalized.npz")
@@ -203,9 +199,7 @@ def test_mixed_archive_and_synthetic_strategies(
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert (
-        is_consistent
-    ), f"archive+synthetic: A @ x != b, max error = {max_error:.2e}"
+    assert is_consistent, f"archive+synthetic: A @ x != b, max error = {max_error:.2e}"
 
     # Verify total count
     data = np.load(Path(dataset_dir) / "normalized.npz")
@@ -237,9 +231,9 @@ def test_large_mixed_dataset_consistency(
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert (
-        is_consistent
-    ), f"large mixed dataset: A @ x != b, max error = {max_error:.2e}"
+    assert is_consistent, (
+        f"large mixed dataset: A @ x != b, max error = {max_error:.2e}"
+    )
 
     # Verify total count
     data = np.load(Path(dataset_dir) / "normalized.npz")
@@ -273,9 +267,7 @@ def test_mixed_strategies_with_shuffling(
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert (
-        is_consistent
-    ), f"shuffled mixed: A @ x != b, max error = {max_error:.2e}"
+    assert is_consistent, f"shuffled mixed: A @ x != b, max error = {max_error:.2e}"
 
 
 def test_diagonal_normalization_preserves_symmetry_with_mixed_strategies(
@@ -307,21 +299,21 @@ def test_diagonal_normalization_preserves_symmetry_with_mixed_strategies(
 
     # Verify consistency
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert (
-        is_consistent
-    ), f"diagonal normalization: A @ x != b, max error = {max_error:.2e}"
+    assert is_consistent, (
+        f"diagonal normalization: A @ x != b, max error = {max_error:.2e}"
+    )
 
     # Verify matrix symmetry is preserved
     data = np.load(Path(dataset_dir) / "normalized.npz")
     A = data["matrix"]
     max_asymmetry = np.max(np.abs(A - A.T))
-    assert (
-        max_asymmetry < 1e-10
-    ), f"Diagonal normalization did not preserve symmetry: max asymmetry = {max_asymmetry:.2e}"
+    assert max_asymmetry < 1e-10, (
+        f"Diagonal normalization did not preserve symmetry: max asymmetry = {max_asymmetry:.2e}"
+    )
 
     # Verify diagonal is normalized to 1
     diag = np.diag(A)
     max_diag_error = np.max(np.abs(diag - 1.0))
-    assert (
-        max_diag_error < 1e-10
-    ), f"Diagonal not normalized to 1: max error = {max_diag_error:.2e}"
+    assert max_diag_error < 1e-10, (
+        f"Diagonal not normalized to 1: max error = {max_diag_error:.2e}"
+    )

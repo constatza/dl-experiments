@@ -7,11 +7,13 @@ from scipy.linalg import norm
 
 from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
 from ..runner import register_strategy
+from ..strategy_configs import KrylovConfig
 
 
 @register_strategy
 class KrylovStrategy(IMatrixOnlyGenerationStrategy):
     name = "krylov"
+    ConfigType = KrylovConfig
 
     def requires_rhs(self) -> bool:
         return False
@@ -23,9 +25,12 @@ class KrylovStrategy(IMatrixOnlyGenerationStrategy):
         *,
         cfg: dict,
     ) -> GeneratedSamples:
-        count = int(cfg.get("samples", 0))
-        m = int(cfg.get("krylov_iters", 15))
-        rng = np.random.default_rng(int(cfg.get("seed", 42)))
+        # Validate and convert to typed config
+        config = KrylovConfig(**cfg)
+
+        count = config.samples
+        m = config.krylov_iters
+        rng = np.random.default_rng(config.seed)
 
         n = matrix.shape[0]
         V = np.zeros((n, m), dtype=np.float64)

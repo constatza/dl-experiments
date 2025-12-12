@@ -7,47 +7,16 @@ import pytest
 
 from scipy.linalg import eigh
 
-from src.generation.base import _generate_eigenvector_combinations, generate_mixture
-from src.generation.types import RawSamples
-from src.normalization import ErrorTraceSamples, ResidualTraceSamples, apply_normalization
+from src.generation import generate_mixture
+from src.generation.base import _generate_eigenvector_combinations
+from src.normalization import (
+    ErrorTraceSamples,
+    ResidualTraceSamples,
+    apply_normalization,
+)
 
 
-def _test_append_raw_samples_offsets_residuals_DISABLED(tmp_path: Path) -> None:
-    # TODO: This test is for a removed internal function - rewrite or delete
-    matrix = np.eye(2, dtype=np.float64)
 
-    base = RawSamples(
-        matrix=matrix,
-        rhs=np.array([[1.0, 0.0]], dtype=np.float64),
-        solutions=np.array([[0.5, 0.0]], dtype=np.float64),
-        mother_rhs=np.array([1.0, 0.0], dtype=np.float64),
-        residual_traces=ResidualTraceSamples(
-            residuals=np.array([[0.1, 0.0]], dtype=np.float64),
-            solutions=np.array([[0.05, 0.0]], dtype=np.float64),
-            sample_indices=np.array([0], dtype=np.int64),
-            iteration_indices=np.array([0], dtype=np.int64),
-        ),
-    )
-
-    addition = RawSamples(
-        matrix=matrix,
-        rhs=np.array([[0.0, 1.0]], dtype=np.float64),
-        solutions=np.array([[0.0, 0.5]], dtype=np.float64),
-        mother_rhs=np.array([0.0, 1.0], dtype=np.float64),
-        residual_traces=ResidualTraceSamples(
-            residuals=np.array([[0.0, 0.2]], dtype=np.float64),
-            solutions=np.array([[0.0, 0.1]], dtype=np.float64),
-            sample_indices=np.array([0], dtype=np.int64),
-            iteration_indices=np.array([0], dtype=np.int64),
-        ),
-    )
-
-    merged = _append_raw_samples(base, addition)
-
-    assert merged.rhs.shape == (2, 2)
-    assert merged.residual_traces is not None
-    assert merged.residual_traces.sample_indices.tolist() == [0, 1]
-    assert merged.residual_traces.iteration_indices.tolist() == [0, 0]
 
 
 def test_residual_strategy_with_archive() -> None:
@@ -68,7 +37,7 @@ def test_residual_strategy_with_archive() -> None:
         b=b,
         mix={"cg_residual": 1.0},
         total=2,
-        residual_iters=3,
+        strategy_overrides={"cg_residual": {"residual_iters": 3}},
         seed=7,
         shuffle=False,
         archive_solutions=archive_sols,
@@ -98,7 +67,7 @@ def test_residual_strategy_archive_validation() -> None:
             b=b,
             mix={"cg_residual": 1.0},
             total=2,  # Request more than archive has
-            residual_iters=3,
+            strategy_overrides={"cg_residual": {"residual_iters": 3}},
             seed=7,
             shuffle=False,
             archive_solutions=archive_sols,
@@ -110,7 +79,6 @@ def test_residual_strategy_archive_validation() -> None:
 
 def test_diagonal_normalization_scales_rows(tmp_path: Path) -> None:
     """Diagonal normalization should apply symmetric diagonal scaling: D^(-1/2) @ A @ D^(-1/2)."""
-
     A = np.array([[4.0, 1.0], [2.0, 6.0]], dtype=np.float64)
     R = np.array([[2.0, 3.0], [1.0, -1.0]], dtype=np.float64)
     X = np.array([[0.5, 0.25], [0.1, 0.2]], dtype=np.float64)
@@ -184,7 +152,6 @@ def test_diagonal_normalization_scales_rows(tmp_path: Path) -> None:
 
 def test_diagonal_normalization_rejects_zero_diagonal(tmp_path: Path) -> None:
     """Diagonal normalization should guard against zero diagonal entries."""
-
     A = np.array([[0.0, 1.0], [1.0, 2.0]], dtype=np.float64)
     R = np.ones((1, 2), dtype=np.float64)
     X = np.ones((1, 2), dtype=np.float64)
@@ -226,7 +193,7 @@ def test_error_strategy_with_random(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
-        residual_iters=3,
+        strategy_overrides={"residual_error": {"residual_iters": 3}},
         seed=test_seed,
         shuffle=False,
     )
@@ -287,7 +254,7 @@ def test_error_strategy_with_archive(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
-        residual_iters=3,
+        strategy_overrides={"residual_error": {"residual_iters": 3}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -295,18 +262,21 @@ def test_error_strategy_with_archive(
     )
 
     # Verify we got the archive solutions (first 2)
-    assert np.allclose(solutions, archive_solutions[:2]), \
+    assert np.allclose(solutions, archive_solutions[:2]), (
         "Solutions should match first 2 archive solutions"
-    assert np.allclose(rhs, archive_rhs[:2]), \
+    )
+    assert np.allclose(rhs, archive_rhs[:2]), (
         "RHS should match first 2 archive RHS vectors"
+    )
 
     # Verify error traces were collected
     assert error_traces is not None, "Error traces should be populated"
     assert error_traces.residuals.shape[1] == small_spd_matrix.shape[0]
 
     # Verify true_solutions matches archive solutions
-    assert np.allclose(error_traces.true_solutions, archive_solutions[:2]), \
+    assert np.allclose(error_traces.true_solutions, archive_solutions[:2]), (
         "True solutions should match archive solutions"
+    )
 
 
 def test_error_vectors_satisfy_equation(
@@ -329,7 +299,7 @@ def test_error_vectors_satisfy_equation(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=3,
-        residual_iters=5,
+        strategy_overrides={"residual_error": {"residual_iters": 5}},
         seed=test_seed,
         shuffle=False,
     )
@@ -345,8 +315,9 @@ def test_error_vectors_satisfy_equation(
 
         expected_error = x_star - x_k
 
-        assert np.allclose(error_k, expected_error, atol=1e-12), \
+        assert np.allclose(error_k, expected_error, atol=1e-12), (
             f"Error vector at trace {i} should equal x* - x_k"
+        )
 
 
 def test_residuals_match_current_solutions(
@@ -373,7 +344,7 @@ def test_residuals_match_current_solutions(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
-        residual_iters=4,
+        strategy_overrides={"residual_error": {"residual_iters": 4}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -391,8 +362,9 @@ def test_residuals_match_current_solutions(
 
         expected_residual = b_vec - small_spd_matrix @ x_k
 
-        assert np.allclose(r_k, expected_residual, atol=1e-10), \
+        assert np.allclose(r_k, expected_residual, atol=1e-10), (
             f"Residual at trace {i} should equal b - A @ x_k"
+        )
 
 
 def test_error_strategy_validation(
@@ -419,15 +391,16 @@ def test_error_strategy_validation(
             b=small_rhs,
             mix={"residual_error": 1.0},
             total=3,  # Request more than archive has
-            residual_iters=3,
+            strategy_overrides={"residual_error": {"residual_iters": 3}},
             seed=test_seed,
             shuffle=False,
             archive_solutions=insufficient_archive,
         )
         assert False, "Should have raised ValueError for insufficient archive"
     except ValueError as e:
-        assert "Not enough archive solutions" in str(e), \
+        assert "Not enough archive solutions" in str(e), (
             "Error message should mention insufficient archive solutions"
+        )
 
 
 def test_error_strategy_in_generate_mixture(
@@ -450,7 +423,7 @@ def test_error_strategy_in_generate_mixture(
         b=small_rhs,
         mix={"normal": 0.5, "residual_error": 0.5},
         total=10,
-        residual_iters=3,
+        strategy_overrides={"residual_error": {"residual_iters": 3}},
         seed=test_seed,
         shuffle=False,
     )
@@ -465,12 +438,14 @@ def test_error_strategy_in_generate_mixture(
     # Verify error traces have approximately 5 samples worth of data
     # (each sample generates multiple traces across CG iterations)
     unique_samples = np.unique(error_traces.sample_indices)
-    assert len(unique_samples) >= 4, \
+    assert len(unique_samples) >= 4, (
         "Should have error traces from approximately 5 samples (allowing for rounding)"
+    )
 
     # Verify residuals is None (normal strategy doesn't produce residual traces)
-    assert residuals is None, \
+    assert residuals is None, (
         "Residuals should be None when only one strategy produces them"
+    )
 
 
 def test_error_strategy_traces_structure(
@@ -495,7 +470,7 @@ def test_error_strategy_traces_structure(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=3,
-        residual_iters=4,
+        strategy_overrides={"residual_error": {"residual_iters": 4}},
         seed=test_seed,
         shuffle=False,
     )
@@ -507,14 +482,17 @@ def test_error_strategy_traces_structure(
         mask = error_traces.sample_indices == sample_idx
         sample_traces = error_traces.iteration_indices[mask]
 
-        assert len(sample_traces) > 0, \
+        assert len(sample_traces) > 0, (
             f"Sample {sample_idx} should have at least one trace"
+        )
 
         # Verify iteration indices are sequential starting from 0
-        assert sample_traces[0] == 0, \
+        assert sample_traces[0] == 0, (
             f"First iteration for sample {sample_idx} should be 0"
-        assert np.all(np.diff(sample_traces) == 1), \
+        )
+        assert np.all(np.diff(sample_traces) == 1), (
             f"Iteration indices for sample {sample_idx} should be sequential"
+        )
 
 
 def test_error_strategy_with_zero_iterations(
@@ -536,7 +514,7 @@ def test_error_strategy_with_zero_iterations(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
-        residual_iters=0,  # Zero iterations
+        strategy_overrides={"residual_error": {"residual_iters": 0}},  # Zero iterations
         seed=test_seed,
         shuffle=False,
     )
@@ -548,8 +526,9 @@ def test_error_strategy_with_zero_iterations(
     # With zero iterations, we should still get error traces
     # (at least the initial state with x_0 = 0 and error = x*)
     assert error_traces is not None, "Error traces should exist even with 0 iterations"
-    assert error_traces.residuals.shape[0] >= 2, \
+    assert error_traces.residuals.shape[0] >= 2, (
         "Should have at least one trace per sample (initial state)"
+    )
 
 
 # =============================================================================
@@ -917,3 +896,102 @@ def test_eigenvector_backward_compatible_defaults(tmp_path: Path) -> None:
         residual = A @ solutions[i] - rhs[i]
         rel_residual = np.linalg.norm(residual) / np.linalg.norm(rhs[i])
         assert rel_residual < 1e-14
+
+
+# =============================================================================
+# PYDANTIC VALIDATION TESTS
+# =============================================================================
+
+
+def test_pydantic_rejects_unknown_parameters() -> None:
+    """Test that Pydantic validation rejects unknown parameters due to extra='forbid'.
+
+    Note: The orchestration layer filters out unknown parameters before passing to strategies,
+    so this test validates by directly instantiating the config class.
+    """
+    from src.generation.strategy_configs import KrylovConfig
+    from pydantic import ValidationError
+
+    # Try to create a config with an unknown parameter directly
+    with pytest.raises(ValidationError, match="Unexpected keyword argument"):
+        KrylovConfig(samples=10, unknown_param=123)
+
+
+def test_pydantic_rejects_invalid_literal_values() -> None:
+    """Test that Pydantic validation rejects invalid Literal values."""
+    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
+    b = np.array([1.0, 0.0], dtype=np.float64)
+
+    # Try to pass an invalid 'which' value (should be 'smallest', 'largest', or 'both')
+    with pytest.raises(ValueError, match="Input should be"):
+        generate_mixture(
+            A=A,
+            b=b,
+            mix={"eigenvector_forward": 1.0},
+            total=2,
+            strategy_overrides={"eigenvector_forward": {"which": "invalid"}},
+        )
+
+
+def test_pydantic_requires_rhs_glob_for_rhs_archive() -> None:
+    """Test that rhs_glob is required for rhs_archive strategy."""
+    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
+    b = np.array([1.0, 0.0], dtype=np.float64)
+
+    # Try to use rhs_archive without providing rhs_glob
+    with pytest.raises(ValueError, match="Field required"):
+        generate_mixture(
+            A=A,
+            b=b,
+            mix={"rhs_archive": 1.0},
+            total=2,
+            strategy_overrides={"rhs_archive": {}},  # Missing rhs_glob
+        )
+
+
+def test_pydantic_requires_solutions_glob_for_solution_archive() -> None:
+    """Test that solutions_glob is required for solution_archive strategy."""
+    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
+    b = np.array([1.0, 0.0], dtype=np.float64)
+
+    # Try to use solution_archive without providing solutions_glob
+    with pytest.raises(ValueError, match="Field required"):
+        generate_mixture(
+            A=A,
+            b=b,
+            mix={"solution_archive": 1.0},
+            total=2,
+            strategy_overrides={"solution_archive": {}},  # Missing solutions_glob
+        )
+
+
+def test_pydantic_validates_residual_iters_type() -> None:
+    """Test that Pydantic validates parameter types (residual_iters must be int)."""
+    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
+    b = np.array([1.0, 0.0], dtype=np.float64)
+
+    # Try to pass a string for residual_iters (should be int)
+    with pytest.raises(ValueError, match="Input should be a valid integer"):
+        generate_mixture(
+            A=A,
+            b=b,
+            mix={"residual_error": 1.0},
+            total=2,
+            strategy_overrides={"residual_error": {"residual_iters": "many"}},
+        )
+
+
+def test_pydantic_validates_krylov_iters_type() -> None:
+    """Test that Pydantic validates parameter types (krylov_iters must be int)."""
+    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
+    b = np.array([1.0, 0.0], dtype=np.float64)
+
+    # Try to pass a float for krylov_iters (should be int)
+    with pytest.raises(ValueError):
+        generate_mixture(
+            A=A,
+            b=b,
+            mix={"krylov": 1.0},
+            total=2,
+            strategy_overrides={"krylov": {"krylov_iters": 15.5}},
+        )

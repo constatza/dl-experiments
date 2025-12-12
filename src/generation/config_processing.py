@@ -5,18 +5,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 import numpy as np
 
 from ..constants import (
     ConfigKeys,
     ConfigSections,
-    DEFAULT_KRYLOV_ITERATIONS,
     DEFAULT_NORMALIZE,
-    DEFAULT_NUM_SAMPLES,
     DEFAULT_RANDOM_SEED,
-    DEFAULT_RESIDUAL_TRACE_ITERS,
     DEFAULT_SHUFFLE,
 )
 from .plan import GenerationPlan, StrategySpec, parse_generation_plan
@@ -40,7 +38,6 @@ class DataGenerationContext:
 
 def _coerce_mapping(value: Any) -> Mapping[str, Any]:
     """Convert arbitrary values to an immutable mapping."""
-
     if isinstance(value, Mapping):
         return dict(value)
     return {}
@@ -58,7 +55,6 @@ def _build_context(
     config_path: Path | str | None,
 ) -> tuple[DataGenerationContext, GenerationPlan]:
     """Assemble generation context, plan, and dataset directory."""
-
     source_cfg = _coerce_mapping(config.get(ConfigSections.SOURCE, {}))
     generation_cfg = _coerce_mapping(config.get(ConfigSections.GENERATION, {}))
     output_cfg = _coerce_mapping(config.get(ConfigSections.OUTPUT, {}))
@@ -106,7 +102,6 @@ def _merge_rhs_archive_options(
     context: DataGenerationContext,
 ) -> dict[str, Any]:
     """Combine generation-level options with strategy-specific overrides."""
-
     relevant_keys = ("solve_systems", "cg_tolerance", "cg_max_iters")
     merged: dict[str, Any] = {}
 
@@ -126,7 +121,6 @@ def _resolve_rhs_archive_glob(
     context: DataGenerationContext,
 ) -> str | None:
     """Resolve the RHS glob path to use for RHS archive samples."""
-
     candidates: tuple[Any, ...] = (
         strategy.options.get(ConfigKeys.RHS_GLOB) if strategy else None,
         strategy.options.get(ConfigKeys.RHS_PATH) if strategy else None,
@@ -147,7 +141,6 @@ def _resolve_solution_archive_path(
     context: DataGenerationContext,
 ) -> str | None:
     """Resolve the solutions glob/path for solution archive ingestion."""
-
     candidates: tuple[Any, ...] = (
         strategy.options.get(ConfigKeys.SOLUTIONS_GLOB),
         strategy.options.get(ConfigKeys.SOLUTIONS_PATH),
@@ -163,7 +156,6 @@ def _resolve_solution_archive_path(
 
 def _coerce_optional_int(value: Any) -> int | None:
     """Convert optional numeric values to ``int`` while preserving ``None``."""
-
     if value is None:
         return None
     return int(value)
@@ -176,7 +168,6 @@ def _derive_rhs_from_solution_archive(
     dataset_dir: Path,
 ) -> Path:
     """Create a fallback RHS vector by applying ``A @ x`` to a stored solution."""
-
     pattern = Path(solutions_glob)
     solution_dir = pattern.parent
     if not solution_dir.exists():
@@ -203,7 +194,7 @@ def _derive_rhs_from_solution_archive(
         cfg={
             "solutions_glob": str(representative),
             "samples": 1,
-        }
+        },
     )
 
     if samples.rhs is None or len(samples.rhs) == 0:
@@ -222,7 +213,6 @@ def _resolve_rhs_source(
     provide_rhs_option: Any,
 ) -> str | None:
     """Determine RHS path for synthetic generation, allowing provide_rhs overrides."""
-
     if context.rhs_path:
         return context.rhs_path
 
@@ -232,9 +222,7 @@ def _resolve_rhs_source(
     if isinstance(provide_rhs_option, (str, Path)):
         path = Path(provide_rhs_option)
         if not path.exists():
-            raise FileNotFoundError(
-                f"provide_rhs path does not exist: {path}"
-            )
+            raise FileNotFoundError(f"provide_rhs path does not exist: {path}")
         return str(path)
 
     if isinstance(provide_rhs_option, bool) and provide_rhs_option:
@@ -275,7 +263,8 @@ def _execute_solution_archive(
         context.generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE),
     )
     seed_value = strategy.options.get(
-        ConfigKeys.SEED, context.generation_cfg.get(ConfigKeys.SEED, DEFAULT_RANDOM_SEED)
+        ConfigKeys.SEED,
+        context.generation_cfg.get(ConfigKeys.SEED, DEFAULT_RANDOM_SEED),
     )
 
     # Use new build_dataset with solution_archive strategy
@@ -309,11 +298,6 @@ def _execute_synthetic_generation(
     """Execute mixed generation using new build_dataset() with all strategies."""
     generation_cfg = context.generation_cfg
 
-    krylov_iters = int(generation_cfg.get(ConfigKeys.KRYLOV_ITERS, DEFAULT_KRYLOV_ITERATIONS))
-    residual_iters = int(
-        generation_cfg.get(ConfigKeys.RESIDUAL_ITERS, DEFAULT_RESIDUAL_TRACE_ITERS)
-    )
-
     seed_value = generation_cfg.get(ConfigKeys.SEED, DEFAULT_RANDOM_SEED)
     if seed_value is None:
         seed_value = DEFAULT_RANDOM_SEED
@@ -333,17 +317,18 @@ def _execute_synthetic_generation(
     # Add solution archive strategy
     if solution_archive_strategy is not None:
         counts["solution_archive"] = solution_archive_strategy.samples
-        solutions_glob = _resolve_solution_archive_path(solution_archive_strategy, context)
+        solutions_glob = _resolve_solution_archive_path(
+            solution_archive_strategy, context
+        )
         if solutions_glob:
             strategy_overrides["solution_archive"] = {
                 "solutions_glob": solutions_glob,
                 "shuffle": solution_archive_strategy.options.get(
                     ConfigKeys.SHUFFLE,
-                    generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE)
+                    generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE),
                 ),
                 "seed": solution_archive_strategy.options.get(
-                    ConfigKeys.SEED,
-                    seed_value
+                    ConfigKeys.SEED, seed_value
                 ),
             }
 
@@ -367,24 +352,15 @@ def _execute_synthetic_generation(
     # Resolve RHS source path (for synthetic strategies that need it)
     rhs_source_path = _resolve_rhs_source(
         context=context,
-        solution_archive_options=solution_archive_strategy.options if solution_archive_strategy else None,
+        solution_archive_options=solution_archive_strategy.options
+        if solution_archive_strategy
+        else None,
         provide_rhs_option=None,
     )
 
     # Use new unified build_dataset()
     from .data_types import NormalizeType
     from typing import cast
-
-    # Add global strategy config for krylov and residual iterations
-    # These apply to all strategies unless overridden per-strategy
-    for strategy_name in counts.keys():
-        if strategy_name not in strategy_overrides:
-            strategy_overrides[strategy_name] = {}
-        # Set defaults if not already specified
-        if "krylov_iters" not in strategy_overrides[strategy_name]:
-            strategy_overrides[strategy_name]["krylov_iters"] = krylov_iters
-        if "residual_iters" not in strategy_overrides[strategy_name]:
-            strategy_overrides[strategy_name]["residual_iters"] = residual_iters
 
     dataset_path = build_dataset(
         matrix_path=context.matrix_path,
@@ -464,7 +440,9 @@ def _execute_plan(
     return _execute_rhs_archive_only(context, rhs_archive_strategy)
 
 
-def process_config(config: dict[str, Any], config_path: Path | str | None = None) -> Path:
+def process_config(
+    config: dict[str, Any], config_path: Path | str | None = None
+) -> Path:
     """Process a data config and execute the declared generation plan.
 
     After generating the main dataset, this also checks for a [test] section
@@ -483,7 +461,7 @@ def process_config(config: dict[str, Any], config_path: Path | str | None = None
     if test_config:
         solutions_glob = test_config.get("solutions_glob")
         if solutions_glob:
-            print(f"\n=== Skipping comparison.npz generation (not yet migrated) ===")
+            print("\n=== Skipping comparison.npz generation (not yet migrated) ===")
             # persist_comparison_samples(
             #     dataset_dir=dataset_dir,
             #     test_solutions_glob=solutions_glob,

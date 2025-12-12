@@ -8,9 +8,9 @@ This script tests that:
 """
 
 from pathlib import Path
-import shutil
 import tomllib
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 from src.validation import validate_data_exists
 from src.paths.core import DataPaths, FlowPaths, ProjectRoots, parse_flow_keys
@@ -75,7 +75,7 @@ def test_selective_regeneration():
             try:
                 validate_data_exists(data_dir, required_files)
                 status = "EXISTS (will skip generation)"
-            except FileNotFoundError as e:
+            except FileNotFoundError:
                 status = "MISSING or INCOMPLETE (will regenerate)"
 
             print(f"  {config_path}")
@@ -83,7 +83,7 @@ def test_selective_regeneration():
             print(f"    → Status: {status}")
         else:
             print(f"  {config_path}")
-            print(f"    → Config file not found")
+            print("    → Config file not found")
         print()
 
     print("✓ Selective regeneration test complete")

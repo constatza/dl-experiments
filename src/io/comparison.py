@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import tomllib
 from loguru import logger
@@ -17,7 +16,9 @@ from ..configuration.solver import (
 from .base import load_npz_entry as load_npz_entry_raw
 
 
-def load_solver_config(config_path: str | Path | None) -> tuple[GeneralSolverParams, list[SolverSpec]]:
+def load_solver_config(
+    config_path: str | Path | None,
+) -> tuple[GeneralSolverParams, list[SolverSpec]]:
     """Read solver config TOML from disk."""
     path = (
         Path(config_path)
@@ -31,17 +32,19 @@ def load_solver_config(config_path: str | Path | None) -> tuple[GeneralSolverPar
 
 def resolve_system_paths(
     *,
-    matrix_path: Optional[Path],
-    rhs_path: Optional[Path],
-    config_matrix: Optional[Path],
-    config_rhs: Optional[Path],
+    matrix_path: Path | None,
+    rhs_path: Path | None,
+    config_matrix: Path | None,
+    config_rhs: Path | None,
 ) -> tuple[Path, Path]:
     """Choose matrix/RHS paths with explicit inputs (no implicit filenames)."""
     matrix = matrix_path or config_matrix
     rhs = rhs_path or config_rhs or matrix
 
     if matrix is None or rhs is None:
-        raise ValueError("Matrix/RHS paths must be provided via solver config or caller.")
+        raise ValueError(
+            "Matrix/RHS paths must be provided via solver config or caller."
+        )
 
     return Path(matrix), Path(rhs)
 
@@ -55,7 +58,9 @@ def load_npz_entry(npz_path: str | Path, key: str) -> np.ndarray:
         arr = arr[0]
     if key == "rhs":
         if arr.ndim > 1 and arr.shape[0] > 1:
-            logger.warning(f"{npz_path} contains multiple RHS entries; using the first.")
+            logger.warning(
+                f"{npz_path} contains multiple RHS entries; using the first."
+            )
         if arr.ndim > 1:
             arr = arr[0]
         arr = arr.reshape(-1)
@@ -63,7 +68,9 @@ def load_npz_entry(npz_path: str | Path, key: str) -> np.ndarray:
     return arr
 
 
-def load_system_arrays(matrix_path: Path, rhs_path: Path | None = None) -> tuple[np.ndarray, np.ndarray | None]:
+def load_system_arrays(
+    matrix_path: Path, rhs_path: Path | None = None
+) -> tuple[np.ndarray, np.ndarray | None]:
     """Load matrix and RHS from explicit file paths (npz/npy/txt).
 
     - npz: use load_npz_entry for "matrix" and "rhs" keys.
@@ -84,7 +91,9 @@ def load_system_arrays(matrix_path: Path, rhs_path: Path | None = None) -> tuple
     A = _load_array(matrix_path, "matrix")
     b_raw = _load_array(rhs_path, "rhs")
     if b_raw.ndim > 1 and b_raw.shape[0] > 1:
-        logger.warning(f"{rhs_path} contains multiple RHS entries; using the first row.")
+        logger.warning(
+            f"{rhs_path} contains multiple RHS entries; using the first row."
+        )
         b_raw = b_raw[0]
     b = b_raw.reshape(-1) if b_raw is not None else None
 

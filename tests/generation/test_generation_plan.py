@@ -97,7 +97,9 @@ class TestGenerationPlan:
 
     def test_valid_plan_with_all_samples(self) -> None:
         strategies = {
-            "solution_archive": StrategySpec("solution_archive", "solution_archive", -1, {}),
+            "solution_archive": StrategySpec(
+                "solution_archive", "solution_archive", -1, {}
+            ),
         }
         plan = GenerationPlan(strategies=strategies)
         assert plan.solution_archive is not None
@@ -119,7 +121,9 @@ class TestGenerationPlan:
 
     def test_solution_archive_property(self) -> None:
         strategies = {
-            "solution_archive": StrategySpec("solution_archive", "solution_archive", -1, {}),
+            "solution_archive": StrategySpec(
+                "solution_archive", "solution_archive", -1, {}
+            ),
         }
         plan = GenerationPlan(strategies=strategies)
         assert plan.solution_archive is not None
@@ -147,7 +151,9 @@ class TestGenerationPlan:
         strategies = {
             "random": StrategySpec("random", "random", 100, {}),
             "rhs_archive": StrategySpec("rhs_archive", "rhs_archive", 50, {}),
-            "solution_archive": StrategySpec("solution_archive", "solution_archive", 50, {}),
+            "solution_archive": StrategySpec(
+                "solution_archive", "solution_archive", 50, {}
+            ),
         }
         plan = GenerationPlan(strategies=strategies)
         synthetic = plan.synthetic
@@ -218,11 +224,7 @@ class TestParsing:
             parse_generation_plan(config)
 
     def test_single_strategy_success(self) -> None:
-        config = {
-            "strategy": [
-                {"name": "random", "samples": 1000}
-            ]
-        }
+        config = {"strategy": [{"name": "random", "samples": 1000}]}
         plan = parse_generation_plan(config)
         assert "random" in plan.strategies
         assert plan.strategies["random"].samples == 1000
@@ -251,8 +253,16 @@ class TestParsing:
     def test_duplicate_all_count_wins(self) -> None:
         config = {
             "strategy": [
-                {"name": "solution_archive", "samples": 500, "solutions_glob": "/a/*.txt"},
-                {"name": "solution_archive", "samples": -1, "solutions_glob": "/b/*.txt"},
+                {
+                    "name": "solution_archive",
+                    "samples": 500,
+                    "solutions_glob": "/a/*.txt",
+                },
+                {
+                    "name": "solution_archive",
+                    "samples": -1,
+                    "solutions_glob": "/b/*.txt",
+                },
             ]
         }
         plan = parse_generation_plan(config)
@@ -261,8 +271,16 @@ class TestParsing:
     def test_duplicate_all_count_first_wins(self) -> None:
         config = {
             "strategy": [
-                {"name": "solution_archive", "samples": -1, "solutions_glob": "/a/*.txt"},
-                {"name": "solution_archive", "samples": 500, "solutions_glob": "/b/*.txt"},
+                {
+                    "name": "solution_archive",
+                    "samples": -1,
+                    "solutions_glob": "/a/*.txt",
+                },
+                {
+                    "name": "solution_archive",
+                    "samples": 500,
+                    "solutions_glob": "/b/*.txt",
+                },
             ]
         }
         plan = parse_generation_plan(config)
@@ -406,3 +424,113 @@ class TestIntegration:
         assert len(plan.strategies) == 2
         assert plan.strategies["random"].samples == 0
         assert plan.strategies["krylov"].samples == 1000
+
+
+class TestPydanticValidation:
+    """Test Pydantic validation of strategy configurations."""
+
+    def test_pydantic_rejects_unknown_parameters(self) -> None:
+        """Test that unknown parameters are rejected when configs are validated."""
+        from src.generation.strategy_configs import KrylovConfig
+        from pydantic import ValidationError
+
+        # Try to create a config with an unknown parameter
+        with pytest.raises(ValidationError, match="Unexpected keyword argument"):
+            KrylovConfig(samples=10, unknown_param=123)
+
+    def test_pydantic_rejects_invalid_literal_values(self) -> None:
+        """Test that invalid Literal values are rejected."""
+        from src.generation.strategy_configs import EigenvectorForwardConfig
+        from pydantic import ValidationError
+
+        # Try to pass an invalid 'which' value
+        with pytest.raises(ValidationError, match="Input should be"):
+            EigenvectorForwardConfig(samples=10, which="invalid")
+
+    def test_pydantic_validates_which_accepts_valid_values(self) -> None:
+        """Test that valid 'which' values are accepted."""
+        from src.generation.strategy_configs import EigenvectorForwardConfig
+
+        # All three valid values should work
+        config1 = EigenvectorForwardConfig(samples=10, which="smallest")
+        assert config1.which == "smallest"
+
+        config2 = EigenvectorForwardConfig(samples=10, which="largest")
+        assert config2.which == "largest"
+
+        config3 = EigenvectorForwardConfig(samples=10, which="both")
+        assert config3.which == "both"
+
+    def test_pydantic_requires_rhs_glob(self) -> None:
+        """Test that rhs_glob is required for RhsArchiveConfig."""
+        from src.generation.strategy_configs import RhsArchiveConfig
+        from pydantic import ValidationError
+
+        # Try to create config without rhs_glob
+        with pytest.raises(ValidationError, match="Field required"):
+            RhsArchiveConfig(samples=10)
+
+    def test_pydantic_requires_solutions_glob(self) -> None:
+        """Test that solutions_glob is required for SolutionArchiveConfig."""
+        from src.generation.strategy_configs import SolutionArchiveConfig
+        from pydantic import ValidationError
+
+        # Try to create config without solutions_glob
+        with pytest.raises(ValidationError, match="Field required"):
+            SolutionArchiveConfig(samples=10)
+
+    def test_pydantic_validates_type_residual_iters(self) -> None:
+        """Test that residual_iters must be int."""
+        from src.generation.strategy_configs import ResidualErrorConfig
+        from pydantic import ValidationError
+
+        # Try to pass a string for residual_iters
+        with pytest.raises(ValidationError, match="Input should be a valid integer"):
+            ResidualErrorConfig(samples=10, residual_iters="many")
+
+    def test_pydantic_validates_type_krylov_iters(self) -> None:
+        """Test that krylov_iters must be int."""
+        from src.generation.strategy_configs import KrylovConfig
+        from pydantic import ValidationError
+
+        # Pydantic will coerce float to int, but invalid types should fail
+        with pytest.raises(ValidationError, match="Input should be a valid integer"):
+            KrylovConfig(samples=10, krylov_iters="invalid")
+
+    def test_pydantic_frozen_prevents_mutation(self) -> None:
+        """Test that frozen=True prevents mutation of config objects."""
+        from src.generation.strategy_configs import KrylovConfig
+        from dataclasses import FrozenInstanceError
+
+        config = KrylovConfig(samples=10, krylov_iters=15)
+
+        # Try to modify a field (Pydantic dataclasses raise FrozenInstanceError)
+        with pytest.raises(FrozenInstanceError, match="cannot assign to field"):
+            config.krylov_iters = 20
+
+    def test_pydantic_accepts_valid_configs(self) -> None:
+        """Test that valid configurations are accepted."""
+        from src.generation.strategy_configs import (
+            KrylovConfig,
+            ResidualErrorConfig,
+            EigenvectorForwardConfig,
+            RandomNormalConfig,
+        )
+
+        # All these should succeed
+        krylov = KrylovConfig(samples=100, krylov_iters=20, seed=42)
+        assert krylov.samples == 100
+        assert krylov.krylov_iters == 20
+
+        residual = ResidualErrorConfig(samples=50, residual_iters=10)
+        assert residual.samples == 50
+        assert residual.residual_iters == 10
+
+        eigenvector = EigenvectorForwardConfig(
+            samples=30, which="largest", include_eigenvectors=True
+        )
+        assert eigenvector.which == "largest"
+        assert eigenvector.include_eigenvectors is True
+
+        random_normal = RandomNormalConfig(samples=200, target_rhs_scale=2.5)
+        assert random_normal.target_rhs_scale == 2.5

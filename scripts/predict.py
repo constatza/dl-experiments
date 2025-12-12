@@ -26,9 +26,7 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 
 
 def main(
-    config: Path = typer.Option(
-        None, help="Path to config file"
-    ),
+    config: Path = typer.Option(None, help="Path to config file"),
     data_config: Path = typer.Option(
         None,
         help="Path to data config providing dataset metadata",

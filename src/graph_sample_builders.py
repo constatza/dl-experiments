@@ -8,9 +8,9 @@ graph-based training and inference.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Literal
+from collections.abc import Sequence
 
-import numpy as np
 
 from .generation.types import RawSamples
 from .normalization import IScale

@@ -29,42 +29,42 @@ def main() -> None:
     print("DATASET CONFIGURATION")
     print("=" * 80)
 
-    if hasattr(settings, 'DATASET') and settings.DATASET:
+    if hasattr(settings, "DATASET") and settings.DATASET:
         dataset = settings.DATASET
         print(f"Dataset name: {dataset.name}")
         print()
 
         # Check features
-        if hasattr(dataset, 'features') and dataset.features:
+        if hasattr(dataset, "features") and dataset.features:
             print(f"Features ({len(dataset.features)} entries):")
             for i, feat in enumerate(dataset.features):
                 print(f"  [{i}] name={feat.name}, path={feat.path}")
-                if hasattr(feat, 'transforms') and feat.transforms:
+                if hasattr(feat, "transforms") and feat.transforms:
                     print(f"      Transforms ({len(feat.transforms)}):")
                     for j, t in enumerate(feat.transforms):
                         print(f"        [{j}] {t.name} (module: {t.module_path})")
-                        if hasattr(t, 'eps'):
+                        if hasattr(t, "eps"):
                             print(f"            eps={t.eps}")
                 else:
-                    print(f"      Transforms: NONE")
+                    print("      Transforms: NONE")
         else:
             print("Features: NONE")
 
         print()
 
         # Check targets
-        if hasattr(dataset, 'targets') and dataset.targets:
+        if hasattr(dataset, "targets") and dataset.targets:
             print(f"Targets ({len(dataset.targets)} entries):")
             for i, targ in enumerate(dataset.targets):
                 print(f"  [{i}] name={targ.name}, path={targ.path}")
-                if hasattr(targ, 'transforms') and targ.transforms:
+                if hasattr(targ, "transforms") and targ.transforms:
                     print(f"      Transforms ({len(targ.transforms)}):")
                     for j, t in enumerate(targ.transforms):
                         print(f"        [{j}] {t.name} (module: {t.module_path})")
-                        if hasattr(t, 'eps'):
+                        if hasattr(t, "eps"):
                             print(f"            eps={t.eps}")
                 else:
-                    print(f"      Transforms: NONE")
+                    print("      Transforms: NONE")
         else:
             print("Targets: NONE")
     else:

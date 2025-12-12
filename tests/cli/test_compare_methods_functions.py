@@ -179,7 +179,9 @@ name = "ffnn"
         # Should default to solver-configs/default.toml
         assert exp_config.solver_config == tmp_path / "solver-configs/default.toml"
 
-    def test_build_experiment_config_derives_checkpoint_path(self, tmp_path: Path) -> None:
+    def test_build_experiment_config_derives_checkpoint_path(
+        self, tmp_path: Path
+    ) -> None:
         """Test that checkpoint path follows convention."""
         model_config = tmp_path / "configs" / "linear.toml"
         model_config.parent.mkdir(parents=True)

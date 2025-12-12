@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from collections.abc import Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,6 +16,17 @@ def plot_condition_boxes(
     *,
     save_path: Path,
 ) -> Path:
+    """Plot boxplots of original vs preconditioned condition numbers.
+
+    Args:
+        labels: Iterable of labels for the x-axis.
+        raw_values: Iterable of raw condition numbers.
+        preconditioned_values: Iterable of preconditioned condition numbers.
+        save_path: Path to save the plot to.
+
+    Returns:
+        Path to the saved plot.
+    """
     labels_list = list(labels)
     raw_list = list(raw_values)
     precond_list = list(preconditioned_values)
@@ -62,6 +73,18 @@ def plot_condition_bars(
     save_path: Path,
     log_scale: bool = True,
 ) -> Path:
+    """Plot bar chart of condition numbers by preconditioner.
+
+    Args:
+        labels: Iterable of labels for the x-axis.
+        cond_maps: Iterable of dictionaries mapping preconditioner name to condition number.
+        preconditioners: Iterable of preconditioner names.
+        save_path: Path to save the plot to.
+        log_scale: Whether to use a log scale for the y-axis.
+
+    Returns:
+        Path to the saved plot.
+    """
     labels_list = list(labels)
     cond_list = list(cond_maps)
     preconds = list(preconditioners)

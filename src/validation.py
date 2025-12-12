@@ -152,7 +152,9 @@ def validate_directory_writable(
     return path
 
 
-def validate_solver_params(rtol: float, atol: float, max_iter: int, stopping_criterion: str) -> None:
+def validate_solver_params(
+    rtol: float, atol: float, max_iter: int, stopping_criterion: str
+) -> None:
     """Validate CG solver parameters.
 
     Args:

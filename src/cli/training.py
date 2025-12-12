@@ -22,7 +22,7 @@ from dlkit.tools.config.core.updater import update_settings
 from ..configuration import load_config
 from ..system_loading import get_latest_checkpoint
 from ..file_operations import derive_model_identifier, sanitize_identifier
-from ..constants import DEFAULT_FIGURES_DIR, DEFAULT_MLRUNS_DIR
+from ..constants import DEFAULT_MLRUNS_DIR
 from ..validation import validate_directory_writable
 from ..pca_training import (
     fit_pca_from_solutions,
@@ -477,8 +477,10 @@ def _log_dataset_debug(dataset: Any) -> None:
             path = getattr(entry, "path", None)
             value = getattr(entry, "value", None)
             value_shape = getattr(value, "shape", None)
-            print(f"[dataset-debug] {name}: type={type(entry).__name__} has_value={has_value} "
-                  f"has_path={has_path} path={path} value_shape={value_shape}")
+            print(
+                f"[dataset-debug] {name}: type={type(entry).__name__} has_value={has_value} "
+                f"has_path={has_path} path={path} value_shape={value_shape}"
+            )
         except Exception:
             continue
 

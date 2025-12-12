@@ -7,6 +7,8 @@ import numpy as np
 from scipy.linalg import norm
 
 from src.generation.base import normal_strategy, krylov_strategy, rng_from_seed
+
+
 def test_normal_strategy_normalization():
     """Test that normal_strategy generates RHS with consistent norms."""
     print("Testing normal_strategy normalization...")
@@ -28,7 +30,7 @@ def test_normal_strategy_normalization():
 
     # Check RHS norms
     rhs_norms = [norm(R[i]) for i in range(len(R))]
-    print(f"  Generated RHS norms:")
+    print("  Generated RHS norms:")
     print(f"    Min:  {min(rhs_norms):.6f}")
     print(f"    Max:  {max(rhs_norms):.6f}")
     print(f"    Mean: {np.mean(rhs_norms):.6f}")
@@ -36,10 +38,10 @@ def test_normal_strategy_normalization():
 
     # Verify A @ x = b relationship
     residuals = [norm(A @ X[i] - R[i]) for i in range(len(R))]
-    print(f"  Residual norms (A @ x - b):")
+    print("  Residual norms (A @ x - b):")
     print(f"    Max: {max(residuals):.2e}")
     print(f"    Mean: {np.mean(residuals):.2e}")
-    print(f"  ✓ Normal strategy normalization: validating residuals")
+    print("  ✓ Normal strategy normalization: validating residuals")
     assert max(residuals) < 1e-10
     assert np.std(rhs_norms) > 0.0
 
@@ -65,7 +67,7 @@ def test_krylov_strategy_normalization():
 
     # Check RHS norms
     rhs_norms = [norm(R[i]) for i in range(len(R))]
-    print(f"  Generated RHS norms:")
+    print("  Generated RHS norms:")
     print(f"    Min:  {min(rhs_norms):.6f}")
     print(f"    Max:  {max(rhs_norms):.6f}")
     print(f"    Mean: {np.mean(rhs_norms):.6f}")
@@ -73,10 +75,10 @@ def test_krylov_strategy_normalization():
 
     # For krylov, the solution is approximate, so residual will be non-zero
     residuals = [norm(A @ X[i] - R[i]) for i in range(len(R))]
-    print(f"  Residual norms (A @ x - b):")
+    print("  Residual norms (A @ x - b):")
     print(f"    Max: {max(residuals):.2e}")
     print(f"    Mean: {np.mean(residuals):.2e}")
-    print(f"  (Note: Krylov solutions are approximate, so residuals are expected)")
+    print("  (Note: Krylov solutions are approximate, so residuals are expected)")
     print("  ✓ Krylov strategy normalization: validating residuals")
     assert max(residuals) < 1e-8
     assert np.std(rhs_norms) > 0.0

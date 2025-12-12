@@ -53,6 +53,7 @@ def solution_archive_files(tmp_path, spd_matrix):
 def test_rhs_archive_strategy_registered():
     """Test RhsArchiveStrategy is registered."""
     from src.generation.runner import _registry
+
     assert "rhs_archive" in _registry._strategies
     assert isinstance(_registry._strategies["rhs_archive"], RhsArchiveStrategy)
 
@@ -60,8 +61,11 @@ def test_rhs_archive_strategy_registered():
 def test_solution_archive_strategy_registered():
     """Test SolutionArchiveStrategy is registered."""
     from src.generation.runner import _registry
+
     assert "solution_archive" in _registry._strategies
-    assert isinstance(_registry._strategies["solution_archive"], SolutionArchiveStrategy)
+    assert isinstance(
+        _registry._strategies["solution_archive"], SolutionArchiveStrategy
+    )
 
 
 def test_rhs_archive_load_files(spd_matrix, rhs_archive_files):

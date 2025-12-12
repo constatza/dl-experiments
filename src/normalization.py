@@ -390,7 +390,9 @@ class DiagonalScale(IScale):
     def scale_matrix(self, matrix: np.ndarray) -> np.ndarray:
         """Scale matrix: A' = D^(-1/2) @ A @ D^(-1/2)."""
         # Apply D^(-1/2) to both rows and columns (symmetric scaling)
-        return self.diagonal_sqrt_inv[:, None] * matrix * self.diagonal_sqrt_inv[None, :]
+        return (
+            self.diagonal_sqrt_inv[:, None] * matrix * self.diagonal_sqrt_inv[None, :]
+        )
 
     def scale_rhs(self, rhs: np.ndarray) -> np.ndarray:
         """Scale RHS: b' = D^(-1/2) @ b."""
@@ -686,7 +688,9 @@ def load_scale_from_metadata(
         # Support both new format (diagonal_sqrt_inv) and legacy format (diagonal_inv)
         if "diagonal_sqrt_inv" in metadata:
             return DiagonalScale(
-                diagonal_sqrt_inv=np.array(metadata["diagonal_sqrt_inv"], dtype=np.float64)
+                diagonal_sqrt_inv=np.array(
+                    metadata["diagonal_sqrt_inv"], dtype=np.float64
+                )
             )
         elif "diagonal_inv" in metadata:
             # Legacy format: diagonal_inv was 1/diag(A), convert to diagonal_sqrt_inv
@@ -728,7 +732,9 @@ def scale_system(system: ILinearSystemBatch, scale: IScale) -> LinearSystemBatch
     return LinearSystemBatch(
         _matrix=scale.scale_matrix(system.matrix),
         _rhs_samples=np.array([scale.scale_rhs(rhs) for rhs in system.rhs_samples]),
-        _sol_samples=np.array([scale.scale_solution(sol) for sol in system.sol_samples]),
+        _sol_samples=np.array(
+            [scale.scale_solution(sol) for sol in system.sol_samples]
+        ),
     )
 
 
@@ -745,7 +751,10 @@ def scale_system_spectral(
             [scale.scale_rhs(rhs) for scale, rhs in zip(scales, system.rhs_samples)]
         ),
         _sol_samples=np.array(
-            [scale.scale_solution(sol) for scale, sol in zip(scales, system.sol_samples)]
+            [
+                scale.scale_solution(sol)
+                for scale, sol in zip(scales, system.sol_samples)
+            ]
         ),
     )
 
@@ -767,7 +776,9 @@ def scale_residual_traces(
     search_direction_products = (
         None
         if traces.search_direction_products is None
-        else np.array([scale.scale_residual(ap) for ap in traces.search_direction_products])
+        else np.array(
+            [scale.scale_residual(ap) for ap in traces.search_direction_products]
+        )
     )
     return ResidualTraceSamples(
         residuals=np.array([scale.scale_residual(r) for r in traces.residuals]),
@@ -787,10 +798,16 @@ def scale_residual_traces_spectral(
     Maps each trace to its corresponding sample's SpectralScale via sample_indices.
     """
     residuals_scaled = np.array(
-        [scales[int(idx)].scale_residual(r) for idx, r in zip(traces.sample_indices, traces.residuals)]
+        [
+            scales[int(idx)].scale_residual(r)
+            for idx, r in zip(traces.sample_indices, traces.residuals)
+        ]
     )
     solutions_scaled = np.array(
-        [scales[int(idx)].scale_solution(s) for idx, s in zip(traces.sample_indices, traces.solutions)]
+        [
+            scales[int(idx)].scale_solution(s)
+            for idx, s in zip(traces.sample_indices, traces.solutions)
+        ]
     )
     search_directions_scaled = (
         None
@@ -808,7 +825,9 @@ def scale_residual_traces_spectral(
         else np.array(
             [
                 scales[int(idx)].scale_residual(ap)
-                for idx, ap in zip(traces.sample_indices, traces.search_direction_products)
+                for idx, ap in zip(
+                    traces.sample_indices, traces.search_direction_products
+                )
             ]
         )
     )
@@ -842,10 +861,16 @@ def scale_error_traces_spectral(
     Maps each trace to its corresponding sample's SpectralScale via sample_indices.
     """
     residuals_scaled = np.array(
-        [scales[int(idx)].scale_residual(r) for idx, r in zip(traces.sample_indices, traces.residuals)]
+        [
+            scales[int(idx)].scale_residual(r)
+            for idx, r in zip(traces.sample_indices, traces.residuals)
+        ]
     )
     errors_scaled = np.array(
-        [scales[int(idx)].scale_residual(e) for idx, e in zip(traces.sample_indices, traces.errors)]
+        [
+            scales[int(idx)].scale_residual(e)
+            for idx, e in zip(traces.sample_indices, traces.errors)
+        ]
     )
     return ErrorTraceSamples(
         residuals=residuals_scaled,
@@ -944,7 +969,11 @@ def normalize_spectral(
     """Spectral normalization: per-sample scaling by spectral norm and RHS norm."""
     scales = make_spectral_scales(system)
     normalized = scale_system_spectral(system, scales)
-    res = scale_residual_traces_spectral(residual_traces, scales) if residual_traces else None
+    res = (
+        scale_residual_traces_spectral(residual_traces, scales)
+        if residual_traces
+        else None
+    )
     err = scale_error_traces_spectral(error_traces, scales) if error_traces else None
     # Return first scale as metadata (all share spectral_norm and dimension_scale)
     return NormalizedSystem(normalized, scales[0] if scales else None, res, err)
@@ -969,7 +998,7 @@ def log_normalization_stats(strategy: str, result: NormalizedSystem) -> None:
         print(f"  Composite scale: {result.scale.composite_scale:.6e}")
 
     elif isinstance(result.scale, DiagonalScale):
-        print(f"  Diagonal scaling (Jacobi)")
+        print("  Diagonal scaling (Jacobi)")
         # Compute spectral radius of normalized matrix for diagnostics
         spec_bound = compute_spectral_bound(result.system.matrix)
         print(f"  Normalized spectral radius bound: {spec_bound:.6e}")
@@ -1199,7 +1228,7 @@ class NormalizationResult:
     @staticmethod
     def from_normalized_system(
         result: NormalizedSystem, normalize_type: str
-    ) -> "NormalizationResult":
+    ) -> NormalizationResult:
         """Convert NormalizedSystem to legacy NormalizationResult format.
 
         Args:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Process data for graph-cg: collection from archives or synthetic generation.
+r"""Process data for graph-cg: collection from archives or synthetic generation.
 
 This unified script handles both data collection (from existing RHS archives)
 and synthetic data generation through the same pipeline.

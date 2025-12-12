@@ -10,6 +10,7 @@ import numpy as np
 from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
 from ..helpers import select_archive_files
 from ..runner import register_strategy
+from ..strategy_configs import SolutionArchiveConfig
 
 
 def _load_solution_vectors(
@@ -100,6 +101,7 @@ class SolutionArchiveStrategy(IMatrixOnlyGenerationStrategy):
     """
 
     name = "solution_archive"
+    ConfigType = SolutionArchiveConfig
 
     def requires_rhs(self) -> bool:
         """Archive is self-sufficient, doesn't need mother RHS."""
@@ -130,16 +132,14 @@ class SolutionArchiveStrategy(IMatrixOnlyGenerationStrategy):
             ValueError: If solutions_glob not provided or insufficient files
             FileNotFoundError: If no files match pattern
         """
-        # Extract configuration
-        solutions_glob = cfg.get("solutions_glob")
-        if not solutions_glob:
-            raise ValueError(
-                "SolutionArchiveStrategy requires 'solutions_glob' in configuration"
-            )
+        # Validate and convert to typed config
+        config = SolutionArchiveConfig(**cfg)
 
-        samples = int(cfg.get("samples", -1))
-        shuffle = bool(cfg.get("shuffle", False))
-        seed = cfg.get("seed")
+        # Extract configuration
+        solutions_glob = config.solutions_glob
+        samples = config.samples
+        shuffle = config.shuffle
+        seed = config.seed
 
         # Select files from archive
         solution_files = select_archive_files(

@@ -81,9 +81,7 @@ seed = 42
 class TestBatchConfigurationLoading:
     """Test batch configuration loading workflow."""
 
-    def test_load_full_experiment_matrix(
-        self, sample_experiments_config: Path
-    ) -> None:
+    def test_load_full_experiment_matrix(self, sample_experiments_config: Path) -> None:
         """Test loading complete experiment matrix."""
         config = load_experiments_config(sample_experiments_config)
         experiments = extract_experiments_list(config)
@@ -307,7 +305,6 @@ class TestEndToEndBatchPipeline:
         for exp_config in experiment_configs:
             # Checkpoint path should contain model name twice:
             # once in directory, once in filename
-            model_name = exp_config.model_template.stem
             # Path parts: [..., data_config_stem, model_name, "checkpoints", "model_name.ckpt"]
             assert exp_config.checkpoint_path.parent.name == "checkpoints"
             assert exp_config.checkpoint_path.parent.parent.name in [

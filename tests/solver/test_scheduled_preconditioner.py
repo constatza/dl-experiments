@@ -60,6 +60,7 @@ def test_scheduled_preconditioner_limit_iters() -> None:
 
 def test_scheduled_preconditioner_wrong_type_raises() -> None:
     """Passing wrong type should raise AttributeError (no 'iteration' or 'residual' attr)."""
+
     def main_precond(r: np.ndarray) -> np.ndarray:
         return r
 
@@ -115,10 +116,14 @@ def test_scheduled_preconditioner_apply_every() -> None:
         result = wrapped(ctx)
 
         if i % 3 == 0:
-            assert call_log[-1] == "main", f"Iteration {i} (divisible by 3) should use main"
+            assert call_log[-1] == "main", (
+                f"Iteration {i} (divisible by 3) should use main"
+            )
             np.testing.assert_array_equal(result, residual * 2.0)
         else:
-            assert call_log[-1] == "fallback", f"Iteration {i} (not divisible by 3) should use fallback"
+            assert call_log[-1] == "fallback", (
+                f"Iteration {i} (not divisible by 3) should use fallback"
+            )
             np.testing.assert_array_equal(result, residual * 0.5)
 
 
@@ -153,7 +158,7 @@ def test_scheduled_preconditioner_first_n() -> None:
             matrix=np.eye(3),
             rhs=residual,
         )
-        result = wrapped(ctx)
+        wrapped(ctx)
         assert call_log[-1] == "main", f"Iteration {i} < first_n=3 should use main"
 
     # Iterations 3+: use fallback
@@ -165,8 +170,10 @@ def test_scheduled_preconditioner_first_n() -> None:
             matrix=np.eye(3),
             rhs=residual,
         )
-        result = wrapped(ctx)
-        assert call_log[-1] == "fallback", f"Iteration {i} >= first_n=3 should use fallback"
+        wrapped(ctx)
+        assert call_log[-1] == "fallback", (
+            f"Iteration {i} >= first_n=3 should use fallback"
+        )
 
 
 def test_scheduled_preconditioner_iteration_zero() -> None:
@@ -234,14 +241,14 @@ def test_scheduled_preconditioner_combined_parameters() -> None:
     residual = np.array([1.0, 2.0, 3.0])
 
     expected = {
-        0: "main",     # < first_n, divisible by 2, < limit
-        1: "fallback", # < first_n, NOT divisible by 2
-        2: "main",     # < first_n, divisible by 2, < limit
-        3: "fallback", # >= first_n
-        4: "fallback", # >= first_n
-        5: "fallback", # >= first_n
-        10: "fallback", # >= limit_iters
-        11: "fallback", # >= limit_iters
+        0: "main",  # < first_n, divisible by 2, < limit
+        1: "fallback",  # < first_n, NOT divisible by 2
+        2: "main",  # < first_n, divisible by 2, < limit
+        3: "fallback",  # >= first_n
+        4: "fallback",  # >= first_n
+        5: "fallback",  # >= first_n
+        10: "fallback",  # >= limit_iters
+        11: "fallback",  # >= limit_iters
     }
 
     for i, expected_call in expected.items():
@@ -253,7 +260,9 @@ def test_scheduled_preconditioner_combined_parameters() -> None:
             rhs=residual,
         )
         wrapped(ctx)
-        assert call_log[-1] == expected_call, f"Iteration {i} should use {expected_call}"
+        assert call_log[-1] == expected_call, (
+            f"Iteration {i} should use {expected_call}"
+        )
 
 
 def test_scheduled_preconditioner_no_fallback() -> None:
@@ -299,7 +308,9 @@ def test_scheduled_preconditioner_no_fallback() -> None:
     result = wrapped(ctx)
     # main_precond should not be called after limit_iters
     assert len(call_log) == 2  # Only 2 main calls from iterations 0-1
-    np.testing.assert_array_equal(result, residual)  # Identity returns residual unchanged
+    np.testing.assert_array_equal(
+        result, residual
+    )  # Identity returns residual unchanged
 
 
 def test_scheduled_preconditioner_iteration_is_int() -> None:
@@ -309,6 +320,7 @@ def test_scheduled_preconditioner_iteration_is_int() -> None:
     @dataclass(frozen=True)
     class BadContext:
         """Context with wrong iteration type."""
+
         iteration: str  # Should be int!
         residual: np.ndarray
         solution: np.ndarray

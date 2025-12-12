@@ -10,7 +10,11 @@ import numpy as np
 from .data_types import NormalizeType
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
-from .trace_utils import _offset_residual_traces, _merge_residual_traces, _merge_error_traces
+from .trace_utils import (
+    _offset_residual_traces,
+    _merge_residual_traces,
+    _merge_error_traces,
+)
 
 
 def _shuffle_samples(
@@ -65,8 +69,6 @@ def generate_mixture(
     mix: Mapping[str, float] | None = None,
     total: int | None = None,
     counts_represent_final_pairs: bool = False,
-    krylov_iters: int = 15,
-    residual_iters: int = 8,
     seed: int = 42,
     shuffle: bool = True,
     strategy_overrides: Mapping[str, Mapping[str, Any]] | None = None,
@@ -85,11 +87,10 @@ def generate_mixture(
         total: Total samples (required if mix provided)
         counts_represent_final_pairs: If True, counts refer to final iteration pairs
             (used for trace strategies to compute number of solver runs needed)
-        krylov_iters: Number of Krylov iterations (for krylov strategy)
-        residual_iters: Number of CG iterations (for residual/error strategies)
         seed: Random seed for reproducibility
         shuffle: Whether to shuffle final samples
-        strategy_overrides: Per-strategy configuration overrides
+        strategy_overrides: Per-strategy configuration overrides. Use this to configure
+            strategy-specific parameters like krylov_iters and residual_iters.
         archive_solutions: Pre-computed solutions for archive-based generation
         archive_rhs: Pre-computed RHS vectors for archive-based generation
 
@@ -109,21 +110,28 @@ def generate_mixture(
         ...     A, b,
         ...     mix={"normal": 1.0, "krylov": 1.0},
         ...     total=100,
-        ...     seed=42
+        ...     seed=42,
+        ...     strategy_overrides={
+        ...         "krylov": {"krylov_iters": 20},
+        ...     }
         ... )
         >>> X.shape
         (100, n)
 
-        >>> # Generate explicit counts
+        >>> # Generate explicit counts with strategy-specific configuration
         >>> X, Y, _, _ = generate_mixture(
         ...     A, b,
         ...     counts={"normal": 50, "krylov": 30, "cg_residual": 20},
-        ...     seed=42
+        ...     seed=42,
+        ...     strategy_overrides={
+        ...         "cg_residual": {"residual_iters": 10},
+        ...     }
         ... )
     """
     # Ensure strategy modules are registered
     from . import strategies  # noqa: F401
     from .runner import run_generation
+    from pydantic import ValidationError
 
     rng = rng_from_seed(seed)
     strategy_counts = _resolve_strategy_counts(counts, mix, total)
@@ -144,11 +152,10 @@ def generate_mixture(
         cfg = overrides.get(strategy_name, {}).copy()
         cfg.setdefault("samples", count)
         cfg.setdefault("seed", seed)
-        cfg.setdefault("krylov_iters", krylov_iters)
-        cfg.setdefault("residual_iters", residual_iters)
         cfg.setdefault("archive_solutions", archive_solutions)
         cfg.setdefault("archive_rhs", archive_rhs)
 
+        # For counts_represent_final_pairs mode, we need to read residual_iters from config
         adjusted_count = count
         if counts_represent_final_pairs and strategy_name in {
             "cg_residual",
@@ -156,14 +163,31 @@ def generate_mixture(
             "cg_residual_error",
             "residual_error",
         }:
-            adjusted_count = max(1, (count + residual_iters - 1) // residual_iters)
+            # Get residual_iters from strategy override or use default
+            strategy_residual_iters = cfg.get("residual_iters", 8)
+            adjusted_count = max(
+                1, (count + strategy_residual_iters - 1) // strategy_residual_iters
+            )
             cfg["samples"] = adjusted_count
 
         # Only pass b if strategy requires it
         from .runner import _registry
+
         strategy = _registry.get(strategy_name)
         rhs_to_pass = b if strategy.requires_rhs() else None
-        generated = run_generation(strategy_name, A, rhs_to_pass, cfg=cfg)
+
+        # Filter cfg to only include fields that the strategy's ConfigType accepts
+        config_type = strategy.ConfigType
+        valid_fields = set(config_type.__dataclass_fields__.keys())
+        filtered_cfg = {k: v for k, v in cfg.items() if k in valid_fields}
+
+        # Run generation with Pydantic validation
+        try:
+            generated = run_generation(strategy_name, A, rhs_to_pass, cfg=filtered_cfg)
+        except ValidationError as e:
+            raise ValueError(
+                f"Invalid configuration for strategy '{strategy_name}': {e}"
+            ) from e
 
         if generated.rhs is not None:
             all_features.append(generated.rhs)
@@ -274,7 +298,6 @@ def build_dataset(
     from pathlib import Path
     from ..io.base import load_matrix
     from .types import RawSamples
-    from ..normalization import create_scale_from_config
     from .helpers import _normalize_matrix_for_generation
 
     print("Building dataset...")

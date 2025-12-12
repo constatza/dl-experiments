@@ -156,7 +156,9 @@ def extract_output_root(config: dict[str, Any]) -> Path:
         Output root path
     """
     paths_cfg = config.get("paths", {})
-    output_root_str = paths_cfg.get("output_root", "/data/projects/graph-cg/data/output")
+    output_root_str = paths_cfg.get(
+        "output_root", "/data/projects/graph-cg/data/output"
+    )
     return Path(output_root_str)
 
 
@@ -179,7 +181,9 @@ def build_experiment_config(
     """
     model_template = root_dir / experiment_dict["model_template"]
     data_config = root_dir / experiment_dict["data_config"]
-    solver_config = root_dir / experiment_dict.get("solver_config", "solver-configs/default.toml")
+    solver_config = root_dir / experiment_dict.get(
+        "solver_config", "solver-configs/default.toml"
+    )
 
     # Check for optional checkpoint_path override
     checkpoint_path_str = experiment_dict.get("checkpoint_path")
@@ -193,7 +197,9 @@ def build_experiment_config(
             checkpoint_path = root_dir / checkpoint_path
     else:
         # Fallback to convention-based derivation
-        checkpoint_path = derive_checkpoint_path(model_template, data_config, output_root)
+        checkpoint_path = derive_checkpoint_path(
+            model_template, data_config, output_root
+        )
 
     return ExperimentConfig(
         model_template=model_template,
@@ -296,7 +302,11 @@ def log_comparison_results(result: dict[str, Any]) -> None:
     if neural_meta is not None:
         residual_iters = getattr(neural_meta, "residual_iters", "unknown")
         applied_iters = getattr(neural_meta, "applied_iters", None)
-        applied_str = f"{applied_iters}" if applied_iters is not None else f"{residual_iters} (default)"
+        applied_str = (
+            f"{applied_iters}"
+            if applied_iters is not None
+            else f"{residual_iters} (default)"
+        )
         logger.info("Neural preconditioner metadata:")
         logger.info(f"  - Training iterations (residual_iters): {residual_iters}")
         logger.info(f"  - Applied iterations: {applied_str}")
@@ -455,8 +465,12 @@ def main(
         None, help="Override figures directory for plots"
     ),
     noise_strategy: str = typer.Option(NOISE_STRATEGY_NONE, help="Noise strategy"),
-    noise_level: float = typer.Option(DEFAULT_NOISE_LEVEL, help="Noise level parameter"),
-    noise_seed: int | None = typer.Option(DEFAULT_NOISE_SEED, help="Random seed for noise"),
+    noise_level: float = typer.Option(
+        DEFAULT_NOISE_LEVEL, help="Noise level parameter"
+    ),
+    noise_seed: int | None = typer.Option(
+        DEFAULT_NOISE_SEED, help="Random seed for noise"
+    ),
     breakdown_tol: float | None = typer.Option(
         None, help="Breakdown tolerance for CG denominator checks"
     ),
@@ -464,7 +478,8 @@ def main(
         None, help="Limit neural preconditioning to first L iterations"
     ),
     fallback_preconditioner: str = typer.Option(
-        "identity", help="Preconditioner after L neural iterations (identity, jacobi, ilu)"
+        "identity",
+        help="Preconditioner after L neural iterations (identity, jacobi, ilu)",
     ),
     precond_every: int = typer.Option(
         1, help="Apply preconditioner every K iterations"
@@ -499,7 +514,11 @@ def main(
     root_dir = Path(__file__).resolve().parent.parent
 
     # Resolve experiments config
-    experiments_path = experiments if experiments is not None else root_dir / DEFAULT_EXPERIMENTS_CONFIG
+    experiments_path = (
+        experiments
+        if experiments is not None
+        else root_dir / DEFAULT_EXPERIMENTS_CONFIG
+    )
 
     # Load and validate configuration
     try:

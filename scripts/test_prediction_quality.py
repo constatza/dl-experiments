@@ -11,10 +11,13 @@ from pathlib import Path
 import numpy as np
 from dlkit.interfaces.api import load_predictor
 
+
 def main() -> None:
     """Test prediction quality."""
     # Find checkpoint
-    checkpoint_path = Path("/data/projects/graph-cg/data/output/collect-504-solutions/linear/checkpoints/linear.ckpt")
+    checkpoint_path = Path(
+        "/data/projects/graph-cg/data/output/collect-504-solutions/linear/checkpoints/linear.ckpt"
+    )
 
     if not checkpoint_path.exists():
         print(f"Error: Checkpoint not found: {checkpoint_path}")
@@ -34,11 +37,13 @@ def main() -> None:
 
     # Test with apply_transforms=True (current behavior)
     print("\n--- Loading predictor with apply_transforms=True ---")
-    with load_predictor(str(checkpoint_path), apply_transforms=True, batch_size=20) as predictor:
+    with load_predictor(
+        str(checkpoint_path), apply_transforms=True, batch_size=20
+    ) as predictor:
         predictions = predictor.predict(rhs_test)
 
     # Extract predictions from InferenceResult
-    if hasattr(predictions, 'predictions'):
+    if hasattr(predictions, "predictions"):
         # InferenceResult object
         pred_dict = predictions.predictions
         pred_arr = next(iter(pred_dict.values()))
@@ -48,7 +53,7 @@ def main() -> None:
         pred_arr = predictions
 
     # Convert to numpy if needed
-    if hasattr(pred_arr, 'numpy'):
+    if hasattr(pred_arr, "numpy"):
         pred_arr = pred_arr.numpy()
 
     # Compute statistics
@@ -61,34 +66,34 @@ def main() -> None:
     rel_errors = abs_errors / (target_norms + 1e-10)
 
     print("\n=== Input Statistics ===")
-    print(f"Input (RHS) norms:")
+    print("Input (RHS) norms:")
     print(f"  Mean: {np.mean(input_norms):.6e}")
     print(f"  Std:  {np.std(input_norms):.6e}")
     print(f"  Min:  {np.min(input_norms):.6e}")
     print(f"  Max:  {np.max(input_norms):.6e}")
 
     print("\n=== Prediction Statistics ===")
-    print(f"Prediction norms:")
+    print("Prediction norms:")
     print(f"  Mean: {np.mean(pred_norms):.6e}")
     print(f"  Std:  {np.std(pred_norms):.6e}")
     print(f"  Min:  {np.min(pred_norms):.6e}")
     print(f"  Max:  {np.max(pred_norms):.6e}")
 
     print("\n=== Target Statistics ===")
-    print(f"Target norms:")
+    print("Target norms:")
     print(f"  Mean: {np.mean(target_norms):.6e}")
     print(f"  Std:  {np.std(target_norms):.6e}")
     print(f"  Min:  {np.min(target_norms):.6e}")
     print(f"  Max:  {np.max(target_norms):.6e}")
 
     print("\n=== Error Analysis ===")
-    print(f"Absolute errors (L2 norm):")
+    print("Absolute errors (L2 norm):")
     print(f"  Mean: {np.mean(abs_errors):.6e}")
     print(f"  Std:  {np.std(abs_errors):.6e}")
     print(f"  Min:  {np.min(abs_errors):.6e}")
     print(f"  Max:  {np.max(abs_errors):.6e}")
 
-    print(f"\nRelative errors (abs_error / target_norm):")
+    print("\nRelative errors (abs_error / target_norm):")
     print(f"  Mean: {np.mean(rel_errors):.6e}")
     print(f"  Std:  {np.std(rel_errors):.6e}")
     print(f"  Min:  {np.min(rel_errors):.6e}")
@@ -123,5 +128,6 @@ def main() -> None:
 
     print("=" * 70)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -7,10 +7,7 @@ import numpy as np
 import pytest
 
 from src.normalization import (
-    DiagonalScale,
     LinearSystemBatch,
-    MatrixScale,
-    SpectralScale,
     make_diagonal_scale,
     make_matrix_scale,
     make_spectral_scales,
@@ -59,7 +56,9 @@ def test_system_batch(
 # =============================================================================
 
 
-def test_matrix_scale_denormalize_matrix_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_matrix_scale_denormalize_matrix_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """MatrixScale.denormalize_matrix inverts scale_matrix."""
     scale = make_matrix_scale(test_system_batch)
     matrix_normalized = scale.scale_matrix(test_system_batch.matrix)
@@ -68,7 +67,9 @@ def test_matrix_scale_denormalize_matrix_is_inverse(test_system_batch: LinearSys
     np.testing.assert_allclose(matrix_recovered, test_system_batch.matrix, rtol=1e-10)
 
 
-def test_matrix_scale_denormalize_rhs_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_matrix_scale_denormalize_rhs_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """MatrixScale.denormalize_rhs inverts scale_rhs."""
     scale = make_matrix_scale(test_system_batch)
     for rhs in test_system_batch.rhs_samples:
@@ -78,7 +79,9 @@ def test_matrix_scale_denormalize_rhs_is_inverse(test_system_batch: LinearSystem
         np.testing.assert_allclose(rhs_recovered, rhs, rtol=1e-10)
 
 
-def test_matrix_scale_denormalize_solution_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_matrix_scale_denormalize_solution_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """MatrixScale.denormalize_solution inverts scale_solution (identity)."""
     scale = make_matrix_scale(test_system_batch)
     for sol in test_system_batch.sol_samples:
@@ -105,7 +108,9 @@ def test_matrix_scale_solution_unchanged(test_system_batch: LinearSystemBatch) -
 # =============================================================================
 
 
-def test_diagonal_scale_denormalize_matrix_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_diagonal_scale_denormalize_matrix_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """DiagonalScale.denormalize_matrix inverts scale_matrix."""
     scale = make_diagonal_scale(test_system_batch)
     matrix_normalized = scale.scale_matrix(test_system_batch.matrix)
@@ -114,7 +119,9 @@ def test_diagonal_scale_denormalize_matrix_is_inverse(test_system_batch: LinearS
     np.testing.assert_allclose(matrix_recovered, test_system_batch.matrix, rtol=1e-10)
 
 
-def test_diagonal_scale_denormalize_rhs_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_diagonal_scale_denormalize_rhs_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """DiagonalScale.denormalize_rhs inverts scale_rhs."""
     scale = make_diagonal_scale(test_system_batch)
     for rhs in test_system_batch.rhs_samples:
@@ -124,7 +131,9 @@ def test_diagonal_scale_denormalize_rhs_is_inverse(test_system_batch: LinearSyst
         np.testing.assert_allclose(rhs_recovered, rhs, rtol=1e-10)
 
 
-def test_diagonal_scale_denormalize_solution_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_diagonal_scale_denormalize_solution_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """DiagonalScale.denormalize_solution inverts scale_solution (identity)."""
     scale = make_diagonal_scale(test_system_batch)
     for sol in test_system_batch.sol_samples:
@@ -149,7 +158,9 @@ def test_diagonal_scale_solution_scaling(test_system_batch: LinearSystemBatch) -
         np.testing.assert_allclose(sol_denormalized, sol, rtol=1e-10)
 
 
-def test_diagonal_scale_normalized_diagonal(test_system_batch: LinearSystemBatch) -> None:
+def test_diagonal_scale_normalized_diagonal(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """DiagonalScale produces identity diagonal after normalization."""
     scale = make_diagonal_scale(test_system_batch)
     matrix_normalized = scale.scale_matrix(test_system_batch.matrix)
@@ -163,7 +174,9 @@ def test_diagonal_scale_normalized_diagonal(test_system_batch: LinearSystemBatch
 # =============================================================================
 
 
-def test_spectral_scale_denormalize_matrix_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_spectral_scale_denormalize_matrix_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """SpectralScale.denormalize_matrix inverts scale_matrix."""
     scales = make_spectral_scales(test_system_batch)
     scale = scales[0]  # Use first scale (matrix scaling is same for all)
@@ -174,7 +187,9 @@ def test_spectral_scale_denormalize_matrix_is_inverse(test_system_batch: LinearS
     np.testing.assert_allclose(matrix_recovered, test_system_batch.matrix, rtol=1e-10)
 
 
-def test_spectral_scale_denormalize_rhs_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_spectral_scale_denormalize_rhs_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """SpectralScale.denormalize_rhs inverts scale_rhs."""
     scales = make_spectral_scales(test_system_batch)
 
@@ -185,7 +200,9 @@ def test_spectral_scale_denormalize_rhs_is_inverse(test_system_batch: LinearSyst
         np.testing.assert_allclose(rhs_recovered, rhs, rtol=1e-10)
 
 
-def test_spectral_scale_denormalize_solution_is_inverse(test_system_batch: LinearSystemBatch) -> None:
+def test_spectral_scale_denormalize_solution_is_inverse(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """SpectralScale.denormalize_solution inverts scale_solution."""
     scales = make_spectral_scales(test_system_batch)
 
@@ -196,7 +213,9 @@ def test_spectral_scale_denormalize_solution_is_inverse(test_system_batch: Linea
         np.testing.assert_allclose(sol_recovered, sol, rtol=1e-10)
 
 
-def test_spectral_scale_solution_transformed(test_system_batch: LinearSystemBatch) -> None:
+def test_spectral_scale_solution_transformed(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """SpectralScale transforms solutions (unlike MatrixScale/DiagonalScale)."""
     scales = make_spectral_scales(test_system_batch)
 
@@ -262,8 +281,12 @@ def test_spectral_scale_full_roundtrip(test_system_batch: LinearSystemBatch) -> 
 
     # Normalize (per-sample scales for RHS/solution)
     A_norm = scales[0].scale_matrix(test_system_batch.matrix)
-    R_norm = np.array([s.scale_rhs(r) for s, r in zip(scales, test_system_batch.rhs_samples)])
-    X_norm = np.array([s.scale_solution(x) for s, x in zip(scales, test_system_batch.sol_samples)])
+    R_norm = np.array(
+        [s.scale_rhs(r) for s, r in zip(scales, test_system_batch.rhs_samples)]
+    )
+    X_norm = np.array(
+        [s.scale_solution(x) for s, x in zip(scales, test_system_batch.sol_samples)]
+    )
 
     # Denormalize
     A_recovered = scales[0].denormalize_matrix(A_norm)
@@ -281,7 +304,9 @@ def test_spectral_scale_full_roundtrip(test_system_batch: LinearSystemBatch) -> 
 # =============================================================================
 
 
-def test_matrix_scale_normalized_system_validity(test_system_batch: LinearSystemBatch) -> None:
+def test_matrix_scale_normalized_system_validity(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """Verify normalized system A' @ x' = b' holds for MatrixScale."""
     scale = make_matrix_scale(test_system_batch)
 
@@ -295,7 +320,9 @@ def test_matrix_scale_normalized_system_validity(test_system_batch: LinearSystem
         np.testing.assert_allclose(result, b_norm, rtol=1e-10)
 
 
-def test_diagonal_scale_normalized_system_validity(test_system_batch: LinearSystemBatch) -> None:
+def test_diagonal_scale_normalized_system_validity(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """Verify normalized system A' @ x' = b' holds for DiagonalScale."""
     scale = make_diagonal_scale(test_system_batch)
 
@@ -309,12 +336,16 @@ def test_diagonal_scale_normalized_system_validity(test_system_batch: LinearSyst
         np.testing.assert_allclose(result, b_norm, rtol=1e-10)
 
 
-def test_spectral_scale_normalized_system_validity(test_system_batch: LinearSystemBatch) -> None:
+def test_spectral_scale_normalized_system_validity(
+    test_system_batch: LinearSystemBatch,
+) -> None:
     """Verify normalized system A' @ x' = b' holds for SpectralScale."""
     scales = make_spectral_scales(test_system_batch)
 
     A_norm = scales[0].scale_matrix(test_system_batch.matrix)
-    for scale, rhs, sol in zip(scales, test_system_batch.rhs_samples, test_system_batch.sol_samples):
+    for scale, rhs, sol in zip(
+        scales, test_system_batch.rhs_samples, test_system_batch.sol_samples
+    ):
         b_norm = scale.scale_rhs(rhs)
         x_norm = scale.scale_solution(sol)
 

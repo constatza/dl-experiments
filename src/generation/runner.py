@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -27,7 +27,9 @@ class StrategyRegistry:
 _registry = StrategyRegistry()
 
 
-def register_strategy(strategy_cls: type[IDataGenerationStrategy]) -> type[IDataGenerationStrategy]:
+def register_strategy(
+    strategy_cls: type[IDataGenerationStrategy],
+) -> type[IDataGenerationStrategy]:
     _registry.register(strategy_cls())  # type: ignore[arg-type]
     return strategy_cls
 
@@ -41,5 +43,7 @@ def run_generation(
 ) -> GeneratedSamples:
     strategy = _registry.get(strategy_name)
     if strategy.requires_rhs() and rhs is None:
-        raise ValueError(f"Strategy '{strategy_name}' requires RHS but none was provided.")
+        raise ValueError(
+            f"Strategy '{strategy_name}' requires RHS but none was provided."
+        )
     return strategy.generate(matrix, rhs, cfg=cfg)

@@ -110,9 +110,7 @@ class TestSolverParamsDataclass:
         assert params.normalize_system == "matrix"
         assert params.stopping_criterion == "tolerance"
 
-    def test_solver_params_to_dict(
-        self, solver_params_expected: SolverParams
-    ) -> None:
+    def test_solver_params_to_dict(self, solver_params_expected: SolverParams) -> None:
         """Test to_dict() conversion.
 
         Args:
@@ -187,9 +185,7 @@ class TestSolverParamsDataclass:
 class TestExtractSolverParamsFromConfig:
     """Tests for extract_solver_params_from_config function."""
 
-    def test_extract_from_full_config(
-        self, solver_config_full: dict[str, Any]
-    ) -> None:
+    def test_extract_from_full_config(self, solver_config_full: dict[str, Any]) -> None:
         """Test extraction from complete config.
 
         Args:
@@ -280,6 +276,7 @@ class TestGetSolverParamsFromSettings:
         self,
     ) -> None:
         """Test extraction from settings.EXTRAS with solver params."""
+
         # Create mock settings object
         class MockSettings:
             def __init__(self) -> None:
@@ -306,6 +303,7 @@ class TestGetSolverParamsFromSettings:
         self,
     ) -> None:
         """Test extraction with empty EXTRAS uses defaults."""
+
         class MockSettings:
             def __init__(self) -> None:
                 self.EXTRAS = {}
@@ -323,6 +321,7 @@ class TestGetSolverParamsFromSettings:
         self,
     ) -> None:
         """Test extraction when settings has no EXTRAS attribute."""
+
         class MockSettings:
             pass
 
@@ -337,6 +336,7 @@ class TestGetSolverParamsFromSettings:
         self,
     ) -> None:
         """Test backwards compatibility with old EXTRAS structure."""
+
         class MockSettings:
             def __init__(self) -> None:
                 self.EXTRAS = {
@@ -363,6 +363,7 @@ class TestGetSolverParamsFromSettings:
         self,
     ) -> None:
         """Test extraction when EXTRAS has partial solver section."""
+
         class MockSettings:
             def __init__(self) -> None:
                 self.EXTRAS = {
@@ -404,8 +405,7 @@ class TestGetSolverParamsFromSettings:
         assert params_from_config.atol == params_from_settings.atol
         assert params_from_config.max_iterations == params_from_settings.max_iterations
         assert (
-            params_from_config.normalize_system
-            == params_from_settings.normalize_system
+            params_from_config.normalize_system == params_from_settings.normalize_system
         )
         assert (
             params_from_config.stopping_criterion

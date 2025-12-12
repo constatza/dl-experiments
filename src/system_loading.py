@@ -11,11 +11,11 @@ from __future__ import annotations
 import json
 import tomllib
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 import numpy as np
 
-from dlkit import GeneralSettings
 from loguru import logger
 
 from .io.base import load_npz_entry
@@ -109,7 +109,9 @@ def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
     if matrix_path.suffix == ".npz":
         mat = load_npz_entry(matrix_path, "matrix")
         if mat.ndim > 2:
-            logger.warning(f"{matrix_path} contains multiple matrices; using the first slice.")
+            logger.warning(
+                f"{matrix_path} contains multiple matrices; using the first slice."
+            )
             mat = mat[0]
         return np.asarray(mat, dtype=np.float64, copy=False)
 
@@ -139,6 +141,7 @@ def _load_rhs_file(rhs_path: str | Path) -> np.ndarray:
     from .io_utils import load_dataset
 
     rhs_path = Path(rhs_path)
+
     def _validate_and_flatten(rhs_array: np.ndarray) -> np.ndarray:
         if rhs_array.ndim == 1:
             return rhs_array
@@ -159,7 +162,9 @@ def _load_rhs_file(rhs_path: str | Path) -> np.ndarray:
     if rhs_path.suffix == ".npz":
         b = load_npz_entry(rhs_path, "rhs")
         if b.ndim > 1 and b.shape[0] > 1:
-            logger.warning(f"{rhs_path} contains multiple RHS entries; using the first.")
+            logger.warning(
+                f"{rhs_path} contains multiple RHS entries; using the first."
+            )
             b = b[0]
         return _validate_and_flatten(b)
 
@@ -321,7 +326,9 @@ def load_case_data(
     return result
 
 
-def list_available_cases(processed_dir: str | Path | None = None) -> list[dict[str, Any]]:
+def list_available_cases(
+    processed_dir: str | Path | None = None,
+) -> list[dict[str, Any]]:
     """List all available data cases in processed directory.
 
     I/O action - scans directory for case metadata.

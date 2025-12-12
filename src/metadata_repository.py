@@ -102,7 +102,7 @@ def _extract_from_data_config(data_config_path: Path) -> int | None:
 
         candidates: list[int] = []
 
-        # Check generation.strategy array
+        # Check generation.strategy array (residual_iters is now strategy-level only)
         strategies = config.get("generation", {}).get("strategy", [])
         for strategy in strategies:
             if not isinstance(strategy, dict):
@@ -111,14 +111,6 @@ def _extract_from_data_config(data_config_path: Path) -> int | None:
                 candidates.append(int(strategy[ConfigKeys.RESIDUAL_ITERS]))
             if "residual_iters" in strategy:
                 candidates.append(int(strategy["residual_iters"]))
-
-        # Check top-level generation
-        generation = config.get("generation", {})
-        if isinstance(generation, dict):
-            if ConfigKeys.RESIDUAL_ITERS in generation:
-                candidates.append(int(generation[ConfigKeys.RESIDUAL_ITERS]))
-            if "residual_iters" in generation:
-                candidates.append(int(generation["residual_iters"]))
 
         return min(candidates) if candidates else None
     except (FileNotFoundError, tomllib.TOMLDecodeError, KeyError, ValueError):

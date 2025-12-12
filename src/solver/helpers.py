@@ -30,7 +30,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.linalg import norm
 
-from .convergence import IConvergenceCriterion
+from .convergence import CombinedToleranceCriterion, IConvergenceCriterion
+from ..constants import DEFAULT_RTOL, DEFAULT_ATOL
 from .state import IterationState
 
 if TYPE_CHECKING:
@@ -122,7 +123,9 @@ def convergence_check(
     References:
         Algorithm.md, Step 1: convergence_check.
     """
-    applied_criterion = criterion or CombinedToleranceCriterion(DEFAULT_RTOL, DEFAULT_ATOL)
+    applied_criterion = criterion or CombinedToleranceCriterion(
+        DEFAULT_RTOL, DEFAULT_ATOL
+    )
 
     r_k_norm = norm(r_k)
     threshold = applied_criterion.threshold(b_norm)
@@ -199,7 +202,6 @@ def curvature(
 
     if d_raw <= 0 or d_raw < curvature_threshold:
         # Restart with steepest descent direction
-        p_new = z_k
         # Caller will compute: q_new = A @ p_new
         # Return d_new based on p_new^T q_new (will be computed by caller)
         new_state = replace(state, restart=True, num_restarts=state.num_restarts + 1)
