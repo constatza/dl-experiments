@@ -188,3 +188,9 @@ mlartifacts*/
 CLAUDE.md
 .claude/
 AGENTS.md
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.svg

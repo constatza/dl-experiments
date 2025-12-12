@@ -30,7 +30,8 @@ References:
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Callable, Literal
+from typing import TYPE_CHECKING, Literal
+from collections.abc import Callable
 
 import numpy as np
 from scipy.linalg import norm
@@ -232,7 +233,9 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
         eps_breakdown: float = 1e-14,
         m_replacement: int = DEFAULT_RESIDUAL_REPLACEMENT_FREQ,
         gamma_div: float = DEFAULT_DIVERGENCE_FACTOR,
-        stopping_criterion: Literal["residual_norm", "fixed_iterations"] = "residual_norm",
+        stopping_criterion: Literal[
+            "residual_norm", "fixed_iterations"
+        ] = "residual_norm",
         reorthogonalize: ReorthogonalizationStrategy | None = None,
         capture_traces: bool = False,
         capture_search_directions: bool = False,
@@ -299,7 +302,9 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
         b_norm = norm(b)
 
         # Build convergence criterion (SciPy-style by default)
-        criterion = convergence_criterion or CombinedToleranceCriterion(rtol=rtol, atol=atol)
+        criterion = convergence_criterion or CombinedToleranceCriterion(
+            rtol=rtol, atol=atol
+        )
 
         # Initialize solver state
         x, r, z, p, state, history = self._initialize_state(A, b, x0, b_norm)
@@ -459,9 +464,13 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
                 # Residual replacement occurred, p was reset to z
                 q_managed = A @ p_managed
             else:
-                q_managed = A @ p_managed if reorth_applied else q  # Track reorthogonalized direction
+                q_managed = (
+                    A @ p_managed if reorth_applied else q
+                )  # Track reorthogonalized direction
 
-            history = history.update(p_managed, q_managed, r, z, m_max=self.history_limit)
+            history = history.update(
+                p_managed, q_managed, r, z, m_max=self.history_limit
+            )
 
             # Update state vectors for next iteration
             r = r_managed
@@ -485,13 +494,18 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
         info_code = 0 if state.converged else state.iterations
 
         residual_history_abs = (
-            self.event_logger.get_history("residual_norm") if self.event_logger is not None else state.residual_history
+            self.event_logger.get_history("residual_norm")
+            if self.event_logger is not None
+            else state.residual_history
         )
 
         # Convert absolute residuals to relative for residual_history
         residual_history_rel = None
         if residual_history_abs:
-            residual_history_rel = [float(r / b_norm) if b_norm > 0 else float(r) for r in residual_history_abs]
+            residual_history_rel = [
+                float(r / b_norm) if b_norm > 0 else float(r)
+                for r in residual_history_abs
+            ]
 
         # Assemble return info
         result = SolverResult(
@@ -504,7 +518,9 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             residual_abs=final_residual_norm,
             residual_rel=final_relative_residual,
             residual_history=residual_history_rel,
-            residual_history_abs=[float(r) for r in residual_history_abs] if residual_history_abs else None,
+            residual_history_abs=[float(r) for r in residual_history_abs]
+            if residual_history_abs
+            else None,
             rhs_norm=b_norm,
             breakdown=state.breakdown,
             stopping_criterion=stopping_criterion,
@@ -512,8 +528,12 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             tol=rtol,
             atol=atol,
             maxiter=max_iterations,
-            residual_vectors=np.stack(trace_logger.get_history("residual")) if trace_logger and capture_traces else None,
-            solution_vectors=np.stack(trace_logger.get_history("solution")) if trace_logger and capture_traces else None,
+            residual_vectors=np.stack(trace_logger.get_history("residual"))
+            if trace_logger and capture_traces
+            else None,
+            solution_vectors=np.stack(trace_logger.get_history("solution"))
+            if trace_logger and capture_traces
+            else None,
         )
 
         return x, result

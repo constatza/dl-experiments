@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import typer
 from dlkit.core.postprocessing import summarize
+from loguru import logger
 
 from src.constants import (
     DEFAULT_MODEL_CONFIG,
@@ -27,31 +28,36 @@ from src.cli.prediction import run_inference
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 
-def _save_sample_prediction_to_csv(y_true: np.ndarray, y_pred: np.ndarray) -> None:
-    """
-    Saves a random sample's true value, prediction, and error to a CSV file.
-    """
-    num_samples = len(y_true)
-    if num_samples > 0:
-        random_index = np.random.randint(0, num_samples)
-        true_val = y_true[random_index]
-        predicted_val = y_pred[random_index]
-        error_val = true_val - predicted_val
+def _save_sample_prediction_to_csv(
+    y_true: np.ndarray, y_pred: np.ndarray, savepath: Path
+) -> None:
+    """Saves a random sample's true value, prediction, and error to a CSV file."""
+    if y_true.ndim != 2 or y_pred.ndim != 2:
+        logger.warning("y_true and y_pred must be 2D arrays.")
+        return
+    num_samples = y_true.shape[0]
+    random_index = np.random.randint(0, num_samples)
+    true_val = y_true[random_index, :]
+    predicted_val = y_pred[random_index, :]
+    error_val = true_val - predicted_val
 
-        sample_data = pd.DataFrame({
-            'Target': [true_val],
-            'Prediction': [predicted_val],
-            'Error': [error_val]
-        })
+    sample_data = pd.DataFrame(
+        {"Target": [true_val], "Prediction": [predicted_val], "Error": [error_val]}
+    )
 
-        output_path = Path("prediction_sample.csv")
-        sample_data.to_csv(output_path, index=False, float_format='%.6e')
-        print(f"Saved random sample prediction, target, and error to {output_path}")
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    try:
+        sample_data.to_csv(savepath, index=False, float_format="%.6e")
+        logger.info(f"Saved random sample prediction, target, and error to {savepath}")
+    except Exception as e:
+        logger.error(
+            f"Failed to save random sample prediction, target, and error to {savepath}: {e}"
+        )
+
 
 def main(
-    config: Path = typer.Option(
-        None, help="Path to config file"
-    ),
+    config: Path = typer.Option(None, help="Path to config file"),
     data_config: Path = typer.Option(
         None,
         help="Path to data config providing dataset metadata",
@@ -77,7 +83,7 @@ def main(
     if data_config is None:
         data_config = graph_cg_root / DEFAULT_DATA_CONFIG
 
-    print(f"Loading configuration from: {config}")
+    logger.info(f"Loading configuration from: {config}")
 
     try:
         results = run_inference(
@@ -91,26 +97,32 @@ def main(
         )
 
         try:
-            print(f"Prediction summary: {summarize(results['predictions'])}")
+            logger.info(f"Prediction summary: {summarize(results['predictions'])}")
         except Exception:
             pass
 
         if results["y_true"] is not None and results["y_pred"] is not None:
-            print(f"Generated predictions for {len(results['y_true'])} samples")
-
-            _save_sample_prediction_to_csv(results['y_true'], results['y_pred'])
-
+            logger.info(f"Generated predictions for {len(results['y_true'])} samples")
+            _save_sample_prediction_to_csv(
+                results["y_true"],
+                results["y_pred"],
+                figures_dir.parent / "diagnostics" / "sample_prediction.csv",
+            )
             if results["plot_path"]:
-                print(f"Saved parity plot to: {results['plot_path']}")
+                logger.info(f"Saved parity plot to: {results['plot_path']}")
             if results.get("diagnostic_plot_path"):
-                print(f"Saved diagnostic plot to: {results['diagnostic_plot_path']}")
+                logger.info(
+                    f"Saved diagnostic plot to: {results['diagnostic_plot_path']}"
+                )
         else:
-            print("Could not extract matching prediction/target arrays for plotting.")
+            logger.warning(
+                "Could not extract matching prediction/target arrays for plotting."
+            )
 
-        print(f"Inference completed in {results['duration_seconds']:.2f}s")
+        logger.info(f"Inference completed in {results['duration_seconds']:.2f}s")
 
     except Exception as exc:  # noqa: BLE001
-        print(f"Error: {exc}")
+        logger.error(f"Error: {exc}")
         raise typer.Exit(code=EXIT_FAILURE)
 
 

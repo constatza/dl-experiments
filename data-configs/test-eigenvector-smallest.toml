@@ -1,9 +1,9 @@
-# Test config: Eigenvector-based solution generation
-# Uses eigenvectors as solutions, RHS computed as b = λ * v (forward mode)
+# Test config: Eigenvector-based RHS generation
+# Uses eigenvectors as RHS, solutions computed as x = A^-1 @ v (inverse mode)
 # Useful for testing CG performance with high-precision eigenvector-based problems
 #
-# Usage: uv run python graph-cg/scripts/process_data.py data-configs/test-eigenvector-solution.toml
-# Output: test-eigenvalue-solution-{normalization}/
+# Usage: uv run python graph-cg/scripts/process_data.py data-configs/test-eigenvector-smallest.toml
+# Output: test-eigenvalue-rhs-{normalization}/
 
 [flow]
 
@@ -17,11 +17,11 @@ shuffle = true
 seed = 42
 residual_iters = 1  # Target CG iterations for neural preconditioner training
 
-# Use all eigenvectors as solutions, RHS = eigenvalue * eigenvector
+# Use all eigenvectors as RHS, solutions = A^-1 @ eigenvector
 [[generation.strategy]]
 name = "eigenvector_forward"
-which = "largest"
-num_eigenvectors = 100
+which = "smallest"
+num_eigenvectors = 10
 samples =  6000 # Use all eigenvectors (504-dimensional system)
 
 [output]

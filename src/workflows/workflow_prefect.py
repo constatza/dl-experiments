@@ -35,7 +35,7 @@ Debugging:
     Prefect task logs can be viewed at the server UI (typically http://127.0.0.1:4200)
 
 How Caching Works:
-    All tasks use persist_result=True and cache_policy=INPUTS for persistent caching:
+    Data generation and training use persist_result=True and cache_policy=INPUTS for persistent caching; prediction and comparison are intentionally uncached:
 
     - Data generation:
       * Filesystem check: skips if data exists (source of truth)
@@ -49,9 +49,7 @@ How Caching Works:
       * persist_result=True ensures checkpoint paths persist
 
     - Prediction & Comparison:
-      * Prefect INPUTS cache: memoizes based on checkpoint + config
-      * persist_result=True ensures results persist across runs
-      * Automatic re-execution only when upstream tasks change
+      * Currently uncached to always refresh plots/CSV diagnostics
 
     - Benefits:
         * No manual cache management needed
@@ -67,7 +65,6 @@ Note:
 
 from __future__ import annotations
 
-import glob
 import hashlib
 import os
 
@@ -105,6 +102,7 @@ from src.prefect_utils import (
 from src.paths.core import DataPaths, FlowPaths, ProjectRoots, parse_flow_keys
 from src.validation import validate_data_exists
 from src.generation import process_config
+from src.diagnostics.prediction_diagnostics import save_prediction_samples_to_csv
 
 
 def build_signature(**parts: str | None) -> str:
@@ -311,7 +309,7 @@ def get_or_generate_data_task(
         files_str = "\n  - ".join(missing_files)
         raise RuntimeError(
             f"Data generation completed but required files are missing or empty:\n  - {files_str}\n"
-            f"This may indicate a Dask worker file system sync issue."
+            f"This may indicates a Dask worker file system sync issue."
         )
 
     # Compute content-based hash of data files
@@ -505,10 +503,7 @@ def train_model_task(
     return checkpoint_path
 
 
-@task(
-    persist_result=True,
-    cache_policy=INPUTS,
-)
+@task(persist_result=False, cache_policy=None, cache_result_in_memory=False)
 def predict_task(
     model_template_path: str,
     data_dir: Path,
@@ -603,54 +598,6 @@ def predict_task(
         logger.info(
             "Experiment output dir (single-pair): %s", output_dirs["experiment_dir"]
         )
-    # Check for existing prediction plots (filesystem-based caching)
-    if not force:
-        # Look for prediction plot in figures directory
-        plot_pattern = output_dirs["figures_dir"] / "parity_*.png"
-        existing_plots = glob.glob(str(plot_pattern))
-        if existing_plots:
-            logger.info(
-                "Prediction already exists for %s/%s — skipping inference",
-                data_config_name,
-                model_name,
-            )
-            return {
-                "predictions": None,
-                "y_true": None,
-                "y_pred": None,
-                "duration_seconds": 0.0,
-                "plot_path": existing_plots[0],
-                "skipped": True,
-            }
-
-    logger.info(
-        "Running prediction for %s on %s using checkpoint %s",
-        model_name,
-        data_config_name,
-        checkpoint_path,
-    )
-    if model_config_version:
-        logger.debug("Model config signature: %s", model_config_version)
-    if data_config_version:
-        logger.debug("Data config signature: %s", data_config_version)
-    if src_hash:
-        logger.debug("Source code signature: %s", src_hash)
-    if data_hash:
-        logger.debug("Data content hash: %s", data_hash[:12])
-    if prediction_state:
-        logger.debug("Prediction state token: %s", prediction_state)
-    _ = src_hash  # Ensures cache keys include source code changes
-    _ = data_hash  # Ensures cache keys include data content hash
-    _ = prediction_state  # Part of cache key via Prefect INPUTS policy
-
-    # Validate checkpoint exists
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(
-            f"Checkpoint not found: {checkpoint_path}\n"
-            "This may indicate the training task returned a cached path "
-            "to a deleted checkpoint."
-        )
-
     # Run inference
     # Note: run_inference will automatically resolve features_path and targets_path
     # from the data config, handling both normalized.npz and separate .npy formats
@@ -674,6 +621,19 @@ def predict_task(
     else:
         logger.warning("Prediction returned no plot path")
 
+    samples_csv_path = save_prediction_samples_to_csv(
+        results.get("y_true"),
+        results.get("y_pred"),
+        output_dirs["predictions_dir"],
+        f"{data_config_name}_{model_name}",
+        num_samples=1,
+    )
+    if samples_csv_path:
+        logger.info("Saved prediction sample CSVs: %s", samples_csv_path)
+        results["samples_csv_paths"] = samples_csv_path
+    else:
+        logger.warning("Prediction sample CSV was not saved (missing targets/predictions or shape mismatch)")
+
     # Create artifact for prediction completion
     experiment_id = f"{data_config_name}/{model_name}"
     create_markdown_artifact(
@@ -694,10 +654,7 @@ def predict_task(
     return results
 
 
-@task(
-    persist_result=True,
-    cache_policy=INPUTS,
-)
+@task(persist_result=False, cache_policy=None, cache_result_in_memory=False)
 def compare_methods_task(
     model_template_path: str,
     data_dir: Path,
@@ -770,27 +727,6 @@ def compare_methods_task(
     output_dirs = prepare_experiment_outputs(
         model_name, data_config_name, output_root_path
     )
-    # Check for existing comparison plots (filesystem-based caching)
-    if not force:
-        # Look for comparison plot in figures directory
-        plot_pattern = output_dirs["figures_dir"] / "convergence_*.png"
-        existing_plots = glob.glob(str(plot_pattern))
-        if existing_plots:
-            logger.info(
-                "Comparison already exists for %s/%s — skipping comparison",
-                data_config_name,
-                model_name,
-            )
-            return {
-                "results": None,
-                "summary": None,
-                "plot_paths": {"convergence": existing_plots[0]},
-                "preconditioners": [],
-                "warm_starts": [],
-                "solver_params": {},
-                "skipped": True,
-            }
-
     logger.info(
         "Comparing preconditioners for %s on %s",
         model_name,

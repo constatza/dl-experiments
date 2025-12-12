@@ -7,6 +7,7 @@ from .spectra import (
     plot_condition_numbers,
 )
 from .plots import plot_condition_boxes, plot_condition_bars
+from .prediction_diagnostics import save_prediction_samples_to_csv
 
 __all__ = [
     "compute_condition_numbers",
@@ -15,4 +16,5 @@ __all__ = [
     "plot_condition_numbers",
     "plot_condition_boxes",
     "plot_condition_bars",
+    "save_prediction_samples_to_csv",
 ]

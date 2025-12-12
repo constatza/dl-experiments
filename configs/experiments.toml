@@ -50,34 +50,34 @@ common_output_root = "/data/projects/graph-cg/data"
 # Test experiments with eigenvector and vanilla solution-based datasets
 # These experiments test CG performance with high-precision data
 [[experiments]]
-model_template = "configs/ffnn.toml"
-data_config = "data-configs/test-solutions.toml"
-solver_config = "solver-configs/default.toml"
+model_template = "ffnn.toml"
+data_config = "../data-configs/test-solutions.toml"
+solver_config = "../solver-configs/default.toml"
 
 [[experiments]]
-model_template = "configs/ffnn.toml"
-data_config = "data-configs/test-eigenvector-solution.toml"
-solver_config = "solver-configs/default.toml"
-
-#[[experiments]]
-#model_template = "configs/ffnn.toml"
-#data_config = "data-configs/test-eigenvector-rhs.toml"
-#solver_config = "solver-configs/default.toml"
+model_template = "ffnn.toml"
+data_config = "../data-configs/test-eigenvector-largest.toml"
+solver_config = "../solver-configs/default.toml"
 
 [[experiments]]
-model_template = "configs/linear.toml"
-data_config = "data-configs/test-solutions.toml"
-solver_config = "solver-configs/default.toml"
+model_template = "ffnn.toml"
+data_config = "../data-configs/test-eigenvector-smallest.toml"
+solver_config = "../solver-configs/default.toml"
+
+[[experiments]]
+model_template = "linear.toml"
+data_config = "../data-configs/test-solutions.toml"
+solver_config = "../solver-configs/default.toml"
 
 #[[experiments]]
-#model_template = "configs/linear.toml"
-#data_config = "data-configs/test-eigenvector-solution.toml"
-#solver_config = "solver-configs/default.toml"
+#model_template = "linear.toml"
+#data_config = "../data-configs/test-eigenvector-largest.toml"
+#solver_config = "../solver-configs/default.toml"
 #
 #[[experiments]]
-#model_template = "configs/linear.toml"
-#data_config = "data-configs/test-eigenvector-rhs.toml"
-#solver_config = "solver-configs/default.toml"
+#model_template = "linear.toml"
+#data_config = "../data-configs/test-eigenvector-smallest.toml"
+#solver_config = "../solver-configs/default.toml"
 
 # ============================================================================
 # ARCHIVED EXPERIMENTS (commented out)
@@ -86,9 +86,9 @@ solver_config = "solver-configs/default.toml"
 # Unified network approach: one model trained on unified error-based data
 # The unified data config uses cg_residual_error strategy to capture error-based training data
 #[[experiments]]
-#model_template = "configs/linear.toml"
-#data_config = "data-configs/collect-504-solutions.toml"
+#model_template = "linear.toml"
+#data_config = "../data-configs/collect-504-solutions.toml"
 
 #[[experiments]]
-#model_template = "configs/ffnn.toml"
-#data_config = "data-configs/collect-504-solutions.toml"
+#model_template = "ffnn.toml"
+#data_config = "../data-configs/collect-504-solutions.toml"
