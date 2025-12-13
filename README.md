@@ -7,8 +7,8 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 - `configs/` – Model templates (FFNN, GNN, linear) and the experiment matrix `experiments.toml`.
 - `data-configs/` – Data templates (e.g., `collect-504-solutions.toml`, `collect-2040-solutions.toml`, `test-solutions.toml`, eigenvector-based tests).
 - `solver-configs/` – CG settings decoupled from models (`default.toml`, `cg.toml`, `pcg.toml`).
-- `scripts/` – Automation entry points for data processing, training, comparison, and workflow orchestration.
-- `src/` – Library code (configuration, generation, solver, diagnostics, workflows).
+- `scripts/` – Automation entry points for data processing, training, comparison, and experiment orchestration. (Note: `test_prediction_quality.py` was removed).
+- `src/` – Library code (configuration, generation, solver, diagnostics, modularized workflows package).
 - `tests/` – End-to-end and unit coverage across CLI, configuration, generation, solver, and workflows.
 
 ## Three-Config System
@@ -57,7 +57,7 @@ checkpoint_dir = context.training.checkpoint_dir
   uv run python scripts/run_experiments.py --config configs/experiments.toml
   ```
 
-Prefect orchestration lives in `src/workflows/workflow_prefect.py` (also exposed via the scripts above).
+Prefect orchestration lives in `src/workflows/flow.py` (also exposed via the scripts above).
 
 ## Tests and Tooling
 
@@ -68,4 +68,4 @@ Prefect orchestration lives in `src/workflows/workflow_prefect.py` (also exposed
   - CLI/workflows: `uv run pytest tests/cli tests/workflows -v`
 - Type checking: `uv run pyright src`
 
-Outputs and large artifacts should stay under `/data/projects/graph-cg` or per-project `output/` directories referenced by the configs.
+Outputs and large artifacts default to `/data/projects/graph-cg/data/output`. For more control over the output root, set the `GRAPH_CG_OUTPUT_DIR` environment variable, or specify `output_root` in your `experiments.toml` paths section.

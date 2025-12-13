@@ -8,13 +8,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import tomllib
 import typer
 
 from src.diagnostics import compute_condition_numbers, plot_condition_bars
 from src.file_operations import ensure_dir, sanitize_identifier
 from src.preconditioner_factory import create_all_preconditioners, create_preconditioner
-from src.system_loading import _load_matrix_file
+from src.system_loading import _load_matrix_file, get_latest_checkpoint
+from src.configuration.loader import load_experiments
+from src.constants import DEFAULT_PROJECT_ROOT, DEFAULT_EXPERIMENTS_CONFIG
 
 app = typer.Typer(add_completion=False, help=__doc__)
 
@@ -29,34 +30,6 @@ class ConditionRecord:
     cond_preconditioned: float
     output_dir: Path
     all_conditions: dict[str, float]
-
-
-def read_toml(path: Path) -> dict[str, Any]:
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
-
-
-def dataset_id(config: dict[str, Any], config_path: Path) -> str:
-    flow = config.get("flow") or config.get("FLOW") or {}
-    return str(flow.get("dataset") or config_path.stem)
-
-
-def model_name(config: dict[str, Any], fallback: str) -> str:
-    model_cfg = config.get("MODEL") or {}
-    return str(model_cfg.get("name") or fallback)
-
-
-def matrix_path_from_data_config(
-    config: dict[str, Any], config_path: Path | None
-) -> Path:
-    source = config.get("source") or {}
-    path = source.get("matrix_path") or source.get("matrix_file")
-    if path is None:
-        raise ValueError("Data config missing source.matrix_path")
-    matrix_path = Path(path)
-    if not matrix_path.is_absolute() and config_path is not None:
-        matrix_path = config_path.parent / matrix_path
-    return matrix_path
 
 
 def load_matrix(matrix_path: Path) -> np.ndarray:
@@ -157,7 +130,7 @@ def plot_summary(
 @app.command()
 def main(
     experiments: Path = typer.Option(
-        "configs/experiments.toml", help="Path to experiments.toml"
+        None, help="Path to experiments.toml (defaults to configs/experiments.toml)"
     ),
     fallback_preconditioner: str = typer.Option(
         "jacobi",
@@ -189,31 +162,46 @@ def main(
         help="List resolved experiments without computing metrics",
     ),
 ) -> None:
-    cfg = read_toml(experiments)
-    exp_entries = cfg.get("experiments") or []
-    paths_section = cfg.get("paths") or {}
-    common_root = Path(
-        paths_section.get("common_output_root") or "/data/projects/graph-cg/data"
-    )
-    base_dir = experiments.parent
-    records: list[ConditionRecord] = []
+    # Use loader to get all active experiments
+    root_dir = DEFAULT_PROJECT_ROOT
+    if experiments is None:
+        experiments_path = root_dir / DEFAULT_EXPERIMENTS_CONFIG
+    else:
+        experiments_path = experiments
+    
+    experiments_path = Path(experiments_path)
 
-    for entry in exp_entries:
-        model_template = base_dir / entry["model_template"]
-        data_config = base_dir / entry["data_config"]
-        checkpoint = None
-        if "checkpoint_path" in entry:
-            checkpoint = Path(entry["checkpoint_path"])
-            if not checkpoint.is_absolute():
-                checkpoint = base_dir / checkpoint
-        model_cfg = read_toml(model_template)
-        data_cfg = read_toml(data_config)
-        dataset = dataset_id(data_cfg, data_config)
-        model = model_name(model_cfg, model_template.stem)
-        run_id = model_template.stem
-        output_dir = Path(entry.get("output_dir") or common_root / dataset / run_id)
-        matrix_path = matrix_path_from_data_config(data_cfg, data_config)
-        label = f"{sanitize_identifier(dataset)} / {sanitize_identifier(model)}"
+    try:
+        experiments_list = load_experiments(experiments_path)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error loading experiments: {exc}")
+        raise typer.Exit(code=1)
+
+    records: list[ConditionRecord] = []
+    
+    # We need a common output root for the summary plot if figures_dir isn't provided
+    # We'll assume the first experiment's context provides a reasonable default if needed
+    common_figures_root = figures_dir
+    
+    for exp_name, settings, context, model_path, data_path, solver_path in experiments_list:
+        if common_figures_root is None:
+             # Default to project-level figures dir from first experiment context
+             common_figures_root = context.flow.roots.figures_root
+
+        dataset_id = context.data.dataset_id
+        model_name = context.run_id
+        
+        # Resolve paths via Context
+        output_dir = context.training.base_dir
+        
+        # For matrix path, we need to look into the resolved settings or context
+        # Context usually has the path to 'normalized.npz' in processed dir
+        matrix_path = context.data.base_dir / "normalized.npz"
+        
+        # Checkpoint
+        checkpoint = get_latest_checkpoint(context.training.checkpoint_dir)
+        
+        label = f"{sanitize_identifier(str(dataset_id))} / {sanitize_identifier(model_name)}"
 
         if dry_run:
             print(
@@ -221,12 +209,16 @@ def main(
             )
             continue
 
+        if not matrix_path.exists():
+             print(f"Skipping {label}: Matrix file not found at {matrix_path}")
+             continue
+
         matrix = load_matrix(matrix_path)
         preconditioners = build_preconditioners(
             matrix,
             checkpoint=checkpoint,
-            model_config_path=model_template,
-            data_config_path=data_config,
+            model_config_path=model_path,
+            data_config_path=data_path,
             use_jacobi=use_jacobi,
             use_ilu=use_ilu,
         )
@@ -236,9 +228,9 @@ def main(
         )
 
         record = ConditionRecord(
-            dataset=dataset,
-            model=model,
-            config_name=run_id,
+            dataset=str(dataset_id),
+            model=model_name,
+            config_name=exp_name,
             primary_preconditioner=primary,
             cond_original=cond_original,
             cond_preconditioned=cond_precond,
@@ -255,10 +247,10 @@ def main(
     if dry_run or not records:
         return
 
-    figures_root = figures_dir if figures_dir is not None else common_root / "figures"
-    ensure_dir(figures_root)
-    figure_path = plot_summary(records, figures_root, log_scale=log_scale)
-    print(f"Saved comparative figure to {figure_path}")
+    if common_figures_root:
+        ensure_dir(common_figures_root)
+        figure_path = plot_summary(records, common_figures_root, log_scale=log_scale)
+        print(f"Saved comparative figure to {figure_path}")
 
 
 if __name__ == "__main__":
