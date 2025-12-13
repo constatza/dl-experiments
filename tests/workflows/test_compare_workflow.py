@@ -46,12 +46,11 @@ def _write_data_config(path: Path, data_root: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                "[metadata]",
-                'flow_id = "test-flow"',
-                'dataset_id = "test-dataset"',
+                "[flow]",
+                'dataset = "test-dataset"',
                 "",
-                "[paths]",
-                f'data_root = "{data_root}"',
+                "[output]",
+                f'processed_dir = "{data_root}"',
                 "",
             ]
         ),

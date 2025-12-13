@@ -2,8 +2,24 @@
 
 from __future__ import annotations
 
+import sys
 import numpy as np
 import pytest
+from loguru import logger
+
+
+@pytest.fixture(scope="session", autouse=True)
+def configure_logging():
+    """Configure loguru to be safe against closed streams during cleanup."""
+
+    def safe_sink(message):
+        try:
+            sys.stderr.write(message)
+        except ValueError:
+            pass  # Ignore "I/O operation on closed file"
+
+    logger.remove()
+    logger.add(safe_sink)
 
 
 @pytest.fixture

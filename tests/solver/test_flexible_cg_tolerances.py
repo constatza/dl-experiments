@@ -35,10 +35,10 @@ def spd_system() -> tuple[NDArray, NDArray, NDArray]:
     return A, b, solution
 
 
-def test_flexible_cg_non_convergence_strict_atol(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_flexible_cg_convergence_strict_atol(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
     """
-    Tests that flexible_cg does NOT converge with very strict ATOL (1e-8)
-    within max_iter=200 for the spd_system, simulating observed behavior.
+    Tests that flexible_cg DOES converge with very strict ATOL (1e-8)
+    within max_iter=200 for the spd_system.
     """
     A, b, _ = spd_system
     x0 = np.zeros_like(b)
@@ -52,11 +52,11 @@ def test_flexible_cg_non_convergence_strict_atol(spd_system: tuple[NDArray, NDAr
         max_iter=200,
     )
 
-    # Assert that it does NOT converge (as observed previously)
-    assert not info.converged
-    # Assert that the residual is above the strict tolerance
+    # Assert that it DOES converge
+    assert info.converged
+    # Assert that the residual is within the strict tolerance
     expected_bound = _tol_bound(b, TEST_ATOL_STRICT, TEST_RTOL_STRICT)
-    assert info.residual_abs > expected_bound
+    assert info.residual_abs <= expected_bound
 
 
 def test_flexible_cg_convergence_relaxed_atol(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
@@ -83,10 +83,10 @@ def test_flexible_cg_convergence_relaxed_atol(spd_system: tuple[NDArray, NDArray
     assert info.residual_abs <= expected_bound
 
 
-def test_flexible_cg_torch_precond_non_convergence_strict_atol(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_flexible_cg_torch_precond_convergence_strict_atol(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
     """
-    Tests that flexible_cg with torch precond does NOT converge with very strict ATOL (1e-8)
-    within max_iter=20 for the spd_system, simulating observed behavior.
+    Tests that flexible_cg with torch precond DOES converge with very strict ATOL (1e-8)
+    within max_iter=20 for the spd_system.
     """
     try:
         import torch  # type: ignore
@@ -116,11 +116,11 @@ def test_flexible_cg_torch_precond_non_convergence_strict_atol(spd_system: tuple
         rtol=TEST_RTOL_STRICT,
         preconditioner=torch_precond,
     )
-    # Assert that it does NOT converge (as observed previously)
-    assert not neural_info.converged
-    # Assert that the residual is above the strict tolerance
+    # Assert that it DOES converge
+    assert neural_info.converged
+    # Assert that the residual is within the strict tolerance
     expected_bound = _tol_bound(b, TEST_ATOL_STRICT, TEST_RTOL_STRICT)
-    assert neural_info.residual_abs > expected_bound
+    assert neural_info.residual_abs <= expected_bound
 
 
 def test_flexible_cg_torch_precond_convergence_relaxed_atol(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:

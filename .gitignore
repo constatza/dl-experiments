@@ -183,6 +183,7 @@ lightning_logs/
 output*/
 mlruns*/
 mlartifacts*/
+*.json
 
 # Claude Code specific
 .claude/
