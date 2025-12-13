@@ -1,4 +1,9 @@
-"""Utilities for Prefect workflow caching and task management."""
+"""Hashing utilities for workflow caching and change detection.
+
+This module provides pure functions to compute stable hashes for directories,
+files, and output states. These hashes are used by Prefect to determine
+if a task needs to be re-run.
+"""
 
 from __future__ import annotations
 
@@ -17,12 +22,6 @@ def compute_directory_hash(directory: Path | str) -> str:
 
     Returns:
         SHA-1 hash of all Python files (sorted for stability)
-
-    Example:
-        >>> src_hash = compute_directory_hash("graph-cg/src")
-        >>> # Fix a bug in src/training.py
-        >>> new_hash = compute_directory_hash("graph-cg/src")
-        >>> assert src_hash != new_hash  # Cache invalidated
     """
     directory = Path(directory)
     if not directory.exists():
@@ -56,13 +55,6 @@ def compute_outputs_state(output_paths: list[Path]) -> str:
 
     Returns:
         String encoding which files exist (for cache key)
-
-    Example:
-        >>> paths = [Path("checkpoint.ckpt"), Path("plot.png")]
-        >>> state = compute_outputs_state(paths)
-        >>> # Delete checkpoint
-        >>> new_state = compute_outputs_state(paths)
-        >>> assert state != new_state  # Cache invalidated
     """
     # Create stable string representation of which files exist
     states = []
@@ -80,22 +72,11 @@ def compute_experiment_output_hash(output_dir: Path | str) -> str:
     creating a stable representation of directory contents. Hash changes when
     files are added, removed, or modified.
 
-    This enables automatic Prefect cache invalidation when outputs are deleted:
-    - Delete checkpoints → hash changes → training reruns
-    - Delete predictions → hash changes → prediction reruns
-
     Args:
         output_dir: Path to output directory to hash
 
     Returns:
         SHA-1 hash of directory listing, or "empty" if directory doesn't exist
-
-    Example:
-        >>> checkpoint_dir = Path("output/model/data/checkpoints")
-        >>> hash1 = compute_experiment_output_hash(checkpoint_dir)
-        >>> # Delete checkpoint.ckpt
-        >>> hash2 = compute_experiment_output_hash(checkpoint_dir)
-        >>> assert hash1 != hash2  # Cache invalidated
     """
     output_dir = Path(output_dir)
     if not output_dir.exists():
@@ -144,13 +125,6 @@ def compute_data_files_hash(data_dir: Path | str) -> str:
 
     Returns:
         SHA-1 hash of data file contents, or "empty" if directory doesn't exist
-
-    Example:
-        >>> data_dir = Path("/data/projects/graph-cg/data/processed/generate-90-norm")
-        >>> hash1 = compute_data_files_hash(data_dir)
-        >>> # Regenerate data with different parameters
-        >>> hash2 = compute_data_files_hash(data_dir)
-        >>> assert hash1 != hash2  # Cache invalidated, training will re-run
     """
     data_dir = Path(data_dir)
     if not data_dir.exists():
@@ -189,4 +163,24 @@ def compute_data_files_hash(data_dir: Path | str) -> str:
         # If we can't read files, return stable error state
         return "error"
 
+    return hasher.hexdigest()
+
+
+def compute_file_signature(path: Path | str) -> str:
+    """Compute a stable SHA-1 signature for a file's contents.
+    
+    Args:
+        path: Path to the file to hash.
+        
+    Returns:
+        SHA-1 hash of the file content, or "missing" if file not found.
+    """
+    file_path = Path(path)
+    if not file_path.exists():
+        return "missing"
+
+    hasher = hashlib.sha1()
+    with open(file_path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(8192), b""):
+            hasher.update(chunk)
     return hasher.hexdigest()
