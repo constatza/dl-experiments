@@ -18,7 +18,9 @@ EXIT_KEYBOARD_INTERRUPT = 130
 # =============================================================================
 # Default Paths
 # =============================================================================
-DEFAULT_PROJECT_ROOT = Path("/data/projects/graph-cg")
+# Dynamically determine project root relative to this file (src/constants.py)
+# src/constants.py -> src -> project_root
+DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PROCESSED_DATA_DIR = DEFAULT_PROJECT_ROOT / "data" / "processed"
 DEFAULT_OUTPUT_DIR = DEFAULT_PROJECT_ROOT / "data" / "output"
 DEFAULT_FIGURES_DIR = DEFAULT_PROJECT_ROOT / "data" / "figures"
@@ -35,6 +37,11 @@ DEFAULT_FIGURES_DIR_STR = str(DEFAULT_FIGURES_DIR)
 DEFAULT_MODEL_CONFIG = "configs/ffnn.toml"
 DEFAULT_DATA_CONFIG = "data-configs/collect-504-solutions.toml"
 DEFAULT_EXPERIMENTS_CONFIG = "configs/experiments.toml"
+
+# Default Experiment Config Filenames
+EXP_MODEL_CONFIG_NAME = "model.toml"
+EXP_DATA_CONFIG_NAME = "data.toml"
+EXP_SOLVER_CONFIG_NAME = "solver.toml"
 
 # =============================================================================
 # CG Solver Defaults

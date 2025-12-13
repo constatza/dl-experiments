@@ -1,6 +1,8 @@
 # This is the master configuration file.
-# It lists the names of the experiment folders in configs/experiments/ to run.
+# It lists the active experiments and their paths relative to this file.
 
-run = [
-  "ffnn_test_solutions",
-]
+project_root = ".."
+defaults_dir = "experiments/default"
+
+[experiments]
+ffnn_test_solutions = "experiments/ffnn_test_solutions"

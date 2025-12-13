@@ -185,6 +185,8 @@ mlruns*/
 mlartifacts*/
 
 # Claude Code specific
-CLAUDE.md
 .claude/
+.gemini/
+CLAUDE.md
 AGENTS.md
+GEMINI.md
