@@ -1,185 +1,143 @@
-"""Pydantic configuration dataclasses for data generation strategies.
+"""Pydantic models for individual data generation strategy configurations."""
 
-Each strategy has a corresponding config dataclass that defines:
-- Required and optional parameters
-- Type annotations for all parameters
-- Default values
-- Validation rules (via Pydantic)
+from __future__ import annotations
 
-All configs use `frozen=True` for immutability and `extra="forbid"` to reject
-unknown parameters at validation time.
-"""
+from pathlib import Path
+from typing import Literal, Any
 
-from typing import Literal
+from pydantic import BaseModel, Field
 
-import numpy as np
-from pydantic.dataclasses import dataclass
+from ..constants import (
+    DEFAULT_KRYLOV_ITERATIONS,
+    DEFAULT_NOISE_LEVEL,
+    DEFAULT_NOISE_SEED,
+    DEFAULT_RANDOM_SEED,
+    DEFAULT_RESIDUAL_TRACE_ITERS,
+    DEFAULT_SHUFFLE,
+    MIN_MATRIX_SIZE,
+    MIN_TOLERANCE,
+    MAX_ITERATIONS_UPPER_LIMIT,
+    EIGENVECTOR_SELECT_SMALLEST,
+    EigenvectorSelectionMode,
+)
 
+class BaseStrategyConfig(BaseModel):
+    samples: int = Field(
+        ...,
+        description="Number of samples to generate for this strategy. (0=skip, -1=all, >0=exact count)",
+        ge=-1, # samples can be -1 for all
+    )
+    seed: int | None = Field(
+        DEFAULT_RANDOM_SEED, description="Random seed for reproducibility."
+    )
+    shuffle: bool = Field(DEFAULT_SHUFFLE, description="Whether to shuffle the generated samples.")
 
-@dataclass(frozen=True, config={"extra": "forbid", "arbitrary_types_allowed": True})
-class ResidualErrorConfig:
-    """Configuration for CG residual error strategy.
-
-    Generates warm-start vectors by running a few CG iterations and capturing
-    the final residual error after a fixed number of iterations.
-
-    Args:
-        samples: Number of samples to generate.
-        residual_iters: Number of CG iterations to run.
-        seed: Random seed for reproducibility.
-        archive_solutions: Optional pre-computed solution vectors.
-        archive_rhs: Optional pre-computed RHS vectors.
-    """
-
-    samples: int
-    residual_iters: int = 8
-    seed: int = 42
-    archive_solutions: np.ndarray | None = None
-    archive_rhs: np.ndarray | None = None
-
-
-@dataclass(frozen=True, config={"extra": "forbid", "arbitrary_types_allowed": True})
-class ResidualTraceConfig:
-    """Configuration for CG residual trace strategy.
-
-    Generates warm-start vectors by running CG iterations and capturing
-    intermediate residual vectors along the convergence path.
-
-    Args:
-        samples: Number of samples to generate.
-        residual_iters: Number of CG iterations to run.
-        seed: Random seed for reproducibility.
-        archive_solutions: Optional pre-computed solution vectors.
-        archive_rhs: Optional pre-computed RHS vectors.
-    """
-
-    samples: int
-    residual_iters: int = 8
-    seed: int = 42
-    archive_solutions: np.ndarray | None = None
-    archive_rhs: np.ndarray | None = None
+    class Config:
+        extra = "forbid" # Forbid extra fields to catch typos
+        frozen = True # Make configs immutable
 
 
-@dataclass(frozen=True, config={"extra": "forbid"})
-class KrylovConfig:
-    """Configuration for Krylov subspace strategy.
-
-    Generates warm-start vectors from the Krylov subspace by running
-    a specified number of iterations and extracting basis vectors.
-
-    Args:
-        samples: Number of samples to generate.
-        krylov_iters: Dimension of Krylov subspace (number of iterations).
-        seed: Random seed for reproducibility.
-    """
-
-    samples: int
-    krylov_iters: int = 15
-    seed: int = 42
+class BaseEigenvectorConfig(BaseStrategyConfig):
+    which: EigenvectorSelectionMode = Field(
+        EIGENVECTOR_SELECT_SMALLEST, description="Which eigenvalues to compute."
+    )
+    include_eigenvectors: bool = Field(
+        True, description="Whether to include eigenvectors in the generated solutions."
+    )
+    num_eigenvectors: int = Field(
+        1, description="Number of eigenvectors to include.", ge=1
+    )
 
 
-@dataclass(frozen=True, config={"extra": "forbid"})
-class EigenvectorForwardConfig:
-    """Configuration for forward eigenvector strategy.
-
-    Generates warm-start vectors from linear combinations of eigenvectors
-    corresponding to eigenvalues (smallest, largest, or both).
-
-    Args:
-        samples: Number of samples to generate. Defaults to matrix dimension.
-        which: Which eigenvectors to use ("smallest", "largest", or "both").
-        include_eigenvectors: Whether to include pure eigenvectors in output.
-        num_eigenvectors: Number of eigenvectors to use. None or -1 means all.
-        seed: Random seed for reproducibility.
-    """
-
-    samples: int
-    which: Literal["smallest", "largest", "both"] = "smallest"
-    include_eigenvectors: bool = False
-    num_eigenvectors: int | None = None
-    seed: int = 42
+class EigenvectorForwardConfig(BaseEigenvectorConfig):
+    """Configuration for EigenvectorForwardStrategy."""
+    pass
 
 
-@dataclass(frozen=True, config={"extra": "forbid"})
-class EigenvectorInverseConfig:
-    """Configuration for inverse eigenvector strategy.
-
-    Generates warm-start vectors from linear combinations of eigenvectors
-    with inverse eigenvalue weighting.
-
-    Args:
-        samples: Number of samples to generate. Defaults to matrix dimension.
-        which: Which eigenvectors to use ("smallest", "largest", or "both").
-        include_eigenvectors: Whether to include pure eigenvectors in output.
-        num_eigenvectors: Number of eigenvectors to use. None or -1 means all.
-        seed: Random seed for reproducibility.
-    """
-
-    samples: int
-    which: Literal["smallest", "largest", "both"] = "smallest"
-    include_eigenvectors: bool = False
-    num_eigenvectors: int | None = None
-    seed: int = 42
+class EigenvectorInverseConfig(BaseEigenvectorConfig):
+    """Configuration for EigenvectorInverseStrategy."""
+    pass
 
 
-@dataclass(frozen=True, config={"extra": "forbid"})
-class RandomNormalConfig:
-    """Configuration for random normal strategy.
-
-    Generates warm-start vectors by sampling from a normal distribution
-    with configurable scale.
-
-    Args:
-        samples: Number of samples to generate.
-        target_rhs_scale: Scale factor for normal distribution sampling.
-        seed: Random seed for reproducibility.
-    """
-
-    samples: int
-    target_rhs_scale: float = 1.0
-    seed: int = 42
+class KrylovConfig(BaseStrategyConfig):
+    krylov_iters: int = Field(
+        DEFAULT_KRYLOV_ITERATIONS,
+        description="Number of Krylov iterations to perform.",
+        ge=1,
+    )
 
 
-@dataclass(frozen=True, config={"extra": "forbid"})
-class RhsArchiveConfig:
-    """Configuration for RHS archive strategy.
-
-    Loads RHS vectors from files matching a glob pattern, optionally
-    solves the linear systems, and returns the solutions.
-
-    Args:
-        rhs_glob: Glob pattern for RHS files (required).
-        samples: Number of files to load. -1 means all available files.
-        shuffle: Whether to shuffle file selection.
-        seed: Random seed for shuffling. Required if shuffle=True.
-        solve_systems: Whether to solve the linear systems.
-        cg_tolerance: CG relative tolerance for solving.
-        cg_max_iters: CG maximum iterations for solving.
-    """
-
-    rhs_glob: str
-    samples: int = -1
-    shuffle: bool = False
-    seed: int | None = None
-    solve_systems: bool = True
-    cg_tolerance: float = 1e-12
-    cg_max_iters: int = 500
+class RandomNormalConfig(BaseStrategyConfig):
+    target_rhs_scale: float = Field(
+        1.0,
+        description="Target scale for the generated RHS vectors (Euclidean norm).",
+        gt=0.0,
+    )
 
 
-@dataclass(frozen=True, config={"extra": "forbid"})
-class SolutionArchiveConfig:
-    """Configuration for solution archive strategy.
+class ResidualErrorConfig(BaseStrategyConfig):
+    residual_iters: int = Field(
+        DEFAULT_RESIDUAL_TRACE_ITERS,
+        description="Number of residual iterations to trace.",
+        ge=0,
+    )
+    archive_solutions: bool = Field(
+        False,
+        description="Whether to archive intermediate solutions for each iteration step.",
+    )
+    archive_rhs: bool = Field(
+        False,
+        description="Whether to archive intermediate RHS vectors for each iteration step.",
+    )
 
-    Loads solution vectors from files matching a glob pattern.
 
-    Args:
-        solutions_glob: Glob pattern for solution files (required).
-        samples: Number of files to load. -1 means all available files.
-        shuffle: Whether to shuffle file selection.
-        seed: Random seed for shuffling. Required if shuffle=True.
-    """
+class ResidualTraceConfig(BaseStrategyConfig):
+    residual_iters: int = Field(
+        DEFAULT_RESIDUAL_TRACE_ITERS,
+        description="Number of residual iterations to trace.",
+        ge=0,
+    )
+    archive_solutions: bool = Field(
+        False,
+        description="Whether to archive intermediate solutions for each iteration step.",
+    )
+    archive_rhs: bool = Field(
+        False,
+        description="Whether to archive intermediate RHS vectors for each iteration step.",
+    )
 
-    solutions_glob: str
-    samples: int = -1
-    shuffle: bool = False
-    seed: int | None = None
+
+class RhsArchiveConfig(BaseStrategyConfig):
+    rhs_glob: str = Field(
+        ..., description="Glob pattern for RHS files to load. Overrides source.rhs_path."
+    )
+    solve_systems: bool = Field(
+        True, description="Whether to solve the systems (A x = b) to get solutions."
+    )
+    cg_tolerance: float = Field(
+        MIN_TOLERANCE, description="CG convergence tolerance.", ge=MIN_TOLERANCE
+    )
+    cg_max_iters: int = Field(
+        MAX_ITERATIONS_UPPER_LIMIT,
+        description="Maximum CG iterations.",
+        ge=1,
+        le=MAX_ITERATIONS_UPPER_LIMIT,
+    )
+
+
+class SolutionArchiveConfig(BaseStrategyConfig):
+    solutions_glob: str = Field(
+        ..., description="Glob pattern for solution files to load. Overrides source.solutions_path."
+    )
+
+
+class MixedStrategyConfig(BaseModel):
+    """Configuration for a mix of strategies. (Not directly used by `generate` methods)"""
+    pass
+
+class GenerationConfig(BaseModel):
+    """Overall configuration for data generation."""
+    # This represents the structure of the [generation] section in the config
+    # Add fields as needed to match the actual data generation config structure.
+    # For now, it's a placeholder.
+    pass

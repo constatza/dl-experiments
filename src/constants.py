@@ -7,6 +7,7 @@ maintainability and avoid duplication.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 # =============================================================================
 # Exit Codes
@@ -34,8 +35,8 @@ DEFAULT_RESULTS_DIR = str(DEFAULT_OUTPUT_DIR)
 DEFAULT_FIGURES_DIR_STR = str(DEFAULT_FIGURES_DIR)
 
 # Default configuration file paths (relative to graph-cg root)
-DEFAULT_MODEL_CONFIG = "configs/ffnn.toml"
-DEFAULT_DATA_CONFIG = "data-configs/collect-504-solutions.toml"
+DEFAULT_MODEL_CONFIG = "configs/experiments/default/ffnn.toml"
+DEFAULT_DATA_CONFIG = "configs/datasets/collect-504-solutions.toml"
 DEFAULT_EXPERIMENTS_CONFIG = "configs/experiments.toml"
 
 # Default Experiment Config Filenames
@@ -103,6 +104,14 @@ DEFAULT_TEST_SAMPLE_INDEX = (
     0  # Which sample to extract for single-sample comparison tasks
 )
 
+
+# =============================================================================
+# Eigenvector Selection
+# =============================================================================
+EIGENVECTOR_SELECT_SMALLEST = "smallest"
+EIGENVECTOR_SELECT_LARGEST = "largest"
+EIGENVECTOR_SELECT_RANDOM = "random"
+EigenvectorSelectionMode = Literal["smallest", "largest", "random"]
 
 # =============================================================================
 # Config Section Names (for TOML parsing)

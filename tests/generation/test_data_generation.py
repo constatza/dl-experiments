@@ -903,19 +903,18 @@ def test_eigenvector_backward_compatible_defaults(tmp_path: Path) -> None:
 # =============================================================================
 
 
-def test_pydantic_rejects_unknown_parameters() -> None:
-    """Test that Pydantic validation rejects unknown parameters due to extra='forbid'.
-
-    Note: The orchestration layer filters out unknown parameters before passing to strategies,
-    so this test validates by directly instantiating the config class.
-    """
-    from src.generation.strategy_configs import KrylovConfig
-    from pydantic import ValidationError
-
-    # Try to create a config with an unknown parameter directly
-    with pytest.raises(ValidationError, match="Unexpected keyword argument"):
-        KrylovConfig(samples=10, unknown_param=123)
-
+    def test_pydantic_rejects_unknown_parameters() -> None:
+        """Test that Pydantic validation rejects unknown parameters due to extra='forbid'.
+    
+        Note: The orchestration layer filters out unknown parameters before passing to strategies,
+        so this test validates by directly instantiating the config class.
+        """
+        from src.generation.strategy_configs import KrylovConfig
+        from pydantic import ValidationError
+    
+        # Try to create a config with an unknown parameter directly
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            KrylovConfig(samples=10, unknown_param=123)
 
 def test_pydantic_rejects_invalid_literal_values() -> None:
     """Test that Pydantic validation rejects invalid Literal values."""

@@ -3,6 +3,7 @@
 
 project_root = ".."
 defaults_dir = "experiments/default"
+output_dir = "/data/projects/graph-cg/data/output"
 
 [experiments]
 ffnn_test_solutions = "experiments/ffnn_test_solutions"

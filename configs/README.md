@@ -27,7 +27,7 @@ dataset = "collect-504-norm"
 
 All orchestrators (`scripts/train_model.py`, `scripts/predict.py`, `scripts/compare_methods.py`, PCA
 helpers) accept a `--data-config` argument and call
-`load_config_with_context(model_config, data_config)` to resolve unified paths:
+`load_experiment(model_config, data_config)` to resolve unified paths:
 
 - Dataset artefacts (`data/processed/<flow>/<dataset>/...`)
 - Training runs (`output/<flow>/train/<dataset>/<run_id>`)

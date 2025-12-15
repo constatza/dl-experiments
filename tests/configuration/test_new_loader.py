@@ -8,8 +8,8 @@ import tomllib
 import pytest
 from dlkit import GeneralSettings
 
-from src.configuration.loader import load_experiments
-from src.paths.core import FlowContext
+from src.configuration.loader import load_batch
+from src.configuration.domain import ExperimentBatch, RunnableExperiment, ExperimentWorkspace
 from src.constants import (
     EXP_MODEL_CONFIG_NAME,
     EXP_DATA_CONFIG_NAME,
@@ -64,47 +64,47 @@ def temp_config_structure(tmp_path: Path) -> Path:
 
 
 def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
-    """Test that load_experiments correctly loads and resolves a mix of experiments."""
+    """Test that load_batch correctly loads and resolves a mix of experiments."""
     monkeypatch.chdir(temp_config_structure)
     
-    experiments = load_experiments(
+    batch = load_batch(
         master_config_path=temp_config_structure / "configs" / "experiments.toml",
     )
 
-    assert len(experiments) == 2
+    assert len(batch.experiments) == 2
     
-    exp1_name, exp1_settings, exp1_context, exp1_model, exp1_data, exp1_solver = experiments[0]
-    exp2_name, exp2_settings, exp2_context, exp2_model, exp2_data, exp2_solver = experiments[1]
+    exp1 = batch.experiments[0]
+    exp2 = batch.experiments[1]
 
     # --- Check Experiment 1 (all files present) ---
-    assert exp1_name == "exp1"
-    assert exp1_settings is not None
-    assert isinstance(exp1_context, FlowContext)
+    assert exp1.spec.id == "exp1"
+    assert exp1.settings is not None
+    assert isinstance(exp1.workspace, ExperimentWorkspace)
     
     # Check paths are correct
-    assert exp1_model.name == EXP_MODEL_CONFIG_NAME
-    assert "exp1" in str(exp1_model)
-    assert exp1_data.name == "exp1_data.toml"
-    assert "datasets" in str(exp1_data)
-    assert exp1_solver.name == EXP_SOLVER_CONFIG_NAME
-    assert "exp1" in str(exp1_solver)
+    assert exp1.spec.model_config_path.name == EXP_MODEL_CONFIG_NAME
+    assert "exp1" in str(exp1.spec.model_config_path)
+    assert exp1.spec.data_config_path.name == "exp1_data.toml"
+    assert "datasets" in str(exp1.spec.data_config_path)
+    assert exp1.spec.solver_config_path.name == EXP_SOLVER_CONFIG_NAME
+    assert "exp1" in str(exp1.spec.solver_config_path)
 
     # Check that the correct solver config was loaded
-    assert exp1_settings.EXTRAS.solver_config["general"]["rtol"] == 1e-5
+    assert exp1.settings.EXTRAS.solver_config["general"]["rtol"] == 1e-5
 
     # --- Check Experiment 2 (fallback) ---
-    assert exp2_name == "exp2_fallback"
+    assert exp2.spec.id == "exp2_fallback"
     
     # Check paths are correct (data and solver should point to default)
-    assert exp2_model.name == EXP_MODEL_CONFIG_NAME
-    assert "exp2_fallback" in str(exp2_model)
-    assert exp2_data.name == "default_data.toml" # Fallback
-    assert "datasets" in str(exp2_data)
-    assert exp2_solver.name == EXP_SOLVER_CONFIG_NAME # Fallback
-    assert "default" in str(exp2_solver)
+    assert exp2.spec.model_config_path.name == EXP_MODEL_CONFIG_NAME
+    assert "exp2_fallback" in str(exp2.spec.model_config_path)
+    assert exp2.spec.data_config_path.name == "default_data.toml" # Fallback
+    assert "datasets" in str(exp2.spec.data_config_path)
+    assert exp2.spec.solver_config_path.name == EXP_SOLVER_CONFIG_NAME # Fallback
+    assert "default" in str(exp2.spec.solver_config_path)
 
     # Check that the correct (default) solver config was loaded
-    assert exp2_settings.EXTRAS.solver_config["general"]["rtol"] == 1e-6
+    assert exp2.settings.EXTRAS.solver_config["general"]["rtol"] == 1e-6
 
 
 def test_load_experiments_file_not_found(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
@@ -123,6 +123,6 @@ def test_load_experiments_file_not_found(temp_config_structure: Path, monkeypatc
     (temp_config_structure / "configs" / "experiments" / "exp3_missing").mkdir()
     
     with pytest.raises(FileNotFoundError, match=EXP_MODEL_CONFIG_NAME):
-        load_experiments(
+        load_batch(
             master_config_path=temp_config_structure / "configs" / "experiments.toml",
         )

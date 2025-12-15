@@ -22,6 +22,6 @@ type = "ilu"
 [[solvers]]
 name = "neural"
 type = "neural"
-limit_iters = 1
+limit_iters = 100
 fallback = "jacobi"
 apply_every = 1

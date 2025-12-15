@@ -10,7 +10,12 @@ from typing import Any, Literal
 import numpy as np
 from scipy.linalg import eigh, norm
 
-from .types import ArchiveData
+from ..constants import (
+    EIGENVECTOR_SELECT_SMALLEST,
+    EIGENVECTOR_SELECT_LARGEST,
+    EIGENVECTOR_SELECT_RANDOM,
+)
+from .interfaces import ArchiveData
 
 
 def rng_from_seed(seed: int | None) -> np.random.Generator:
@@ -397,18 +402,18 @@ def _select_eigenvectors(
         )
     if count <= 0:
         raise ValueError(f"Sample count must be positive, got {count}")
-    if which == "smallest":
+    if which == EIGENVECTOR_SELECT_SMALLEST:
         indices = np.arange(count)
-    elif which == "largest":
+    elif which == EIGENVECTOR_SELECT_LARGEST:
         indices = np.arange(n - count, n)
-    elif which == "random":
+    elif which == EIGENVECTOR_SELECT_RANDOM:
         indices = rng.choice(n, size=count, replace=False)
     else:
         raise ValueError(
-            f"Invalid which: '{which}'. Must be 'smallest', 'largest', or 'random'"
+            f"Invalid which: '{which}'. Must be '{EIGENVECTOR_SELECT_SMALLEST}', "
+            f"'{EIGENVECTOR_SELECT_LARGEST}', or '{EIGENVECTOR_SELECT_RANDOM}'"
         )
     return eigenvectors[:, indices], eigenvalues[indices], indices
-
 
 def _generate_eigenvector_combinations(
     eigenvectors: np.ndarray,

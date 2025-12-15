@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
+from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
 from ..helpers import select_archive_files
 from ..runner import register_strategy
 from ..strategy_configs import SolutionArchiveConfig
@@ -113,6 +113,7 @@ class SolutionArchiveStrategy(IMatrixOnlyGenerationStrategy):
         rhs: np.ndarray | None,
         *,
         cfg: dict[str, Any],
+        archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
         """Load solution vectors from archive and compute RHS = A @ x.
 
@@ -124,6 +125,7 @@ class SolutionArchiveStrategy(IMatrixOnlyGenerationStrategy):
                 - samples: Number of files to load
                 - shuffle: Whether to shuffle file selection
                 - seed: Random seed for shuffling
+            archive: Optional pre-loaded archive data (ignored by this strategy as it loads from disk)
 
         Returns:
             GeneratedSamples with loaded solutions and computed RHS

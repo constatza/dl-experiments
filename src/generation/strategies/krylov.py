@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.linalg import norm
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
+from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import KrylovConfig
 
@@ -24,7 +24,19 @@ class KrylovStrategy(IMatrixOnlyGenerationStrategy):
         rhs: np.ndarray | None,
         *,
         cfg: dict,
+        archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
+        """Generate samples using Krylov subspace methods.
+
+        Args:
+            matrix: System matrix
+            rhs: Mother RHS (ignored)
+            cfg: Configuration dictionary
+            archive: Optional archive data (ignored)
+
+        Returns:
+            GeneratedSamples with Krylov-generated solutions
+        """
         # Validate and convert to typed config
         config = KrylovConfig(**cfg)
 

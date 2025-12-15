@@ -435,7 +435,7 @@ class TestPydanticValidation:
         from pydantic import ValidationError
 
         # Try to create a config with an unknown parameter
-        with pytest.raises(ValidationError, match="Unexpected keyword argument"):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
             KrylovConfig(samples=10, unknown_param=123)
 
     def test_pydantic_rejects_invalid_literal_values(self) -> None:
@@ -458,8 +458,8 @@ class TestPydanticValidation:
         config2 = EigenvectorForwardConfig(samples=10, which="largest")
         assert config2.which == "largest"
 
-        config3 = EigenvectorForwardConfig(samples=10, which="both")
-        assert config3.which == "both"
+        config3 = EigenvectorForwardConfig(samples=10, which="random")
+        assert config3.which == "random"
 
     def test_pydantic_requires_rhs_glob(self) -> None:
         """Test that rhs_glob is required for RhsArchiveConfig."""
@@ -500,12 +500,12 @@ class TestPydanticValidation:
     def test_pydantic_frozen_prevents_mutation(self) -> None:
         """Test that frozen=True prevents mutation of config objects."""
         from src.generation.strategy_configs import KrylovConfig
-        from dataclasses import FrozenInstanceError
+        from pydantic import ValidationError
 
         config = KrylovConfig(samples=10, krylov_iters=15)
 
-        # Try to modify a field (Pydantic dataclasses raise FrozenInstanceError)
-        with pytest.raises(FrozenInstanceError, match="cannot assign to field"):
+        # Try to modify a field (Pydantic raises ValidationError for frozen models)
+        with pytest.raises(ValidationError, match="Instance is frozen"):
             config.krylov_iters = 20
 
     def test_pydantic_accepts_valid_configs(self) -> None:

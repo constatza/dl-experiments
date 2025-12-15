@@ -12,12 +12,10 @@ from typing import Any, Literal
 import numpy as np
 
 from ..constants import (
-    NOISE_STRATEGY_NONE,
-    DEFAULT_NOISE_LEVEL,
-    DEFAULT_NOISE_SEED,
     REORTHOG_STRICT_THRESHOLD,
     ConfigKeys,
 )
+from ..workflows.specs import ComparisonParams, PreconditionerLimits
 from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from ..file_operations import ensure_dir, sanitize_identifier
 from ..configuration.loader import load_data_context
@@ -35,28 +33,10 @@ from ..preconditioner_factory import (
 )
 
 
-# TODO: Re-implement noise generators
-# from ..noise_generators import create_noise_strategy
-def create_noise_strategy(*args, **kwargs):
-    """Stub for noise strategy - to be re-implemented."""
-    return None
-
-
 from ..plotting import plot_convergence_comparison
 from ..validation import validate_matrix, validate_rhs_vector, validate_solver_params
 
 
-NoiseStrategyName = Literal[
-    "none",
-    "global",
-    "single_dim",
-    "blockwise",
-    "worst_case",
-    "load_redistribution",
-    "missing_data",
-    "corrupted_data",
-    "extreme_magnitude",
-]
 ReorthogonalizationName = Literal["none", "full", "partial", "selective"]
 StoppingCriterionName = Literal["tolerance", "fixed_iterations"]
 
@@ -77,9 +57,7 @@ def compare_preconditioners(
     pca_path: str | Path | None = None,
     output_dir: str | Path | None = None,
     solver_config_path: str | Path | None = None,
-    noise_strategy: NoiseStrategyName = NOISE_STRATEGY_NONE,
-    noise_level: float = DEFAULT_NOISE_LEVEL,
-    noise_seed: int | None = DEFAULT_NOISE_SEED,
+    params: ComparisonParams | None = None,
     save_plots: bool = True,
     figures_dir: str | Path | None = None,
     breakdown_tol: float | None = None,
@@ -93,9 +71,41 @@ def compare_preconditioners(
     custom_combinations: Sequence[tuple[str, str, str]] | None = None,
 ) -> dict[str, Any]:
     """Compare preconditioner, warm-start, and helper strategies."""
+    # Merge params and legacy kwargs
+    if params is None:
+        limits = PreconditionerLimits(
+            apply_every=precond_every,
+            first_n=precond_first_n,
+            neural_iters=neural_precond_iters,
+            fallback_preconditioner=fallback_preconditioner,
+        )
+        params = ComparisonParams(
+            matrix=matrix_path if matrix_path else None,
+            rhs=rhs_path if rhs_path else None,
+            output_dir=output_dir if output_dir else None,
+            figures_dir=Path(figures_dir) if figures_dir else None,
+            save_plots=save_plots,
+            breakdown_tol=breakdown_tol,
+            limits=limits,
+            reorthogonalize=reorthogonalize,
+            reorthog_window=reorthog_window,
+            reorthog_threshold=reorthog_threshold,
+        )
+    figures_dir = params.figures_dir or (Path(figures_dir) if figures_dir else None)
+    save_plots = params.save_plots
+    breakdown_tol = params.breakdown_tol
+    neural_precond_iters = params.limits.neural_iters
+    fallback_preconditioner = params.limits.fallback_preconditioner
+    precond_every = params.limits.apply_every
+    precond_first_n = params.limits.first_n
+    reorthogonalize = params.reorthogonalize
+    reorthog_window = params.reorthog_window
+    reorthog_threshold = params.reorthog_threshold
     # Optional data context (no model config required)
     context, data_config, data_config_path_resolved = load_data_context(
-        data_config_path
+        data_config_path,
+        model_config_path=config_path,
+        solver_config_path=solver_config_path,
     )
     if context is None:
         raise ValueError(
@@ -107,12 +117,14 @@ def compare_preconditioners(
         Path(general_params.matrix_path) if general_params.matrix_path else None
     )
     config_rhs = Path(general_params.rhs_path) if general_params.rhs_path else None
-    supplied_matrix = Path(matrix_path) if matrix_path is not None else None
-    supplied_rhs = Path(rhs_path) if rhs_path is not None else None
+    supplied_matrix = Path(params.matrix) if params.matrix is not None else None
+    supplied_rhs = Path(params.rhs) if params.rhs is not None else None
 
     checkpoint_file = checkpoint_path
     # Resolve output root
-    if output_dir is not None:
+    if params.output_dir is not None:
+        output_path = Path(params.output_dir)
+    elif output_dir is not None:
         output_path = Path(output_dir)
     elif context is not None:
         output_path = Path(context.flow.output_root)
@@ -163,12 +175,6 @@ def compare_preconditioners(
         print(f"Matrix condition number (2-norm): {cond_num:.3e}")
     except Exception as exc:  # noqa: BLE001
         print(f"Matrix condition number unavailable: {exc}")
-
-    if noise_strategy != NOISE_STRATEGY_NONE:
-        noise_fn = create_noise_strategy(
-            noise_strategy, noise_level, seed=noise_seed, A=A
-        )
-        b = noise_fn(b)
 
     rtol = general_params.rtol
     atol = general_params.atol

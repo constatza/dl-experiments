@@ -14,7 +14,7 @@ from typing import Any
 
 from dlkit import GeneralSettings
 
-from .paths import FlowContext
+from .configuration import ExperimentWorkspace
 
 
 def ensure_dir(path: str | Path) -> Path:
@@ -58,7 +58,7 @@ def sanitize_identifier(value: str, default: str = "run") -> str:
 
 def derive_model_identifier(
     settings: GeneralSettings,
-    context: FlowContext,
+    context: ExperimentWorkspace,
     config_path: str | Path,
 ) -> str:
     """Derive a stable model identifier for artifact naming.
@@ -73,7 +73,7 @@ def derive_model_identifier(
 
     Args:
         settings: General settings
-        context: Flow context
+        context: Experiment workspace
         config_path: Path to config file
 
     Returns:

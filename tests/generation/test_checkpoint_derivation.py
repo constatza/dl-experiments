@@ -171,11 +171,7 @@ class TestPathConventionConsistency:
     """Tests ensuring path convention is consistent across codebase."""
 
     def test_matches_workflow_convention(self, tmp_path: Path) -> None:
-        """Test that derived path matches prepare_experiment_outputs convention.
-
-        This ensures consistency between compare_methods.py and workflow_prefect.py.
-        The workflow uses: {output_root}/{data_config_stem}/{model_name}/checkpoints/
-        """
+        """Test that derived path matches prepare_experiment_outputs convention."""
         model_config = tmp_path / "model.toml"
         model_config.write_text("""
 [SESSION]

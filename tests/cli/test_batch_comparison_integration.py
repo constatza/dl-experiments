@@ -18,6 +18,8 @@ from typer.testing import CliRunner
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.compare_methods import main
+from src.configuration.domain import ExperimentWorkspace
+from src.workflows.specs import ComparisonSpec, ComparisonOutcome
 
 runner = CliRunner()
 
@@ -31,56 +33,51 @@ def test_script_help():
     assert result.exit_code == 0
     assert "Compare preconditioner methods" in result.stdout
 
-@patch("scripts.compare_methods.load_experiments")
-def test_script_execution_no_experiments(mock_load):
-    """Test script execution when no experiments are returned."""
-    mock_load.return_value = []
-    
-    import typer
-    test_app = typer.Typer()
-    test_app.command()(main)
-    
-    result = runner.invoke(test_app, ["--experiments", "dummy.toml"])
-    
-    assert result.exit_code == 0
-    mock_load.assert_called_once()
+@patch("scripts.compare_methods.build_batch_comparisons")
+def test_script_execution_no_experiments(mock_build_batch):
+    """Exit with failure when no comparison specs are built."""
+    mock_build_batch.return_value = []
 
-@patch("scripts.compare_methods.load_experiments")
-@patch("scripts.compare_methods.run_single_comparison")
-@patch("scripts.compare_methods.get_latest_checkpoint")
-def test_script_execution_mock_experiment(mock_get_ckpt, mock_run_single, mock_load, tmp_path):
-    """Test script with a mock experiment."""
-    # Setup mocks
-    mock_context = MagicMock()
-    mock_context.training.base_dir = tmp_path
-    mock_context.training.checkpoint_dir = tmp_path / "checkpoints"
-    mock_context.run_id = "test_run"
-    mock_context.data.dataset_id = "test_data"
-    
-    mock_load.return_value = [
-        ("test_exp", MagicMock(), mock_context, Path("m.toml"), Path("d.toml"), Path("s.toml"))
-    ]
-    
-    # Mock checkpoint path to be a MagicMock so we can set exists()
-    mock_path = MagicMock(spec=Path)
-    mock_path.exists.return_value = True
-    mock_path.__str__.return_value = "ckpt.pt"
-    mock_get_ckpt.return_value = mock_path
-    
-    mock_run_single.return_value = {
-        "preconditioners": ["none", "neural"],
-        "summary": "Mock Summary",
-        "results": {},
-        "plot_paths": {"convergence": Path("plot.png")}
-    }
-    
     import typer
     test_app = typer.Typer()
     test_app.command()(main)
-    
+
+    result = runner.invoke(test_app, ["--experiments", "dummy.toml"])
+
+    assert result.exit_code != 0
+    mock_build_batch.assert_called_once()
+
+
+@patch("scripts.compare_methods.run_comparisons")
+@patch("scripts.compare_methods.build_batch_comparisons")
+def test_script_execution_mock_experiment(mock_build_batch, mock_run, tmp_path):
+    """Happy-path execution with one comparison spec."""
+    workspace = ExperimentWorkspace(
+        root_dir=tmp_path / "root",
+        data_dir=tmp_path / "data",
+        checkpoint_dir=tmp_path / "ckpts",
+        figures_dir=tmp_path / "figs",
+        predictions_dir=tmp_path / "preds",
+        run_id="test_model",
+    )
+    spec = ComparisonSpec(
+        name="test_exp",
+        model_config=Path("m.toml"),
+        data_config=Path("d.toml"),
+        solver_config=Path("s.toml"),
+        workspace=workspace,
+        checkpoint=tmp_path / "ckpts" / "ckpt.pt",
+    )
+    mock_build_batch.return_value = [spec]
+    outcome = ComparisonOutcome(name="test_exp", success=True, payload={"summary": "ok"})
+    mock_run.return_value = [outcome]
+
+    import typer
+    test_app = typer.Typer()
+    test_app.command()(main)
+
     result = runner.invoke(test_app, ["--experiments", "dummy.toml", "--no-plots"])
-    
+
     assert result.exit_code == 0
-    mock_load.assert_called_once()
-    mock_get_ckpt.assert_called()
-    mock_run_single.assert_called_once()
+    mock_build_batch.assert_called_once()
+    mock_run.assert_called_once()

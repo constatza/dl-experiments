@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
-from .interfaces import GeneratedSamples
+from .interfaces import GeneratedSamples, ArchiveData
 
 # =============================================================================
 # CONSTANTS
@@ -37,21 +37,6 @@ class StrategyOutput:
     solutions: np.ndarray
     residual_traces: ResidualTraceSamples | None = None
     error_traces: ErrorTraceSamples | None = None
-
-
-@dataclass(frozen=True)
-class ArchiveData:
-    """Container for pre-computed solutions and RHS vectors.
-
-    Used when loading from solution archives instead of generating random data.
-
-    Attributes:
-        solutions: Solution vectors, shape (N, n)
-        rhs_vectors: Optional pre-computed RHS vectors, shape (N, n)
-    """
-
-    solutions: np.ndarray
-    rhs_vectors: np.ndarray | None = None
 
 
 @dataclass(frozen=True)

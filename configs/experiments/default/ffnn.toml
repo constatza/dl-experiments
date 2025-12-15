@@ -6,7 +6,7 @@ precision = "float64"
 # NormScaled linear FFNN with layer normalization
 name = "NormScaledConstantWidthFFNN"
 module_path = "dlkit.nn.ffnn"
-hidden_size = 1000
+hidden_size = 500
 num_layers = 1
 # checkpoint path is managed dynamically by workflow - no hardcoded path needed
 
@@ -21,7 +21,7 @@ mode = "linear"
 
 
 [TRAINING.trainer]
-max_epochs = 600
+max_epochs = 500
 accelerator = "auto"
 enable_checkpointing = true
 
@@ -77,9 +77,6 @@ enabled = true
 backend_store_uri = "sqlite:////data/projects/graph-cg/data/mlruns/mlflow.db"
 artifacts_destination = "/data/projects/graph-cg/data/mlartifacts"
 
-[MLFLOW.client]
-# Connect to flow-level MLflow server started by workflow
-tracking_uri = "http://127.0.0.1:5000"
 
 [OPTUNA]
 enabled = false

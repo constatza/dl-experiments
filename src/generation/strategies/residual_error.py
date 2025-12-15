@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IDataGenerationStrategy
+from ..interfaces import GeneratedSamples, IDataGenerationStrategy, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import ResidualErrorConfig
-from ..types import ArchiveData
 from ...solver import SolverResult, flexible_cg
 from ..helpers import (
     _load_or_generate_solutions,
@@ -15,16 +14,6 @@ from ..helpers import (
     _build_trace_indices,
 )
 from ...normalization import ErrorTraceSamples
-
-
-def _build_archive(
-    solutions: np.ndarray,
-    rhs: np.ndarray | None,
-) -> ArchiveData:
-    """Normalize archive inputs into ArchiveData."""
-    sols = np.asarray(solutions, dtype=np.float64)
-    rhs_vectors = None if rhs is None else np.asarray(rhs, dtype=np.float64)
-    return ArchiveData(solutions=sols, rhs_vectors=rhs_vectors)
 
 
 @register_strategy
@@ -41,7 +30,19 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
         rhs: np.ndarray | None,
         *,
         cfg: dict,
+        archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
+        """Generate samples with full residual error traces.
+
+        Args:
+            matrix: System matrix
+            rhs: Mother RHS vector (required)
+            cfg: Configuration dictionary
+            archive: Optional archive data to seed generation
+
+        Returns:
+            GeneratedSamples with error_traces populated
+        """
         if rhs is None:
             raise ValueError("cg_residual_error requires rhs input")
 
@@ -51,10 +52,10 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
         count = config.samples
         cg_iters = config.residual_iters
         rng = np.random.default_rng(config.seed)
-        archive = None
-        if config.archive_solutions is not None:
-            archive = _build_archive(config.archive_solutions, config.archive_rhs)
-
+        
+        # Ensure archive is available if requested?
+        # For now, just use what is passed.
+        
         n = matrix.shape[0]
         sols = _load_or_generate_solutions(count, n, rng, 1.0, archive)
         rhs_samples = _load_or_compute_rhs(matrix, sols, archive)

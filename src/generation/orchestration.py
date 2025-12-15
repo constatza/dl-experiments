@@ -15,6 +15,7 @@ from .trace_utils import (
     _merge_residual_traces,
     _merge_error_traces,
 )
+from .interfaces import ArchiveData
 
 
 def _shuffle_samples(
@@ -152,8 +153,10 @@ def generate_mixture(
         cfg = overrides.get(strategy_name, {}).copy()
         cfg.setdefault("samples", count)
         cfg.setdefault("seed", seed)
-        cfg.setdefault("archive_solutions", archive_solutions)
-        cfg.setdefault("archive_rhs", archive_rhs)
+        
+        archive_data: ArchiveData | None = None
+        if archive_solutions is not None:
+            archive_data = ArchiveData(solutions=archive_solutions, rhs_vectors=archive_rhs)
 
         # For counts_represent_final_pairs mode, we need to read residual_iters from config
         adjusted_count = count
@@ -178,12 +181,18 @@ def generate_mixture(
 
         # Filter cfg to only include fields that the strategy's ConfigType accepts
         config_type = strategy.ConfigType
-        valid_fields = set(config_type.__dataclass_fields__.keys())
+        if hasattr(config_type, "model_fields"):
+            valid_fields = set(config_type.model_fields.keys())
+        elif hasattr(config_type, "__dataclass_fields__"):
+            valid_fields = set(config_type.__dataclass_fields__.keys())
+        else:
+            # Fallback for plain classes or TypedDicts if necessary, though expected types are defined
+            valid_fields = set(cfg.keys())
         filtered_cfg = {k: v for k, v in cfg.items() if k in valid_fields}
 
         # Run generation with Pydantic validation
         try:
-            generated = run_generation(strategy_name, A, rhs_to_pass, cfg=filtered_cfg)
+            generated = run_generation(strategy_name, A, rhs_to_pass, cfg=filtered_cfg, archive=archive_data)
         except ValidationError as e:
             raise ValueError(
                 f"Invalid configuration for strategy '{strategy_name}': {e}"

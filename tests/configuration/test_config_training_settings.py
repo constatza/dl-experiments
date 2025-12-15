@@ -8,7 +8,7 @@ import tomllib
 
 import pytest
 
-from src.configuration import load_config
+from src.configuration import load_experiment
 
 
 MINIMAL_FFNN_CONFIG = """
@@ -74,7 +74,7 @@ name = "GNNModel"
 def test_training_sections_round_trip(
     tmp_path: Path, config_content_template: str
 ) -> None:
-    """Ensure load_config preserves trainer callbacks/metrics from a temporary file."""
+    """Ensure load_experiment preserves trainer callbacks/metrics from a temporary file."""
     # Create necessary directories that dlkit expects
     (tmp_path / "output").mkdir()
     
@@ -99,13 +99,17 @@ def test_training_sections_round_trip(
     # Use a dummy default solver config to avoid filesystem dependency
     solver_path = tmp_path / "solver.toml"
     solver_path.write_text("[general]")
+    
+    # Create dummy data config
+    data_path = tmp_path / "data.toml"
+    data_path.write_text('[flow]\ndataset="dummy_dataset"')
 
-    # Ensure this temporary solver_path also exists
-    solver_path.parent.mkdir(parents=True, exist_ok=True)
-    solver_path.write_text("[general]")
-
-
-    settings, _ = load_config(config_path, solver_config_path=solver_path)
+    experiment = load_experiment(
+        config_path, 
+        data_config_path=data_path, 
+        solver_config_path=solver_path
+    )
+    settings = experiment.settings
     training = settings.TRAINING
     assert training is not None, "TRAINING section missing"
 
@@ -114,7 +118,3 @@ def test_training_sections_round_trip(
 
     actual_metric_names = tuple(metric.name for metric in training.metrics)
     assert actual_metric_names == expected_metric_names
-
-    # The test does not need to check `model_copy` behavior
-    # patched_training = training.model_copy(update={"epochs": training.epochs + 2})
-    # assert patched_training.trainer.callbacks == training.trainer.callbacks

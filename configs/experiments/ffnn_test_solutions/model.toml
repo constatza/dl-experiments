@@ -7,7 +7,7 @@ precision = "float64"
 name = "NormScaledConstantWidthFFNN"
 module_path = "dlkit.nn.ffnn"
 hidden_size = 504
-num_layers = 8
+num_layers = 1
 # checkpoint path is managed dynamically by workflow - no hardcoded path needed
 
 [TRAINING]
@@ -21,7 +21,7 @@ mode = "linear"
 
 
 [TRAINING.trainer]
-max_epochs = 600
+max_epochs = 400
 accelerator = "auto"
 enable_checkpointing = true
 
@@ -42,7 +42,7 @@ name = "AdamW"
 [TRAINING.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
-patience = 15
+patience = 30
 min_lr = 1e-14
 
 [[TRAINING.metrics]]

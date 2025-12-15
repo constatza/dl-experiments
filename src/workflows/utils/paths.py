@@ -29,9 +29,15 @@ def extract_model_name(model_config_path: Path | str) -> str:
             config = tomllib.load(f)
         session = config.get("SESSION") or {}
         name = session.get("name")
-        if not isinstance(name, str) or not name:
-            name = model_config_path.stem
-        return name
+        if isinstance(name, str) and name:
+            return name
+        model_cfg = config.get("MODEL") or {}
+        model_name = model_cfg.get("name")
+        if isinstance(model_name, str) and model_name:
+            return model_name
+        raise ValueError(
+            "Model name missing. Please set [SESSION].name or [MODEL].name in the model config."
+        )
     except (FileNotFoundError, tomllib.TOMLDecodeError):
         return model_config_path.stem
 

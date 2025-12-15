@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""CLI entry point for running the graph-cg experiment matrix.
-
-This script provides a simple command-line interface to run all experiments
-defined in configs/experiments.toml. It orchestrates data generation and model
-training using Prefect for caching and parallelization.
-
-Usage:
-    # Run all experiments
-    uv run python scripts/run_experiments.py
-
-    # Use custom experiments config
-    uv run python scripts/run_experiments.py --config custom-experiments.toml
-
-Benefits:
-    - Config coordination: Automatic path resolution ensures each model trains
-      on correct data
-    - Incremental computation: Prefect caches based on input hashes (only reruns
-      when configs change)
-    - Parallelization: All data generation runs in parallel; training
-      parallelized per data source
-    - Simplicity: Model configs stay as templates, runtime merging handles
-      coordination
-"""
+"""CLI entry point for running the graph-cg experiment matrix without Prefect."""
 
 from __future__ import annotations
 
@@ -33,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import typer
 
-from src.workflows.flow import run_experiment_matrix_flow
+from src.workflows.runner import run_experiment_matrix
 from src.constants import (
     DEFAULT_EXPERIMENTS_CONFIG,
     EXIT_FAILURE,
@@ -84,23 +62,27 @@ def main(
     try:
         print(f"Running experiments from: {config}")
         if force:
-            print("Force mode enabled: Ignoring caches and filesystem checks")
+            print("Force mode enabled: ignoring caches and filesystem checks")
         print()
 
-        # Run the experiment matrix flow
-        results = run_experiment_matrix_flow(
-            experiments_config_path=str(config),
+        results = run_experiment_matrix(
+            experiments_config_path=config,
             force=force,
+            project_root=graph_cg_root,
         )
 
         print("\n" + "=" * 80)
         print("Summary")
         print("=" * 80)
         print(f"\nCompleted {len(results)} experiments:")
-        for name in results:
-            print(f"  ✓ {name}")
+        for res in results:
+            status = "✓" if res.is_success else "✗"
+            detail = f" ({res.error})" if res.error else ""
+            print(f"  {status} {res.experiment_id}{detail}")
 
-        print("\nAll experiments completed successfully!")
+        failures = [r for r in results if not r.is_success]
+        if failures:
+            raise typer.Exit(code=EXIT_FAILURE)
 
     except Exception as e:
         print(f"\nError: {e}")

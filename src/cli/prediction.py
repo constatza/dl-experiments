@@ -14,7 +14,7 @@ from dlkit.core.postprocessing import stack_batches
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 from dlkit.tools.io import load_array
 
-from ..configuration import load_config
+from ..configuration import load_experiment
 from ..file_operations import derive_model_identifier, sanitize_identifier
 from ..plotting import plot_parity_and_residuals, plot_prediction_diagnostics
 
@@ -325,12 +325,14 @@ def run_inference(
     figures_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run inference for parity plot generation using DLKit."""
-    settings, context = load_config(config_path, data_config_path)
+    experiment = load_experiment(config_path, data_config_path)
+    settings = experiment.settings
+    workspace = experiment.workspace
 
     if features_path is not None:
         features_file = Path(features_path)
     else:
-        features_file = context.data.features_file
+        features_file = workspace.data_dir / "normalized.npz"
         if not features_file.exists():
             raise ValueError(
                 "No features path specified. Provide features_path or include [DATASET] in config."
@@ -339,7 +341,7 @@ def run_inference(
     if targets_path is not None:
         targets_file = Path(targets_path)
     else:
-        targets_file = context.data.targets_file
+        targets_file = workspace.data_dir / "normalized.npz"
         if not targets_file.exists():
             raise ValueError(
                 "No targets path specified. Provide targets_path or include [DATASET] in config."
@@ -473,17 +475,14 @@ def run_inference(
         and y_arr is not None
     ):
         figures_root = (
-            Path(figures_dir) if figures_dir is not None else context.flow.figures_root
+            Path(figures_dir) if figures_dir is not None else workspace.figures_dir
         )
         figures_root.mkdir(parents=True, exist_ok=True)
 
-        dataset_id = getattr(getattr(context, "data", None), "dataset_id", None)
-        if dataset_id is None and data_config_path is not None:
-            dataset_id = Path(data_config_path).stem
-        dataset_id = dataset_id or "dataset"
-
+        dataset_id = experiment.spec.data_config_path.stem
+        
         run_identifier = _derive_run_identifier(
-            settings, context, checkpoint_to_use, config_path
+            settings, workspace, checkpoint_to_use, config_path
         )
         dataset_slug = sanitize_identifier(str(dataset_id))
         run_identifier = sanitize_identifier(run_identifier)

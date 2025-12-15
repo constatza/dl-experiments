@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import tomli_w
 from pathlib import Path
-from src.workflows.flow import run_experiment_matrix_flow
+from src.workflows.runner import run_experiment_matrix
 import os
 
 def test_run_experiments_full_flow(tmp_path):
@@ -80,39 +80,35 @@ def test_run_experiments_full_flow(tmp_path):
     
     model_config_path = exp_dir / "model.toml"
     model_config = {
-        "SESSION": {
-            "seed": 42,
-            "precision": "float64",
-            "name": "test_model"
-        },
-        "MODEL": {
-            "name": "NormScaledConstantWidthFFNN",
-            "module_path": "dlkit.nn.ffnn",
-            "hidden_size": 16,
-            "num_layers": 2
-        },
-        "TRAINING": {
-            "lr_tuner": {
-                "min_lr": 1e-4,
-                "max_lr": 1e-2,
-                "num_training": 2,
-                "mode": "linear"
-            },
+                                "SESSION": {
+                                    "seed": 42,
+                                    "precision": "float64",
+                                    "name": "test_model"
+                                },
+                                "MODEL": {
+                                    "name": "NormScaledConstantWidthFFNN",
+                                    "module_path": "dlkit.nn.ffnn",
+                                    "hidden_size": 2,
+                                    "num_layers": 1
+        },        "TRAINING": {
             "trainer": {
-                "max_epochs": 1,
-                "accelerator": "cpu",
-                "enable_checkpointing": True,
-                "callbacks": [
-                    {
-                        "name": "ModelCheckpoint",
-                        "filename": "test_ckpt",
-                        "monitor": "val_loss",
-                        "save_top_k": 1,
-                        "every_n_epochs": 1,
-                        "enable_version_counter": False
-                    }
-                ]
-            },
+                    "max_epochs": 1,
+                    "accelerator": "cpu",
+                    "enable_checkpointing": True,
+                    "num_sanity_val_steps": 0,
+                    "limit_train_batches": 1,
+                    "limit_val_batches": 1,
+                    "callbacks": [
+                        {
+                            "name": "ModelCheckpoint",
+                            "filename": "test_ckpt",
+                            "monitor": "val_loss",
+                            "save_top_k": 1,
+                            "every_n_epochs": 1,
+                            "enable_version_counter": False
+                        }
+                    ]
+                },
             "optimizer": {
                 "lr": 1e-3,
                 "name": "AdamW"
@@ -174,12 +170,12 @@ def test_run_experiments_full_flow(tmp_path):
     os.environ["GRAPH_CG_OUTPUT_DIR"] = str(data_dir / "output")
 
     # 7. Run the flow
-    results = run_experiment_matrix_flow(
+    results = run_experiment_matrix(
         experiments_config_path=master_config_path,
         force=True,
         project_root=tmp_path
     )
-    
-    assert exp_name in results
-    assert "checkpoint_path" in results[exp_name]
-    assert results[exp_name]["checkpoint_path"].exists()
+
+    assert len(results) == 1
+    assert results[0].experiment_id == "test_model"
+    assert results[0].status == "Success"

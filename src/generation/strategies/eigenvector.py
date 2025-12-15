@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
+from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import EigenvectorForwardConfig, EigenvectorInverseConfig
 from ..helpers import (
@@ -36,7 +36,19 @@ class EigenvectorForwardStrategy(IMatrixOnlyGenerationStrategy):
         rhs: np.ndarray | None,
         *,
         cfg: dict[str, Any],
+        archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
+        """Generate samples based on eigenvectors (forward mode).
+
+        Args:
+            matrix: System matrix
+            rhs: Mother RHS (ignored)
+            cfg: Configuration dictionary
+            archive: Optional archive data (ignored)
+
+        Returns:
+            GeneratedSamples with eigenvector-based solutions
+        """
         # Validate and convert to typed config
         config = EigenvectorForwardConfig(**cfg)
 
@@ -100,7 +112,19 @@ class EigenvectorInverseStrategy(IMatrixOnlyGenerationStrategy):
         rhs: np.ndarray | None,
         *,
         cfg: dict[str, Any],
+        archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
+        """Generate samples based on eigenvectors (inverse mode).
+
+        Args:
+            matrix: System matrix
+            rhs: Mother RHS (ignored)
+            cfg: Configuration dictionary
+            archive: Optional archive data (ignored)
+
+        Returns:
+            GeneratedSamples with eigenvector-based RHS and solved solutions
+        """
         # Validate and convert to typed config
         config = EigenvectorInverseConfig(**cfg)
 

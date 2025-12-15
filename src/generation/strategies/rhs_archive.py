@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 from scipy.sparse.linalg import cg as scipy_cg
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
+from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
 from ...validation import validate_rhs_vector as validate_rhs
 from ..helpers import select_archive_files
 from ..runner import register_strategy
@@ -141,6 +141,7 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
         rhs: np.ndarray | None,
         *,
         cfg: dict[str, Any],
+        archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
         """Load RHS vectors from archive and optionally solve systems.
 
@@ -155,6 +156,7 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
                 - solve_systems: Whether to solve systems
                 - cg_tolerance: CG relative tolerance
                 - cg_max_iters: CG max iterations
+            archive: Optional pre-loaded archive data (ignored by this strategy as it loads from disk)
 
         Returns:
             GeneratedSamples with loaded RHS and optionally solved solutions

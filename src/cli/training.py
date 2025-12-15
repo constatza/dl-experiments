@@ -9,7 +9,7 @@ Functional architecture:
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,7 @@ from dlkit.interfaces.api import execute
 from dlkit.tools.config.data_entries import Feature, FeatureType, Target, TargetType
 from dlkit.tools.config.core.updater import update_settings
 
-from ..configuration import load_config
+from ..configuration import load_experiment, RunnableExperiment, ExperimentWorkspace
 from ..system_loading import get_latest_checkpoint
 from ..file_operations import derive_model_identifier, sanitize_identifier
 from ..constants import DEFAULT_MLRUNS_DIR
@@ -29,7 +29,6 @@ from ..pca_training import (
     save_pca_model,
     plot_variance_ratios,
 )
-from ..paths import FlowContext
 from dlkit.tools.config.dataset_settings import DatasetSettings
 
 
@@ -106,7 +105,7 @@ def _load_training_arrays(data_path: Path) -> TrainingArrays:
 
 def _load_and_prepare_data(
     settings: GeneralSettings,
-    context: FlowContext,
+    workspace: ExperimentWorkspace,
 ) -> tuple[TrainingArrays, list[FeatureType], list[TargetType]]:
     """Load training data and create Feature/Target configurations.
 
@@ -114,12 +113,12 @@ def _load_and_prepare_data(
 
     Args:
         settings: Training settings for dataset type resolution
-        context: Flow context with data paths
+        workspace: Experiment workspace with data paths
 
     Returns:
         Tuple of (arrays, features, targets)
     """
-    arrays = _load_training_arrays(context.training.data.features_file)
+    arrays = _load_training_arrays(workspace.data_dir / "normalized.npz")
     dataset_name = settings.DATASET.name if settings.DATASET else None
     features = _create_feature_configs(arrays, dataset_name)
     targets = _create_target_configs(arrays)
@@ -265,26 +264,26 @@ def _resolve_dataset(
 
 def _configure_session(
     settings: GeneralSettings,
-    context: FlowContext,
+    workspace: ExperimentWorkspace,
     session_name: str | None,
-) -> tuple[GeneralSettings, FlowContext]:
+) -> tuple[GeneralSettings, ExperimentWorkspace]:
     """Apply session name override to settings and context.
 
     Pure function: computes new configuration without side effects.
 
     Args:
         settings: Base settings object
-        context: Base flow context
+        workspace: Experiment workspace
         session_name: Optional session name override
 
     Returns:
-        Tuple of (updated_settings, updated_context)
+        Tuple of (updated_settings, updated_workspace)
 
     Raises:
         ValueError: If SESSION section is missing
     """
     if session_name is None:
-        return settings, context
+        return settings, workspace
 
     session_cfg = settings.SESSION
     if session_cfg is None:
@@ -292,9 +291,9 @@ def _configure_session(
 
     session_cfg = session_cfg.model_copy(update={"name": session_name})
     settings = settings.model_copy(update={"SESSION": session_cfg})
-    context = context.with_run_id(session_name)
+    workspace = replace(workspace, run_id=session_name)
 
-    return settings, context
+    return settings, workspace
 
 
 def _configure_callbacks(
@@ -379,7 +378,7 @@ def _configure_output_paths(
 
 def _configure_mlflow(
     settings: GeneralSettings,
-    context: FlowContext,
+    dataset_id: str,
 ) -> GeneralSettings:
     """Configure MLflow experiment tracking.
 
@@ -387,7 +386,7 @@ def _configure_mlflow(
 
     Args:
         settings: Base settings object
-        context: Flow context containing dataset identifier
+        dataset_id: Identifier for the dataset (MLflow experiment name)
 
     Returns:
         New settings with MLflow configuration
@@ -395,69 +394,66 @@ def _configure_mlflow(
     if not settings.MLFLOW:
         return settings
 
+    model_cfg = settings.MODEL
+    model_name = getattr(model_cfg, "name", None) if model_cfg is not None else None
+    if not isinstance(model_name, str) or not model_name:
+        raise ValueError("Config is missing [MODEL].name required for MLflow run naming")
+
     updated = update_settings(
         settings,
-        {"MLFLOW": {"client": {"experiment_name": context.data.dataset_id}}},
+        {
+            "MLFLOW": {
+                "client": {
+                    "experiment_name": dataset_id,
+                    "run_name": model_name,
+                }
+            }
+        },
     )
     # update_settings returns BasicSettings but we need GeneralSettings
     # Safe cast since GeneralSettings extends BasicSettings
     return updated  # type: ignore[return-value]
 
 
-def _setup_mlflow_tracking_uri() -> None:
-    """Set up MLflow tracking URI environment variable.
-
-    Action function: modifies environment variable to ensure MLflow uses
-    the correct backend store location.
-
-    Sets MLFLOW_TRACKING_URI to point to the default mlruns directory
-    if not already set, ensuring mlflow.db is created in the expected
-    location rather than the current working directory.
-    """
-    if "MLFLOW_TRACKING_URI" not in os.environ:
-        mlruns_dir = DEFAULT_MLRUNS_DIR
-        mlruns_dir.mkdir(parents=True, exist_ok=True)
-        tracking_uri = f"file://{mlruns_dir.resolve()}"
-        os.environ["MLFLOW_TRACKING_URI"] = tracking_uri
-
-
 def _configure_training_pipeline(
     settings: GeneralSettings,
-    context: FlowContext,
+    workspace: ExperimentWorkspace,
     features: list[FeatureType],
     targets: list[TargetType],
     session_name: str | None,
     output_dir: Path | None,
     accelerator: str | None,
     checkpoint_filename: str | None,
-) -> tuple[GeneralSettings, FlowContext]:
+    dataset_id: str,
+) -> tuple[GeneralSettings, ExperimentWorkspace]:
     """Apply all configuration transformations to settings.
 
     Impure function: chains configuration steps (includes directory validation I/O).
 
     Args:
         settings: Base settings
-        context: Flow context
+        workspace: Experiment workspace
         features: Feature configurations
         targets: Target configurations
         session_name: Optional session name override
         output_dir: Optional output directory override
         accelerator: Optional accelerator override
         checkpoint_filename: Optional checkpoint filename
+        dataset_id: Dataset identifier for MLflow
 
     Returns:
-        Tuple of (configured_settings, updated_context)
+        Tuple of (configured_settings, updated_workspace)
     """
     settings = _resolve_dataset(settings, features, targets)
-    settings, context = _configure_session(settings, context, session_name)
+    settings, workspace = _configure_session(settings, workspace, session_name)
     settings = _configure_output_paths(
         settings,
         output_dir,
         accelerator,
         checkpoint_filename,
     )
-    settings = _configure_mlflow(settings, context)
-    return settings, context
+    settings = _configure_mlflow(settings, dataset_id)
+    return settings, workspace
 
 
 def _log_dataset_debug(dataset: Any) -> None:
@@ -526,29 +522,40 @@ def train_model(
         RuntimeError: If no checkpoint is found after training
     """
     # Phase 1: Load (action)
-    settings, context = load_config(config_path, data_config_path)
-    _, features, targets = _load_and_prepare_data(settings, context)
+    experiment = load_experiment(
+        config_path,
+        data_config_path,
+        output_root=Path(output_dir) if output_dir is not None else None,
+    )
+    settings = experiment.settings
+    workspace = experiment.workspace
+    
+    # We need to extract the dataset ID before we lose the spec in helpers
+    dataset_id = experiment.spec.data_config_path.stem
+
+    _, features, targets = _load_and_prepare_data(settings, workspace)
 
     # Phase 2: Configure (pure)
-    settings, context = _configure_training_pipeline(
+    output_root = workspace.root_dir
+    settings, workspace = _configure_training_pipeline(
         settings,
-        context,
+        workspace,
         features,
         targets,
         session_name,
-        Path(output_dir) if output_dir else None,
+        output_root,
         accelerator,
         checkpoint_filename,
+        dataset_id,
     )
 
     _log_dataset_debug(settings.DATASET)
 
     # Phase 3: Execute (action)
-    _setup_mlflow_tracking_uri()
-    execute(settings, run_name=context.run_id)  # type: ignore[arg-type]
+    execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
 
     # Phase 4: Finalize (action)
-    checkpoint_dir = context.training.checkpoint_dir
+    checkpoint_dir = workspace.checkpoint_dir
     checkpoint_path = get_latest_checkpoint(checkpoint_dir)
     if checkpoint_path is None:
         raise RuntimeError(f"No checkpoint found in {checkpoint_dir}")
@@ -566,12 +573,14 @@ def train_pca_preconditioner(
     normalize: bool = True,
 ) -> tuple[Path, Path]:
     """Train PCA preconditioner on solution samples."""
-    settings, context = load_config(config_path, data_config_path)
+    experiment = load_experiment(config_path, data_config_path)
+    settings = experiment.settings
+    workspace = experiment.workspace
 
     solution_samples = (
         Path(solution_samples_path)
         if solution_samples_path is not None
-        else context.data.targets_file
+        else workspace.data_dir / "normalized.npz"
     )
     if not solution_samples.exists():
         raise ValueError(
@@ -579,7 +588,7 @@ def train_pca_preconditioner(
         )
 
     if output_path is None:
-        base_output = context.flow.output_root
+        base_output = workspace.root_dir
         output_path = base_output / "pca" / f"pca_{n_components}comp.pt"
     output_path = Path(output_path)
 
@@ -588,11 +597,11 @@ def train_pca_preconditioner(
     )
     save_pca_model(pca, stats, output_path)
 
-    figures_dir = context.flow.figures_root
+    figures_dir = workspace.figures_dir
     figures_dir.mkdir(parents=True, exist_ok=True)
-    dataset_slug = sanitize_identifier(context.data.dataset_id)
+    dataset_slug = sanitize_identifier(experiment.spec.data_config_path.stem)
     model_slug = sanitize_identifier(
-        derive_model_identifier(settings, context, config_path)
+        derive_model_identifier(settings, workspace, config_path)
     )
     plot_filename = f"pca_variance_{dataset_slug}-{model_slug}_{n_components}comp.png"
     plot_path = figures_dir / plot_filename

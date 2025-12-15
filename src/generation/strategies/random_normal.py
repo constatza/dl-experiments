@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
+from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import RandomNormalConfig
 
@@ -23,7 +23,19 @@ class RandomNormalStrategy(IMatrixOnlyGenerationStrategy):
         rhs: np.ndarray | None,
         *,
         cfg: dict,
+        archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
+        """Generate random normal solutions and compute RHS.
+
+        Args:
+            matrix: System matrix
+            rhs: Mother RHS (ignored)
+            cfg: Configuration dictionary
+            archive: Optional archive data (ignored)
+
+        Returns:
+            GeneratedSamples with random normal solutions
+        """
         # Validate and convert to typed config
         config = RandomNormalConfig(**cfg)
 

@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-from collections.abc import Mapping
+from typing import Any, Mapping
+
+
 
 import numpy as np
 
@@ -441,7 +442,7 @@ def _execute_plan(
 
 
 def process_config(
-    config: dict[str, Any], config_path: Path | str | None = None
+    config: Mapping[str, Any], config_path: Path | str | None = None
 ) -> Path:
     """Process a data config and execute the declared generation plan.
 
