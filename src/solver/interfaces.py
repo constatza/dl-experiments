@@ -150,7 +150,7 @@ class IIterativeSolver(ISolver):
         self,
         residual: NDArray,
         rhs_norm: float,
-        criterion: "IConvergenceCriterion",
+        criterion: IConvergenceCriterion,
     ) -> bool:
         """Check if convergence criterion is satisfied.
 

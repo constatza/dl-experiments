@@ -1,7 +1,6 @@
 """Test initial residual logging in scipy CG wrapper."""
 
 import numpy as np
-import pytest
 from src.solver.pcg_solver import cg_solve
 from src.solver.event_logging import VectorLogger
 
@@ -37,7 +36,8 @@ def test_scipy_cg_initial_residual_zero_guess():
 
     event_log = VectorLogger()
     x, result = cg_solve(
-        A, b,
+        A,
+        b,
         x0=None,  # Zero guess
         tol=1e-6,
         maxiter=20,
@@ -65,7 +65,8 @@ def test_scipy_cg_initial_residual_nonzero_guess():
 
     event_log = VectorLogger()
     x, result = cg_solve(
-        A, b,
+        A,
+        b,
         x0=x0,
         tol=1e-6,
         maxiter=20,
@@ -100,14 +101,10 @@ def test_scipy_cg_vs_fcg_consistency():
     x0 = np.zeros(n)
 
     # Solve with scipy CG
-    x_scipy, result_scipy = preconditioned_cg(
-        A, b, x0=x0, rtol=1e-6, max_iter=20
-    )
+    x_scipy, result_scipy = preconditioned_cg(A, b, x0=x0, rtol=1e-6, max_iter=20)
 
     # Solve with FCG
-    x_fcg, result_fcg = flexible_cg(
-        A, b, x0=x0, rtol=1e-6, max_iterations=20
-    )
+    x_fcg, result_fcg = flexible_cg(A, b, x0=x0, rtol=1e-6, max_iterations=20)
 
     # Both should have iteration 0 in history
     assert result_scipy.residual_history is not None
@@ -120,5 +117,7 @@ def test_scipy_cg_vs_fcg_consistency():
     assert np.isclose(result_fcg.residual_history[0], 1.0, rtol=1e-10)
 
     # Both should have absolute residual = ||b||
-    assert np.isclose(result_scipy.residual_history_abs[0], np.linalg.norm(b), rtol=1e-10)
+    assert np.isclose(
+        result_scipy.residual_history_abs[0], np.linalg.norm(b), rtol=1e-10
+    )
     assert np.isclose(result_fcg.residual_history_abs[0], np.linalg.norm(b), rtol=1e-10)

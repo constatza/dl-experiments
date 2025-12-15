@@ -405,8 +405,7 @@ def _select_eigenvectors(
         indices = rng.choice(n, size=count, replace=False)
     else:
         raise ValueError(
-            f"Invalid which: '{which}'. "
-            f"Must be 'smallest', 'largest', or 'random'"
+            f"Invalid which: '{which}'. Must be 'smallest', 'largest', or 'random'"
         )
     return eigenvectors[:, indices], eigenvalues[indices], indices
 
@@ -459,7 +458,9 @@ def _verify_solution_accuracy(
         residual = A @ solutions[i] - rhs_vectors[i]
         rhs_norm = np.linalg.norm(rhs_vectors[i])
         rel_residuals[i] = (
-            np.linalg.norm(residual) / rhs_norm if rhs_norm > 0 else np.linalg.norm(residual)
+            np.linalg.norm(residual) / rhs_norm
+            if rhs_norm > 0
+            else np.linalg.norm(residual)
         )
         if rel_residuals[i] > tolerance:
             warnings.warn(

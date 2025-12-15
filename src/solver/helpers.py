@@ -27,10 +27,12 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from loguru import logger
 import numpy as np
 from scipy.linalg import norm
 
-from .convergence import IConvergenceCriterion
+from .convergence import CombinedToleranceCriterion, IConvergenceCriterion
+from ..constants import DEFAULT_RTOL, DEFAULT_ATOL
 from .state import IterationState
 
 if TYPE_CHECKING:
@@ -122,7 +124,9 @@ def convergence_check(
     References:
         Algorithm.md, Step 1: convergence_check.
     """
-    applied_criterion = criterion or CombinedToleranceCriterion(DEFAULT_RTOL, DEFAULT_ATOL)
+    applied_criterion = criterion or CombinedToleranceCriterion(
+        DEFAULT_RTOL, DEFAULT_ATOL
+    )
 
     r_k_norm = norm(r_k)
     threshold = applied_criterion.threshold(b_norm)
@@ -199,7 +203,6 @@ def curvature(
 
     if d_raw <= 0 or d_raw < curvature_threshold:
         # Restart with steepest descent direction
-        p_new = z_k
         # Caller will compute: q_new = A @ p_new
         # Return d_new based on p_new^T q_new (will be computed by caller)
         new_state = replace(state, restart=True, num_restarts=state.num_restarts + 1)
@@ -280,11 +283,9 @@ def step_length(
 
     # Check for NaN/Inf in numerator (preconditioner or residual problem)
     if not np.isfinite(numerator):
-        return 0.0, replace(state, breakdown=True)
-
-    # Check denominator is safe for division (SciPy-style safeguard)
-    # This prevents catastrophic cancellation and overflow in alpha
-    if abs(d_k) < eps_breakdown:
+        logger.warning(
+            "FCG Breakdown: Numerator (p_k^T r_k) is not finite. Value: {}", numerator
+        )
         return 0.0, replace(state, breakdown=True)
 
     # Compute step length
@@ -292,6 +293,12 @@ def step_length(
 
     # Check for NaN/Inf in result
     if not np.isfinite(alpha):
+        logger.warning(
+            "FCG Breakdown: Computed alpha is not finite. Value: {}, Numerator: {}, Denominator: {}",
+            alpha,
+            numerator,
+            d_k,
+        )
         return 0.0, replace(state, breakdown=True)
 
     return alpha, state

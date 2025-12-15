@@ -10,7 +10,8 @@ Each strategy specifies either:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
+from collections.abc import Mapping, Sequence
 
 from ..constants import ConfigKeys
 
@@ -109,9 +110,7 @@ class GenerationPlan:
         """Get all synthetic (non-archive) strategies."""
         excluded = {ConfigKeys.TYPE_RHS_ARCHIVE, ConfigKeys.TYPE_SOLUTION_ARCHIVE}
         return {
-            name: spec
-            for name, spec in self.strategies.items()
-            if name not in excluded
+            name: spec for name, spec in self.strategies.items() if name not in excluded
         }
 
 

@@ -84,9 +84,11 @@ def with_dataset_arrays(
     features = list(create_features_from_array(rhs, name="rhs"))
 
     # Include matrix if provided and dataset is GraphDataset
-    dataset_name = getattr(settings.DATASET, "name", None) if hasattr(
-        settings, "DATASET"
-    ) else None
+    dataset_name = (
+        getattr(settings.DATASET, "name", None)
+        if hasattr(settings, "DATASET")
+        else None
+    )
 
     if matrix is not None and dataset_name == "GraphDataset":
         features.append(create_matrix_feature(matrix))

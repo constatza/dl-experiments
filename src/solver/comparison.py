@@ -84,8 +84,12 @@ def _scheduled_preconditioner(
             use_main = False
 
         if use_main:
-            return _invoke_preconditioner(active_precond, active_pattern, residual, context)
-        return _invoke_preconditioner(fallback_precond, fallback_pattern, residual, context)
+            return _invoke_preconditioner(
+                active_precond, active_pattern, residual, context
+            )
+        return _invoke_preconditioner(
+            fallback_precond, fallback_pattern, residual, context
+        )
 
     return wrapped
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Diagnostic script to verify normalization consistency between data files.
+"""Diagnostic script to verify normalization consistency between data files.
 
 This script checks:
 1. Whether normalized.npz and comparison.npz have matching normalization metadata
@@ -56,7 +55,12 @@ def compare_metadata(meta1: dict, meta2: dict, name1: str, name2: str) -> list[s
     differences = []
 
     # Compare normalization parameters
-    for key in ["normalize_type", "spectral_radius_bound", "dimension_scale", "composite_scale"]:
+    for key in [
+        "normalize_type",
+        "spectral_radius_bound",
+        "dimension_scale",
+        "composite_scale",
+    ]:
         if key in meta1 and key in meta2:
             val1, val2 = meta1[key], meta2[key]
             if isinstance(val1, float) and isinstance(val2, float):
@@ -72,13 +76,17 @@ def compare_metadata(meta1: dict, meta2: dict, name1: str, name2: str) -> list[s
             else:
                 print(f"  ✓ {key}: {val1} (match)")
         elif key in meta1 or key in meta2:
-            differences.append(f"  ❌ {key}: only in {name1 if key in meta1 else name2}")
+            differences.append(
+                f"  ❌ {key}: only in {name1 if key in meta1 else name2}"
+            )
 
     # Compare array shapes
     for key in ["matrix_shape", "rhs_shape", "solutions_shape"]:
         if key in meta1 and key in meta2:
             if meta1[key] != meta2[key]:
-                differences.append(f"  ❌ {key}: {name1}={meta1[key]}, {name2}={meta2[key]}")
+                differences.append(
+                    f"  ❌ {key}: {name1}={meta1[key]}, {name2}={meta2[key]}"
+                )
             else:
                 print(f"  ✓ {key}: {meta1[key]} (match)")
 
@@ -101,7 +109,7 @@ def verify_directory(data_dir: Path) -> bool:
     print(f"Loading normalization metadata from {normalized_path.name}...")
     norm_meta = load_normalization_metadata(normalized_path)
 
-    print(f"\nNormalized data:")
+    print("\nNormalized data:")
     for key, value in norm_meta.items():
         if isinstance(value, tuple):
             print(f"  {key}: {value}")
@@ -114,7 +122,7 @@ def verify_directory(data_dir: Path) -> bool:
         print(f"\nLoading normalization metadata from {comparison_path.name}...")
         comp_meta = load_normalization_metadata(comparison_path)
 
-        print(f"\nComparison data:")
+        print("\nComparison data:")
         for key, value in comp_meta.items():
             if isinstance(value, tuple):
                 print(f"  {key}: {value}")
@@ -148,7 +156,9 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python verify_normalization.py <data_directory>")
         print("\nExample:")
-        print("  python verify_normalization.py /data/projects/graph-cg/data/processed/collect-504-solutions")
+        print(
+            "  python verify_normalization.py /data/projects/graph-cg/data/processed/collect-504-solutions"
+        )
         sys.exit(1)
 
     data_dir = Path(sys.argv[1])

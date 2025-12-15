@@ -26,7 +26,7 @@ def plot_residual_history(
 
     for name, info in results.items():
         # Handle both dict and dataclass results
-        if hasattr(info, 'residual_history'):
+        if hasattr(info, "residual_history"):
             residual_history = info.residual_history
         elif isinstance(info, dict):
             residual_history = info.get("residual_history", [])
@@ -34,18 +34,18 @@ def plot_residual_history(
             residual_history = []
 
         if residual_history:
-            plt.semilogy(residual_history, label=name, marker='o', markersize=4)
+            plt.semilogy(residual_history, label=name, marker="o", markersize=4)
 
-    plt.xlabel('CG Iteration')
-    plt.ylabel('Relative Residual $\\|r\\| / \\|b\\|$')
-    plt.title('Convergence History Comparison (Relative)')
+    plt.xlabel("CG Iteration")
+    plt.ylabel("Relative Residual $\\|r\\| / \\|b\\|$")
+    plt.title("Convergence History Comparison (Relative)")
     plt.legend()
     plt.grid(True, alpha=0.3)
 
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=200, bbox_inches='tight')
+        plt.savefig(save_path, dpi=200, bbox_inches="tight")
 
     if show:
         plt.show()
@@ -68,7 +68,7 @@ def plot_convergence_comparison(
 
     for name, info in results.items():
         # Handle both dict and dataclass results
-        if hasattr(info, 'residual_history'):
+        if hasattr(info, "residual_history"):
             residual_history = info.residual_history
         elif isinstance(info, dict):
             residual_history = info.get("residual_history") or []
@@ -77,11 +77,11 @@ def plot_convergence_comparison(
 
         if residual_history:
             iterations = range(len(residual_history))
-            ax.semilogy(iterations, residual_history, 'o-', label=name, markersize=4)
+            ax.semilogy(iterations, residual_history, "o-", label=name, markersize=4)
 
-    ax.set_xlabel('Iteration')
-    ax.set_ylabel('Relative Residual $\\|r\\| / \\|b\\|$')
-    ax.set_title('Convergence History Comparison (Relative)')
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Relative Residual $\\|r\\| / \\|b\\|$")
+    ax.set_title("Convergence History Comparison (Relative)")
     ax.grid(True, alpha=0.3)
     ax.legend()
 
@@ -90,7 +90,7 @@ def plot_convergence_comparison(
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=200, bbox_inches='tight')
+        plt.savefig(save_path, dpi=200, bbox_inches="tight")
 
     if show:
         plt.show()
@@ -132,27 +132,33 @@ def plot_parity_residuals(
         np.min([axes[0].get_xlim(), axes[0].get_ylim()]),
         np.max([axes[0].get_xlim(), axes[0].get_ylim()]),
     ]
-    axes[0].plot(lims, lims, 'k--', alpha=0.8, zorder=0)
-    axes[0].set_xlabel('True')
-    axes[0].set_ylabel('Predicted')
-    axes[0].set_title('Parity Plot')
-    axes[0].text(0.05, 0.95, f'R² = {r2:.3f}\nRMSE = {rmse:.3e}\nMAE = {mae:.3e}',
-                transform=axes[0].transAxes, fontsize=10, verticalalignment='top',
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    axes[0].plot(lims, lims, "k--", alpha=0.8, zorder=0)
+    axes[0].set_xlabel("True")
+    axes[0].set_ylabel("Predicted")
+    axes[0].set_title("Parity Plot")
+    axes[0].text(
+        0.05,
+        0.95,
+        f"R² = {r2:.3f}\nRMSE = {rmse:.3e}\nMAE = {mae:.3e}",
+        transform=axes[0].transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+    )
 
     # Residuals plot
     axes[1].scatter(y_pred, residuals, alpha=0.6, s=20)
-    axes[1].axhline(y=0, color='k', linestyle='--', alpha=0.8)
-    axes[1].set_xlabel('Predicted')
-    axes[1].set_ylabel('Residuals (Pred - True)')
-    axes[1].set_title('Residuals Plot')
+    axes[1].axhline(y=0, color="k", linestyle="--", alpha=0.8)
+    axes[1].set_xlabel("Predicted")
+    axes[1].set_ylabel("Residuals (Pred - True)")
+    axes[1].set_title("Residuals Plot")
 
     plt.tight_layout()
 
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=200, bbox_inches='tight')
+        plt.savefig(save_path, dpi=200, bbox_inches="tight")
 
     if show:
         plt.show()
@@ -179,7 +185,9 @@ def plot_noise_robustness(
 
     # Use matplotlib Set1 colormap for consistent colors
     colors = cm.Set1(np.linspace(0, 1, max(len(methods), 3)))
-    method_colors = {method: colors[i % len(colors)] for i, method in enumerate(methods)}
+    method_colors = {
+        method: colors[i % len(colors)] for i, method in enumerate(methods)
+    }
 
     fig = plt.figure(figsize=(12, 8))
 
@@ -191,7 +199,7 @@ def plot_noise_robustness(
             if method in noise_results[level]:
                 result = noise_results[level][method]
                 # Handle both dict and dataclass results
-                if hasattr(result, 'iterations'):
+                if hasattr(result, "iterations"):
                     iters = result.iterations
                 elif isinstance(result, dict):
                     iters = result.get("iterations", 0)
@@ -201,19 +209,26 @@ def plot_noise_robustness(
                 levels_numeric.append(float(level))
 
         if iterations:
-            plt.plot(levels_numeric, iterations, 'o-',
-                    label=method, color=method_colors[method], linewidth=2, markersize=6)
+            plt.plot(
+                levels_numeric,
+                iterations,
+                "o-",
+                label=method,
+                color=method_colors[method],
+                linewidth=2,
+                markersize=6,
+            )
 
-    plt.xlabel('Noise Level (%)')
-    plt.ylabel('CG Iterations to Convergence')
-    plt.title('Noise Robustness Analysis')
+    plt.xlabel("Noise Level (%)")
+    plt.ylabel("CG Iterations to Convergence")
+    plt.title("Noise Robustness Analysis")
     plt.legend()
     plt.grid(True, alpha=0.3)
 
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=200, bbox_inches='tight')
+        plt.savefig(save_path, dpi=200, bbox_inches="tight")
 
     if show:
         plt.show()

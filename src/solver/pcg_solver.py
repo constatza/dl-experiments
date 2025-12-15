@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Literal
+from typing import Any, Literal
+from collections.abc import Callable
 
 import numpy as np
 import scipy.sparse.linalg as spla
@@ -28,7 +29,11 @@ def _wrap_preconditioner(
         return preconditioner
 
     def matvec(vec: np.ndarray) -> np.ndarray:
-        return np.asarray(preconditioner(np.asarray(vec, dtype=dtype, copy=False)), dtype=dtype, copy=False)
+        return np.asarray(
+            preconditioner(np.asarray(vec, dtype=dtype, copy=False)),
+            dtype=dtype,
+            copy=False,
+        )
 
     return spla.LinearOperator(shape, matvec=matvec, dtype=dtype)
 
@@ -69,7 +74,9 @@ class ResidualRecorder(SolverCallbackLogger):
             if self.event_log is not None:
                 self.event_log.log("residual", residual)
                 self.event_log.log("solution", xk)
-        residual_rel = residual_abs / self.rhs_norm if self.rhs_norm > 0 else residual_abs
+        residual_rel = (
+            residual_abs / self.rhs_norm if self.rhs_norm > 0 else residual_abs
+        )
         self.history_abs.append(residual_abs)
         self.history_rel.append(residual_rel)
         if self.event_log is not None:
@@ -176,7 +183,9 @@ def cg_solve(
         if recorder is not None:
             recorder(xk_or_norm)
 
-    applied_callback = _composed_callback if (callback is not None or recorder is not None) else None
+    applied_callback = (
+        _composed_callback if (callback is not None or recorder is not None) else None
+    )
 
     x, info_code = spla.cg(
         A_op,
@@ -194,8 +203,10 @@ def cg_solve(
     rhs_norm = recorder.rhs_norm if recorder is not None else float(np.linalg.norm(b))
     residual_rel = residual_abs / rhs_norm if rhs_norm > 0 else residual_abs
 
-    if recorder is not None and recorder.history_abs and (
-        recorder.callback_type is None or recorder.callback_type == "pr_norm"
+    if (
+        recorder is not None
+        and recorder.history_abs
+        and (recorder.callback_type is None or recorder.callback_type == "pr_norm")
     ):
         # Ensure final residual is recorded for callback types that do not include it.
         recorder.history_abs.append(residual_abs)
@@ -207,7 +218,9 @@ def cg_solve(
     # - info = 0: successfully converged
     # - info > 0: did not converge, equals number of iterations performed
     # SciPy never returns negative codes, so breakdown is always False here
-    iterations = info_code if info_code > 0 else (len(recorder.history_abs) if recorder else 0)
+    iterations = (
+        info_code if info_code > 0 else (len(recorder.history_abs) if recorder else 0)
+    )
     converged = info_code == 0
 
     result = SolverResult(

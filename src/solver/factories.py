@@ -47,7 +47,6 @@ from .pcg_solver import cg_solve
 from .info import SolverResult
 from .preconditioners import (
     CallablePreconditioner,
-    IdentityPreconditioner,
     LinearOperatorPreconditioner,
 )
 from ..constants import (
@@ -83,7 +82,9 @@ def flexible_cg(
     breakdown_tol: float | None = None,
     m_replacement: int = DEFAULT_RESIDUAL_REPLACEMENT_FREQ,
     gamma_div: float = DEFAULT_DIVERGENCE_FACTOR,
-    stopping_criterion: Literal["residual_norm", "tolerance", "fixed_iterations"] = "residual_norm",
+    stopping_criterion: Literal[
+        "residual_norm", "tolerance", "fixed_iterations"
+    ] = "residual_norm",
     reorthogonalize: ReorthogonalizationStrategy | None = None,
     capture_traces: bool | None = None,
     capture_search_directions: bool | None = None,
@@ -208,7 +209,6 @@ def flexible_cg(
     See Also:
         preconditioned_cg: PCG with two-term recurrence (lower cost)
     """
-
     # Create preconditioner strategy
     if preconditioner is None:
         precond_strategy = None  # Will use IdentityPreconditioner by default
@@ -238,7 +238,9 @@ def flexible_cg(
     eps_break = breakdown_tol if breakdown_tol is not None else eps_breakdown
 
     # Map tolerance to residual_norm for backwards compatibility
-    criterion = stopping_criterion if stopping_criterion != "tolerance" else "residual_norm"
+    criterion = (
+        stopping_criterion if stopping_criterion != "tolerance" else "residual_norm"
+    )
 
     # Solve system
     x, result = solver.solve(
@@ -279,12 +281,16 @@ def preconditioned_cg(
     breakdown_tol: float | None = None,
     m_replacement: int = DEFAULT_RESIDUAL_REPLACEMENT_FREQ,
     gamma_div: float = DEFAULT_DIVERGENCE_FACTOR,
-    stopping_criterion: Literal["residual_norm", "tolerance", "fixed_iterations"] = "residual_norm",
+    stopping_criterion: Literal[
+        "residual_norm", "tolerance", "fixed_iterations"
+    ] = "residual_norm",
 ) -> tuple[NDArray, SolverResult]:
     """Solve linear system using SciPy's CG with optional preconditioning."""
     logger = VectorLogger()
     max_iters = (
-        max_iterations if max_iterations is not None else (max_iter if max_iter is not None else 100)
+        max_iterations
+        if max_iterations is not None
+        else (max_iter if max_iter is not None else 100)
     )
     rtol_value = tol if tol is not None else rtol
     x, result = cg_solve(

@@ -7,10 +7,10 @@ training using Prefect for caching and parallelization.
 
 Usage:
     # Run all experiments
-    uv run python graph-cg/scripts/run_experiments.py
+    uv run python scripts/run_experiments.py
 
     # Use custom experiments config
-    uv run python graph-cg/scripts/run_experiments.py --config custom-experiments.toml
+    uv run python scripts/run_experiments.py --config custom-experiments.toml
 
 Benefits:
     - Config coordination: Automatic path resolution ensures each model trains
@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import typer
 
-from src.workflows.workflow_prefect import run_experiment_matrix_flow
+from src.workflows.flow import run_experiment_matrix_flow
 from src.constants import (
     DEFAULT_EXPERIMENTS_CONFIG,
     EXIT_FAILURE,
@@ -68,8 +68,8 @@ def main(
     - Incremental computation (only reruns changed configs)
 
     Example:
-        $ uv run python graph-cg/scripts/run_experiments.py
-        $ uv run python graph-cg/scripts/run_experiments.py --config custom.toml
+        $ uv run python scripts/run_experiments.py
+        $ uv run python scripts/run_experiments.py --config custom.toml
     """
     graph_cg_root = Path(__file__).resolve().parent.parent
 

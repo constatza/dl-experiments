@@ -31,6 +31,7 @@ TRIDIAGONAL_OFFDIAG_VALUE = -1.0
 TEST_SEED = 42
 DEFAULT_RTOL = 1e-6
 DEFAULT_ATOL = 1e-14
+DEFAULT_ASSERT_RTOL = 1e-5
 DEFAULT_MAX_ITER = 1000
 
 
@@ -312,7 +313,9 @@ def identity_preconditioner() -> Callable[[NDArray, object], NDArray]:
 
 
 @pytest.fixture
-def jacobi_preconditioner_factory() -> Callable[[NDArray], Callable[[NDArray, object], NDArray]]:
+def jacobi_preconditioner_factory() -> Callable[
+    [NDArray], Callable[[NDArray, object], NDArray]
+]:
     """Factory for Jacobi preconditioner M = diag(A).
 
     Returns:
@@ -355,7 +358,9 @@ def jacobi_preconditioner_factory() -> Callable[[NDArray], Callable[[NDArray, ob
 @pytest.fixture
 def jacobi_preconditioner_tridiagonal(
     tridiagonal_spd_small: NDArray,
-    jacobi_preconditioner_factory: Callable[[NDArray], Callable[[NDArray, object], NDArray]],
+    jacobi_preconditioner_factory: Callable[
+        [NDArray], Callable[[NDArray, object], NDArray]
+    ],
 ) -> Callable[[NDArray, object], NDArray]:
     """Jacobi preconditioner for tridiagonal test matrix.
 
@@ -422,9 +427,19 @@ def default_tolerances() -> tuple[float, float]:
 
 
 @pytest.fixture
+def default_assert_rtol() -> float:
+    """Default relative tolerance for assertion checks.
+
+    Returns:
+        Default assertion rtol (typically 1e-5).
+    """
+    return DEFAULT_ASSERT_RTOL
+
+
+@pytest.fixture
 def tight_tolerances() -> tuple[float, float]:
     """Tight convergence tolerances for high-accuracy checks."""
-    return 1e-13, 1e-13
+    return 1e-14, 1e-14
 
 
 @pytest.fixture

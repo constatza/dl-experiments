@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
 
-def analyze_dataset(data_dir: Path, name: str) -> Dict[str, Any]:
+def analyze_dataset(data_dir: Path, name: str) -> dict[str, Any]:
     """Compute descriptive statistics for a processed dataset."""
     from ..io_utils import load_dataset
 
@@ -47,30 +47,39 @@ def analyze_dataset(data_dir: Path, name: str) -> Dict[str, Any]:
     row_norms = np.linalg.norm(A, axis=1)
     col_norms = np.linalg.norm(A, axis=0)
     print(
-        "  Row norms - min: {:.6e}, max: {:.6e}, mean: {:.6e}".format(
-            np.min(row_norms), np.max(row_norms), np.mean(row_norms)
-        )
+        f"  Row norms - min: {np.min(row_norms):.6e}, max: {np.max(row_norms):.6e}, mean: {np.mean(row_norms):.6e}"
     )
     print(
-        "  Col norms - min: {:.6e}, max: {:.6e}, mean: {:.6e}".format(
-            np.min(col_norms), np.max(col_norms), np.mean(col_norms)
-        )
+        f"  Col norms - min: {np.min(col_norms):.6e}, max: {np.max(col_norms):.6e}, mean: {np.mean(col_norms):.6e}"
     )
 
     rhs_norms = np.linalg.norm(rhs_samples, axis=1)
     mother_norm = float(np.linalg.norm(rhs_mother))
     print("\nRHS statistics:")
     print(f"  Mother RHS norm: {mother_norm:.6e}")
-    print(f"  Sample RHS norms - min: {np.min(rhs_norms):.6e}, max: {np.max(rhs_norms):.6e}")
-    print(f"  Sample RHS norms - mean: {np.mean(rhs_norms):.6e}, std: {np.std(rhs_norms):.6e}")
-    print(f"  All RHS norms close to mother? {np.allclose(rhs_norms, mother_norm, rtol=1e-10)}")
+    print(
+        f"  Sample RHS norms - min: {np.min(rhs_norms):.6e}, max: {np.max(rhs_norms):.6e}"
+    )
+    print(
+        f"  Sample RHS norms - mean: {np.mean(rhs_norms):.6e}, std: {np.std(rhs_norms):.6e}"
+    )
+    print(
+        f"  All RHS norms close to mother? {np.allclose(rhs_norms, mother_norm, rtol=1e-10)}"
+    )
 
     sol_norms = np.linalg.norm(sol_samples, axis=1)
     print("\nSolution statistics:")
-    print(f"  Solution norms - min: {np.min(sol_norms):.6e}, max: {np.max(sol_norms):.6e}")
-    print(f"  Solution norms - mean: {np.mean(sol_norms):.6e}, std: {np.std(sol_norms):.6e}")
+    print(
+        f"  Solution norms - min: {np.min(sol_norms):.6e}, max: {np.max(sol_norms):.6e}"
+    )
+    print(
+        f"  Solution norms - mean: {np.mean(sol_norms):.6e}, std: {np.std(sol_norms):.6e}"
+    )
 
-    residuals = [np.linalg.norm(A @ sol_samples[i] - rhs_samples[i]) for i in range(min(100, num_samples))]
+    residuals = [
+        np.linalg.norm(A @ sol_samples[i] - rhs_samples[i])
+        for i in range(min(100, num_samples))
+    ]
     print("\nResidual (||A @ x - b||) for first 100 samples:")
     print(f"  Min: {np.min(residuals):.6e}, Max: {np.max(residuals):.6e}")
     print(f"  Mean: {np.mean(residuals):.6e}, Median: {np.median(residuals):.6e}")
@@ -79,10 +88,16 @@ def analyze_dataset(data_dir: Path, name: str) -> Dict[str, Any]:
         np.linalg.norm(-2 * A.T @ rhs_samples[i]) for i in range(min(100, num_samples))
     ]
     print("\nGradient magnitude (if we start from x=0):")
-    print(f"  Min: {np.min(gradients_from_zero):.6e}, Max: {np.max(gradients_from_zero):.6e}")
-    print(f"  Mean: {np.mean(gradients_from_zero):.6e}, Std: {np.std(gradients_from_zero):.6e}")
+    print(
+        f"  Min: {np.min(gradients_from_zero):.6e}, Max: {np.max(gradients_from_zero):.6e}"
+    )
+    print(
+        f"  Mean: {np.mean(gradients_from_zero):.6e}, Std: {np.std(gradients_from_zero):.6e}"
+    )
 
-    losses_at_zero = [np.linalg.norm(rhs_samples[i]) ** 2 for i in range(min(100, num_samples))]
+    losses_at_zero = [
+        np.linalg.norm(rhs_samples[i]) ** 2 for i in range(min(100, num_samples))
+    ]
     print("\nLoss at x=0 (||b||^2):")
     print(f"  Min: {np.min(losses_at_zero):.6e}, Max: {np.max(losses_at_zero):.6e}")
     print(f"  Mean: {np.mean(losses_at_zero):.6e}, Std: {np.std(losses_at_zero):.6e}")

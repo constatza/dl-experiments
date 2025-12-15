@@ -3,25 +3,6 @@
 
 This script runs preconditioner comparisons for ALL experiments defined in experiments.toml.
 It uses the unified configuration architecture where experiments.toml is the single source of truth.
-
-Usage:
-    # Run all experiments with default config
-    uv run python scripts/compare_methods.py
-
-    # Use custom experiments file
-    uv run python scripts/compare_methods.py --experiments custom-experiments.toml
-
-    # Override paths for testing
-    uv run python scripts/compare_methods.py --matrix /path/to/test.npz
-
-Checkpoint Path Resolution:
-    Checkpoints are auto-derived from model and data configs by default.
-    To compare different checkpoint versions, add checkpoint_path to experiments.toml:
-
-    [[experiments]]
-    model_template = "configs/ffnn.toml"
-    data_config = "data-configs/test-solutions.toml"
-    checkpoint_path = "/custom/path/to/checkpoint.ckpt"  # Optional override
 """
 
 from __future__ import annotations
@@ -33,7 +14,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import os
-import tomllib
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,6 +22,7 @@ from loguru import logger
 
 from src.constants import (
     DEFAULT_EXPERIMENTS_CONFIG,
+    DEFAULT_PROJECT_ROOT,
     NOISE_STRATEGY_NONE,
     DEFAULT_NOISE_LEVEL,
     DEFAULT_NOISE_SEED,
@@ -51,19 +32,11 @@ from src.constants import (
     REORTHOG_STRICT_THRESHOLD,
 )
 from src.cli.comparison import compare_preconditioners
-from src.system_loading import derive_checkpoint_path
+from src.configuration.loader import load_experiments
+from src.system_loading import get_latest_checkpoint
+from src.workflows.utils.paths import resolve_output_root
 
 os.environ.setdefault("MPLBACKEND", "Agg")
-
-
-@dataclass(frozen=True)
-class ExperimentConfig:
-    """Single experiment configuration."""
-
-    model_template: Path
-    data_config: Path
-    solver_config: Path
-    checkpoint_path: Path
 
 
 @dataclass(frozen=True)
@@ -92,173 +65,34 @@ class ComparisonParams:
 class ExperimentResult:
     """Result of running one experiment comparison."""
 
-    experiment: ExperimentConfig
+    name: str
     success: bool
     error_message: str | None = None
     best_preconditioner: dict[str, Any] | None = None
     plot_paths: dict[str, Path] | None = None
 
 
-def load_experiments_config(config_path: Path) -> dict[str, Any]:
-    """Load experiments configuration from TOML file.
-
-    Pure I/O action - reads config file.
-
-    Args:
-        config_path: Path to experiments.toml
-
-    Returns:
-        Parsed configuration dictionary
-
-    Raises:
-        FileNotFoundError: If config file doesn't exist
-        ValueError: If config parsing fails
-    """
-    if not config_path.exists():
-        raise FileNotFoundError(f"Experiments config not found: {config_path}")
-
-    try:
-        with open(config_path, "rb") as f:
-            return tomllib.load(f)
-    except Exception as exc:
-        raise ValueError(f"Error loading experiments config: {exc}") from exc
-
-
-def extract_experiments_list(config: dict[str, Any]) -> list[dict[str, str]]:
-    """Extract experiments list from config dictionary.
-
-    Pure function - no I/O.
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        List of experiment dictionaries
-
-    Raises:
-        ValueError: If no experiments defined
-    """
-    experiments = config.get("experiments", [])
-    if not experiments:
-        raise ValueError("No experiments defined in config")
-    return experiments
-
-
-def extract_output_root(config: dict[str, Any]) -> Path:
-    """Extract output root path from config.
-
-    Pure function - no I/O.
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        Output root path
-    """
-    paths_cfg = config.get("paths", {})
-    output_root_str = paths_cfg.get("output_root", "/data/projects/graph-cg/data/output")
-    return Path(output_root_str)
-
-
-def build_experiment_config(
-    experiment_dict: dict[str, str],
-    root_dir: Path,
-    output_root: Path,
-) -> ExperimentConfig:
-    """Build ExperimentConfig from dictionary.
-
-    Pure function - only path construction.
-
-    Args:
-        experiment_dict: Raw experiment dictionary from TOML
-        root_dir: Project root directory
-        output_root: Output root path
-
-    Returns:
-        Structured experiment configuration
-    """
-    model_template = root_dir / experiment_dict["model_template"]
-    data_config = root_dir / experiment_dict["data_config"]
-    solver_config = root_dir / experiment_dict.get("solver_config", "solver-configs/default.toml")
-
-    # Check for optional checkpoint_path override
-    checkpoint_path_str = experiment_dict.get("checkpoint_path")
-
-    if checkpoint_path_str is not None:
-        # Use explicit checkpoint path
-        checkpoint_path = Path(checkpoint_path_str)
-
-        # Resolve relative paths against project root
-        if not checkpoint_path.is_absolute():
-            checkpoint_path = root_dir / checkpoint_path
-    else:
-        # Fallback to convention-based derivation
-        checkpoint_path = derive_checkpoint_path(model_template, data_config, output_root)
-
-    return ExperimentConfig(
-        model_template=model_template,
-        data_config=data_config,
-        solver_config=solver_config,
-        checkpoint_path=checkpoint_path,
-    )
-
-
-def validate_checkpoint_exists(experiment: ExperimentConfig) -> str | None:
-    """Validate that checkpoint file exists.
-
-    I/O action - checks filesystem.
-
-    Args:
-        experiment: Experiment configuration
-
-    Returns:
-        Error message if checkpoint missing, None otherwise
-    """
-    if not experiment.checkpoint_path.exists():
-        return f"Checkpoint not found: {experiment.checkpoint_path}"
+def validate_checkpoint_exists(checkpoint_path: Path) -> str | None:
+    """Validate that checkpoint file exists."""
+    if not checkpoint_path.exists():
+        return f"Checkpoint not found: {checkpoint_path}"
     return None
 
 
-def log_experiment_header(idx: int, total: int, experiment: ExperimentConfig) -> None:
-    """Log experiment header information.
-
-    I/O action - logs to stdout.
-
-    Args:
-        idx: Current experiment index (1-based)
-        total: Total number of experiments
-        experiment: Experiment configuration
-    """
-    logger.info("=" * 80)
-    logger.info(f"Experiment {idx}/{total}")
-    logger.info("=" * 80)
-    logger.info(f"Model:      {experiment.model_template.name}")
-    logger.info(f"Data:       {experiment.data_config.name}")
-    logger.info(f"Solver:     {experiment.solver_config.name}")
-    logger.info(f"Checkpoint: {experiment.checkpoint_path}")
-    logger.info("")
-
-
 def run_single_comparison(
-    experiment: ExperimentConfig,
+    exp_name: str,
+    model_config: Path,
+    data_config: Path,
+    solver_config: Path,
+    checkpoint_path: Path,
     params: ComparisonParams,
 ) -> dict[str, Any]:
-    """Run comparison for a single experiment.
-
-    I/O action - calls comparison function.
-
-    Args:
-        experiment: Experiment configuration
-        params: Comparison parameters
-
-    Returns:
-        Comparison result dictionary
-    """
+    """Run comparison for a single experiment."""
     return compare_preconditioners(
-        config_path=experiment.model_template,
-        data_config_path=experiment.data_config,
-        solver_config_path=experiment.solver_config,
-        checkpoint_path=experiment.checkpoint_path,
+        config_path=model_config,
+        data_config_path=data_config,
+        solver_config_path=solver_config,
+        checkpoint_path=checkpoint_path,
         matrix_path=params.matrix,
         rhs_path=params.rhs,
         output_dir=params.output_dir,
@@ -280,13 +114,7 @@ def run_single_comparison(
 
 
 def log_comparison_results(result: dict[str, Any]) -> None:
-    """Log comparison results.
-
-    I/O action - logs to stdout.
-
-    Args:
-        result: Comparison result dictionary
-    """
+    """Log comparison results."""
     logger.info(f"Available preconditioners: {result['preconditioners']}")
 
     # Log neural preconditioner metadata
@@ -296,7 +124,11 @@ def log_comparison_results(result: dict[str, Any]) -> None:
     if neural_meta is not None:
         residual_iters = getattr(neural_meta, "residual_iters", "unknown")
         applied_iters = getattr(neural_meta, "applied_iters", None)
-        applied_str = f"{applied_iters}" if applied_iters is not None else f"{residual_iters} (default)"
+        applied_str = (
+            f"{applied_iters}"
+            if applied_iters is not None
+            else f"{residual_iters} (default)"
+        )
         logger.info("Neural preconditioner metadata:")
         logger.info(f"  - Training iterations (residual_iters): {residual_iters}")
         logger.info(f"  - Applied iterations: {applied_str}")
@@ -328,105 +160,6 @@ def log_comparison_results(result: dict[str, Any]) -> None:
             f"| residual={best_overall['residual']:.3e}"
         )
 
-    # Log plot paths (only if plots were saved)
-    plot_paths = result.get("plot_paths", {})
-    if plot_paths:
-        logger.info("Generated plots:")
-        for plot_type, path in plot_paths.items():
-            logger.info(f"  {plot_type}: {path}")
-
-
-def process_experiment(
-    experiment: ExperimentConfig,
-    params: ComparisonParams,
-    idx: int,
-    total: int,
-) -> ExperimentResult:
-    """Process a single experiment comparison.
-
-    I/O orchestrator - coordinates experiment execution.
-
-    Args:
-        experiment: Experiment configuration
-        params: Comparison parameters
-        idx: Current experiment index (1-based)
-        total: Total number of experiments
-
-    Returns:
-        Experiment result
-    """
-    log_experiment_header(idx, total, experiment)
-
-    # Guard: Validate checkpoint exists
-    checkpoint_error = validate_checkpoint_exists(experiment)
-    if checkpoint_error is not None:
-        logger.warning(f"⚠ Skipping: {checkpoint_error}")
-        return ExperimentResult(
-            experiment=experiment,
-            success=False,
-            error_message=checkpoint_error,
-        )
-
-    # Run comparison
-    try:
-        result = run_single_comparison(experiment, params)
-        log_comparison_results(result)
-        logger.info(f"{SYMBOL_CHECKMARK} Comparison complete for experiment {idx}!")
-
-        recs = result.get("recommendations", {})
-        best_overall = recs.get("best_overall") if isinstance(recs, dict) else None
-
-        return ExperimentResult(
-            experiment=experiment,
-            success=True,
-            best_preconditioner=best_overall,
-            plot_paths=result["plot_paths"],
-        )
-
-    except Exception as exc:
-        error_msg = f"Comparison failed: {exc}"
-        logger.error(error_msg)
-        logger.exception("Full traceback:")
-        return ExperimentResult(
-            experiment=experiment,
-            success=False,
-            error_message=error_msg,
-        )
-
-
-def log_final_summary(results: list[ExperimentResult]) -> None:
-    """Log final summary of all experiments.
-
-    I/O action - logs to stdout.
-
-    Args:
-        results: List of experiment results
-    """
-    total = len(results)
-    successful = sum(1 for r in results if r.success)
-    failed = total - successful
-
-    logger.info("")
-    logger.info("=" * 80)
-    logger.info("FINAL SUMMARY")
-    logger.info("=" * 80)
-    logger.info(f"Total experiments: {total}")
-    logger.info(f"Successful: {successful}")
-    logger.info(f"Failed: {failed}")
-
-    # Log failed experiments
-    failed_results = [r for r in results if not r.success]
-    if failed_results:
-        logger.info("")
-        logger.info("Failed experiments:")
-        for result in failed_results:
-            exp = result.experiment
-            logger.error(
-                f"  ✗ {exp.model_template.name} + {exp.data_config.name}: {result.error_message}"
-            )
-    else:
-        logger.info(f"{SYMBOL_CHECKMARK} All comparisons completed successfully!")
-
 
 def main(
     experiments: Path = typer.Option(
@@ -442,11 +175,11 @@ def main(
     ),
     matrix: Path | None = typer.Option(
         None,
-        help="Override matrix path (npz supported). If omitted, uses solver-config or derived paths.",
+        help="Override matrix path (npz supported).",
     ),
     rhs: Path | None = typer.Option(
         None,
-        help="Override RHS path (npz supported). If omitted, uses solver-config or derived paths.",
+        help="Override RHS path (npz supported).",
     ),
     output_dir: Path | None = typer.Option(
         None, help="Override output directory for all experiments"
@@ -455,8 +188,12 @@ def main(
         None, help="Override figures directory for plots"
     ),
     noise_strategy: str = typer.Option(NOISE_STRATEGY_NONE, help="Noise strategy"),
-    noise_level: float = typer.Option(DEFAULT_NOISE_LEVEL, help="Noise level parameter"),
-    noise_seed: int | None = typer.Option(DEFAULT_NOISE_SEED, help="Random seed for noise"),
+    noise_level: float = typer.Option(
+        DEFAULT_NOISE_LEVEL, help="Noise level parameter"
+    ),
+    noise_seed: int | None = typer.Option(
+        DEFAULT_NOISE_SEED, help="Random seed for noise"
+    ),
     breakdown_tol: float | None = typer.Option(
         None, help="Breakdown tolerance for CG denominator checks"
     ),
@@ -464,7 +201,8 @@ def main(
         None, help="Limit neural preconditioning to first L iterations"
     ),
     fallback_preconditioner: str = typer.Option(
-        "identity", help="Preconditioner after L neural iterations (identity, jacobi, ilu)"
+        "identity",
+        help="Preconditioner after L neural iterations (identity, jacobi, ilu)",
     ),
     precond_every: int = typer.Option(
         1, help="Apply preconditioner every K iterations"
@@ -482,33 +220,26 @@ def main(
         REORTHOG_STRICT_THRESHOLD, help="Threshold for selective reorthogonalization"
     ),
 ):
-    """Compare preconditioner methods for all experiments in experiments.toml.
-
-    This command runs preconditioner comparisons for every experiment defined in the
-    experiments config. Each experiment specifies its model, data, and solver configs.
-
-    Checkpoint paths are auto-derived from the configuration by default, or can be
-    explicitly specified in experiments.toml using the optional checkpoint_path field.
-    This enables comparing multiple checkpoint versions of the same model.
-
-    Example:
-        $ uv run python scripts/compare_methods.py
-        $ uv run python scripts/compare_methods.py --experiments custom.toml
-        $ uv run python scripts/compare_methods.py --matrix /path/to/test.npz
-    """
-    root_dir = Path(__file__).resolve().parent.parent
+    """Compare preconditioner methods for all experiments in experiments.toml."""
+    root_dir = DEFAULT_PROJECT_ROOT
 
     # Resolve experiments config
-    experiments_path = experiments if experiments is not None else root_dir / DEFAULT_EXPERIMENTS_CONFIG
+    experiments_path = (
+        experiments
+        if experiments is not None
+        else root_dir / DEFAULT_EXPERIMENTS_CONFIG
+    )
+    experiments_path = Path(experiments_path)
 
-    # Load and validate configuration
     try:
-        config = load_experiments_config(experiments_path)
-        experiments_list = extract_experiments_list(config)
-        output_root = extract_output_root(config)
+        # Load experiments using the unified loader
+        # This returns tuples: (name, settings, context, model_path, data_path, solver_path)
+        experiments_list = load_experiments(experiments_path)
     except (FileNotFoundError, ValueError) as exc:
         logger.error(str(exc))
         raise typer.Exit(code=EXIT_FAILURE)
+
+    output_root = resolve_output_root(None) if output_dir is None else output_dir
 
     logger.info(f"Running comparisons for {len(experiments_list)} experiments...")
     logger.info(f"Experiments config: {experiments_path}")
@@ -535,24 +266,68 @@ def main(
         reorthog_threshold=reorthog_threshold,
     )
 
-    # Build experiment configurations
-    experiment_configs = [
-        build_experiment_config(exp_dict, root_dir, output_root)
-        for exp_dict in experiments_list
-    ]
+    results = []
+    
+    for idx, (exp_name, settings, context, model_path, data_path, solver_path) in enumerate(experiments_list, 1):
+        logger.info("=" * 80)
+        logger.info(f"Experiment {idx}/{len(experiments_list)}: {exp_name}")
+        logger.info("=" * 80)
+        
+        # Determine checkpoint path
+        # 1. Check if checkpoint was overridden in context (not currently supported by loader but good for future)
+        # 2. Use get_latest_checkpoint from the training output directory
+        checkpoint_dir = context.training.checkpoint_dir
+        checkpoint_path = get_latest_checkpoint(checkpoint_dir)
+        
+        if not checkpoint_path or not checkpoint_path.exists():
+            logger.warning(f"⚠ Checkpoint not found in {checkpoint_dir}")
+            results.append(ExperimentResult(name=exp_name, success=False, error_message="Checkpoint not found"))
+            continue
+            
+        logger.info(f"Checkpoint: {checkpoint_path}")
 
-    # Process all experiments
-    results = [
-        process_experiment(exp, params, idx, len(experiment_configs))
-        for idx, exp in enumerate(experiment_configs, 1)
-    ]
+        try:
+            result = run_single_comparison(
+                exp_name, model_path, data_path, solver_path, checkpoint_path, params
+            )
+            log_comparison_results(result)
+            
+            recs = result.get("recommendations", {})
+            best_overall = recs.get("best_overall") if isinstance(recs, dict) else None
+            
+            results.append(ExperimentResult(
+                name=exp_name,
+                success=True,
+                best_preconditioner=best_overall,
+                plot_paths=result.get("plot_paths")
+            ))
+            
+        except Exception as exc:
+            error_msg = f"Comparison failed: {exc}"
+            logger.error(error_msg)
+            results.append(ExperimentResult(name=exp_name, success=False, error_message=error_msg))
 
     # Log final summary
-    log_final_summary(results)
+    logger.info("")
+    logger.info("=" * 80)
+    logger.info("FINAL SUMMARY")
+    logger.info("=" * 80)
+    
+    successful = sum(1 for r in results if r.success)
+    failed = len(results) - successful
+    
+    logger.info(f"Total experiments: {len(results)}")
+    logger.info(f"Successful: {successful}")
+    logger.info(f"Failed: {failed}")
 
-    # Exit with error if any experiments failed
-    if any(not r.success for r in results):
+    if failed > 0:
+        logger.info("\nFailed experiments:")
+        for r in results:
+            if not r.success:
+                logger.error(f"  ✗ {r.name}: {r.error_message}")
         raise typer.Exit(code=EXIT_FAILURE)
+    else:
+        logger.info(f"\n{SYMBOL_CHECKMARK} All comparisons completed successfully!")
 
 
 if __name__ == "__main__":

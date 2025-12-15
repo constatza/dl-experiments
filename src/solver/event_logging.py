@@ -196,7 +196,9 @@ class VectorLogger:
             if event_name not in self._events:
                 self._events[event_name] = []
             # Copy to ensure immutability
-            self._events[event_name].insert(0, np.asarray(value, dtype=np.float64).copy())
+            self._events[event_name].insert(
+                0, np.asarray(value, dtype=np.float64).copy()
+            )
 
     def get_history(self, event_name: str) -> list[NDArray] | list[float]:
         """Retrieve full history for an event.
@@ -304,7 +306,8 @@ class VectorLogger:
             >>> assert logger.has_event("residual")
         """
         return (
-            event_name in self._scalar_events and len(self._scalar_events[event_name]) > 0
+            event_name in self._scalar_events
+            and len(self._scalar_events[event_name]) > 0
         ) or (event_name in self._events and len(self._events[event_name]) > 0)
 
     def event_count(self, event_name: str) -> int:

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, asdict
-from typing import Any, TYPE_CHECKING, Iterable
+from typing import Any, TYPE_CHECKING
+from collections.abc import Iterable
 
 from ..constants import (
     DEFAULT_ATOL,
@@ -111,10 +112,14 @@ def parse_solver_config(
     solver_section = solver_config.get("solver", {})
     data_gen_section = solver_config.get("data_generation", {})
     general = GeneralSolverParams(
-        rtol=float(solver_section.get("rtol", solver_section.get("tolerance", DEFAULT_RTOL))),
+        rtol=float(
+            solver_section.get("rtol", solver_section.get("tolerance", DEFAULT_RTOL))
+        ),
         atol=float(solver_section.get("atol", DEFAULT_ATOL)),
         max_iterations=int(solver_section.get("max_iterations", 100)),
-        stopping_criterion=str(solver_section.get("stopping_criterion", "residual_norm")),
+        stopping_criterion=str(
+            solver_section.get("stopping_criterion", "residual_norm")
+        ),
         normalize_system=data_gen_section.get("normalize", "matrix"),
         matrix_path=solver_section.get("matrix"),
         rhs_path=solver_section.get("rhs"),
@@ -125,7 +130,9 @@ def parse_solver_config(
         "beta_max": solver_section.get("beta_max", DEFAULT_BETA_MAX),
         "eps_curv": solver_section.get("eps_curv", DEFAULT_CURVATURE_EPSILON),
         "eps_breakdown": solver_section.get("eps_breakdown", 1e-14),
-        "m_replacement": solver_section.get("m_replacement", DEFAULT_RESIDUAL_REPLACEMENT_FREQ),
+        "m_replacement": solver_section.get(
+            "m_replacement", DEFAULT_RESIDUAL_REPLACEMENT_FREQ
+        ),
         "gamma_div": solver_section.get("gamma_div", DEFAULT_DIVERGENCE_FACTOR),
     }
     solvers = [SolverSpec(name=solver_type, type=solver_type, args=legacy_args)]
@@ -190,7 +197,7 @@ def get_solver_params(settings: Any) -> SolverParams:
 def create_solver_from_params(
     params: SolverParams,
     preconditioner: Callable[[NDArray], NDArray] | None = None,
-) -> Callable[[NDArray, NDArray, NDArray | None], tuple[NDArray, "SolverResult"]]:
+) -> Callable[[NDArray, NDArray, NDArray | None], tuple[NDArray, SolverResult]]:
     """Create a solver function from SolverParams configuration.
 
     Args:
@@ -228,7 +235,7 @@ def create_solver_from_params(
             A: NDArray,
             b: NDArray,
             x0: NDArray | None = None,
-        ) -> tuple[NDArray, "SolverResult"]:
+        ) -> tuple[NDArray, SolverResult]:
             return flexible_cg(
                 A,
                 b,
@@ -251,7 +258,7 @@ def create_solver_from_params(
             A: NDArray,
             b: NDArray,
             x0: NDArray | None = None,
-        ) -> tuple[NDArray, "SolverResult"]:
+        ) -> tuple[NDArray, SolverResult]:
             return preconditioned_cg(
                 A,
                 b,

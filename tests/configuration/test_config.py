@@ -6,7 +6,6 @@ for unified configuration management.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +15,9 @@ from src.configuration.loader import (
     _load_toml,
     _extract_project_roots,
     _extract_flow_keys,
-    _inject_context_paths,
-    _inject_solver_params,
     load_config,
 )
-from src.paths.core import ProjectRoots, FlowContext
+from src.paths.core import FlowContext
 
 
 # Get project root (repo root directory)
@@ -232,9 +229,7 @@ class TestLoadToml:
 class TestExtractProjectRoots:
     """Tests for _extract_project_roots function."""
 
-    def test_extract_from_model_config(
-        self, model_config_dict: dict[str, Any]
-    ) -> None:
+    def test_extract_from_model_config(self, model_config_dict: dict[str, Any]) -> None:
         """Test root extraction from model config.
 
         Args:
@@ -286,9 +281,7 @@ class TestExtractProjectRoots:
 class TestExtractFlowKeys:
     """Tests for _extract_flow_keys function."""
 
-    def test_extract_from_model_config(
-        self, model_config_dict: dict[str, Any]
-    ) -> None:
+    def test_extract_from_model_config(self, model_config_dict: dict[str, Any]) -> None:
         """Test flow key extraction from model config.
 
         Args:
@@ -443,7 +436,7 @@ class TestLoadConfig:
 
             assert settings is not None
             # Solver params should be injected
-            assert hasattr(settings, 'EXTRAS') or True  # May vary by implementation
+            assert hasattr(settings, "EXTRAS") or True  # May vary by implementation
         except Exception as e:
             # Skip if validation fails during load
             pytest.skip(f"Config load validation: {e}")
@@ -515,6 +508,6 @@ class TestLoadConfig:
         settings, context = load_config(linear_config_path)
 
         # Verify that mkdir was called with parents=True, exist_ok=True
-        assert any(
-            parents and exist_ok for _, parents, exist_ok in mkdir_calls
-        ), "mkdir should be called with parents=True and exist_ok=True"
+        assert any(parents and exist_ok for _, parents, exist_ok in mkdir_calls), (
+            "mkdir should be called with parents=True and exist_ok=True"
+        )

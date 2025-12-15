@@ -6,6 +6,7 @@ import numpy as np
 
 from ..interfaces import GeneratedSamples, IDataGenerationStrategy
 from ..runner import register_strategy
+from ..strategy_configs import ResidualErrorConfig
 from ..types import ArchiveData
 from ...solver import SolverResult, flexible_cg
 from ..helpers import (
@@ -29,6 +30,7 @@ def _build_archive(
 @register_strategy
 class ResidualErrorStrategy(IDataGenerationStrategy):
     name = "cg_residual_error"
+    ConfigType = ResidualErrorConfig
 
     def requires_rhs(self) -> bool:
         return True
@@ -42,14 +44,16 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
     ) -> GeneratedSamples:
         if rhs is None:
             raise ValueError("cg_residual_error requires rhs input")
-        count = int(cfg.get("samples", 0))
-        cg_iters = int(cfg.get("residual_iters", 8))
-        rng = np.random.default_rng(int(cfg.get("seed", 42)))
-        archive_solutions = cfg.get("archive_solutions")
-        archive_rhs = cfg.get("archive_rhs")
+
+        # Validate and convert to typed config
+        config = ResidualErrorConfig(**cfg)
+
+        count = config.samples
+        cg_iters = config.residual_iters
+        rng = np.random.default_rng(config.seed)
         archive = None
-        if archive_solutions is not None:
-            archive = _build_archive(archive_solutions, archive_rhs)
+        if config.archive_solutions is not None:
+            archive = _build_archive(config.archive_solutions, config.archive_rhs)
 
         n = matrix.shape[0]
         sols = _load_or_generate_solutions(count, n, rng, 1.0, archive)
@@ -85,7 +89,9 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
             solution_seq = np.array(solution_list)
             num_pairs = residual_seq.shape[0]
 
-            error_seq = np.array([true_sol - x_k for x_k in solution_seq], dtype=np.float64)
+            error_seq = np.array(
+                [true_sol - x_k for x_k in solution_seq], dtype=np.float64
+            )
 
             residual_blocks.append(residual_seq)
             solution_current_blocks.append(solution_seq)

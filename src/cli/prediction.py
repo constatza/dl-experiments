@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
+from collections.abc import Iterable, Iterator
 
 import numpy as np
 from loguru import logger
@@ -49,12 +50,16 @@ def _ensure_dataset_settings(
     targets: list[TargetType] = list(dataset.targets or ())
 
     if features:
-        features[0] = features[0].model_copy(update={"value": feature_values, "path": None})
+        features[0] = features[0].model_copy(
+            update={"value": feature_values, "path": None}
+        )
     else:
         features = [Feature(name="x", value=feature_values, path=None)]
 
     if targets:
-        targets[0] = targets[0].model_copy(update={"value": target_values, "path": None})
+        targets[0] = targets[0].model_copy(
+            update={"value": target_values, "path": None}
+        )
     else:
         targets = [Target(name="y", value=target_values, path=None)]
 
@@ -79,7 +84,11 @@ def _load_feature_arrays(entries: Iterable[Any]) -> dict[str, np.ndarray]:
             array = np.asarray(value)
         else:
             tensor = load_array(entry.path)
-            array = tensor.cpu().numpy() if hasattr(tensor, "cpu") and hasattr(tensor, "numpy") else np.asarray(tensor)
+            array = (
+                tensor.cpu().numpy()
+                if hasattr(tensor, "cpu") and hasattr(tensor, "numpy")
+                else np.asarray(tensor)
+            )
 
         feature_arrays[entry.name] = array
     if not feature_arrays:
@@ -129,7 +138,9 @@ def _collect_predictions(
     return predictions, total_duration
 
 
-def _merge_pred_target_batches(batches: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def _merge_pred_target_batches(
+    batches: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
     merged: list[dict[str, Any]] = []
     for item in batches:
         if not isinstance(item, dict):
@@ -159,7 +170,9 @@ def _merge_pred_target_batches(batches: Iterable[dict[str, Any]]) -> list[dict[s
     return merged
 
 
-def _pick_pred_target_arrays(plot_ready: Any) -> tuple[np.ndarray | None, np.ndarray | None]:
+def _pick_pred_target_arrays(
+    plot_ready: Any,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
     if isinstance(plot_ready, list) and plot_ready and isinstance(plot_ready[0], dict):
         preds, tgts = [], []
         for d in plot_ready:
@@ -220,7 +233,9 @@ def _summarize_vector(values: np.ndarray) -> dict[str, float]:
     }
 
 
-def _log_prediction_diagnostics(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> None:
+def _log_prediction_diagnostics(
+    y_true: np.ndarray | None, y_pred: np.ndarray | None
+) -> None:
     """Emit debug diagnostics comparing prediction and target magnitudes."""
     if y_true is None or y_pred is None:
         return
@@ -269,10 +284,8 @@ def _log_prediction_diagnostics(y_true: np.ndarray | None, y_pred: np.ndarray | 
 
     if norm_ratio > 10 or norm_ratio < 0.1:
         logger.warning(
-            (
-                "Prediction/target norms differ by more than 10x (ratio={ratio:.3e}). "
-                "Check normalization settings and dataset transforms."
-            ).format(ratio=norm_ratio)
+            f"Prediction/target norms differ by more than 10x (ratio={norm_ratio:.3e}). "
+            "Check normalization settings and dataset transforms."
         )
 
 
@@ -291,7 +304,11 @@ def _derive_run_identifier(
             return cp.stem
 
     run_id = getattr(context, "run_id", None)
-    if isinstance(run_id, str) and run_id and not run_id.lower().startswith("dlkit-session"):
+    if (
+        isinstance(run_id, str)
+        and run_id
+        and not run_id.lower().startswith("dlkit-session")
+    ):
         return run_id
 
     return derive_model_identifier(settings, context, config_path)
@@ -308,7 +325,6 @@ def run_inference(
     figures_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run inference for parity plot generation using DLKit."""
-
     settings, context = load_config(config_path, data_config_path)
 
     if features_path is not None:
@@ -364,7 +380,9 @@ def run_inference(
         if "normalize_type" in norm_data:
             logger.debug(f"  Normalization type: {norm_data['normalize_type']}")
         if "spectral_radius_bound" in norm_data:
-            logger.debug(f"  Spectral radius bound: {norm_data['spectral_radius_bound']:.6e}")
+            logger.debug(
+                f"  Spectral radius bound: {norm_data['spectral_radius_bound']:.6e}"
+            )
         if "dimension_scale" in norm_data:
             logger.debug(f"  Dimension scale: {norm_data['dimension_scale']:.6e}")
     if comparison_path.exists():
@@ -373,16 +391,22 @@ def run_inference(
         if "normalize_type" in comp_data:
             logger.debug(f"  Normalization type: {comp_data['normalize_type']}")
         if "spectral_radius_bound" in comp_data:
-            logger.debug(f"  Spectral radius bound: {comp_data['spectral_radius_bound']:.6e}")
+            logger.debug(
+                f"  Spectral radius bound: {comp_data['spectral_radius_bound']:.6e}"
+            )
         if "dimension_scale" in comp_data:
             logger.debug(f"  Dimension scale: {comp_data['dimension_scale']:.6e}")
 
     y_arr = target_values.astype(np.float64, copy=False)
-    logger.debug(f"Targets shape: {y_arr.shape}, range: [{y_arr.min():.3e}, {y_arr.max():.3e}], L2 norm: {np.linalg.norm(y_arr):.3e}")
+    logger.debug(
+        f"Targets shape: {y_arr.shape}, range: [{y_arr.min():.3e}, {y_arr.max():.3e}], L2 norm: {np.linalg.norm(y_arr):.3e}"
+    )
 
     feature_arrays = _load_feature_arrays(settings.DATASET.features)
     for name, arr in feature_arrays.items():
-        logger.debug(f"Feature '{name}' shape: {arr.shape}, range: [{arr.min():.3e}, {arr.max():.3e}], L2 norm: {np.linalg.norm(arr):.3e}")
+        logger.debug(
+            f"Feature '{name}' shape: {arr.shape}, range: [{arr.min():.3e}, {arr.max():.3e}], L2 norm: {np.linalg.norm(arr):.3e}"
+        )
     batch_size = _resolve_batch_size(settings)
 
     # Data is pre-normalized in normalized.npz - no additional transforms needed
@@ -390,11 +414,11 @@ def run_inference(
     # Therefore apply_transforms=False to avoid double-normalization
     # Force float64 precision to match checkpoint weights and training precision
     logger.debug(f"Loading checkpoint from: {checkpoint_to_use}")
-    logger.debug(f"Using apply_transforms=False with precision=FULL_64")
+    logger.debug("Using apply_transforms=False with precision=FULL_64")
     with load_predictor(
         str(checkpoint_to_use),
         apply_transforms=False,
-        precision=PrecisionStrategy.FULL_64
+        precision=PrecisionStrategy.FULL_64,
     ) as predictor:
         raw_predictions, total_duration = _collect_predictions(
             predictor,
@@ -412,7 +436,9 @@ def run_inference(
     else:
         y_hat_arr = stacked
 
-    logger.debug(f"Raw predictions shape: {y_hat_arr.shape}, range: [{y_hat_arr.min():.3e}, {y_hat_arr.max():.3e}], L2 norm: {np.linalg.norm(y_hat_arr):.3e}")
+    logger.debug(
+        f"Raw predictions shape: {y_hat_arr.shape}, range: [{y_hat_arr.min():.3e}, {y_hat_arr.max():.3e}], L2 norm: {np.linalg.norm(y_hat_arr):.3e}"
+    )
 
     # Flatten to 1D for diagnostics (keep original y_arr for downstream consumers)
     y_hat_arr = y_hat_arr.ravel()
@@ -440,8 +466,15 @@ def run_inference(
 
     plot_path = None
     diagnostic_plot_path = None
-    if save_plots and y_hat_arr is not None and y_true_diag is not None and y_arr is not None:
-        figures_root = Path(figures_dir) if figures_dir is not None else context.flow.figures_root
+    if (
+        save_plots
+        and y_hat_arr is not None
+        and y_true_diag is not None
+        and y_arr is not None
+    ):
+        figures_root = (
+            Path(figures_dir) if figures_dir is not None else context.flow.figures_root
+        )
         figures_root.mkdir(parents=True, exist_ok=True)
 
         dataset_id = getattr(getattr(context, "data", None), "dataset_id", None)
@@ -457,11 +490,15 @@ def run_inference(
         suffix = f"{dataset_slug}-{run_identifier}"
 
         plot_path = figures_root / f"parity_residuals_{suffix}.png"
-        plot_parity_and_residuals(y_hat_arr, y_arr, sample=0, save_path=plot_path, show=False)
+        plot_parity_and_residuals(
+            y_hat_arr, y_arr, sample=0, save_path=plot_path, show=False
+        )
 
         # Generate comprehensive diagnostic plot for scaling analysis
         diagnostic_plot_path = figures_root / f"diagnostics_{suffix}.png"
-        plot_prediction_diagnostics(y_hat_arr, y_arr, sample=0, save_path=diagnostic_plot_path, show=False)
+        plot_prediction_diagnostics(
+            y_hat_arr, y_arr, sample=0, save_path=diagnostic_plot_path, show=False
+        )
 
     return {
         "predictions": predictions,

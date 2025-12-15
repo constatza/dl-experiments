@@ -8,6 +8,7 @@ import numpy as np
 
 from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
 from ..runner import register_strategy
+from ..strategy_configs import EigenvectorForwardConfig, EigenvectorInverseConfig
 from ..helpers import (
     _compute_eigendecomposition,
     _select_eigenvectors,
@@ -24,6 +25,7 @@ def _validate_count(count: int, n: int) -> None:
 @register_strategy
 class EigenvectorForwardStrategy(IMatrixOnlyGenerationStrategy):
     name = "eigenvector_forward"
+    ConfigType = EigenvectorForwardConfig
 
     def requires_rhs(self) -> bool:
         return False
@@ -35,11 +37,14 @@ class EigenvectorForwardStrategy(IMatrixOnlyGenerationStrategy):
         *,
         cfg: dict[str, Any],
     ) -> GeneratedSamples:
-        count = int(cfg.get("samples", matrix.shape[0]))
-        which = cfg.get("which", "smallest")
-        include_eigenvectors = bool(cfg.get("include_eigenvectors", False))
-        num_eigenvectors_raw = cfg.get("num_eigenvectors")
-        rng = np.random.default_rng(int(cfg.get("seed", 42)))
+        # Validate and convert to typed config
+        config = EigenvectorForwardConfig(**cfg)
+
+        count = config.samples
+        which = config.which
+        include_eigenvectors = config.include_eigenvectors
+        num_eigenvectors_raw = config.num_eigenvectors
+        rng = np.random.default_rng(config.seed)
 
         eigenvalues, eigenvectors = _compute_eigendecomposition(matrix)
         n = eigenvectors.shape[0]
@@ -84,6 +89,7 @@ class EigenvectorForwardStrategy(IMatrixOnlyGenerationStrategy):
 @register_strategy
 class EigenvectorInverseStrategy(IMatrixOnlyGenerationStrategy):
     name = "eigenvector_inverse"
+    ConfigType = EigenvectorInverseConfig
 
     def requires_rhs(self) -> bool:
         return False
@@ -95,11 +101,14 @@ class EigenvectorInverseStrategy(IMatrixOnlyGenerationStrategy):
         *,
         cfg: dict[str, Any],
     ) -> GeneratedSamples:
-        count = int(cfg.get("samples", matrix.shape[0]))
-        which = cfg.get("which", "smallest")
-        include_eigenvectors = bool(cfg.get("include_eigenvectors", False))
-        num_eigenvectors_raw = cfg.get("num_eigenvectors")
-        rng = np.random.default_rng(int(cfg.get("seed", 42)))
+        # Validate and convert to typed config
+        config = EigenvectorInverseConfig(**cfg)
+
+        count = config.samples
+        which = config.which
+        include_eigenvectors = config.include_eigenvectors
+        num_eigenvectors_raw = config.num_eigenvectors
+        rng = np.random.default_rng(config.seed)
 
         eigenvalues, eigenvectors = _compute_eigendecomposition(matrix)
         n = eigenvectors.shape[0]

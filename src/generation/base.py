@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from typing import Any, Literal
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 
 import warnings
 
@@ -13,7 +13,6 @@ import numpy as np
 from scipy.linalg import eigh, norm, solve
 
 from ..solver import SolverResult, flexible_cg
-from ..constants import ConfigKeys
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
 
 
@@ -672,8 +671,7 @@ def _select_eigenvectors(
         indices = rng.choice(n, size=count, replace=False)
     else:
         raise ValueError(
-            f"Invalid which: '{which}'. "
-            f"Must be 'smallest', 'largest', or 'random'"
+            f"Invalid which: '{which}'. Must be 'smallest', 'largest', or 'random'"
         )
     return eigenvectors[:, indices], eigenvalues[indices], indices
 
@@ -704,7 +702,9 @@ def _verify_solution_accuracy(
         residual = A @ solutions[i] - rhs_vectors[i]
         rhs_norm = np.linalg.norm(rhs_vectors[i])
         rel_residuals[i] = (
-            np.linalg.norm(residual) / rhs_norm if rhs_norm > 0 else np.linalg.norm(residual)
+            np.linalg.norm(residual) / rhs_norm
+            if rhs_norm > 0
+            else np.linalg.norm(residual)
         )
         if rel_residuals[i] > tolerance:
             warnings.warn(
@@ -855,16 +855,22 @@ def _merge_residual_traces(
 
     if all(has_search_directions):
         # All blocks have search_directions (validated above), filter None for type safety
-        search_directions = np.vstack([
-            block.search_directions for block in blocks
-            if block.search_directions is not None
-        ])
+        search_directions = np.vstack(
+            [
+                block.search_directions
+                for block in blocks
+                if block.search_directions is not None
+            ]
+        )
     if all(has_search_direction_products):
         # All blocks have search_direction_products (validated above), filter None for type safety
-        search_direction_products = np.vstack([
-            block.search_direction_products for block in blocks
-            if block.search_direction_products is not None
-        ])
+        search_direction_products = np.vstack(
+            [
+                block.search_direction_products
+                for block in blocks
+                if block.search_direction_products is not None
+            ]
+        )
     return ResidualTraceSamples(
         residuals=residuals,
         solutions=solutions,
@@ -1027,6 +1033,7 @@ def generate_mixture(
 
         # Only pass b if strategy requires it
         from .runner import _registry
+
         strategy = _registry.get(strategy_name)
         rhs_to_pass = b if strategy.requires_rhs() else None
         generated = run_generation(strategy_name, A, rhs_to_pass, cfg=cfg)

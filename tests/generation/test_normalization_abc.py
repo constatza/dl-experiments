@@ -18,9 +18,6 @@ import pytest
 from src.normalization import (
     DiagonalScale,
     ErrorTraceSamples,
-    ILinearSystemBatch,
-    IScale,
-    ITraceSamples,
     LinearSystem,
     LinearSystemBatch,
     MatrixScale,
@@ -37,7 +34,6 @@ from src.normalization import (
     normalize_none,
     normalize_spectral,
     scale_error_traces,
-    scale_error_traces_spectral,
     scale_residual_traces,
     scale_residual_traces_spectral,
     scale_system,
@@ -62,7 +58,9 @@ def simple_system_batch(simple_spd_matrix: np.ndarray) -> LinearSystemBatch:
     """Create a simple system batch for testing."""
     A = simple_spd_matrix
     R = np.array([[1.0, 2.0, 1.0], [0.5, 1.5, 0.5], [2.0, 1.0, 2.0]], dtype=np.float64)
-    X = np.array([[0.1, 0.2, 0.1], [0.05, 0.15, 0.05], [0.2, 0.1, 0.2]], dtype=np.float64)
+    X = np.array(
+        [[0.1, 0.2, 0.1], [0.05, 0.15, 0.05], [0.2, 0.1, 0.2]], dtype=np.float64
+    )
     return LinearSystemBatch(_matrix=A, _rhs_samples=R, _sol_samples=X)
 
 
@@ -71,7 +69,9 @@ def residual_traces_fixture() -> ResidualTraceSamples:
     """Create residual traces for testing."""
     return ResidualTraceSamples(
         residuals=np.array([[0.1, 0.2, 0.1], [0.05, 0.1, 0.05]], dtype=np.float64),
-        solutions=np.array([[0.01, 0.02, 0.01], [0.005, 0.01, 0.005]], dtype=np.float64),
+        solutions=np.array(
+            [[0.01, 0.02, 0.01], [0.005, 0.01, 0.005]], dtype=np.float64
+        ),
         sample_indices=np.array([0, 1], dtype=np.int64),
         iteration_indices=np.array([0, 0], dtype=np.int64),
     )
@@ -140,7 +140,9 @@ def test_iscale_interface_matrix_scale(simple_system_batch: LinearSystemBatch) -
     assert rhs_scaled.shape == simple_system_batch.rhs_samples[0].shape
 
 
-def test_iscale_interface_diagonal_scale(simple_system_batch: LinearSystemBatch) -> None:
+def test_iscale_interface_diagonal_scale(
+    simple_system_batch: LinearSystemBatch,
+) -> None:
     """Test IScale interface is implemented by DiagonalScale."""
     scale = make_diagonal_scale(simple_system_batch)
 
@@ -151,7 +153,9 @@ def test_iscale_interface_diagonal_scale(simple_system_batch: LinearSystemBatch)
     assert callable(scale.scale_residual)
 
 
-def test_itrace_samples_interface(residual_traces_fixture: ResidualTraceSamples) -> None:
+def test_itrace_samples_interface(
+    residual_traces_fixture: ResidualTraceSamples,
+) -> None:
     """Test ITraceSamples interface is implemented by ResidualTraceSamples."""
     traces = residual_traces_fixture
 
@@ -262,7 +266,9 @@ def test_scale_system_with_matrix_scale(simple_system_batch: LinearSystemBatch) 
     np.testing.assert_allclose(scaled.matrix, expected_matrix)
 
 
-def test_scale_system_with_diagonal_scale(simple_system_batch: LinearSystemBatch) -> None:
+def test_scale_system_with_diagonal_scale(
+    simple_system_batch: LinearSystemBatch,
+) -> None:
     """Test scale_system scales system correctly with DiagonalScale."""
     scale = make_diagonal_scale(simple_system_batch)
     scaled = scale_system(simple_system_batch, scale)
@@ -271,7 +277,9 @@ def test_scale_system_with_diagonal_scale(simple_system_batch: LinearSystemBatch
 
     # Verify symmetric diagonal scaling: D^(-1/2) @ A @ D^(-1/2)
     diag_sqrt_inv = scale.diagonal_sqrt_inv
-    expected_matrix = diag_sqrt_inv[:, None] * simple_system_batch.matrix * diag_sqrt_inv[None, :]
+    expected_matrix = (
+        diag_sqrt_inv[:, None] * simple_system_batch.matrix * diag_sqrt_inv[None, :]
+    )
     np.testing.assert_allclose(scaled.matrix, expected_matrix)
 
 
@@ -325,8 +333,12 @@ def test_scale_error_traces(error_traces_fixture: ErrorTraceSamples) -> None:
     np.testing.assert_allclose(scaled.errors, expected_errors)
 
     # Verify solutions_current and true_solutions unchanged (reference only)
-    np.testing.assert_allclose(scaled.solutions_current, error_traces_fixture.solutions_current)
-    np.testing.assert_allclose(scaled.true_solutions, error_traces_fixture.true_solutions)
+    np.testing.assert_allclose(
+        scaled.solutions_current, error_traces_fixture.solutions_current
+    )
+    np.testing.assert_allclose(
+        scaled.true_solutions, error_traces_fixture.true_solutions
+    )
 
 
 def test_scale_residual_traces_spectral(
@@ -343,7 +355,9 @@ def test_scale_residual_traces_spectral(
     # Each trace should be scaled by its sample's scale
     for i, sample_idx in enumerate(residual_traces_fixture.sample_indices):
         sample_scale = scales[int(sample_idx)]
-        expected_residual = sample_scale.scale_residual(residual_traces_fixture.residuals[i])
+        expected_residual = sample_scale.scale_residual(
+            residual_traces_fixture.residuals[i]
+        )
         np.testing.assert_allclose(scaled.residuals[i], expected_residual)
 
 
@@ -368,7 +382,9 @@ def test_normalize_none(
 
     # Verify traces were copied
     assert result.residual_traces is not None
-    np.testing.assert_array_equal(result.residual_traces.residuals, residual_traces_fixture.residuals)
+    np.testing.assert_array_equal(
+        result.residual_traces.residuals, residual_traces_fixture.residuals
+    )
     assert result.residual_traces.residuals is not residual_traces_fixture.residuals
 
 
@@ -497,7 +513,9 @@ def test_scale_system_polymorphic() -> None:
     # Both should work without modification (polymorphism via IScale)
 
 
-def test_scale_traces_polymorphic(residual_traces_fixture: ResidualTraceSamples) -> None:
+def test_scale_traces_polymorphic(
+    residual_traces_fixture: ResidualTraceSamples,
+) -> None:
     """Test scale_residual_traces works polymorphically with any IScale."""
     # Test with different IScale implementations
     matrix_scale = MatrixScale(spectral_radius_bound=10.0, dimension_scale=2.0)

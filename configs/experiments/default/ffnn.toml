@@ -1,0 +1,86 @@
+[SESSION]
+seed = 42
+precision = "float64"
+
+[MODEL]
+# NormScaled linear FFNN with layer normalization
+name = "NormScaledConstantWidthFFNN"
+module_path = "dlkit.nn.ffnn"
+hidden_size = 1000
+num_layers = 1
+# checkpoint path is managed dynamically by workflow - no hardcoded path needed
+
+[TRAINING]
+# Checkpoint to resume training from (full training state: model + optimizer + scheduler + epoch)
+# Comment out if starting fresh training
+[TRAINING.lr_tuner]
+min_lr = 1e-5
+max_lr = 1e-1
+num_training =  100
+mode = "linear"
+
+
+[TRAINING.trainer]
+max_epochs = 600
+accelerator = "auto"
+enable_checkpointing = true
+
+
+[[TRAINING.trainer.callbacks]]
+name = "ModelCheckpoint"
+filename = "ffnn"
+monitor = "val_loss"
+save_top_k = 1
+save_weights_only = false
+every_n_epochs = 50
+enable_version_counter = false
+
+[TRAINING.optimizer]
+lr = 1e-2
+name = "AdamW"
+
+[TRAINING.scheduler]
+name = "ReduceLROnPlateau"
+factor = 0.5
+patience = 15
+min_lr = 1e-14
+
+[[TRAINING.metrics]]
+name = "NormalizedVectorNormError"
+module_path = "dlkit.core.training.metrics"
+norm_ord = 2
+vector_dim = -1
+
+[DATASET]
+# Dataset uses PRE-NORMALIZED data from the data generation pipeline.
+# Data is normalized during generation (see data_pipeline.py) and saved as normalized.npz.
+# NO additional transforms are applied during training to avoid double normalization.
+# Features/targets are injected programmatically at runtime with in-memory arrays (not file paths).
+name = "FlexibleDataset"
+
+[DATAMODULE]
+name = "InMemoryModule"
+
+[DATAMODULE.dataloader]
+num_workers = 0
+batch_size = 32  # Reduced for small eigenvector dataset (504 samples → ~15 batches)
+pin_memory = true
+shuffle = true
+
+
+
+[MLFLOW]
+enabled = true
+
+[MLFLOW.server]
+# MLflow server backend database and artifacts storage
+backend_store_uri = "sqlite:////data/projects/graph-cg/data/mlruns/mlflow.db"
+artifacts_destination = "/data/projects/graph-cg/data/mlartifacts"
+
+[MLFLOW.client]
+# Connect to flow-level MLflow server started by workflow
+tracking_uri = "http://127.0.0.1:5000"
+
+[OPTUNA]
+enabled = false
+

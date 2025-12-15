@@ -183,11 +183,15 @@ lightning_logs/
 output*/
 mlruns*/
 mlartifacts*/
+*.json
 
 # Claude Code specific
 CLAUDE.md
 .claude/
+.gemini/
+CLAUDE.md
 AGENTS.md
+GEMINI.md
 
 # Images
 *.png

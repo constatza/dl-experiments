@@ -33,7 +33,7 @@ def load_numpy_array(path: str | Path) -> np.ndarray:
     """
     path = Path(path)
 
-    if path.suffix == '.npy':
+    if path.suffix == ".npy":
         arr = load_array(path).numpy()
     else:
         # Assume text format
@@ -89,7 +89,9 @@ def load_dataset(
 
     for name, arr in (("matrix", matrix), ("rhs", rhs), ("solutions", solutions)):
         if arr.dtype != np.float64:
-            raise ValueError(f"{filename}:{name} dtype must be float64, got {arr.dtype}")
+            raise ValueError(
+                f"{filename}:{name} dtype must be float64, got {arr.dtype}"
+            )
 
     return {"matrix": matrix, "rhs": rhs, "solutions": solutions}
 
@@ -198,7 +200,9 @@ def file_exists(path: str | Path) -> bool:
     return Path(path).exists()
 
 
-def get_latest_checkpoint(checkpoint_dir: str | Path, pattern: str = "*.ckpt") -> Path | None:
+def get_latest_checkpoint(
+    checkpoint_dir: str | Path, pattern: str = "*.ckpt"
+) -> Path | None:
     """Find the most recent checkpoint file in directory.
 
     Args:
@@ -251,7 +255,7 @@ def format_file_size(size_bytes: int) -> str:
     Returns:
         Formatted size string
     """
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if size_bytes < 1024.0:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024.0
@@ -279,19 +283,23 @@ class FileTracker:
 
     def track_read(self, path: str | Path, size: int | None = None) -> None:
         """Track file read operation."""
-        self.operations.append({
-            "operation": "read",
-            "path": str(path),
-            "size": size or get_file_size(path)
-        })
+        self.operations.append(
+            {
+                "operation": "read",
+                "path": str(path),
+                "size": size or get_file_size(path),
+            }
+        )
 
     def track_write(self, path: str | Path, size: int | None = None) -> None:
         """Track file write operation."""
-        self.operations.append({
-            "operation": "write",
-            "path": str(path),
-            "size": size or get_file_size(path)
-        })
+        self.operations.append(
+            {
+                "operation": "write",
+                "path": str(path),
+                "size": size or get_file_size(path),
+            }
+        )
 
     def get_summary(self) -> dict[str, Any]:
         """Get summary of file operations."""
@@ -309,10 +317,14 @@ class FileTracker:
     def print_summary(self) -> None:
         """Print file operations summary."""
         summary = self.get_summary()
-        print(f"File Operations Summary:")
+        print("File Operations Summary:")
         print(f"  Total operations: {summary['total_operations']}")
-        print(f"  Reads: {summary['reads']} ({format_file_size(summary['total_read_size'])})")
-        print(f"  Writes: {summary['writes']} ({format_file_size(summary['total_write_size'])})")
+        print(
+            f"  Reads: {summary['reads']} ({format_file_size(summary['total_read_size'])})"
+        )
+        print(
+            f"  Writes: {summary['writes']} ({format_file_size(summary['total_write_size'])})"
+        )
 
 
 # Global file tracker instance

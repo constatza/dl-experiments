@@ -12,6 +12,7 @@ from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy
 from ...validation import validate_rhs_vector as validate_rhs
 from ..helpers import select_archive_files
 from ..runner import register_strategy
+from ..strategy_configs import RhsArchiveConfig
 
 
 def _load_rhs_vectors(
@@ -36,7 +37,7 @@ def _load_rhs_vectors(
         raise ValueError("No RHS files provided")
 
     rhs_list: list[np.ndarray] = []
-    n = matrix.shape[0]
+    matrix.shape[0]
 
     for rhs_file in rhs_files:
         rhs = np.loadtxt(rhs_file, dtype=np.float64)
@@ -128,6 +129,7 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
     """
 
     name = "rhs_archive"
+    ConfigType = RhsArchiveConfig
 
     def requires_rhs(self) -> bool:
         """Archive is self-sufficient, doesn't need mother RHS."""
@@ -161,17 +163,17 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
             ValueError: If rhs_glob not provided or insufficient files
             FileNotFoundError: If no files match pattern
         """
-        # Extract configuration
-        rhs_glob = cfg.get("rhs_glob")
-        if not rhs_glob:
-            raise ValueError("RhsArchiveStrategy requires 'rhs_glob' in configuration")
+        # Validate and convert to typed config
+        config = RhsArchiveConfig(**cfg)
 
-        samples = int(cfg.get("samples", -1))
-        shuffle = bool(cfg.get("shuffle", False))
-        seed = cfg.get("seed")
-        solve_systems = bool(cfg.get("solve_systems", True))
-        cg_tolerance = float(cfg.get("cg_tolerance", 1e-12))
-        cg_max_iters = int(cfg.get("cg_max_iters", 500))
+        # Extract configuration
+        rhs_glob = config.rhs_glob
+        samples = config.samples
+        shuffle = config.shuffle
+        seed = config.seed
+        solve_systems = config.solve_systems
+        cg_tolerance = config.cg_tolerance
+        cg_max_iters = config.cg_max_iters
 
         # Select files from archive
         rhs_files = select_archive_files(

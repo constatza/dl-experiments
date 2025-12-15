@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
@@ -18,7 +17,6 @@ def _load_array(file: Path) -> np.ndarray:
 
 def standardize_raw_filenames(base_dir: Path) -> None:
     """Rename raw files to the ``{kind}-{dimensions}`` convention."""
-
     for file in sorted(base_dir.glob("*")):
         if file.is_dir():
             continue
@@ -37,7 +35,11 @@ def standardize_raw_filenames(base_dir: Path) -> None:
             dim_str = str(data.shape[0])
             keyword = "rhs"
         elif data.ndim == 2:
-            dim_str = str(data.shape[0]) if data.shape[0] == data.shape[1] else f"{data.shape[0]}x{data.shape[1]}"
+            dim_str = (
+                str(data.shape[0])
+                if data.shape[0] == data.shape[1]
+                else f"{data.shape[0]}x{data.shape[1]}"
+            )
             keyword = "matrix"
         else:
             print(f"  Unexpected shape: {data.shape}")
@@ -60,7 +62,9 @@ def standardize_raw_filenames(base_dir: Path) -> None:
                 print(f"  Duplicate of {new_name}, removing original")
                 file.unlink()
             else:
-                print(f"  ⚠ Warning: {new_name} already exists with different data, skipping")
+                print(
+                    f"  ⚠ Warning: {new_name} already exists with different data, skipping"
+                )
             continue
 
         file.rename(new_path)

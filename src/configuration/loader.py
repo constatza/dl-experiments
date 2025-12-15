@@ -23,6 +23,12 @@ from dlkit.tools.config import load_training_settings
 from dlkit.tools.config.core.updater import update_settings
 from dlkit.tools.config.core.base_settings import BasicSettings
 
+from ..constants import (
+    DEFAULT_PROJECT_ROOT,
+    EXP_MODEL_CONFIG_NAME,
+    EXP_DATA_CONFIG_NAME,
+    EXP_SOLVER_CONFIG_NAME,
+)
 from ..paths.core import (
     FlowContext,
     ProjectRoots,
@@ -297,12 +303,9 @@ def _get_default_solver_config_path() -> Path:
     Pure function - returns default solver config location.
 
     Returns:
-        Path to graph-cg/solver-configs/default.toml.
+        Path to configs/experiments/default/solver.toml.
     """
-    # Resolve relative to graph-cg directory (3 levels up from this module)
-    # This module is at: graph-cg/src/configuration/loader.py
-    module_dir = Path(__file__).parent  # graph-cg/src/configuration
-    return module_dir.parent.parent / "solver-configs" / "default.toml"
+    return DEFAULT_PROJECT_ROOT / "configs" / "experiments" / "default" / "solver.toml"
 
 
 def _ensure_training_dirs(context: FlowContext) -> None:
@@ -394,3 +397,105 @@ def load_config(
     settings = _inject_context_paths(settings, context)
 
     return settings, context  # type: ignore[return-value]
+
+
+def _resolve_experiment_config_path(
+    experiment_name: str,
+    config_filename: str,
+    experiment_dir: Path,
+    default_dir: Path,
+    default_filename: str | None = None,
+) -> Path:
+    """
+    Resolve a config file path using the experiment -> default fallback logic.
+    """
+    exp_path = experiment_dir / config_filename
+    if exp_path.exists():
+        return exp_path
+
+    # Use specified default filename if provided, otherwise use standard config filename
+    target_default_name = default_filename if default_filename else config_filename
+    default_path = default_dir / target_default_name
+    
+    if default_path.exists():
+        return default_path
+
+    raise FileNotFoundError(
+        f"Config file '{config_filename}' not found for experiment '{experiment_name}' "
+        f"in '{exp_path.parent}'. Fallback '{target_default_name}' also not found in '{default_dir}'"
+    )
+
+
+def load_experiments(
+    master_config_path: Path,
+) -> list[tuple[str, GeneralSettings, FlowContext, Path, Path, Path]]:
+    """
+    Load all active experiment configurations based on the master config file.
+
+    Args:
+        master_config_path: Path to the TOML file listing experiments to run.
+
+    Returns:
+        A list of tuples, where each tuple contains:
+        (experiment_name, settings, context, model_path, data_gen_path, solver_path).
+    """
+    if not master_config_path.exists():
+        raise FileNotFoundError(f"Master config not found: {master_config_path}")
+
+    config_dir = master_config_path.parent
+
+    with open(master_config_path, "rb") as f:
+        master_config_data = tomllib.load(f)
+    
+    # Resolve project root
+    project_root_str = master_config_data.get("project_root", "..")
+    project_root = (config_dir / project_root_str).resolve()
+
+    # Resolve defaults directory
+    defaults_dir_str = master_config_data.get("defaults_dir", "experiments/default")
+    defaults_dir = (config_dir / defaults_dir_str).resolve()
+
+    # Get experiments dictionary
+    experiments_map = master_config_data.get("experiments", {})
+    if not experiments_map:
+        # Fallback for legacy "run" list, assuming standard structure if not defined
+        run_list = master_config_data.get("run", [])
+        experiments_map = {name: f"experiments/{name}" for name in run_list}
+
+    resolved_experiments: list[tuple[str, GeneralSettings, FlowContext, Path, Path, Path]] = []
+    for exp_name, exp_path_str in experiments_map.items():
+        exp_dir = (config_dir / exp_path_str).resolve()
+
+        # Resolve paths for all three config files
+        # We search in the specific experiment dir, then fallback to defaults_dir
+        model_path = _resolve_experiment_config_path(
+            exp_name, EXP_MODEL_CONFIG_NAME, exp_dir, defaults_dir, default_filename="ffnn.toml"
+        )
+        data_pointer_path = _resolve_experiment_config_path(
+            exp_name, EXP_DATA_CONFIG_NAME, exp_dir, defaults_dir
+        )
+        solver_path = _resolve_experiment_config_path(
+            exp_name, EXP_SOLVER_CONFIG_NAME, exp_dir, defaults_dir
+        )
+
+        # The data.toml file is a pointer to the actual data generation config.
+        with open(data_pointer_path, "rb") as f:
+            data_pointer_config = tomllib.load(f)
+        
+        data_gen_path_str = data_pointer_config.get("dataconfig")
+        if not data_gen_path_str:
+            raise ValueError(f"The data.toml for experiment '{exp_name}' is missing the 'dataconfig' key.")
+        
+        # The path in dataconfig is relative to the project root.
+        real_data_gen_path = project_root / data_gen_path_str
+
+        # Use the existing load_config function to get the settings and context
+        settings, context = load_config(
+            config_path=model_path,
+            data_config_path=real_data_gen_path,
+            solver_config_path=solver_path,
+        )
+        
+        resolved_experiments.append((exp_name, settings, context, model_path, real_data_gen_path, solver_path))
+
+    return resolved_experiments

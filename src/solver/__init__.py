@@ -66,7 +66,6 @@ from __future__ import annotations
 
 from .comparison import (
     format_results_summary,
-    preconditioned_cg,
     run_cg_comparison,
     summarize_best_combinations,
 )

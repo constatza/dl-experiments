@@ -67,16 +67,22 @@ def _merge_residual_traces(
 
     if all(has_search_directions):
         # All blocks have search_directions (validated above), filter None for type safety
-        search_directions = np.vstack([
-            block.search_directions for block in blocks
-            if block.search_directions is not None
-        ])
+        search_directions = np.vstack(
+            [
+                block.search_directions
+                for block in blocks
+                if block.search_directions is not None
+            ]
+        )
     if all(has_search_direction_products):
         # All blocks have search_direction_products (validated above), filter None for type safety
-        search_direction_products = np.vstack([
-            block.search_direction_products for block in blocks
-            if block.search_direction_products is not None
-        ])
+        search_direction_products = np.vstack(
+            [
+                block.search_direction_products
+                for block in blocks
+                if block.search_direction_products is not None
+            ]
+        )
     return ResidualTraceSamples(
         residuals=residuals,
         solutions=solutions,

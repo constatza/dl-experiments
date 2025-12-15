@@ -39,7 +39,11 @@ def _to_linear_operator(
     A: np.ndarray,
 ) -> LinearOperator:
     dtype = np.asarray(A).dtype
-    return LinearOperator(shape=A.shape, dtype=dtype, matvec=lambda x: matvec(np.asarray(x, dtype=dtype, copy=False)))
+    return LinearOperator(
+        shape=A.shape,
+        dtype=dtype,
+        matvec=lambda x: matvec(np.asarray(x, dtype=dtype, copy=False)),
+    )
 
 
 def make_jacobi_preconditioner(A: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
@@ -127,7 +131,11 @@ def make_hybrid_preconditioner(
     fallback: Literal["identity", "jacobi", "ilu"] = "jacobi",
     config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
-) -> tuple[Callable[[np.ndarray], np.ndarray], Callable[[np.ndarray], np.ndarray], NeuralPreconditionerMetadata]:
+) -> tuple[
+    Callable[[np.ndarray], np.ndarray],
+    Callable[[np.ndarray], np.ndarray],
+    NeuralPreconditionerMetadata,
+]:
     """Create neural preconditioner with cheaper fallback.
 
     Returns a pair of preconditioners for use with flexible_pcg's
@@ -144,7 +152,9 @@ def make_hybrid_preconditioner(
     Returns:
         Tuple of (neural_preconditioner, fallback_preconditioner, metadata)
     """
-    neural_precond, metadata = make_neural_preconditioner(A, neural_checkpoint_path, config_path, data_config_path)
+    neural_precond, metadata = make_neural_preconditioner(
+        A, neural_checkpoint_path, config_path, data_config_path
+    )
 
     if fallback == "identity":
         fallback_precond = make_identity_preconditioner()
@@ -170,7 +180,9 @@ def make_neural_step_helper(
     )
 
 
-def make_pca_preconditioner(A: np.ndarray, pca_path: str | Path) -> Callable[[np.ndarray], np.ndarray]:
+def make_pca_preconditioner(
+    A: np.ndarray, pca_path: str | Path
+) -> Callable[[np.ndarray], np.ndarray]:
     pca, stats = load_pca_model(pca_path)
     V = get_pca_components_matrix(pca)
     A_reduced = V.T @ A @ V
@@ -191,11 +203,15 @@ def make_pca_preconditioner(A: np.ndarray, pca_path: str | Path) -> Callable[[np
     return preconditioner
 
 
-def make_pca_preconditioner_operator(A: np.ndarray, pca_path: str | Path) -> LinearOperator:
+def make_pca_preconditioner_operator(
+    A: np.ndarray, pca_path: str | Path
+) -> LinearOperator:
     return _to_linear_operator(make_pca_preconditioner(A, pca_path), A)
 
 
-def make_pca_warm_start(A: np.ndarray, pca_path: str | Path) -> Callable[[np.ndarray], np.ndarray]:
+def make_pca_warm_start(
+    A: np.ndarray, pca_path: str | Path
+) -> Callable[[np.ndarray], np.ndarray]:
     pca, stats = load_pca_model(pca_path)
     V = get_pca_components_matrix(pca)
     A_reduced = V.T @ A @ V
@@ -220,7 +236,10 @@ def create_preconditioner(
     name: Literal["none", "jacobi", "ilu", "pca", "neural"],
     A: np.ndarray,
     **kwargs,
-) -> Callable[[np.ndarray], np.ndarray] | tuple[Callable[[np.ndarray], np.ndarray], NeuralPreconditionerMetadata]:
+) -> (
+    Callable[[np.ndarray], np.ndarray]
+    | tuple[Callable[[np.ndarray], np.ndarray], NeuralPreconditionerMetadata]
+):
     """Create a preconditioner by name.
 
     Args:
@@ -256,7 +275,9 @@ def create_preconditioner(
     raise ValueError(f"Unknown preconditioner type: {name}")
 
 
-def create_preconditioners(A: np.ndarray) -> dict[str, Callable[[np.ndarray], np.ndarray]]:
+def create_preconditioners(
+    A: np.ndarray,
+) -> dict[str, Callable[[np.ndarray], np.ndarray]]:
     return {
         "none": create_preconditioner("none", A),
         "jacobi": create_preconditioner("jacobi", A),
@@ -296,7 +317,9 @@ def create_warm_starts(
             logger.error(f"Failed to create neural warm start: {exc}")
 
             def _raise(_: np.ndarray, *, _err=exc) -> np.ndarray:  # type: ignore[return-type]
-                raise RuntimeError(f"Neural warm start unavailable: {_err}. Checkpoint: {checkpoint_to_use}")
+                raise RuntimeError(
+                    f"Neural warm start unavailable: {_err}. Checkpoint: {checkpoint_to_use}"
+                )
 
             warm_starts["neural_warm_start"] = _raise
 
@@ -315,7 +338,9 @@ def create_warm_starts(
                 logger.error(f"Failed to create PCA warm start: {exc}")
 
                 def _raise(_: np.ndarray, *, _err=exc) -> np.ndarray:  # type: ignore[return-type]
-                    raise RuntimeError(f"PCA warm start unavailable: {_err}. Path: {pca_path}")
+                    raise RuntimeError(
+                        f"PCA warm start unavailable: {_err}. Path: {pca_path}"
+                    )
 
                 warm_starts["pca_warm_start"] = _raise
 
@@ -347,7 +372,9 @@ def create_step_helpers(
             logger.error(f"Failed to create neural step helper: {exc}")
 
             def _raise(_: object, *, _err=exc) -> np.ndarray:  # type: ignore[return-type]
-                raise RuntimeError(f"Neural step helper unavailable: {_err}. Checkpoint: {checkpoint_to_use}")
+                raise RuntimeError(
+                    f"Neural step helper unavailable: {_err}. Checkpoint: {checkpoint_to_use}"
+                )
 
             helpers["neural_step"] = _raise
 

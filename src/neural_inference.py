@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import torch
@@ -69,7 +69,6 @@ def create_neural_step_helper(
         The helper holds a predictor with resources that should be cleaned up.
         Access the underlying predictor via helper._predictor to call unload().
     """
-
     _ = config_path  # Placeholder for API compatibility
     _ = data_config_path
     checkpoint = _ensure_checkpoint(Path(checkpoint_path))
@@ -106,7 +105,7 @@ class _NeuralWarmStart:
             str(checkpoint),
             batch_size=1,
             apply_transforms=False,
-            precision=PrecisionStrategy.FULL_64
+            precision=PrecisionStrategy.FULL_64,
         )
 
     def __enter__(self) -> _NeuralWarmStart:
@@ -173,13 +172,15 @@ class _NeuralWarmStart:
 
         except Exception as e:
             # Provide specific error context for neural warm start failures
-            error_msg = f"Neural inference failed"
+            error_msg = "Neural inference failed"
             if "Could not infer dtype" in str(e):
-                error_msg += f" - dtype inference error, likely due to malformed model output"
+                error_msg += (
+                    " - dtype inference error, likely due to malformed model output"
+                )
             elif "predictions" in str(e).lower():
-                error_msg += f" - predictions format error"
+                error_msg += " - predictions format error"
             elif "checkpoint" in str(e).lower():
-                error_msg += f" - checkpoint loading error"
+                error_msg += " - checkpoint loading error"
             else:
                 error_msg += f" - {type(e).__name__}: {str(e)}"
 
@@ -217,9 +218,7 @@ class _NeuralWarmStart:
         return prediction.reshape(-1)
 
     def _prepare_inputs(
-        self,
-        matrix: np.ndarray | None,
-        rhs: np.ndarray
+        self, matrix: np.ndarray | None, rhs: np.ndarray
     ) -> dict[str, torch.Tensor]:
         """Prepare inputs for dlkit inference, supporting both FFNN and GNN models.
 
@@ -267,7 +266,6 @@ class _NeuralStepHelper:
 
     def __call__(self, context: Any) -> np.ndarray:
         """Return helper correction for given iteration context or residual."""
-
         if isinstance(context, np.ndarray):
             residual = context
             matrix = None
@@ -344,7 +342,7 @@ def _extract_prediction_array(predictions: Any, target_size: int) -> np.ndarray:
             if keys:
                 first_val_type = type(predictions[keys[0]]).__name__
                 pred_info += f", first value type: {first_val_type}"
-        elif hasattr(predictions, 'shape'):
+        elif hasattr(predictions, "shape"):
             pred_info = f"{pred_type} with shape: {predictions.shape}"
         else:
             pred_info = f"{pred_type}: {str(predictions)[:100]}"
@@ -356,8 +354,7 @@ def _extract_prediction_array(predictions: Any, target_size: int) -> np.ndarray:
 
 
 def prepare_neural_input(
-    rhs: np.ndarray,
-    matrix: np.ndarray | None = None
+    rhs: np.ndarray, matrix: np.ndarray | None = None
 ) -> dict[str, torch.Tensor]:
     """Prepare input tensors for backwards compatibility with older tooling.
 
