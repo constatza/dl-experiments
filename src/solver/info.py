@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 import numpy as np
 
 if TYPE_CHECKING:
-    from .event_logging import VectorLogger
+    from .trace_recorder import TraceRecorder
 
 
 class SolverCallbackLogger(Protocol):
@@ -42,7 +42,7 @@ class SolverResult:
     maxiter: int | None = None
     callback_type: Literal["x", "pr_norm", None] | None = None
     logger: SolverCallbackLogger | None = None
-    event_log: VectorLogger | None = None
+    event_log: TraceRecorder | None = None
     stopping_criterion: str | None = None
     residual_vectors: np.ndarray | None = None
     solution_vectors: np.ndarray | None = None

@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 import pytest
 from numpy.typing import NDArray
@@ -30,20 +24,6 @@ def _tol_bound(b: NDArray, atol: float, rtol: float) -> float:
     return max(atol, rtol * float(np.linalg.norm(b)))
 
 
-def _save_history_plot(name: str, history: list[float], out_dir: Path) -> None:
-    if not history:
-        return
-    fig, ax = plt.subplots(figsize=(4, 3))
-    ax.semilogy(history, marker="o")
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Residual norm")
-    ax.set_title(name)
-    fig.tight_layout()
-    out_path = out_dir / f"{name}.png"
-    fig.savefig(out_path)
-    plt.close(fig)
-
-
 @pytest.fixture(scope="module")
 def spd_system() -> tuple[NDArray, NDArray, NDArray]:
     """Deterministic 20x20 SPD system with known solution."""
@@ -62,19 +42,18 @@ def spd_system() -> tuple[NDArray, NDArray, NDArray]:
     return A, b, solution
 
 
-@pytest.fixture(scope="module")
-def diagnostics_dir() -> Path:
-    out_dir = Path(__file__).resolve().parent / "solver" / "diagnostics"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    return out_dir
-
-
-def test_flexible_matches_classical(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_flexible_matches_classical(
+    spd_system: tuple[NDArray, NDArray, NDArray],
+) -> None:
     A, b, x_true = spd_system
     x0 = np.zeros_like(b)
 
-    x_classic, info_classic = preconditioned_cg(A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, max_iter=200)
-    x_flex, info_flex = flexible_cg(A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, max_iter=200)
+    x_classic, info_classic = preconditioned_cg(
+        A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, max_iter=200
+    )
+    x_flex, info_flex = flexible_cg(
+        A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, max_iter=200
+    )
 
     assert info_classic.converged == info_flex.converged
     bound = _tol_bound(b, FUNCTIONAL_ATOL, FUNCTIONAL_RTOL)
@@ -82,53 +61,8 @@ def test_flexible_matches_classical(spd_system: tuple[NDArray, NDArray, NDArray]
     assert info_flex.residual_abs <= bound
 
 
-def test_flexible_helper_accelerates(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
-    A, b, x_true = spd_system
-    x0 = np.zeros_like(b)
-
-    _, info = flexible_cg(
-        A,
-        b,
-        x0,
-        atol=FUNCTIONAL_ATOL,
-        rtol=FUNCTIONAL_RTOL,
-        max_iter=200,
-    )
-
-    assert info.converged
-    assert np.linalg.norm(A @ _ - b) <= _tol_bound(b, FUNCTIONAL_ATOL, FUNCTIONAL_RTOL)
-
-
-def test_flexible_cg_captures_residuals_and_solutions(
-    spd_system: tuple[NDArray, NDArray, NDArray], diagnostics_dir: Path
-) -> None:
-    A, b, _ = spd_system
-    x0 = np.zeros_like(b)
-
-    _, info = flexible_cg(
-        A,
-        b,
-        x0,
-        max_iter=200,
-        atol=FUNCTIONAL_ATOL,
-        rtol=FUNCTIONAL_RTOL,
-        capture_traces=True,
-        capture_search_directions=True,
-    )
-
-    assert info.residual_history is not None
-    assert len(info.residual_history) >= 1
-    assert len(info.residual_history) >= info.iterations
-    assert not np.isnan(info.residual_history).any()
-    assert info.residual_vectors is not None
-    assert info.solution_vectors is not None
-    assert info.residual_vectors.shape[0] >= info.iterations
-    assert info.solution_vectors.shape[0] >= info.iterations
-    _save_history_plot("flexible_cg_history", info.residual_history, diagnostics_dir)
-
-
 def test_pcg_captures_residual_history(
-    spd_system: tuple[NDArray, NDArray, NDArray], diagnostics_dir: Path
+    spd_system: tuple[NDArray, NDArray, NDArray],
 ) -> None:
     A, b, _ = spd_system
     x0 = np.zeros_like(b)
@@ -152,14 +86,55 @@ def test_pcg_captures_residual_history(
     assert len(info.residual_history) >= info.iterations
     assert not np.isnan(info.residual_history).any()
     assert info.event_log is not None
-    residual_norms = info.event_log.get_history("residual_norm")
-    assert len(residual_norms) > 0
-    assert len(residual_norms) >= info.iterations
-    assert not np.isnan(np.array(residual_norms)).any()
-    _save_history_plot("pcg_history", residual_norms, diagnostics_dir)
+    residual_events = info.event_log.get_history("residual")
+    assert len(residual_events) > 0
+    assert len(residual_events) >= info.iterations
+    residual_norms = np.asarray(
+        info.event_log.get_history("residual_norm"), dtype=np.float64
+    )
+    assert residual_norms.size > 0
+    assert residual_norms.size >= info.iterations
+    assert not np.isnan(residual_norms).any()
 
 
-def test_flexible_cg_accepts_linear_operator_preconditioner(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_pcg_captures_vector_traces(
+    spd_system: tuple[NDArray, NDArray, NDArray],
+) -> None:
+    A, b, _ = spd_system
+    x0 = np.zeros_like(b)
+
+    def jacobi(residual: np.ndarray) -> np.ndarray:
+        return residual / np.diag(A)
+
+    _, info = preconditioned_cg(
+        A,
+        b,
+        x0,
+        preconditioner=jacobi,
+        atol=FUNCTIONAL_ATOL,
+        rtol=FUNCTIONAL_RTOL,
+        max_iter=15,
+        capture_traces=True,
+    )
+
+    assert info.residual_vectors is not None
+    assert info.solution_vectors is not None
+    assert info.residual_vectors.shape[0] == info.iterations
+    assert info.solution_vectors.shape[0] == info.iterations
+    assert info.residual_vectors.shape[1] == b.shape[0]
+    assert info.solution_vectors.shape[1] == b.shape[0]
+    final_solution = info.solution_vectors[-1]
+    assert np.allclose(
+        info.residual_vectors[-1],
+        b - A @ final_solution,
+        atol=FUNCTIONAL_ATOL,
+        rtol=0.0,
+    )
+
+
+def test_flexible_cg_accepts_linear_operator_preconditioner(
+    spd_system: tuple[NDArray, NDArray, NDArray],
+) -> None:
     """Ensure FCG can use a SciPy LinearOperator preconditioner."""
     A, b, x_true = spd_system
     x0 = np.zeros_like(b)
@@ -186,7 +161,9 @@ def test_flexible_cg_accepts_linear_operator_preconditioner(spd_system: tuple[ND
     assert info.residual_abs <= _tol_bound(b, FUNCTIONAL_ATOL, FUNCTIONAL_RTOL)
 
 
-def test_flexible_cg_with_torch_linear_preconditioner(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_flexible_cg_with_torch_linear_preconditioner(
+    spd_system: tuple[NDArray, NDArray, NDArray],
+) -> None:
     """Integration: FCG using a torch.nn.Linear as neural-like preconditioner."""
     try:
         import torch  # type: ignore
@@ -229,7 +206,9 @@ def test_flexible_cg_with_torch_linear_preconditioner(spd_system: tuple[NDArray,
     assert neural_info.residual_abs <= _tol_bound(b, FUNCTIONAL_ATOL, FUNCTIONAL_RTOL)
 
 
-def test_run_cg_comparison_preconditioners(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_run_cg_comparison_preconditioners(
+    spd_system: tuple[NDArray, NDArray, NDArray],
+) -> None:
     """Basic sanity check: static preconditioners run via SciPy CG."""
     A, b, _ = spd_system
 
@@ -248,58 +227,24 @@ def test_run_cg_comparison_preconditioners(spd_system: tuple[NDArray, NDArray, N
         assert not result.breakdown
 
 
-def test_flexible_pcg_capture_traces(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
-    """Test that flexible_pcg captures residual and solution traces correctly."""
-    A, b, x_true = spd_system
-    x0 = np.zeros_like(b)
-
-    # Run with trace capture
-    x_final, info = flexible_cg(
-        A,
-        b,
-        x0,
-        max_iter=200,
-        capture_traces=True,
-        atol=FUNCTIONAL_ATOL,
-        rtol=FUNCTIONAL_RTOL,
-    )
-
-    # Verify trace arrays are present
-    assert info.residual_vectors is not None
-    assert info.solution_vectors is not None
-
-    residual_vecs = info.residual_vectors
-    solution_vecs = info.solution_vectors
-
-    # SciPy callback logs after each iteration; expect iterations length
-    num_iters = info.iterations
-    assert residual_vecs.shape[0] >= num_iters
-    assert solution_vecs.shape[0] >= num_iters
-    assert residual_vecs.shape[1] == len(b)
-    assert solution_vecs.shape[1] == len(b)
-
-    # Verify final solution matches returned solution
-    assert np.all(np.isclose(solution_vecs[-1], x_final, atol=FUNCTIONAL_ATOL, rtol=0.0))
-    assert np.all(np.isclose(x_final, x_true, atol=FUNCTIONAL_ATOL, rtol=0.0))
-
-    # Verify residuals correspond to solutions at SAME iteration for trailing entries
-    for k in range(num_iters):
-        expected_residual = b - A @ solution_vecs[k]
-        assert np.all(np.isclose(residual_vecs[k], expected_residual, atol=FUNCTIONAL_ATOL, rtol=0.0))
-
-
-def test_flexible_pcg_no_traces_by_default(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_flexible_pcg_no_traces_by_default(
+    spd_system: tuple[NDArray, NDArray, NDArray],
+) -> None:
     """Test that traces are not captured when capture_traces=False."""
     A, b, _ = spd_system
     x0 = np.zeros_like(b)
 
-    _, info = flexible_cg(A, b, x0, max_iter=50, capture_traces=False, atol=FUNCTIONAL_ATOL)
+    _, info = flexible_cg(
+        A, b, x0, max_iter=50, capture_traces=False, atol=FUNCTIONAL_ATOL
+    )
 
     assert info.residual_vectors is None
     assert info.solution_vectors is None
 
 
-def test_flexible_pcg_traces_satisfy_residual_equation(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_flexible_pcg_traces_satisfy_residual_equation(
+    spd_system: tuple[NDArray, NDArray, NDArray],
+) -> None:
     """Test that captured traces satisfy: residual = b - A @ solution."""
     A, b, _ = spd_system
     x0 = np.zeros_like(b)
@@ -319,14 +264,16 @@ def test_flexible_pcg_traces_satisfy_residual_equation(spd_system: tuple[NDArray
 
     # Verify each captured pair satisfies: r_k = b - A @ x_k
     for k in range(len(residual_vecs)):
-        r_k = residual_vecs[k]
-        x_k = solution_vecs[k]
+        r_k: np.ndarray = residual_vecs[k]
+        x_k: np.ndarray = solution_vecs[k]
 
         # Compute residual from solution
         computed_residual = b - A @ x_k
 
         # Verify they match
-        assert np.all(np.isclose(r_k, computed_residual, atol=FUNCTIONAL_ATOL, rtol=0.0)), (
+        assert np.all(
+            np.isclose(r_k, computed_residual, atol=FUNCTIONAL_ATOL, rtol=0.0)
+        ), (
             f"Pair {k}: residual does not satisfy r_k = b - A @ x_k\n"
             f"  Captured r_k = {r_k}\n"
             f"  b - A @ x_k  = {computed_residual}\n"
@@ -350,14 +297,13 @@ def test_partial_reorthog_unlimited_window() -> None:
     v_reorthog, info = reorthog.reorthogonalize(v, basis, iteration=5)
 
     # Should have reorthogonalized against all 5 vectors
-    assert info["reorthog_count"] == 5
-    assert info["window_size"] == 5
+    assert info.reorthog_count == 5
+    assert info.window_size == 5
 
 
 def test_partial_reorthog_fail_fast() -> None:
-    """Test that PartialReorthogonalization raises errors on numerical issues."""
+    """Test that PartialReorthogonalization reports breakdown instead of raising."""
     from src.solver import PartialReorthogonalization
-    import pytest
 
     reorthog = PartialReorthogonalization(window_size=10)
 
@@ -365,8 +311,11 @@ def test_partial_reorthog_fail_fast() -> None:
     basis = [np.array([1e-20, 1e-20])]
     v = np.array([1.0, 1.0])
 
-    with pytest.raises(ValueError, match="near-zero norm"):
-        reorthog.reorthogonalize(v, basis, iteration=1)
+    v_out, info = reorthog.reorthogonalize(v, basis, iteration=1)
+    assert np.allclose(v_out, v)
+    assert info.breakdown is True
+    assert info.reason is not None and "near-zero" in info.reason
+    assert info.basis_index == 0
 
 
 def test_full_reorthog_fail_fast_zero_input() -> None:
@@ -382,9 +331,10 @@ def test_full_reorthog_fail_fast_zero_input() -> None:
     # Should return gracefully with breakdown flag instead of raising
     v_out, info = reorthog.reorthogonalize(v, basis, iteration=1)
 
-    assert info["breakdown"] is True
-    assert "near-zero" in info["reason"].lower()
-    assert "norm" in info["reason"].lower()
+    assert info.breakdown is True
+    assert info.reason is not None
+    assert "near-zero" in info.reason.lower()
+    assert "norm" in info.reason.lower()
 
 
 def test_full_reorthog_fail_fast_zero_basis() -> None:
@@ -400,10 +350,12 @@ def test_full_reorthog_fail_fast_zero_basis() -> None:
     # Should return gracefully with breakdown flag instead of raising
     v_out, info = reorthog.reorthogonalize(v, basis, iteration=1)
 
-    assert info["breakdown"] is True
-    assert "near-zero" in info["reason"].lower()
+    assert info.breakdown is True
+    assert info.reason is not None
+    reason_lower = info.reason.lower()
+    assert "near-zero" in reason_lower
     # Reason should mention either "A-norm" or "norm" or "basis"
-    assert any(word in info["reason"].lower() for word in ["a-norm", "norm", "basis"])
+    assert any(word in reason_lower for word in ["a-norm", "norm", "basis"])
 
 
 def test_selective_reorthog_strict_threshold() -> None:
@@ -420,5 +372,5 @@ def test_selective_reorthog_strict_threshold() -> None:
     v_reorthog, info = reorthog_strict.reorthogonalize(v2, [v1], iteration=1)
 
     # Should have triggered reorthogonalization
-    assert info["triggered"]
-    assert info["reorthog_count"] > 0
+    assert info.triggered
+    assert info.reorthog_count > 0

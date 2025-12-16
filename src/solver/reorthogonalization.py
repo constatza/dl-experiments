@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Literal
+from dataclasses import dataclass, field
+from typing import Any, Literal, Optional
 
 import numpy as np
 from scipy.linalg import norm
@@ -26,9 +27,28 @@ class ReorthogonalizationStrategy(ABC):
         vector: np.ndarray,
         basis_vectors: list[np.ndarray],
         iteration: int,
-    ) -> tuple[np.ndarray, dict[str, Any]]:
+    ) -> tuple[np.ndarray, "ReorthogonalizationReport"]:
         """Reorthogonalize vector against basis vectors."""
         raise NotImplementedError
+
+
+@dataclass
+class ReorthogonalizationReport:
+    """Result of a reorthogonalization attempt."""
+
+    iteration: int
+    reorthog_count: int = 0
+    reorthog_coeffs: list[float] = field(default_factory=list)
+    breakdown: bool = False
+    reason: Optional[str] = None
+    skipped: bool = False
+    window_size: Optional[int] = None
+    triggered: Optional[bool] = None
+    basis_index: Optional[int] = None
+    basis_norm: Optional[float] = None
+    pAp: Optional[float] = None
+    norm_initial: Optional[float] = None
+    norm_final: Optional[float] = None
 
 
 class FullReorthogonalization(ReorthogonalizationStrategy):
@@ -43,15 +63,15 @@ class FullReorthogonalization(ReorthogonalizationStrategy):
         vector: np.ndarray,
         basis_vectors: list[np.ndarray],
         iteration: int,
-    ) -> tuple[np.ndarray, dict[str, Any]]:
+    ) -> tuple[np.ndarray, ReorthogonalizationReport]:
         v = vector.copy()
+        report = ReorthogonalizationReport(iteration=iteration)
         v_norm_initial = norm(v)
         if v_norm_initial < REORTHOG_ZERO_NORM_TOL:
-            return v, {
-                "breakdown": True,
-                "reason": "near-zero input norm",
-                "norm_initial": v_norm_initial,
-            }
+            report.breakdown = True
+            report.reason = "near-zero input norm"
+            report.norm_initial = v_norm_initial
+            return v, report
 
         coeffs: list[float] = []
 
@@ -60,55 +80,47 @@ class FullReorthogonalization(ReorthogonalizationStrategy):
                 Ap = self.A.dot(basis_vec)
                 pAp = np.dot(basis_vec, Ap)
                 if abs(pAp) < REORTHOG_ZERO_NORM_TOL:
-                    return v, {
-                        "breakdown": True,
-                        "reason": "near-zero A-norm basis vector",
-                        "pAp": float(pAp),
-                        "basis_index": i,
-                    }
+                    report.breakdown = True
+                    report.reason = "near-zero A-norm basis vector"
+                    report.pAp = float(pAp)
+                    report.basis_index = i
+                    return v, report
                 coeff = np.dot(v, Ap) / pAp
             else:
                 basis_norm_sq = np.dot(basis_vec, basis_vec)
                 if basis_norm_sq < REORTHOG_ZERO_NORM_TOL:
-                    return v, {
-                        "breakdown": True,
-                        "reason": "near-zero basis norm",
-                        "basis_norm_sq": float(basis_norm_sq),
-                        "basis_index": i,
-                    }
+                    report.breakdown = True
+                    report.reason = "near-zero basis norm"
+                    report.basis_norm = float(basis_norm_sq)
+                    report.basis_index = i
+                    return v, report
                 coeff = np.dot(v, basis_vec) / basis_norm_sq
 
             if not np.isfinite(coeff):
-                return v, {
-                    "breakdown": True,
-                    "reason": "non-finite coeff",
-                    "coeff": float(coeff),
-                    "basis_index": i,
-                }
+                report.breakdown = True
+                report.reason = "non-finite coeff"
+                report.basis_index = i
+                return v, report
             if abs(coeff) > REORTHOG_MAX_COEFF:
-                return v, {
-                    "breakdown": True,
-                    "reason": "coeff too large",
-                    "coeff": float(coeff),
-                    "basis_index": i,
-                }
+                report.breakdown = True
+                report.reason = "coeff too large"
+                report.basis_index = i
+                return v, report
 
             v = v - coeff * basis_vec
             coeffs.append(float(coeff))
 
         v_norm_final = norm(v)
         if v_norm_final < REORTHOG_ZERO_NORM_TOL * v_norm_initial:
-            return v, {
-                "breakdown": True,
-                "reason": "near-zero output norm",
-                "norm_initial": v_norm_initial,
-                "norm_final": v_norm_final,
-            }
+            report.breakdown = True
+            report.reason = "near-zero output norm"
+            report.norm_initial = v_norm_initial
+            report.norm_final = v_norm_final
+            return v, report
 
-        return v, {
-            "reorthog_count": len(coeffs),
-            "reorthog_coeffs": coeffs,
-        }
+        report.reorthog_count = len(coeffs)
+        report.reorthog_coeffs = coeffs
+        return v, report
 
 
 class PartialReorthogonalization(ReorthogonalizationStrategy):
@@ -125,30 +137,30 @@ class PartialReorthogonalization(ReorthogonalizationStrategy):
         vector: np.ndarray,
         basis_vectors: list[np.ndarray],
         iteration: int,
-    ) -> tuple[np.ndarray, dict[str, Any]]:
+    ) -> tuple[np.ndarray, ReorthogonalizationReport]:
         v = vector.copy()
-        info: dict[str, Any] = {
-            "reorthog_count": 0,
-            "iteration": iteration,
-            "window_size": 0,
-        }
+        report = ReorthogonalizationReport(iteration=iteration, window_size=0)
 
         basis = (
             basis_vectors
             if self.window_size is None
             else basis_vectors[-self.window_size :]
         )
-        info["window_size"] = len(basis)
+        report.window_size = len(basis)
 
-        for basis_vec in basis:
+        for idx, basis_vec in enumerate(basis):
             norm_basis = norm(basis_vec)
             if norm_basis < REORTHOG_ZERO_NORM_TOL:
-                raise ValueError("basis vector has near-zero norm")
+                report.breakdown = True
+                report.reason = "near-zero basis norm"
+                report.basis_norm = float(norm_basis)
+                report.basis_index = idx
+                return v, report
             coeff = np.dot(basis_vec, v) / (norm_basis**2)
             v = v - coeff * basis_vec
-            info["reorthog_count"] += 1
+            report.reorthog_count += 1
 
-        return v, info
+        return v, report
 
 
 class SelectiveReorthogonalization(ReorthogonalizationStrategy):
@@ -165,8 +177,9 @@ class SelectiveReorthogonalization(ReorthogonalizationStrategy):
         vector: np.ndarray,
         basis_vectors: list[np.ndarray],
         iteration: int,
-    ) -> tuple[np.ndarray, dict[str, Any]]:
+    ) -> tuple[np.ndarray, ReorthogonalizationReport]:
         v = vector.copy()
+        report = ReorthogonalizationReport(iteration=iteration, reorthog_coeffs=[], triggered=False)
         if self.A is not None:
             Av = self.A.dot(v)
             v_norm_sq = float(np.dot(v, Av))
@@ -175,12 +188,8 @@ class SelectiveReorthogonalization(ReorthogonalizationStrategy):
             v_norm = norm(v)
             v_norm_sq = v_norm * v_norm
         if v_norm == 0:
-            return v, {
-                "reorthog_count": 0,
-                "reorthog_coeffs": [],
-                "triggered": False,
-                "threshold": self.threshold,
-            }
+            report.triggered = False
+            return v, report
 
         coeffs: list[float] = []
         needs_reorthog = False
@@ -219,12 +228,11 @@ class SelectiveReorthogonalization(ReorthogonalizationStrategy):
                     v = v - coeff * basis_vec
                     coeffs.append(float(coeff))
 
-        return v, {
-            "reorthog_count": len(coeffs),
-            "reorthog_coeffs": coeffs,
-            "triggered": needs_reorthog,
-            "threshold": self.threshold,
-        }
+        report.reorthog_count = len(coeffs)
+        report.reorthog_coeffs = coeffs
+        report.triggered = needs_reorthog
+        report.reason = None
+        return v, report
 
 
 def create_reorthogonalization_strategy(
@@ -252,8 +260,10 @@ def apply_reorthogonalization(
     vector: np.ndarray,
     basis_vectors: list[np.ndarray],
     iteration: int,
-) -> tuple[np.ndarray, dict[str, Any]]:
+) -> tuple[np.ndarray, ReorthogonalizationReport]:
     """Apply reorthogonalization if a strategy is provided."""
     if strategy is None or not basis_vectors:
-        return vector, {"skipped": True, "reorthog_count": 0}
+        return vector, ReorthogonalizationReport(
+            iteration=iteration, skipped=True, reorthog_count=0
+        )
     return strategy.reorthogonalize(vector, basis_vectors, iteration)

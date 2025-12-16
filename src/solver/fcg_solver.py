@@ -19,7 +19,7 @@ Design Principles:
     - Single Responsibility: Solver only orchestrates algorithm
     - Dependency Inversion: Depends on Preconditioner abstraction
     - Interface Segregation: Implements minimal IIterativeSolver interface
-    - Event Sourcing: Optional VectorLogger for iteration history
+    - Trace Recording: Optional TraceRecorder for iteration history
 
 References:
     - Notay (2000): "Flexible Conjugate Gradients"
@@ -57,6 +57,7 @@ from .info import IterationContext, SolverResult
 from .interfaces import IIterativeSolver
 from .preconditioners import IdentityPreconditioner, Preconditioner
 from .reorthogonalization import (
+    ReorthogonalizationReport,
     ReorthogonalizationStrategy,
     apply_reorthogonalization,
 )
@@ -65,7 +66,7 @@ from .state import DirectionHistory, IterationState
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from .event_logging import VectorLogger
+from .trace_recorder import TraceRecorder
 
 
 def _ensure_vector(
@@ -106,7 +107,7 @@ def _relative(value: float, b_norm: float) -> float:
 
 
 class FlexibleConjugateGradientSolver(IIterativeSolver):
-    """Flexible Conjugate Gradient solver with event sourcing.
+    """Flexible Conjugate Gradient solver with trace recording.
 
     Implements the FCG algorithm using truncated Gram-Schmidt orthogonalization.
     This solver is specifically designed for systems with non-SPD or time-varying
@@ -124,14 +125,14 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
 
     Design:
         - Uses TruncatedOrthogonalDirection for step 3 (Gram-Schmidt)
-        - Optional VectorLogger for iteration history (event sourcing)
+        - Optional TraceRecorder for iteration history
         - Implements IIterativeSolver interface
         - Convergence checking via check_convergence() method
 
     Attributes:
         preconditioner: Preconditioner strategy (default: IdentityPreconditioner)
         direction_strategy: TruncatedOrthogonalDirection with m_max parameter
-        event_logger: Optional VectorLogger for event sourcing
+        event_logger: Optional TraceRecorder for event sourcing
 
     Mathematical Properties:
         - Handles non-SPD preconditioners via restart mechanism
@@ -146,7 +147,7 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
         >>> print(f"Converged: {result.converged}, Iterations: {result.iterations}")
         >>>
         >>> # With event logging
-        >>> logger = VectorLogger()
+        >>> logger = TraceRecorder()
         >>> solver = FlexibleConjugateGradientSolver(event_logger=logger)
         >>> x, result = solver.solve(A, b)
         >>> residual_history = logger.get_history("residual_norm")
@@ -163,7 +164,7 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
         preconditioner: Preconditioner | None = None,
         m_max: int = DEFAULT_M_MAX,
         history_limit: int = DEFAULT_FCG_HISTORY_LIMIT,
-        event_logger: VectorLogger | None = None,
+        event_logger: TraceRecorder | None = None,
     ) -> None:
         """Initialize FCG solver.
 
@@ -177,7 +178,7 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             history_limit: Maximum number of search directions retained for
                 orthogonalization/reorthogonalization. Increase if residuals
                 oscillate from loss of orthogonality. Default: 200.
-            event_logger: Optional VectorLogger for iteration history. If provided,
+            event_logger: Optional TraceRecorder for iteration history. If provided,
                 logs residual, solution, search_direction, and residual_norm at
                 each iteration. Default: None (no logging, zero overhead).
 
@@ -309,19 +310,17 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
         # Initialize solver state
         x, r, z, p, state, history = self._initialize_state(A, b, x0, b_norm)
 
-        # Log initial state
-        if self.event_logger is not None:
-            self.event_logger.log("residual", r)
-            self.event_logger.log("solution", x)
-            self.event_logger.log("search_direction", p)
-            self.event_logger.log("residual_norm", state.residual_history[0])
-        trace_logger: VectorLogger | None = None
-        if capture_traces:
-            trace_logger = self.event_logger or VectorLogger()
-            trace_logger.log("residual", r)
-            trace_logger.log("solution", x)
-            if self.event_logger is None:
-                self.event_logger = trace_logger
+        logger: TraceRecorder | None = self.event_logger
+        if capture_traces and logger is None:
+            logger = TraceRecorder()
+            self.event_logger = logger
+
+        # Log initial state once through the active logger
+        if logger is not None:
+            logger.log("residual", r)
+            logger.log("solution", x)
+            logger.log("search_direction", p)
+            logger.log("residual_norm", state.residual_history[0])
 
         # Main iteration loop
         q_managed: NDArray | None = None
@@ -418,7 +417,7 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             )
 
             # Optional reorthogonalization hook shared across solvers
-            reorth_info: dict[str, object] | None = None
+            reorth_info: ReorthogonalizationReport | None = None
             if reorthogonalize is not None:
                 p_managed, reorth_info = apply_reorthogonalization(
                     reorthogonalize,
@@ -426,10 +425,10 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
                     history.p_vectors,
                     iteration + 1,
                 )
-                if reorth_info.get("breakdown"):
+                if reorth_info.breakdown:
                     state = replace(state, breakdown=True)
                     q = A @ p_managed
-            reorth_applied = bool(reorth_info) and not reorth_info.get("skipped", False)
+            reorth_applied = bool(reorth_info) and not reorth_info.skipped
 
             # Update iteration state
             current_res_norm = norm(r_managed)
@@ -445,18 +444,15 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
                 converged=is_converged_now,
             )
 
-            # Log iteration values
-            if self.event_logger is not None:
-                self.event_logger.log("residual", r_managed)
-                self.event_logger.log("solution", x)
-                self.event_logger.log("search_direction", p_managed)
-                self.event_logger.log("residual_norm", current_res_norm)
+            # Log iteration values through the active logger
+            if logger is not None:
+                logger.log("residual", r_managed)
+                logger.log("solution", x)
+                logger.log("search_direction", p_managed)
+                logger.log("residual_norm", current_res_norm)
                 if capture_traces and capture_search_directions:
                     q_to_log = q_managed if q_managed is not None else q
-                    self.event_logger.log("search_direction_product", q_to_log)
-            if trace_logger is not None:
-                trace_logger.log("residual", r_managed)
-                trace_logger.log("solution", x)
+                    logger.log("search_direction_product", q_to_log)
 
             # Update history for next iteration
             # If residual_management did a restart, p_managed is the new steepest descent
@@ -493,9 +489,11 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
         # Keep breakdown flag separate for diagnostics
         info_code = 0 if state.converged else state.iterations
 
+        active_logger = logger
+
         residual_history_abs = (
-            self.event_logger.get_history("residual_norm")
-            if self.event_logger is not None
+            active_logger.get_history("residual_norm")
+            if active_logger is not None
             else state.residual_history
         )
 
@@ -508,6 +506,12 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             ]
 
         # Assemble return info
+        residual_vectors = None
+        solution_vectors = None
+        if capture_traces and active_logger is not None:
+            residual_vectors = active_logger.get_history("residual")
+            solution_vectors = active_logger.get_history("solution")
+
         result = SolverResult(
             converged=state.converged,
             iterations=state.iterations,
@@ -524,16 +528,12 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             rhs_norm=b_norm,
             breakdown=state.breakdown,
             stopping_criterion=stopping_criterion,
-            event_log=self.event_logger,
+            event_log=active_logger,
             tol=rtol,
             atol=atol,
             maxiter=max_iterations,
-            residual_vectors=np.stack(trace_logger.get_history("residual"))
-            if trace_logger and capture_traces
-            else None,
-            solution_vectors=np.stack(trace_logger.get_history("solution"))
-            if trace_logger and capture_traces
-            else None,
+            residual_vectors=residual_vectors,
+            solution_vectors=solution_vectors,
         )
 
         return x, result

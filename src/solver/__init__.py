@@ -75,7 +75,7 @@ from .direction_strategies import (
     TruncatedOrthogonalDirection,
 )
 from .convergence import CombinedToleranceCriterion, IConvergenceCriterion
-from .event_logging import VectorLogger
+from .trace_recorder import TraceRecorder
 from .factories import flexible_cg, preconditioned_cg
 from .fcg_solver import FlexibleConjugateGradientSolver
 from .helpers import (
@@ -97,6 +97,7 @@ from .preconditioners import (
 from .reorthogonalization import (
     FullReorthogonalization,
     PartialReorthogonalization,
+    ReorthogonalizationReport,
     ReorthogonalizationStrategy,
     SelectiveReorthogonalization,
     create_reorthogonalization_strategy,
@@ -118,12 +119,13 @@ __all__ = [
     # State management
     "IterationState",
     "DirectionHistory",
+    "ReorthogonalizationReport",
     "IterationContext",
     # Result structures
     "SolverResult",
     "CGComparisonResult",
-    # Event sourcing
-    "VectorLogger",  # NEW: Event logging for iteration history
+    # Trace recording
+    "TraceRecorder",  # Trace recording for iteration history
     # Convergence rules
     "IConvergenceCriterion",
     "CombinedToleranceCriterion",

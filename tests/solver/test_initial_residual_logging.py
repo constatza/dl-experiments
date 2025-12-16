@@ -2,12 +2,12 @@
 
 import numpy as np
 from src.solver.pcg_solver import cg_solve
-from src.solver.event_logging import VectorLogger
+from src.solver.trace_recorder import TraceRecorder
 
 
 def test_vector_logger_prepend_scalar():
-    """Test VectorLogger.prepend() with scalar values."""
-    logger = VectorLogger()
+    """Test TraceRecorder.prepend() with scalar values."""
+    logger = TraceRecorder()
     logger.log("residual_norm", 0.5)
     logger.log("residual_norm", 0.25)
     logger.prepend("residual_norm", 1.0)
@@ -17,8 +17,8 @@ def test_vector_logger_prepend_scalar():
 
 
 def test_vector_logger_prepend_vector():
-    """Test VectorLogger.prepend() with vector values."""
-    logger = VectorLogger()
+    """Test TraceRecorder.prepend() with vector values."""
+    logger = TraceRecorder()
     logger.log("residual", np.array([0.5, 0.3]))
     logger.prepend("residual", np.array([1.0, 0.8]))
 
@@ -34,7 +34,7 @@ def test_scipy_cg_initial_residual_zero_guess():
     A = np.eye(n) * 2.0 + np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
     b = np.ones(n)
 
-    event_log = VectorLogger()
+    event_log = TraceRecorder()
     x, result = cg_solve(
         A,
         b,
@@ -63,7 +63,7 @@ def test_scipy_cg_initial_residual_nonzero_guess():
     b = np.ones(n)
     x0 = np.random.rand(n) * 0.1
 
-    event_log = VectorLogger()
+    event_log = TraceRecorder()
     x, result = cg_solve(
         A,
         b,

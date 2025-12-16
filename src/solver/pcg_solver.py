@@ -8,7 +8,7 @@ from collections.abc import Callable
 import numpy as np
 import scipy.sparse.linalg as spla
 
-from .event_logging import VectorLogger
+from .trace_recorder import TraceRecorder
 from .info import SolverCallbackLogger, SolverResult
 
 
@@ -48,7 +48,7 @@ class ResidualRecorder(SolverCallbackLogger):
         *,
         callback_type: Literal["x", "pr_norm", None] | None = "x",
         track_solution: bool = False,
-        event_log: VectorLogger | None = None,
+    event_log: TraceRecorder | None = None,
     ) -> None:
         self.A = A
         self.b = b
@@ -63,17 +63,20 @@ class ResidualRecorder(SolverCallbackLogger):
         self._initial_logged = False
 
     def __call__(self, xk_or_norm: np.ndarray | float) -> None:
+        residual_abs: float
         if self.callback_type == "pr_norm":
             residual_abs = float(xk_or_norm)
+            residual = None
         else:
             xk = np.asarray(xk_or_norm, dtype=np.float64)
             residual = self.b - self.A @ xk
             residual_abs = float(np.linalg.norm(residual))
             if self.solutions is not None:
                 self.solutions.append(xk.copy())
-            if self.event_log is not None:
+            if self.event_log is not None and residual is not None:
                 self.event_log.log("residual", residual)
-                self.event_log.log("solution", xk)
+                if self.track_solution:
+                    self.event_log.log("solution", xk)
         residual_rel = (
             residual_abs / self.rhs_norm if self.rhs_norm > 0 else residual_abs
         )
@@ -114,12 +117,13 @@ class ResidualRecorder(SolverCallbackLogger):
         if self._initial_logged:
             return  # Already logged, skip
 
+        x_initial = np.zeros_like(self.b) if x0 is None else np.asarray(x0, dtype=np.float64, copy=False)
+
         # Compute initial residual
         if x0 is None:
             r0 = self.b.copy()
         else:
-            x0 = np.asarray(x0, dtype=np.float64, copy=False)
-            r0 = self.b - self.A @ x0
+            r0 = self.b - self.A @ x_initial
 
         # Compute norms
         r0_norm = float(np.linalg.norm(r0))
@@ -132,13 +136,13 @@ class ResidualRecorder(SolverCallbackLogger):
         # Log to event logger if available
         if self.event_log is not None:
             self.event_log.log("residual", r0)
+            if self.track_solution:
+                self.event_log.log("solution", x_initial.copy())
             self.event_log.log("residual_norm", r0_norm)
-            if x0 is not None:
-                self.event_log.log("solution", x0.copy())
 
         # Track solution history if requested
-        if self.track_solution and self.solutions is not None and x0 is not None:
-            self.solutions.append(x0.copy())
+        if self.track_solution and self.solutions is not None:
+            self.solutions.append(x_initial.copy())
 
         self._initial_logged = True
 
@@ -156,21 +160,26 @@ def cg_solve(
     callback_type: Literal["x", "pr_norm", None] | None = None,
     record_history: bool = True,
     track_solution: bool = False,
-    event_log: VectorLogger | None = None,
+    event_log: TraceRecorder | None = None,
+    capture_traces: bool = False,
 ) -> tuple[np.ndarray, SolverResult]:
     """Thin wrapper around scipy.sparse.linalg.cg returning SolverResult."""
     A_op = _as_linear_operator(A)
     dtype = A_op.dtype or np.dtype(np.float64)
     M_op = _wrap_preconditioner(M, A_op.shape, dtype) if M is not None else None
 
+    track_solution_flag = track_solution or capture_traces
+    should_record = record_history or track_solution_flag or capture_traces
+    resolved_event_log = event_log or (TraceRecorder() if (capture_traces or track_solution_flag) else None)
+
     recorder: ResidualRecorder | None = None
-    if record_history:
+    if should_record:
         recorder = ResidualRecorder(
             A_op,
             np.asarray(b, dtype=dtype, copy=False),
             callback_type=callback_type,
-            track_solution=track_solution,
-            event_log=event_log,
+            track_solution=track_solution_flag,
+            event_log=resolved_event_log,
         )
 
     # Log initial state (iteration 0) before scipy CG starts
@@ -223,6 +232,24 @@ def cg_solve(
     )
     converged = info_code == 0
 
+    residual_vectors = None
+    solution_vectors = None
+    if capture_traces and resolved_event_log is not None:
+        residual_vectors = resolved_event_log.get_history("residual")
+        solution_vectors = resolved_event_log.get_history("solution")
+
+    residual_history_abs = recorder.history_abs if recorder else None
+    if resolved_event_log is not None:
+        logged_norms = resolved_event_log.get_history("residual_norm")
+        if logged_norms:
+            residual_history_abs = [float(val) for val in logged_norms]
+
+    residual_history_rel = None
+    if residual_history_abs is not None:
+        residual_history_rel = [
+            float(r / rhs_norm) if rhs_norm > 0 else float(r) for r in residual_history_abs
+        ]
+
     result = SolverResult(
         converged=converged,
         iterations=iterations,
@@ -232,8 +259,8 @@ def cg_solve(
         residual=residual_rel,
         residual_abs=residual_abs,
         residual_rel=residual_rel,
-        residual_history=recorder.history_rel if recorder else None,
-        residual_history_abs=recorder.history_abs if recorder else None,
+        residual_history=residual_history_rel,
+        residual_history_abs=residual_history_abs,
         rhs_norm=rhs_norm,
         breakdown=False,  # SciPy CG never reports breakdown
         tol=tol,
@@ -241,7 +268,9 @@ def cg_solve(
         maxiter=maxiter,
         callback_type=callback_type,
         logger=recorder,
-        event_log=event_log,
+        event_log=resolved_event_log,
+        residual_vectors=residual_vectors,
+        solution_vectors=solution_vectors,
     )
 
     return x, result

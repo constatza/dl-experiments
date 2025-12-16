@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Sequence
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 import pytest
 from numpy.typing import NDArray
@@ -10,10 +17,26 @@ from src.solver import flexible_cg, preconditioned_cg
 # Define very strict tolerances for double precision accuracy goals
 DOUBLE_PRECISION_ATOL = 1e-14
 DOUBLE_PRECISION_RTOL = 1e-15 # Closer to machine epsilon for float64
+MAX_SAMPLES = 30
 
 
 def _tol_bound(b: NDArray, atol: float, rtol: float) -> float:
     return max(atol, rtol * float(np.linalg.norm(b)))
+
+
+def _plot_history(name: str, history: Sequence[float] | np.ndarray, out_dir: Path) -> None:
+    if len(history) == 0:
+        return
+    values = np.asarray(history, dtype=np.float64)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.semilogy(values, marker="o")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Residual norm")
+    ax.set_title(name)
+    fig.tight_layout()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_dir / f"{name}.png")
+    plt.close(fig)
 
 
 @pytest.fixture(scope="module")
@@ -44,7 +67,16 @@ def jacobi_preconditioner_callable(A_matrix: NDArray) -> LinearOperator:
     return LinearOperator(matvec=matvec, shape=A_matrix.shape, dtype=np.float64)
 
 
-def test_pcg_jacobi_double_precision_accuracy(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+@pytest.fixture(scope="module")
+def diagnostics_dir() -> Path:
+    out_dir = Path(__file__).resolve().parent / "solver" / "diagnostics"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+
+def test_pcg_jacobi_double_precision_accuracy(
+    spd_system: tuple[NDArray, NDArray, NDArray], diagnostics_dir: Path
+) -> None:
     """
     Tests that preconditioned_cg (SciPy wrapper) with Jacobi preconditioner
     can reach double precision accuracy for the spd_system.
@@ -62,14 +94,43 @@ def test_pcg_jacobi_double_precision_accuracy(spd_system: tuple[NDArray, NDArray
         atol=DOUBLE_PRECISION_ATOL,
         rtol=DOUBLE_PRECISION_RTOL,
         max_iter=200, # Sufficiently high max_iter
+        capture_traces=True,
     )
 
     assert info.converged
     assert info.residual_abs <= _tol_bound(b, DOUBLE_PRECISION_ATOL, DOUBLE_PRECISION_RTOL)
     assert np.allclose(x_sol, x_true, atol=DOUBLE_PRECISION_ATOL, rtol=DOUBLE_PRECISION_RTOL)
+    if info.residual_history is not None and info.residual_history_abs is not None:
+        count = min(len(info.residual_history), len(info.residual_history_abs), MAX_SAMPLES)
+        data = np.column_stack(
+            [
+                np.asarray(info.residual_history_abs[:count], dtype=np.float64),
+                np.asarray(info.residual_history[:count], dtype=np.float64),
+            ]
+        )
+        np.savetxt(
+            diagnostics_dir / "pcg_double_precision_residual_norms.csv",
+            data,
+            delimiter=",",
+            fmt=["%.6e", "%.6e"],
+            header="residual_abs,residual_rel",
+            comments="",
+        )
+    if info.residual_history is not None:
+        _plot_history("pcg_double_precision_history", info.residual_history, diagnostics_dir)
+    # Uncomment to persist residual vectors for inspection (requires capture_traces=True above).
+    # if info.residual_vectors is not None:
+    #     np.savetxt(
+    #         diagnostics_dir / "pcg_double_precision_residual_vectors.csv",
+    #         info.residual_vectors[:MAX_SAMPLES],
+    #         delimiter=",",
+    #         fmt="%.6e",
+    #     )
 
 
-def test_fcg_jacobi_double_precision_accuracy(spd_system: tuple[NDArray, NDArray, NDArray]) -> None:
+def test_fcg_jacobi_double_precision_accuracy(
+    spd_system: tuple[NDArray, NDArray, NDArray], diagnostics_dir: Path
+) -> None:
     """
     Tests that flexible_cg with Jacobi preconditioner can reach double precision accuracy
     for the spd_system. This is a challenging goal for FCG.
@@ -89,8 +150,35 @@ def test_fcg_jacobi_double_precision_accuracy(spd_system: tuple[NDArray, NDArray
         max_iter=200, # Sufficiently high max_iter
         m_max=20, # Use a larger m_max for better orthogonalization
         # Using default eps_curv and eps_breakdown
+        capture_traces=True,
     )
 
     assert info.converged
     assert info.residual_abs <= _tol_bound(b, DOUBLE_PRECISION_ATOL, DOUBLE_PRECISION_RTOL)
     assert np.allclose(x_sol, x_true, atol=DOUBLE_PRECISION_ATOL, rtol=DOUBLE_PRECISION_RTOL)
+    if info.residual_history is not None and info.residual_history_abs is not None:
+        count = min(len(info.residual_history), len(info.residual_history_abs), MAX_SAMPLES)
+        data = np.column_stack(
+            [
+                np.asarray(info.residual_history_abs[:count], dtype=np.float64),
+                np.asarray(info.residual_history[:count], dtype=np.float64),
+            ]
+        )
+        np.savetxt(
+            diagnostics_dir / "fcg_double_precision_residual_norms.csv",
+            data,
+            delimiter=",",
+            fmt=["%.6e", "%.6e"],
+            header="residual_abs,residual_rel",
+            comments="",
+        )
+    if info.residual_history is not None:
+        _plot_history("fcg_double_precision_history", info.residual_history, diagnostics_dir)
+    # Uncomment to persist residual vectors for inspection (requires capture_traces=True above).
+    # if info.residual_vectors is not None:
+    #     np.savetxt(
+    #         diagnostics_dir / "fcg_double_precision_residual_vectors.csv",
+    #         info.residual_vectors[:MAX_SAMPLES],
+    #         delimiter=",",
+    #         fmt="%.6e",
+    #     )

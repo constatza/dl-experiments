@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Literal
 
 from scipy.sparse.linalg import LinearOperator
 
-from .event_logging import VectorLogger
+from .trace_recorder import TraceRecorder
 from .fcg_solver import FlexibleConjugateGradientSolver
 from .pcg_solver import cg_solve
 from .info import SolverResult
@@ -218,7 +218,7 @@ def flexible_cg(
         precond_strategy = CallablePreconditioner(preconditioner)
 
     # Create event logger for iteration history
-    logger = VectorLogger()
+    logger = TraceRecorder()
 
     # Construct new FCG solver
     solver = FlexibleConjugateGradientSolver(
@@ -284,9 +284,10 @@ def preconditioned_cg(
     stopping_criterion: Literal[
         "residual_norm", "tolerance", "fixed_iterations"
     ] = "residual_norm",
+    capture_traces: bool = False,
 ) -> tuple[NDArray, SolverResult]:
     """Solve linear system using SciPy's CG with optional preconditioning."""
-    logger = VectorLogger()
+    logger = TraceRecorder()
     max_iters = (
         max_iterations
         if max_iterations is not None
@@ -303,8 +304,9 @@ def preconditioned_cg(
         M=preconditioner,
         callback_type="x",
         record_history=True,
-        track_solution=False,
+        track_solution=capture_traces,
         event_log=logger,
+        capture_traces=capture_traces,
     )
     # Preserve legacy stopping_criterion field for compatibility
     result.stopping_criterion = stopping_criterion

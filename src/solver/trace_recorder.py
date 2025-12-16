@@ -1,8 +1,8 @@
-"""Event sourcing system for solver iteration logging.
+"""Trace recording utilities for solver iteration logging.
 
-This module provides orthogonal event logging for solver iterations without
-coupling to solver implementation. Follows event sourcing pattern where all
-iteration events are stored as immutable history.
+This module provides orthogonal trace recording for solver iterations without
+coupling to solver implementation. It stores immutable copies of iteration
+artifacts (vectors and scalars) for diagnostics.
 
 Design Principles:
     - Single Responsibility: Only handles logging, not solver logic
@@ -19,13 +19,13 @@ Theory:
     4. Separation of logging concerns from algorithm logic
 
 Usage:
-    >>> logger = VectorLogger()
+    >>> logger = TraceRecorder()
     >>> logger.log("residual", r0)
     >>> logger.log("residual", r1)
     >>> logger.log("solution", x0)
     >>>
-    >>> residuals = logger.get_history("residual")  # [r0, r1]
-    >>> solutions = logger.get_history("solution")  # [x0]
+    >>> residuals = logger.get_history("residual")  # stacked array
+    >>> solutions = logger.get_history("solution")  # stacked array
     >>> latest_r = logger.get_latest("residual")     # r1
 
 References:
@@ -43,20 +43,21 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-class VectorLogger:
-    """Event sourcing logger for solver iteration values.
+class TraceRecorder:
+    """Trace recorder for solver iteration values.
 
-    This class provides orthogonal logging of iteration values without
-    coupling to solver implementation. Each log() call creates an immutable
-    event by copying the value. Supports both vector (NDArray) and scalar
-    (float) events.
+    Each log() call creates an immutable copy of the value. Supports both
+    vector (NDArray) and scalar (float) entries.
 
     Design Pattern:
         Event Sourcing - Store all state changes as immutable events
 
     Attributes:
-        _events: Dictionary mapping event names to lists of vector values
-        _scalar_events: Dictionary mapping event names to lists of scalar values
+        residuals: List of residual vectors
+        solutions: List of solution vectors
+        residual_norms: List of residual norms (absolute)
+        _events: Dictionary for other vector events
+        _scalar_events: Dictionary for other scalar events
 
     Mathematical Background:
         For iterative solvers, we typically want to log:
@@ -80,7 +81,7 @@ class VectorLogger:
             latest_norm = logger.get_latest("residual_norm")
 
     Examples:
-        >>> logger = VectorLogger()
+        >>> logger = TraceRecorder()
         >>> logger.log("residual", np.array([1.0, 2.0, 3.0]))
         >>> logger.log("residual", np.array([0.5, 1.0, 1.5]))
         >>> logger.log("residual_norm", 2.5)
@@ -93,27 +94,18 @@ class VectorLogger:
     """
 
     def __init__(self) -> None:
-        """Initialize empty event log.
-
-        Creates empty dictionaries for vector and scalar events.
-        No memory allocated until first log() call.
-
-        Theory:
-            Starting with empty logs ensures zero overhead if logger
-            is created but never used (optional dependency pattern).
-        """
+        """Initialize empty trace buffers."""
+        self.residuals: list[NDArray] = []
+        self.solutions: list[NDArray] = []
+        self.residual_norms: list[float] = []
         self._events: dict[str, list[NDArray]] = {}
         self._scalar_events: dict[str, list[float]] = {}
 
     def log(self, event_name: str, value: NDArray | float | int) -> None:
-        """Log an iteration value as an immutable event.
-
-        This method creates a new event by copying the value to prevent
-        external mutation. Automatically detects whether value is a vector
-        or scalar and stores in appropriate dictionary.
+        """Log an iteration value as an immutable trace entry.
 
         Args:
-            event_name: Name of the event (e.g., "residual", "solution",
+            event_name: Name of the entry (e.g., "residual", "solution",
                 "residual_norm"). Recommended naming:
                 - Vectors: descriptive name ("residual", "solution")
                 - Scalars: name with unit/type ("residual_norm", "step_length")
@@ -133,7 +125,7 @@ class VectorLogger:
             - Performance: avoid unnecessary array creation for scalars
 
         Examples:
-            >>> logger = VectorLogger()
+            >>> logger = TraceRecorder()
             >>> r = np.array([1.0, 2.0])
             >>> logger.log("residual", r)
             >>> r[0] = 999.0  # Mutate original
@@ -142,15 +134,24 @@ class VectorLogger:
         """
         if isinstance(value, (int, float)):
             # Scalar event
+            if event_name == "residual_norm":
+                self.residual_norms.append(float(value))
+                return
             if event_name not in self._scalar_events:
                 self._scalar_events[event_name] = []
             self._scalar_events[event_name].append(float(value))
         else:
             # Vector event
+            array_val = np.asarray(value, dtype=np.float64).copy()
+            if event_name == "residual":
+                self.residuals.append(array_val)
+                return
+            if event_name == "solution":
+                self.solutions.append(array_val)
+                return
             if event_name not in self._events:
                 self._events[event_name] = []
-            # Copy to ensure immutability
-            self._events[event_name].append(np.asarray(value, dtype=np.float64).copy())
+            self._events[event_name].append(array_val)
 
     def prepend(self, event_name: str, value: NDArray | float | int) -> None:
         """Prepend an event to the beginning of the history.
@@ -173,7 +174,7 @@ class VectorLogger:
             it to the history to get complete convergence data.
 
         Examples:
-            >>> logger = VectorLogger()
+            >>> logger = TraceRecorder()
             >>> logger.log("residual_norm", 0.5)
             >>> logger.log("residual_norm", 0.25)
             >>> logger.prepend("residual_norm", 1.0)  # Add initial residual
@@ -188,51 +189,51 @@ class VectorLogger:
         """
         if isinstance(value, (int, float)):
             # Scalar event
+            if event_name == "residual_norm":
+                self.residual_norms.insert(0, float(value))
+                return
             if event_name not in self._scalar_events:
                 self._scalar_events[event_name] = []
             self._scalar_events[event_name].insert(0, float(value))
         else:
             # Vector event
+            array_val = np.asarray(value, dtype=np.float64).copy()
+            if event_name == "residual":
+                self.residuals.insert(0, array_val)
+                return
+            if event_name == "solution":
+                self.solutions.insert(0, array_val)
+                return
             if event_name not in self._events:
                 self._events[event_name] = []
-            # Copy to ensure immutability
-            self._events[event_name].insert(
-                0, np.asarray(value, dtype=np.float64).copy()
-            )
+            self._events[event_name].insert(0, array_val)
 
-    def get_history(self, event_name: str) -> list[NDArray] | list[float]:
+    def get_history(self, event_name: str) -> NDArray:
         """Retrieve full history for an event.
 
-        Returns a copy of the event list to maintain immutability of the log.
-
-        Args:
-            event_name: Name of the event to retrieve.
-
         Returns:
-            List of all logged values for this event:
-            - For vector events: list[NDArray]
-            - For scalar events: list[float]
-            - For non-existent events: empty list []
-
-        Theory:
-            Returning a copy (via .copy()) prevents external code from
-            modifying the internal event log. This maintains the event
-            sourcing invariant: events are immutable once logged.
-
-        Examples:
-            >>> logger = VectorLogger()
-            >>> logger.log("residual_norm", 1.0)
-            >>> logger.log("residual_norm", 0.5)
-            >>> logger.log("residual_norm", 0.25)
-            >>> norms = logger.get_history("residual_norm")
-            >>> assert norms == [1.0, 0.5, 0.25]
-            >>> assert len(logger.get_history("nonexistent")) == 0
+            - For vector events: stacked ndarray (empty array if none logged)
+            - For scalar events: list of floats
         """
+        if event_name == "residual":
+            return (
+                np.stack(self.residuals)
+                if self.residuals
+                else np.empty((0,), dtype=np.float64)
+            )
+        if event_name == "solution":
+            return (
+                np.stack(self.solutions)
+                if self.solutions
+                else np.empty((0,), dtype=np.float64)
+            )
+        if event_name == "residual_norm":
+            return np.asarray(self.residual_norms)
         if event_name in self._scalar_events:
-            # Scalar events: return copy of list
-            return self._scalar_events[event_name].copy()
-        # Vector events: return copy of list (vectors already copied in log())
-        return self._events.get(event_name, []).copy()
+            return np.asarray(self._scalar_events[event_name])
+        if event_name not in self._events or not self._events[event_name]:
+            return np.empty((0,), dtype=np.float64)
+        return np.stack(self._events[event_name])
 
     def get_latest(self, event_name: str) -> NDArray | float | None:
         """Get most recent value for an event.
@@ -256,7 +257,7 @@ class VectorLogger:
             - Get current step length for adaptive algorithms
 
         Examples:
-            >>> logger = VectorLogger()
+        >>> logger = TraceRecorder()
             >>> logger.log("residual_norm", 1.0)
             >>> logger.log("residual_norm", 0.5)
             >>> latest = logger.get_latest("residual_norm")
@@ -266,9 +267,13 @@ class VectorLogger:
         if event_name in self._scalar_events:
             history = self._scalar_events[event_name]
             return history[-1] if history else None
-
+        if event_name == "residual_norm":
+            return self.residual_norms[-1] if self.residual_norms else None
+        if event_name == "residual":
+            return self.residuals[-1].copy() if self.residuals else None
+        if event_name == "solution":
+            return self.solutions[-1].copy() if self.solutions else None
         history = self._events.get(event_name, [])
-        # Return copy to maintain immutability
         return history[-1].copy() if history else None
 
     def clear(self) -> None:
@@ -282,11 +287,14 @@ class VectorLogger:
             objects. This is memory-efficient for repeated solves.
 
         Examples:
-            >>> logger = VectorLogger()
+            >>> logger = TraceRecorder()
             >>> logger.log("residual", np.array([1.0, 2.0]))
             >>> logger.clear()
             >>> assert len(logger.get_history("residual")) == 0
         """
+        self.residuals.clear()
+        self.solutions.clear()
+        self.residual_norms.clear()
         self._events.clear()
         self._scalar_events.clear()
 
@@ -300,11 +308,17 @@ class VectorLogger:
             True if at least one value logged for this event, False otherwise.
 
         Examples:
-            >>> logger = VectorLogger()
+            >>> logger = TraceRecorder()
             >>> assert not logger.has_event("residual")
             >>> logger.log("residual", np.array([1.0]))
             >>> assert logger.has_event("residual")
         """
+        if event_name == "residual":
+            return len(self.residuals) > 0
+        if event_name == "solution":
+            return len(self.solutions) > 0
+        if event_name == "residual_norm":
+            return len(self.residual_norms) > 0
         return (
             event_name in self._scalar_events
             and len(self._scalar_events[event_name]) > 0
@@ -320,12 +334,18 @@ class VectorLogger:
             Number of values logged for this event (0 if never logged).
 
         Examples:
-            >>> logger = VectorLogger()
+            >>> logger = TraceRecorder()
             >>> logger.log("residual_norm", 1.0)
             >>> logger.log("residual_norm", 0.5)
             >>> assert logger.event_count("residual_norm") == 2
             >>> assert logger.event_count("nonexistent") == 0
         """
+        if event_name == "residual":
+            return len(self.residuals)
+        if event_name == "solution":
+            return len(self.solutions)
+        if event_name == "residual_norm":
+            return len(self.residual_norms)
         if event_name in self._scalar_events:
             return len(self._scalar_events[event_name])
         return len(self._events.get(event_name, []))
@@ -337,11 +357,18 @@ class VectorLogger:
             List of event names that have been logged (both vector and scalar).
 
         Examples:
-            >>> logger = VectorLogger()
+            >>> logger = TraceRecorder()
             >>> logger.log("residual", np.array([1.0]))
             >>> logger.log("residual_norm", 1.0)
             >>> names = logger.get_all_event_names()
             >>> assert "residual" in names
             >>> assert "residual_norm" in names
         """
-        return list(set(self._events.keys()) | set(self._scalar_events.keys()))
+        names = set(self._events.keys()) | set(self._scalar_events.keys())
+        if self.residuals:
+            names.add("residual")
+        if self.solutions:
+            names.add("solution")
+        if self.residual_norms:
+            names.add("residual_norm")
+        return list(names)
