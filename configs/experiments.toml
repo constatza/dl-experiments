@@ -7,3 +7,5 @@ output_dir = "/data/projects/graph-cg/data/output"
 
 [experiments]
 ffnn_test_solutions = "experiments/ffnn_test_solutions"
+ffnn_test_eigenvector_solution = "experiments/ffnn_test_eigenvector_solution"
+ffnn_test_eigenvector_inverse = "experiments/ffnn_test_eigenvector_inverse"

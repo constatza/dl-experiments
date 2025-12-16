@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight CLI wrapper around src.cli.prediction.run_inference."""
+"""Lightweight CLI wrapper around src.workflows.prediction.run_inference."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import os
 
-import numpy as np
-import pandas as pd
 import typer
 from dlkit.core.postprocessing import summarize
 from loguru import logger
@@ -23,37 +21,9 @@ from src.constants import (
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
 )
-from src.cli.prediction import run_inference
+from src.workflows.prediction import run_inference
 
 os.environ.setdefault("MPLBACKEND", "Agg")
-
-
-def _save_sample_prediction_to_csv(
-    y_true: np.ndarray, y_pred: np.ndarray, savepath: Path
-) -> None:
-    """Saves a random sample's true value, prediction, and error to a CSV file."""
-    if y_true.ndim != 2 or y_pred.ndim != 2:
-        logger.warning("y_true and y_pred must be 2D arrays.")
-        return
-    num_samples = y_true.shape[0]
-    random_index = np.random.randint(0, num_samples)
-    true_val = y_true[random_index, :]
-    predicted_val = y_pred[random_index, :]
-    error_val = true_val - predicted_val
-
-    sample_data = pd.DataFrame(
-        {"Target": [true_val], "Prediction": [predicted_val], "Error": [error_val]}
-    )
-
-    savepath.mkdir(parents=True, exist_ok=True)
-
-    try:
-        sample_data.to_csv(savepath, index=False, float_format="%.6e")
-        logger.info(f"Saved random sample prediction, target, and error to {savepath}")
-    except Exception as e:
-        logger.error(
-            f"Failed to save random sample prediction, target, and error to {savepath}: {e}"
-        )
 
 
 def main(
@@ -72,6 +42,11 @@ def main(
     no_plots: bool = typer.Option(False, help="Skip saving plots"),
     figures_dir: Path | None = typer.Option(
         None, help="Override directory for saved plots"
+    ),
+    enable_mlflow: bool = typer.Option(
+        False,
+        "--enable-mlflow/--no-mlflow",
+        help="Enable MLflow logging (defaults to disabled)",
     ),
 ):
     """Run inference using a DLKit configuration."""
@@ -94,6 +69,7 @@ def main(
             targets_path=targets,
             save_plots=not no_plots,
             figures_dir=figures_dir,
+            enable_mlflow=enable_mlflow,
         )
 
         try:
@@ -103,11 +79,6 @@ def main(
 
         if results["y_true"] is not None and results["y_pred"] is not None:
             logger.info(f"Generated predictions for {len(results['y_true'])} samples")
-            _save_sample_prediction_to_csv(
-                results["y_true"],
-                results["y_pred"],
-                figures_dir.parent / "diagnostics" / "sample_prediction.csv",
-            )
             if results["plot_path"]:
                 logger.info(f"Saved parity plot to: {results['plot_path']}")
             if results.get("diagnostic_plot_path"):

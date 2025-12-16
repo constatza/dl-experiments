@@ -37,7 +37,7 @@ from src.constants import (
     SYMBOL_SUCCESS,
     SYMBOL_ERROR,
 )
-from src.cli.data import process_data_from_config
+from src.workflows.data import process_data_from_config
 
 
 def main(

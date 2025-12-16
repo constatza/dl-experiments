@@ -499,7 +499,7 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
 
         # Convert absolute residuals to relative for residual_history
         residual_history_rel = None
-        if residual_history_abs:
+        if residual_history_abs is not None:
             residual_history_rel = [
                 float(r / b_norm) if b_norm > 0 else float(r)
                 for r in residual_history_abs
@@ -522,9 +522,11 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             residual_abs=final_residual_norm,
             residual_rel=final_relative_residual,
             residual_history=residual_history_rel,
-            residual_history_abs=[float(r) for r in residual_history_abs]
-            if residual_history_abs
-            else None,
+            residual_history_abs=(
+                [float(r) for r in residual_history_abs]
+                if residual_history_abs is not None
+                else None
+            ),
             rhs_norm=b_norm,
             breakdown=state.breakdown,
             stopping_criterion=stopping_criterion,

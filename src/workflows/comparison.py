@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable, Any
+from types import SimpleNamespace
+import tomllib
 
 from loguru import logger
 
 from src.configuration.loader import load_batch
 from src.configuration.services import WorkspaceFactory
 from src.configuration.domain import ExperimentWorkspace
-from src.constants import DEFAULT_OUTPUT_DIR, DEFAULT_PROCESSED_DATA_DIR
+from src.constants import DEFAULT_OUTPUT_DIR, DEFAULT_PROCESSED_DATA_DIR, DEFAULT_PROJECT_ROOT
 from src.workflows.checkpoints import resolve_checkpoint
 from src.workflows.specs import (
     ComparisonSpec,
@@ -19,8 +21,14 @@ from src.workflows.specs import (
     PreconditionerLimits,
 )
 from src.workflows.utils.paths import extract_model_name
-from src.cli.comparison import compare_preconditioners
+from src.workflows.compare import compare_preconditioners
+from src.io.comparison import load_solver_config
+from src.preconditioner_factory import build_preconditioner_configs
 from src.workflows.utils.paths import resolve_output_root
+from src.mlflow_utils import build_run_config, finalize_run, open_run
+
+
+COMPARISON_ARTIFACTS: tuple[str, ...] = ("figures", "reports", "metrics")
 
 
 def _make_workspace(
@@ -63,6 +71,7 @@ def _build_batch_spec(
         rhs_override=rhs,
         figures_dir=exp.workspace.figures_dir,
         output_dir=exp.workspace.root_dir,
+        settings=exp.settings,
     )
 
 
@@ -89,6 +98,62 @@ def _build_direct_spec(
         figures_dir=workspace.figures_dir,
         output_dir=workspace.root_dir,
     )
+
+
+def _coerce_mlflow_settings(model_config: Path) -> Any | None:
+    try:
+        with model_config.open("rb") as handle:
+            config = tomllib.load(handle)
+        mlflow_cfg = config.get("MLFLOW")
+        if not isinstance(mlflow_cfg, dict):
+            return None
+        client_cfg = mlflow_cfg.get("client") if isinstance(mlflow_cfg.get("client"), dict) else {}
+        server_cfg = mlflow_cfg.get("server") if isinstance(mlflow_cfg.get("server"), dict) else {}
+        return SimpleNamespace(
+            MLFLOW=SimpleNamespace(
+                enabled=bool(mlflow_cfg.get("enabled")),
+                client=SimpleNamespace(**client_cfg),
+                server=SimpleNamespace(**server_cfg),
+            ),
+            PATHS=SimpleNamespace(project_root=str(DEFAULT_PROJECT_ROOT)),
+        )
+    except Exception:
+        return None
+
+
+def _start_comparison_run(spec: ComparisonSpec, enable_mlflow: bool):
+    settings = spec.settings or _coerce_mlflow_settings(spec.model_config)
+    config = build_run_config(
+        settings=settings,
+        workspace_root=spec.workspace.root_dir,
+        dataset_id=spec.data_config.stem,
+        model_name=f"{spec.name}-compare",
+        enabled=enable_mlflow,
+    )
+    if config is None:
+        return None
+    try:
+        return open_run(config)
+    except ModuleNotFoundError:
+        logger.info("MLflow not installed; skipping MLflow logging.")
+        return None
+
+
+def _comparison_metrics(result: dict[str, Any] | None) -> dict[str, float]:
+    if not result:
+        return {}
+    recs = result.get("recommendations") if isinstance(result, dict) else None
+    best = recs.get("best_overall") if isinstance(recs, dict) else None
+    if not isinstance(best, dict):
+        return {}
+    metrics: dict[str, float] = {}
+    for key, target in (("residual", "best_residual"), ("iterations", "best_iterations")):
+        value = best.get(key)
+        try:
+            metrics[target] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return metrics
 
 
 def build_batch_comparisons(
@@ -143,7 +208,10 @@ def build_direct_comparisons(
 
 
 def run_comparisons(
-    specs: Iterable[ComparisonSpec], params: ComparisonParams
+    specs: Iterable[ComparisonSpec],
+    params: ComparisonParams,
+    *,
+    enable_mlflow: bool = False,
 ) -> list[ComparisonOutcome]:
     outcomes: list[ComparisonOutcome] = []
     for spec in specs:
@@ -165,20 +233,41 @@ def run_comparisons(
             reorthog_window=params.reorthog_window,
             reorthog_threshold=params.reorthog_threshold,
         )
+        mlflow_state = _start_comparison_run(spec, enable_mlflow)
+        metrics: dict[str, float] | None = None
+        error: Exception | None = None
+        result: dict[str, Any] | None = None
         try:
-            result = compare_preconditioners(
-                config_path=spec.model_config,
-                data_config_path=spec.data_config,
-                solver_config_path=spec.solver_config,
-                checkpoint_path=spec.checkpoint,
-                params=merged_params,
-                custom_combinations=None,
+            general_params, solver_entries = load_solver_config(spec.solver_config)
+            precond_configs = build_preconditioner_configs(
+                [
+                    {"name": solver.name, "type": solver.type, **solver.args}
+                    for solver in solver_entries
+                ]
             )
-            outcomes.append(
-                ComparisonOutcome(name=spec.name, success=True, payload=result)
+            result = compare_preconditioners(
+                general_params=general_params,
+                preconditioner_configs=precond_configs,
+                output_root=spec.output_dir or spec.workspace.root_dir,
+                figures_root=spec.figures_dir or spec.workspace.figures_dir,
             )
         except Exception as exc:  # noqa: BLE001
+            error = exc
+        finally:
+            metrics = _comparison_metrics(result)
+            finalize_run(
+                mlflow_state,
+                metrics=metrics,
+                workspace_root=spec.workspace.root_dir,
+                allowlist=COMPARISON_ARTIFACTS,
+                failed=error is not None,
+            )
+        if error:
             outcomes.append(
-                ComparisonOutcome(name=spec.name, success=False, error=str(exc))
+                ComparisonOutcome(name=spec.name, success=False, error=str(error))
+            )
+        else:
+            outcomes.append(
+                ComparisonOutcome(name=spec.name, success=True, payload=result)
             )
     return outcomes

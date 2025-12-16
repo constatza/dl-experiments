@@ -67,6 +67,11 @@ def main(
     reorthog_threshold: float = typer.Option(
         REORTHOG_STRICT_THRESHOLD, help="Threshold for selective reorthogonalization"
     ),
+    enable_mlflow: bool = typer.Option(
+        False,
+        "--enable-mlflow/--no-mlflow",
+        help="Enable MLflow logging for the comparison (defaults to disabled)",
+    ),
 ):
     """Compare preconditioner methods for a single experiment (explicit configs)."""
     limits = PreconditionerLimits(
@@ -103,7 +108,7 @@ def main(
         raise typer.Exit(code=EXIT_FAILURE)
 
     logger.info(f"Running single comparison for: {model_config}")
-    outcomes = run_comparisons(specs, params)
+    outcomes = run_comparisons(specs, params, enable_mlflow=enable_mlflow)
     failed = [o for o in outcomes if not o.success]
     if failed:
         for item in failed:

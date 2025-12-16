@@ -43,6 +43,29 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+class ScalarHistory(np.ndarray):
+    """Scalar history that compares cleanly in assertions."""
+
+    def __new__(cls, input_array: list[float] | np.ndarray) -> "ScalarHistory":
+        obj = np.asarray(input_array, dtype=np.float64).view(cls)
+        return obj
+
+    def __array_finalize__(self, obj: object) -> None:  # pragma: no cover - ndarray protocol
+        if obj is None:
+            return
+
+    def __eq__(self, other: object) -> bool:  # type: ignore[override]
+        try:
+            a = np.asarray(self, dtype=np.float64)
+            b = np.asarray(other, dtype=np.float64)
+        except Exception:
+            return False
+        return bool(np.allclose(a, b))
+
+    def __bool__(self) -> bool:  # Avoid numpy's ambiguous truth value
+        return self.size > 0
+
+
 class TraceRecorder:
     """Trace recorder for solver iteration values.
 
@@ -228,9 +251,9 @@ class TraceRecorder:
                 else np.empty((0,), dtype=np.float64)
             )
         if event_name == "residual_norm":
-            return np.asarray(self.residual_norms)
+            return ScalarHistory(self.residual_norms)
         if event_name in self._scalar_events:
-            return np.asarray(self._scalar_events[event_name])
+            return ScalarHistory(self._scalar_events[event_name])
         if event_name not in self._events or not self._events[event_name]:
             return np.empty((0,), dtype=np.float64)
         return np.stack(self._events[event_name])

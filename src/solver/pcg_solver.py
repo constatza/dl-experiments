@@ -241,7 +241,7 @@ def cg_solve(
     residual_history_abs = recorder.history_abs if recorder else None
     if resolved_event_log is not None:
         logged_norms = resolved_event_log.get_history("residual_norm")
-        if logged_norms:
+        if logged_norms is not None:
             residual_history_abs = [float(val) for val in logged_norms]
 
     residual_history_rel = None

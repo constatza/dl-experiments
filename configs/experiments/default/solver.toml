@@ -1,5 +1,5 @@
 [general]
-rtol = 1.0e-6
+rtol = 1.0e-9
 atol = 1.0e-14
 max_iterations = 200
 stopping_criterion = "residual_norm"  # "residual_norm" or "fixed_iterations"
@@ -22,6 +22,5 @@ type = "ilu"
 [[solvers]]
 name = "neural"
 type = "neural"
-limit_iters = 100
-fallback = "jacobi"
-apply_every = 1
+limit_iters = 0
+checkpoint_path = "/data/projects/graph-cg/data/output/test-solutions/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"

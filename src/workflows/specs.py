@@ -23,6 +23,7 @@ class ComparisonSpec:
     rhs_override: Path | None = None
     figures_dir: Path | None = None
     output_dir: Path | None = None
+    settings: Any | None = None
 
 
 @dataclass(frozen=True)

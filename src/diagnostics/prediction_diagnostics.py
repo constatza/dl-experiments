@@ -97,8 +97,7 @@ def save_prediction_samples_to_csv(
             records, columns=["y_true", "y_pred", "error"]
         )
 
-        dim_count = true_vec.size
-        filepath = output_dir / f"{filename_prefix}_predictions_sample_{idx}_dim{dim_count}.csv"
+        filepath = output_dir / f"{filename_prefix}_predictions_sample_{idx}.csv"
         df.to_csv(filepath, index=False)
         saved_paths.append(filepath)
         logger.info(f"Saved {len(records)} prediction entries to {filepath}")

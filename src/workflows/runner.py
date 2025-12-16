@@ -3,63 +3,21 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from dataclasses import replace
 
 from src.configuration.loader import load_batch
 from src.workflows.reporting import ExperimentResult
 from src.workflows.utils.hashing import compute_directory_hash
-from src.cli.data import load_data_config
+from src.workflows.data import load_data_config
 from src.generation import process_config
 from src.workflows.utils.paths import extract_model_name
-from src.cli.training import train_model
-from src.cli.prediction import run_inference
-from src.cli.comparison import compare_preconditioners
+from src.workflows.training import train_model
+from src.workflows.prediction import run_inference
 from src.validation import validate_data_exists
 from src.system_loading import get_latest_checkpoint
-
-
-def run_training_stage(
-    *, model_config_path: Path, data_config_path: Path, output_dir: Path, session_name: str
-) -> Path:
-    return train_model(
-        config_path=model_config_path,
-        data_config_path=data_config_path,
-        output_dir=output_dir,
-        session_name=session_name,
-    )
-
-
-def run_prediction_stage(
-    *, model_config_path: Path, data_config_path: Path, checkpoint_path: Path, figures_dir: Path
-) -> None:
-    run_inference(
-        config_path=model_config_path,
-        data_config_path=data_config_path,
-        checkpoint_path=checkpoint_path,
-        figures_dir=figures_dir,
-    )
-
-
-def run_comparison_stage(
-    *,
-    model_config_path: Path,
-    data_config_path: Path,
-    solver_config_path: Path,
-    matrix_path: Path,
-    checkpoint_path: Path,
-    output_dir: Path,
-    figures_dir: Path,
-) -> None:
-    compare_preconditioners(
-        config_path=model_config_path,
-        data_config_path=data_config_path,
-        solver_config_path=solver_config_path,
-        matrix_path=matrix_path,
-        checkpoint_path=checkpoint_path,
-        save_plots=True,
-        output_dir=output_dir,
-        figures_dir=figures_dir,
-    )
+from src.workflows.compare import compare_preconditioners
+from src.io.comparison import load_solver_config
+from src.preconditioner_factory import build_preconditioner_configs
 
 
 def run_experiment(
@@ -78,36 +36,48 @@ def run_experiment(
         data_dir = process_config(data_cfg, config_path=data_config_path)
         validate_data_exists(data_dir, ["normalized.npz"])
 
-        checkpoint_dir = output_root / data_config_path.stem / model_name / "checkpoints"
+        checkpoint_dir = (
+            output_root / data_config_path.stem / model_name / "checkpoints"
+        )
         checkpoint = get_latest_checkpoint(checkpoint_dir)
         if force or checkpoint is None:
-            checkpoint = run_training_stage(
-                model_config_path=model_config_path,
+            checkpoint = train_model(
+                config_path=model_config_path,
                 data_config_path=data_config_path,
                 output_dir=output_root,
                 session_name=model_name,
             )
 
-        run_prediction_stage(
-            model_config_path=model_config_path,
+        run_inference(
+            config_path=model_config_path,
             data_config_path=data_config_path,
             checkpoint_path=checkpoint,
             figures_dir=output_root / data_config_path.stem / model_name / "figures",
+            output_root=output_root,
         )
 
-        run_comparison_stage(
-            model_config_path=model_config_path,
-            data_config_path=data_config_path,
-            solver_config_path=solver_config_path,
-            matrix_path=data_dir / "normalized.npz",
-            checkpoint_path=checkpoint,
-            output_dir=output_root / data_config_path.stem / model_name,
-            figures_dir=output_root / data_config_path.stem / model_name / "figures",
+        general_params, solver_entries = load_solver_config(solver_config_path)
+        normalized_path = data_dir / "normalized.npz"
+        general_params = replace(
+            general_params,
+            matrix_path=str(normalized_path),
+            rhs_path=str(normalized_path),
+        )
+        precond_configs = build_preconditioner_configs(
+            [{"name": spec.name, "type": spec.type, **spec.args} for spec in solver_entries]
+        )
+        compare_preconditioners(
+            general_params=general_params,
+            preconditioner_configs=precond_configs,
+            output_root=output_root / data_config_path.stem / model_name,
+            figures_root=output_root / data_config_path.stem / model_name / "figures",
         )
 
         return ExperimentResult(experiment_id=model_name, status="Success")
     except Exception as exc:  # noqa: BLE001
-        return ExperimentResult(experiment_id=model_name, status="Failed", error=str(exc))
+        return ExperimentResult(
+            experiment_id=model_name, status="Failed", error=str(exc)
+        )
 
 
 def run_experiment_matrix(

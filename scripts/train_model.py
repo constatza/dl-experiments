@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI wrapper for src.cli.training.train_model."""
+"""CLI wrapper for src.workflows.training.train_model."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from pathlib import Path
 # Add graph-cg root to Python path so we can import from src
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-
 import typer
 
 from src.constants import (
@@ -18,7 +17,7 @@ from src.constants import (
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
 )
-from src.cli.training import train_model
+from src.workflows.training import train_model
 
 
 def main(
@@ -36,11 +35,15 @@ def main(
     accelerator: str | None = typer.Option(
         None, help="Override accelerator: cpu|gpu|auto|tpu"
     ),
+    enable_mlflow: bool = typer.Option(
+        False,
+        "--enable-mlflow/--no-mlflow",
+        help="Enable MLflow logging (defaults to disabled)",
+    ),
 ):
     """Train model with optional dataset/output overrides."""
     graph_cg_root = Path(__file__).resolve().parent.parent
 
-    # Resolve defaults
     if config is None:
         config = graph_cg_root / DEFAULT_MODEL_CONFIG
     if data_config is None:
@@ -54,6 +57,7 @@ def main(
             data_config_path=data_config,
             output_dir=out_dir,
             accelerator=accelerator,
+            enable_mlflow=enable_mlflow,
         )
 
         print(f"\nTraining complete. Checkpoint saved to: {checkpoint_path}")

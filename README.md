@@ -56,6 +56,12 @@ checkpoint_dir = context.training.checkpoint_dir
   ```bash
   uv run python scripts/run_experiments.py --config configs/experiments.toml
   ```
+- Optional MLflow logging (adds uploads; local files remain):
+  ```bash
+  uv run python scripts/train_model.py --config configs/ffnn.toml --data-config data-configs/collect-504-solutions.toml --enable-mlflow
+  uv run python scripts/predict.py --config configs/ffnn.toml --data-config data-configs/collect-504-solutions.toml --enable-mlflow
+  uv run python scripts/compare_methods.py --experiments configs/experiments.toml --enable-mlflow
+  ```
 
 Prefect orchestration lives in `src/workflows/flow.py` (also exposed via the scripts above).
 

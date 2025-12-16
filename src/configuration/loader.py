@@ -25,6 +25,7 @@ from ..constants import (
     ConfigKeys,
 )
 from ..validation import validate_file_exists
+from ..mlflow_utils import resolve_mlflow_paths
 
 from .domain import (
     ExperimentSpec,
@@ -123,33 +124,27 @@ def _inject_paths_and_params(
     # Check if MLFLOW section exists
     mlf_cfg = settings.MLFLOW
     if mlf_cfg is not None:
-        server_cfg = mlf_cfg.server if hasattr(mlf_cfg, "server") else None
-        existing_uri = server_cfg.backend_store_uri if server_cfg else None
-
-        resolved_uri = existing_uri
-
-        if not existing_uri:
-            # Default to project-local mlruns
-            mlruns_db_path = project_root / "data" / "mlruns" / "mlflow.db"
-            resolved_uri = f"sqlite:///{mlruns_db_path.as_posix()}"
-        elif isinstance(existing_uri, str) and existing_uri.startswith("sqlite:///"):
-            # It's a URI, check if the path part is relative
-            path_part = existing_uri.replace("sqlite:///", "")
-            # If it looks like a relative path (not starting with /), anchor it to project root
-            if not path_part.startswith("/"):
-                full_path = project_root / path_part
-                resolved_uri = f"sqlite:///{full_path.as_posix()}"
-
-        settings = update_settings(
-            settings,
-            {
-                "MLFLOW": {
-                    "server": {
-                        "backend_store_uri": resolved_uri
-                    }
+        server_cfg = getattr(mlf_cfg, "server", None)
+        client_cfg = getattr(mlf_cfg, "client", None)
+        backend_uri = getattr(server_cfg, "backend_store_uri", None)
+        artifact_uri = getattr(server_cfg, "artifacts_destination", None)
+        paths = resolve_mlflow_paths(
+            backend_uri,
+            artifact_uri,
+            project_root,
+            workspace.root_dir,
+        )
+        payload: dict[str, dict[str, dict[str, str]]] = {
+            "MLFLOW": {
+                "server": {
+                    "backend_store_uri": paths.tracking_uri,
+                    "artifacts_destination": paths.artifact_uri,
                 }
             }
-        )
+        }
+        if getattr(client_cfg, "tracking_uri", None) is None:
+            payload["MLFLOW"]["client"] = {"tracking_uri": paths.tracking_uri}
+        settings = update_settings(settings, payload)
 
     return settings
 

@@ -139,6 +139,11 @@ def main(
         None, "--checkpoint-config", help="TOML containing checkpoint.path override"
     ),
     checkpoint_path: Path | None = typer.Option(None, help="Direct checkpoint path override"),
+    enable_mlflow: bool = typer.Option(
+        False,
+        "--enable-mlflow/--no-mlflow",
+        help="Enable MLflow logging for comparisons (defaults to disabled)",
+    ),
 ):
     """Compare preconditioner methods for all experiments in experiments.toml."""
     experiments_path = (
@@ -180,7 +185,7 @@ def main(
     logger.info(f"Experiments config: {experiments_path}")
     logger.info("")
 
-    outcomes = run_comparisons(specs, params)
+    outcomes = run_comparisons(specs, params, enable_mlflow=enable_mlflow)
     _log_outcomes(outcomes)
 
 
