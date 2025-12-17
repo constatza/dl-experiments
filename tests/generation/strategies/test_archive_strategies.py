@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.generation import run_generation
-from src.generation.strategies.rhs_archive import RhsArchiveStrategy
-from src.generation.strategies.solution_archive import SolutionArchiveStrategy
+from neuralls.generation import run_generation
+from neuralls.generation.strategies.rhs_archive import RhsArchiveStrategy
+from neuralls.generation.strategies.solution_archive import SolutionArchiveStrategy
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def solution_archive_files(tmp_path, spd_matrix):
 
 def test_rhs_archive_strategy_registered():
     """Test RhsArchiveStrategy is registered."""
-    from src.generation.runner import _registry
+    from neuralls.generation.runner import _registry
 
     assert "rhs_archive" in _registry._strategies
     assert isinstance(_registry._strategies["rhs_archive"], RhsArchiveStrategy)
@@ -60,7 +60,7 @@ def test_rhs_archive_strategy_registered():
 
 def test_solution_archive_strategy_registered():
     """Test SolutionArchiveStrategy is registered."""
-    from src.generation.runner import _registry
+    from neuralls.generation.runner import _registry
 
     assert "solution_archive" in _registry._strategies
     assert isinstance(
@@ -273,7 +273,7 @@ def test_solution_archive_insufficient_files(spd_matrix, solution_archive_files)
 
 def test_mixed_archive_and_synthetic(spd_matrix, rhs_archive_files):
     """Test mixing archive and synthetic strategies using generate_mixture."""
-    from src.generation import generate_mixture
+    from neuralls.generation import generate_mixture
 
     files, glob_pattern = rhs_archive_files
 

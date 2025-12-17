@@ -11,13 +11,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import typer
 
-from src.constants import (
+from neuralls.constants import (
     DEFAULT_MODEL_CONFIG,
     DEFAULT_DATA_CONFIG,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
 )
-from src.workflows.training import train_model
+from neuralls.workflows.training import train_model
 
 
 def main(

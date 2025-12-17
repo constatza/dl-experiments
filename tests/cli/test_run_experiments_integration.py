@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import tomli_w
 from pathlib import Path
-from src.workflows.runner import run_experiment_matrix
+from neuralls.workflows.runner import run_experiment_matrix
 import os
 
 def test_run_experiments_full_flow(tmp_path):

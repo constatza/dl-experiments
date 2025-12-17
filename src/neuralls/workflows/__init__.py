@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.workflows.reporting import ExperimentResult
+    from neuralls.workflows.reporting import ExperimentResult
 
 __all__ = ["run_experiment_matrix"]
 
@@ -18,7 +18,7 @@ def run_experiment_matrix(
     project_root: Path | None = None,
     **kwargs: Any,
 ) -> list["ExperimentResult"]:
-    from src.workflows.runner import run_experiment_matrix as _run
+    from neuralls.workflows.runner import run_experiment_matrix as _run
 
     return _run(
         experiments_config_path,

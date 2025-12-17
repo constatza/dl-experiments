@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from src.generation.orchestration import build_dataset
+from neuralls.generation.orchestration import build_dataset
 
 
 @pytest.fixture

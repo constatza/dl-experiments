@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.configuration import load_config
+from neuralls.configuration import load_config
 
 
 def main() -> None:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import numpy as np
 
-from src.solver.comparison import _scheduled_preconditioner
-from src.solver.info import IterationContext
+from neuralls.solver.comparison import _scheduled_preconditioner
+from neuralls.solver.info import IterationContext
 
 
 def test_scheduled_preconditioner_limit_iters() -> None:

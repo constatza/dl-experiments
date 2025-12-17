@@ -11,7 +11,7 @@ import os
 import tomllib
 from pathlib import Path
 
-from src.constants import DEFAULT_OUTPUT_DIR
+from neuralls.constants import DEFAULT_OUTPUT_DIR
 
 
 def extract_model_name(model_config_path: Path | str) -> str:

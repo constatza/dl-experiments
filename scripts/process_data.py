@@ -25,13 +25,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import typer
 
-from src.constants import (
+from neuralls.constants import (
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_SUCCESS,
     SYMBOL_ERROR,
 )
-from src.workflows.data import process_data_from_config
+from neuralls.workflows.data import process_data_from_config
 
 
 def main(

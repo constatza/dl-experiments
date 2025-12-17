@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.linalg import norm
 
-from src.generation.base import normal_strategy, krylov_strategy, rng_from_seed
+from neuralls.generation.base import normal_strategy, krylov_strategy, rng_from_seed
 
 
 def test_normal_strategy_normalization():

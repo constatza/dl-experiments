@@ -11,8 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import typer
 
-from src.workflows.runner import run_experiment_matrix
-from src.constants import (
+from neuralls.workflows.runner import run_experiment_matrix
+from neuralls.constants import (
     DEFAULT_EXPERIMENTS_CONFIG,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,

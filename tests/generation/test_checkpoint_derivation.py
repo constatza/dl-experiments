@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from src.system_loading import derive_checkpoint_path, extract_model_name
+from neuralls.system_loading import derive_checkpoint_path, extract_model_name
 
 
 class TestExtractModelName:

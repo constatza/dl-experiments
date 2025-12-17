@@ -20,15 +20,15 @@ from dlkit.tools.config.data_entries import (
 )
 from dlkit.tools.config.dataset_settings import DatasetSettings
 
-from src.configuration import ExperimentWorkspace, load_experiment
-from src.mlflow_utils import (
+from neuralls.configuration import ExperimentWorkspace, load_experiment
+from neuralls.mlflow_utils import (
     MlflowRunState,
     build_run_config,
     finalize_run,
     open_run,
 )
-from src.system_loading import get_latest_checkpoint
-from src.validation import validate_directory_writable
+from neuralls.system_loading import get_latest_checkpoint
+from neuralls.validation import validate_directory_writable
 from loguru import logger
 
 

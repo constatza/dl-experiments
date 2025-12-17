@@ -19,18 +19,18 @@ from typing import Any
 import typer
 from loguru import logger
 
-from src.constants import (
+from neuralls.constants import (
     DEFAULT_EXPERIMENTS_CONFIG,
     DEFAULT_PROJECT_ROOT,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_CHECKMARK,
 )
-from src.workflows.comparison import (
+from neuralls.workflows.comparison import (
     build_batch_comparisons,
     run_comparisons,
 )
-from src.workflows.specs import (
+from neuralls.workflows.specs import (
     ComparisonParams,
     ComparisonOutcome,
 )

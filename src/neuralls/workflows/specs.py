@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable, TYPE_CHECKING
 
-from src.configuration.domain import ExperimentWorkspace
+from neuralls.configuration.domain import ExperimentWorkspace
 
 if TYPE_CHECKING:
     from .results import ComparisonResult

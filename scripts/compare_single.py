@@ -12,13 +12,13 @@ import os
 import typer
 from loguru import logger
 
-from src.constants import (
+from neuralls.constants import (
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_CHECKMARK,
 )
-from src.workflows.comparison import build_direct_comparisons, run_comparisons
-from src.workflows.specs import ComparisonParams
+from neuralls.workflows.comparison import build_direct_comparisons, run_comparisons
+from neuralls.workflows.specs import ComparisonParams
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 

@@ -15,12 +15,12 @@ import typer
 from dlkit.core.postprocessing import summarize
 from loguru import logger
 
-from src.constants import (
+from neuralls.constants import (
     DEFAULT_MODEL_CONFIG,
     DEFAULT_DATA_CONFIG,
     EXIT_KEYBOARD_INTERRUPT,
 )
-from src.workflows.prediction import run_inference
+from neuralls.workflows.prediction import run_inference
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 

@@ -122,7 +122,7 @@ def plot_2d_scatter(rhs: np.ndarray, solutions: np.ndarray, title: str) -> plt.F
 
 def load_matrix(dataset_dir: Path) -> np.ndarray:
     """Load matrix from dataset (prefer unnormalized for spectral analysis)."""
-    from src.io_utils import load_dataset
+    from neuralls.io_utils import load_dataset
 
     # Prefer unnormalized matrix.npy for spectral analysis
     matrix_path = dataset_dir / "matrix.npy"

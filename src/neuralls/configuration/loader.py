@@ -43,7 +43,7 @@ from .loaders import (
 from .services import WorkspaceFactory
 
 # Import paths module for FlowContext (needed by some scripts)
-from src.paths.core import (
+from neuralls.paths.core import (
     ComparisonPaths,
     DataPaths,
     FlowContext,

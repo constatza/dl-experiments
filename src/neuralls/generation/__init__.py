@@ -20,7 +20,7 @@ Architecture:
     - runner: Strategy registry and dispatcher
 
 Usage:
-    >>> from src.generation import generate_mixture
+    >>> from neuralls.generation import generate_mixture
     >>> X, Y, res_traces, err_traces = generate_mixture(
     ...     A, b,
     ...     mix={"normal": 1.0, "krylov": 1.0},

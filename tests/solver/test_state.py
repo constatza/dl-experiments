@@ -16,7 +16,7 @@ from dataclasses import replace
 
 import pytest
 
-from src.solver.state import IterationState
+from neuralls.solver.state import IterationState
 
 
 # =============================================================================

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 
-from src.workflows.compare import compare_preconditioners
-from src.io.comparison import load_solver_config
-from src.preconditioner_factory import build_preconditioner_configs
+from neuralls.workflows.compare import compare_preconditioners
+from neuralls.io.comparison import load_solver_config
+from neuralls.preconditioner_factory import build_preconditioner_configs
 
 
 def _write_normalized_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:

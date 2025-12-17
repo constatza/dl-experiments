@@ -97,7 +97,7 @@ def build_preconditioner_configs(
 
 
 def build_preconditioner_configs_from_specs(
-    specs: Sequence[Any],  # SolverSpecConfig from src.configuration.solver_models
+    specs: Sequence[Any],  # SolverSpecConfig from neuralls.configuration.solver_models
 ) -> list[BasePreconditionerConfig]:
     """Build preconditioner configs from SolverSpecConfig Pydantic models.
 

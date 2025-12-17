@@ -16,9 +16,9 @@ pytestmark = pytest.mark.skipif(
 
 from dlkit import GeneralSettings
 
-from src.configuration.loader import load_batch
-from src.configuration.domain import ExperimentBatch, RunnableExperiment, ExperimentWorkspace
-from src.constants import (
+from neuralls.configuration.loader import load_batch
+from neuralls.configuration.domain import ExperimentBatch, RunnableExperiment, ExperimentWorkspace
+from neuralls.constants import (
     EXP_MODEL_CONFIG_NAME,
     EXP_DATA_CONFIG_NAME,
     EXP_SOLVER_CONFIG_NAME,

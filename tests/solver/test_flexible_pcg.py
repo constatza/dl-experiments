@@ -22,14 +22,14 @@ import numpy as np
 import pytest
 from scipy.linalg import norm
 
-from src.constants import (
+from neuralls.constants import (
     DEFAULT_ATOL,
     DEFAULT_BETA_MAX,
     DEFAULT_CURVATURE_EPSILON,
     DEFAULT_DIVERGENCE_FACTOR,
     DEFAULT_RESIDUAL_REPLACEMENT_FREQ,
 )
-from src.solver.factories import flexible_cg as flexible_pcg
+from neuralls.solver.factories import flexible_cg as flexible_pcg
 
 if TYPE_CHECKING:
     from collections.abc import Callable

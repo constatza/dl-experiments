@@ -6,19 +6,19 @@ from pathlib import Path
 
 from loguru import logger
 
-from src.configuration.loader import load_batch
-from src.workflows.reporting import ExperimentResult
-from src.workflows.utils.hashing import compute_directory_hash
-from src.workflows.data import load_data_config
-from src.generation import process_config
-from src.workflows.utils.paths import extract_model_name
-from src.workflows.training import train_model
-from src.workflows.prediction import run_inference
-from src.validation import validate_data_exists
-from src.system_loading import get_latest_checkpoint
-from src.workflows.compare import compare_preconditioners
-from src.io.comparison import load_solver_config
-from src.preconditioner_factory import build_preconditioner_configs
+from neuralls.configuration.loader import load_batch
+from neuralls.workflows.reporting import ExperimentResult
+from neuralls.workflows.utils.hashing import compute_directory_hash
+from neuralls.workflows.data import load_data_config
+from neuralls.generation import process_config
+from neuralls.workflows.utils.paths import extract_model_name
+from neuralls.workflows.training import train_model
+from neuralls.workflows.prediction import run_inference
+from neuralls.validation import validate_data_exists
+from neuralls.system_loading import get_latest_checkpoint
+from neuralls.workflows.compare import compare_preconditioners
+from neuralls.io.comparison import load_solver_config
+from neuralls.preconditioner_factory import build_preconditioner_configs
 
 
 def run_experiment(

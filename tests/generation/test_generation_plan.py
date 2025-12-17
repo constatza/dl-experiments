@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.generation.plan import (
+from neuralls.generation.plan import (
     GenerationPlan,
     StrategySpec,
     _canonicalize_strategy_name,
@@ -431,7 +431,7 @@ class TestPydanticValidation:
 
     def test_pydantic_rejects_unknown_parameters(self) -> None:
         """Test that unknown parameters are rejected when configs are validated."""
-        from src.generation.strategy_configs import KrylovConfig
+        from neuralls.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
 
         # Try to create a config with an unknown parameter
@@ -440,7 +440,7 @@ class TestPydanticValidation:
 
     def test_pydantic_rejects_invalid_literal_values(self) -> None:
         """Test that invalid Literal values are rejected."""
-        from src.generation.strategy_configs import EigenvectorForwardConfig
+        from neuralls.generation.strategy_configs import EigenvectorForwardConfig
         from pydantic import ValidationError
 
         # Try to pass an invalid 'which' value
@@ -449,7 +449,7 @@ class TestPydanticValidation:
 
     def test_pydantic_validates_which_accepts_valid_values(self) -> None:
         """Test that valid 'which' values are accepted."""
-        from src.generation.strategy_configs import EigenvectorForwardConfig
+        from neuralls.generation.strategy_configs import EigenvectorForwardConfig
 
         # All three valid values should work
         config1 = EigenvectorForwardConfig(samples=10, which="smallest")
@@ -463,7 +463,7 @@ class TestPydanticValidation:
 
     def test_pydantic_requires_rhs_glob(self) -> None:
         """Test that rhs_glob is required for RhsArchiveConfig."""
-        from src.generation.strategy_configs import RhsArchiveConfig
+        from neuralls.generation.strategy_configs import RhsArchiveConfig
         from pydantic import ValidationError
 
         # Try to create config without rhs_glob
@@ -472,7 +472,7 @@ class TestPydanticValidation:
 
     def test_pydantic_requires_solutions_glob(self) -> None:
         """Test that solutions_glob is required for SolutionArchiveConfig."""
-        from src.generation.strategy_configs import SolutionArchiveConfig
+        from neuralls.generation.strategy_configs import SolutionArchiveConfig
         from pydantic import ValidationError
 
         # Try to create config without solutions_glob
@@ -481,7 +481,7 @@ class TestPydanticValidation:
 
     def test_pydantic_validates_type_residual_iters(self) -> None:
         """Test that residual_iters must be int."""
-        from src.generation.strategy_configs import ResidualErrorConfig
+        from neuralls.generation.strategy_configs import ResidualErrorConfig
         from pydantic import ValidationError
 
         # Try to pass a string for residual_iters
@@ -490,7 +490,7 @@ class TestPydanticValidation:
 
     def test_pydantic_validates_type_krylov_iters(self) -> None:
         """Test that krylov_iters must be int."""
-        from src.generation.strategy_configs import KrylovConfig
+        from neuralls.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
 
         # Pydantic will coerce float to int, but invalid types should fail
@@ -499,7 +499,7 @@ class TestPydanticValidation:
 
     def test_pydantic_frozen_prevents_mutation(self) -> None:
         """Test that frozen=True prevents mutation of config objects."""
-        from src.generation.strategy_configs import KrylovConfig
+        from neuralls.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
 
         config = KrylovConfig(samples=10, krylov_iters=15)
@@ -510,7 +510,7 @@ class TestPydanticValidation:
 
     def test_pydantic_accepts_valid_configs(self) -> None:
         """Test that valid configurations are accepted."""
-        from src.generation.strategy_configs import (
+        from neuralls.generation.strategy_configs import (
             KrylovConfig,
             ResidualErrorConfig,
             EigenvectorForwardConfig,

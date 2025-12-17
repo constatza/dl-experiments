@@ -7,22 +7,22 @@ from typing import Iterable, Any
 
 from loguru import logger
 
-from src.configuration.loader import load_batch
-from src.configuration.services import WorkspaceFactory
-from src.configuration.domain import ExperimentWorkspace
-from src.constants import DEFAULT_OUTPUT_DIR, DEFAULT_PROCESSED_DATA_DIR, DEFAULT_PROJECT_ROOT
-from src.workflows.checkpoints import resolve_checkpoint
-from src.workflows.specs import (
+from neuralls.configuration.loader import load_batch
+from neuralls.configuration.services import WorkspaceFactory
+from neuralls.configuration.domain import ExperimentWorkspace
+from neuralls.constants import DEFAULT_OUTPUT_DIR, DEFAULT_PROCESSED_DATA_DIR, DEFAULT_PROJECT_ROOT
+from neuralls.workflows.checkpoints import resolve_checkpoint
+from neuralls.workflows.specs import (
     ComparisonSpec,
     ComparisonParams,
     ComparisonOutcome,
 )
-from src.workflows.utils.paths import extract_model_name
-from src.workflows.compare import compare_preconditioners
-from src.io.comparison import load_solver_config
-from src.preconditioner_factory import build_preconditioner_configs_from_specs
-from src.workflows.utils.paths import resolve_output_root
-from src.mlflow_utils import build_run_config, finalize_run, open_run
+from neuralls.workflows.utils.paths import extract_model_name
+from neuralls.workflows.compare import compare_preconditioners
+from neuralls.io.comparison import load_solver_config
+from neuralls.preconditioner_factory import build_preconditioner_configs_from_specs
+from neuralls.workflows.utils.paths import resolve_output_root
+from neuralls.mlflow_utils import build_run_config, finalize_run, open_run
 
 
 COMPARISON_ARTIFACTS: tuple[str, ...] = ("figures", "reports", "metrics")
@@ -93,7 +93,7 @@ def _get_mlflow_config(model_config: Path):
     Returns ModelConfigFile or None if loading fails.
     """
     try:
-        from src.configuration.loaders import load_model_config
+        from neuralls.configuration.loaders import load_model_config
         return load_model_config(model_config)
     except Exception:
         return None

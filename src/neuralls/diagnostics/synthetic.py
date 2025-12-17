@@ -7,7 +7,7 @@ import numpy as np
 from loguru import logger
 import pandas as pd
 
-from src.io.comparison import load_npz_entry
+from neuralls.io.comparison import load_npz_entry
 
 
 def load_matrix(path: Path) -> np.ndarray:

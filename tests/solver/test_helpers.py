@@ -22,14 +22,14 @@ import numpy as np
 import pytest
 from scipy.linalg import norm
 
-from src.constants import (
+from neuralls.constants import (
     DEFAULT_ATOL,
     DEFAULT_BETA_MAX,
     DEFAULT_CURVATURE_EPSILON,
     DEFAULT_DIVERGENCE_FACTOR,
     DEFAULT_RESIDUAL_REPLACEMENT_FREQ,
 )
-from src.solver.helpers import (
+from neuralls.solver.helpers import (
     beta_update,
     convergence_check,
     curvature,
@@ -38,8 +38,8 @@ from src.solver.helpers import (
     residual_management,
     step_length,
 )
-from src.solver.convergence import CombinedToleranceCriterion
-from src.solver.state import IterationState
+from neuralls.solver.convergence import CombinedToleranceCriterion
+from neuralls.solver.state import IterationState
 
 if TYPE_CHECKING:
     from collections.abc import Callable

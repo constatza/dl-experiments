@@ -27,7 +27,7 @@ from dlkit.tools.config import (
 )
 from dlkit.tools.config.trainer_settings import TrainerSettings
 
-from src.configuration.dataset import (
+from neuralls.configuration.dataset import (
     create_features_from_array,
     create_matrix_feature,
     create_targets_from_array,

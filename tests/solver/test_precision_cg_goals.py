@@ -12,7 +12,7 @@ import pytest
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from src.solver import flexible_cg, preconditioned_cg
+from neuralls.solver import flexible_cg, preconditioned_cg
 
 # Define very strict tolerances for double precision accuracy goals
 DOUBLE_PRECISION_ATOL = 1e-14

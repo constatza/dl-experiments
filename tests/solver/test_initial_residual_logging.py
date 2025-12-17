@@ -1,8 +1,8 @@
 """Test initial residual logging in scipy CG wrapper."""
 
 import numpy as np
-from src.solver.pcg_solver import cg_solve
-from src.solver.trace_recorder import TraceRecorder
+from neuralls.solver.pcg_solver import cg_solve
+from neuralls.solver.trace_recorder import TraceRecorder
 
 
 def test_vector_logger_prepend_scalar():
@@ -93,7 +93,7 @@ def test_scipy_cg_vs_fcg_consistency():
     - residual_history: RELATIVE residuals (||r|| / ||b||)
     - residual_history_abs: ABSOLUTE residuals (||r||)
     """
-    from src.solver.factories import flexible_cg, preconditioned_cg
+    from neuralls.solver.factories import flexible_cg, preconditioned_cg
 
     n = 10
     A = np.eye(n) * 2.0 + np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)

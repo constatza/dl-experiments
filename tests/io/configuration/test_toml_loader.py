@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.configuration.loaders.toml_loader import (
+from neuralls.configuration.loaders.toml_loader import (
     ConfigLoadError,
     load_data_config,
     load_model_config,

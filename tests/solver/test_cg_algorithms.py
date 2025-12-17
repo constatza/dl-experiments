@@ -5,8 +5,8 @@ import pytest
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from src.constants import REORTHOG_STRICT_THRESHOLD
-from src.solver import flexible_cg, preconditioned_cg, run_cg_comparison
+from neuralls.constants import REORTHOG_STRICT_THRESHOLD
+from neuralls.solver import flexible_cg, preconditioned_cg, run_cg_comparison
 
 # Functional/Integration Test Tolerances
 FUNCTIONAL_ATOL = 1e-6
@@ -283,7 +283,7 @@ def test_flexible_pcg_traces_satisfy_residual_equation(
 
 def test_partial_reorthog_unlimited_window() -> None:
     """Test that PartialReorthogonalization with window_size=None uses all vectors."""
-    from src.solver import PartialReorthogonalization
+    from neuralls.solver import PartialReorthogonalization
 
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
     b = np.array([1.0, 2.0], dtype=np.float64)
@@ -303,7 +303,7 @@ def test_partial_reorthog_unlimited_window() -> None:
 
 def test_partial_reorthog_fail_fast() -> None:
     """Test that PartialReorthogonalization reports breakdown instead of raising."""
-    from src.solver import PartialReorthogonalization
+    from neuralls.solver import PartialReorthogonalization
 
     reorthog = PartialReorthogonalization(window_size=10)
 
@@ -320,7 +320,7 @@ def test_partial_reorthog_fail_fast() -> None:
 
 def test_full_reorthog_fail_fast_zero_input() -> None:
     """Test that FullReorthogonalization handles zero input vector gracefully."""
-    from src.solver import FullReorthogonalization
+    from neuralls.solver import FullReorthogonalization
 
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
     reorthog = FullReorthogonalization(A=A)
@@ -339,7 +339,7 @@ def test_full_reorthog_fail_fast_zero_input() -> None:
 
 def test_full_reorthog_fail_fast_zero_basis() -> None:
     """Test that FullReorthogonalization handles zero basis vector gracefully."""
-    from src.solver import FullReorthogonalization
+    from neuralls.solver import FullReorthogonalization
 
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
     reorthog = FullReorthogonalization(A=A)
@@ -360,7 +360,7 @@ def test_full_reorthog_fail_fast_zero_basis() -> None:
 
 def test_selective_reorthog_strict_threshold() -> None:
     """Test that SelectiveReorthogonalization with strict threshold is strict."""
-    from src.solver import SelectiveReorthogonalization
+    from neuralls.solver import SelectiveReorthogonalization
 
     # Create slightly non-orthogonal vectors (2% off orthogonality)
     v1 = np.array([1.0, 0.0])
