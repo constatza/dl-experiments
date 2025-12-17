@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 # Add root to path for script imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.compare_methods import ComparisonParams
 

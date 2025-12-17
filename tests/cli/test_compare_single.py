@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.compare_single import main
 from neuralls.configuration.domain import ExperimentWorkspace
