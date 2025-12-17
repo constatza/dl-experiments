@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from datetime import datetime
 from dlkit import GeneralSettings
 from dlkit.interfaces.api import execute
 from dlkit.tools.config.core.updater import update_settings
-from dlkit.tools.config.data_entries import Feature, FeatureType, Target, TargetType
+from dlkit.tools.config.data_entries import (
+    FeatureType,
+    TargetType,
+    ValueFeature,
+    ValueTarget,
+)
 from dlkit.tools.config.dataset_settings import DatasetSettings
 
 from src.configuration import ExperimentWorkspace, load_experiment
@@ -22,6 +29,7 @@ from src.mlflow_utils import (
 )
 from src.system_loading import get_latest_checkpoint
 from src.validation import validate_directory_writable
+from loguru import logger
 
 
 @dataclass(frozen=True)
@@ -103,16 +111,32 @@ def _create_feature_configs(
                 f"Matrix feature must be 2D or 3D for GraphDataset, got {matrix.shape}."
             )
         return [
-            Feature(name="rhs", value=arrays.rhs, path=None),
-            Feature(name="matrix", value=matrix, path=None),
+            ValueFeature(
+                name="rhs",
+                value=arrays.rhs,
+            ),
+            ValueFeature(
+                name="matrix",
+                value=matrix,
+            ),
         ]
 
-    return [Feature(name="rhs", value=arrays.rhs, path=None)]
+    return [
+        ValueFeature(
+            name="rhs",
+            value=arrays.rhs,
+        )
+    ]
 
 
 def _create_target_configs(arrays: TrainingArrays) -> list[TargetType]:
     """Create Target configs from training arrays."""
-    return [Target(name="solutions", value=arrays.solutions, path=None)]
+    return [
+        ValueTarget(
+            name="solutions",
+            value=arrays.solutions,
+        )
+    ]
 
 
 def _validate_dataset_section(settings: GeneralSettings) -> None:
@@ -158,30 +182,9 @@ def _resolve_dataset(
     return settings.model_copy(update={"DATASET": dataset})
 
 
-def _configure_session(
-    settings: GeneralSettings,
-    workspace: ExperimentWorkspace,
-    session_name: str | None,
-) -> tuple[GeneralSettings, ExperimentWorkspace]:
-    """Apply session name override to settings and context."""
-    if session_name is None:
-        return settings, workspace
-
-    session_cfg = settings.SESSION
-    if session_cfg is None:
-        raise ValueError("Config is missing [SESSION] section")
-
-    session_cfg = session_cfg.model_copy(update={"name": session_name})
-    settings = settings.model_copy(update={"SESSION": session_cfg})
-    workspace = replace(workspace, run_id=session_name)
-
-    return settings, workspace
-
-
 def _configure_callbacks(
     callbacks: list[Any],
     output_dir: Path,
-    checkpoint_filename: str | None,
 ) -> list[Any]:
     """Configure checkpoint callbacks with output directory."""
     checkpoint_dir = output_dir / "checkpoints"
@@ -190,8 +193,6 @@ def _configure_callbacks(
     for cb in callbacks:
         if getattr(cb, "name", None) == "ModelCheckpoint":
             updates: dict[str, Any] = {"dirpath": str(checkpoint_dir)}
-            if checkpoint_filename is not None:
-                updates["filename"] = checkpoint_filename
             cb = cb.model_copy(update=updates)
         updated_callbacks.append(cb)
 
@@ -200,36 +201,20 @@ def _configure_callbacks(
 
 def _configure_output_paths(
     settings: GeneralSettings,
-    output_dir: Path | None,
-    accelerator: str | None,
-    checkpoint_filename: str | None,
+    output_dir: Path,
 ) -> GeneralSettings:
-    """Configure training output paths and accelerator."""
-    if output_dir is None and accelerator is None:
-        return settings
-
+    """Configure training output paths."""
     training_cfg = settings.TRAINING
-    if training_cfg is None:
-        raise ValueError("Config is missing [TRAINING] section")
 
     trainer_cfg = training_cfg.trainer
     callbacks = list(trainer_cfg.callbacks or [])
 
-    if output_dir is not None:
-        validated_dir = validate_directory_writable(output_dir, "Output directory")
-        trainer_cfg = trainer_cfg.model_copy(
-            update={"default_root_dir": str(validated_dir)}
-        )
-        callbacks = _configure_callbacks(
-            callbacks, Path(validated_dir), checkpoint_filename
-        )
+    validated_dir = validate_directory_writable(output_dir, "Output directory")
+    trainer_cfg = trainer_cfg.update_with({"default_root_dir": str(validated_dir)})
 
-    if accelerator is not None:
-        trainer_cfg = trainer_cfg.model_copy(update={"accelerator": accelerator})
-
-    trainer_cfg = trainer_cfg.model_copy(update={"callbacks": callbacks})
-    training_cfg = training_cfg.model_copy(update={"trainer": trainer_cfg})
-    return settings.model_copy(update={"TRAINING": training_cfg})
+    trainer_cfg = trainer_cfg.update_with({"callbacks": callbacks})
+    training_cfg = training_cfg.update_with({"trainer": trainer_cfg})
+    return settings.update_with({"TRAINING": training_cfg})
 
 
 def _configure_mlflow(
@@ -266,66 +251,28 @@ def _configure_training_pipeline(
     workspace: ExperimentWorkspace,
     features: list[FeatureType],
     targets: list[TargetType],
-    session_name: str | None,
-    output_dir: Path | None,
-    accelerator: str | None,
-    checkpoint_filename: str | None,
     dataset_id: str,
 ) -> tuple[GeneralSettings, ExperimentWorkspace]:
     """Apply all configuration transformations to settings."""
     settings = _resolve_dataset(settings, features, targets)
-    settings, workspace = _configure_session(settings, workspace, session_name)
     settings = _configure_output_paths(
         settings,
-        output_dir,
-        accelerator,
-        checkpoint_filename,
+        workspace.root_dir,
     )
     settings = _configure_mlflow(settings, dataset_id)
     return settings, workspace
-
-
-def _start_mlflow_run(
-    settings: GeneralSettings,
-    workspace: ExperimentWorkspace,
-    dataset_id: str,
-    session_name: str | None,
-    enable_mlflow: bool,
-) -> MlflowRunState | None:
-    """Start MLflow run when enabled and available."""
-    config = build_run_config(
-        settings=settings,
-        workspace_root=workspace.root_dir,
-        dataset_id=dataset_id,
-        model_name=workspace.run_id,
-        session_name=session_name,
-        enabled=enable_mlflow,
-    )
-    if config is None:
-        return None
-    try:
-        return open_run(config)
-    except ModuleNotFoundError:
-        print("MLflow not installed; skipping MLflow logging.")
-        return None
 
 
 def train_model(
     *,
     config_path: str | Path,
     data_config_path: str | Path | None = None,
-    output_dir: str | Path | None = None,
-    accelerator: str | None = None,
     session_name: str | None = None,
-    checkpoint_filename: str | None = None,
-    manifest_metadata: dict[str, Any] | None = None,
-    enable_mlflow: bool = False,
 ) -> Path:
     """Train a DLKit model using resolved data+config context."""
     experiment = load_experiment(
         config_path,
         data_config_path,
-        output_root=Path(output_dir) if output_dir is not None else None,
     )
     settings = experiment.settings
     workspace = experiment.workspace
@@ -333,39 +280,16 @@ def train_model(
 
     _, features, targets = _load_and_prepare_data(settings, workspace)
 
-    output_root = workspace.root_dir
     settings, workspace = _configure_training_pipeline(
         settings,
         workspace,
         features,
         targets,
-        session_name,
-        output_root,
-        accelerator,
-        checkpoint_filename,
         dataset_id,
     )
 
-    mlflow_state = _start_mlflow_run(
-        settings,
-        workspace,
-        dataset_id,
-        session_name,
-        enable_mlflow,
-    )
-
-    error: Exception | None = None
-    try:
-        execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
-    except Exception as exc:  # noqa: BLE001
-        error = exc
-        raise
-    finally:
-        finalize_run(
-            mlflow_state,
-            workspace_root=workspace.root_dir,
-            failed=error is not None,
-        )
+    # dlkit handles all MLflow operations including server startup and tracking
+    execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
 
     checkpoint_dir = workspace.checkpoint_dir
     checkpoint_path = get_latest_checkpoint(checkpoint_dir)

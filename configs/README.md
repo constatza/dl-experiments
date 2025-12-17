@@ -27,7 +27,7 @@ dataset = "collect-504-norm"
 
 All orchestrators (`scripts/train_model.py`, `scripts/predict.py`, `scripts/compare_methods.py`, PCA
 helpers) accept a `--data-config` argument and call
-`load_experiment(model_config, data_config)` to resolve unified paths:
+`load_experiment(model_config, data_config, solver_config)` to resolve unified paths with **Pydantic-validated configs**:
 
 - Dataset artefacts (`data/processed/<flow>/<dataset>/...`)
 - Training runs (`output/<flow>/train/<dataset>/<run_id>`)
@@ -183,18 +183,23 @@ name = "FFNN-NormScaled-504-lr1e3-exp1"  # Descriptive session name
 2. Add CLI overrides for common hyperparameters:
    ```python
    # In scripts/train_model.py
+   from src.configuration.loader import load_experiment
+
    def main(
        config: Path,
+       data_config: Path,
        lr: float | None = None,
        hidden_size: int | None = None,
        num_layers: int | None = None,
        batch_size: int | None = None,
        max_epochs: int | None = None,
    ):
-       settings = load_config(config)
+       # Load with Pydantic validation
+       experiment = load_experiment(config, data_config)
+
        # Override settings from CLI
        if lr is not None:
-           settings.TRAINING.optimizer.lr = lr
+           experiment.settings.TRAINING.optimizer.lr = lr
        # ... apply other overrides
    ```
 

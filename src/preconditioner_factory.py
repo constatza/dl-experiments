@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal, Union
 
 import numpy as np
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, ConfigDict, Field, ValidationError
 from scipy.sparse.linalg import LinearOperator, spilu
 
 from .math_utils import _to_csc
@@ -27,9 +27,10 @@ class BasePreconditionerConfig(BaseModel):
         default="identity", description="Fallback preconditioner name when limited."
     )
 
-    class Config:
-        extra = "ignore"
-        frozen = True
+    model_config = ConfigDict(
+        extra="ignore",  # Allow extra fields from SolverSpec conversion
+        frozen=True,
+    )
 
 
 class NonePreconditionerConfig(BasePreconditionerConfig):
@@ -93,6 +94,30 @@ def build_preconditioner_configs(
     specs: Sequence[dict[str, Any]],
 ) -> list[BasePreconditionerConfig]:
     return [parse_preconditioner_config(spec) for spec in specs]
+
+
+def build_preconditioner_configs_from_specs(
+    specs: Sequence[Any],  # SolverSpecConfig from src.configuration.solver_models
+) -> list[BasePreconditionerConfig]:
+    """Build preconditioner configs from SolverSpecConfig Pydantic models.
+
+    This function accepts SolverSpecConfig Pydantic models directly, avoiding
+    the need for dataclass conversion (eliminating type erasure).
+
+    Args:
+        specs: Sequence of SolverSpecConfig Pydantic models.
+
+    Returns:
+        List of validated preconditioner configurations.
+    """
+    return [
+        parse_preconditioner_config({
+            "name": spec.name,
+            "type": spec.type,
+            **spec.model_dump(exclude={'name', 'type'})
+        })
+        for spec in specs
+    ]
 
 
 def make_identity_preconditioner() -> PreconditionerFn:

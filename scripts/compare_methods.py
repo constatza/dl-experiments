@@ -25,16 +25,13 @@ from src.constants import (
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_CHECKMARK,
-    REORTHOG_STRICT_THRESHOLD,
 )
 from src.workflows.comparison import (
     build_batch_comparisons,
-    build_direct_comparisons,
     run_comparisons,
 )
 from src.workflows.specs import (
     ComparisonParams,
-    PreconditionerLimits,
     ComparisonOutcome,
 )
 
@@ -102,90 +99,25 @@ def main(
         "--plots/--no-plots",
         help="Save comparison plots to disk (default: True)",
     ),
-    matrix: Path | None = typer.Option(None, help="Override matrix path (npz supported)."),
-    rhs: Path | None = typer.Option(None, help="Override RHS path (npz supported)."),
-    output_dir: Path | None = typer.Option(
-        None, help="Override output directory for all experiments"
-    ),
-    figures_dir: Path | None = typer.Option(
-        None, help="Override figures directory for plots"
-    ),
-    breakdown_tol: float | None = typer.Option(
-        None, help="Breakdown tolerance for CG denominator checks"
-    ),
-    neural_precond_iters: int | None = typer.Option(
-        None, help="Limit neural preconditioning to first L iterations"
-    ),
-    fallback_preconditioner: str = typer.Option(
-        "identity",
-        help="Preconditioner after L neural iterations (identity, jacobi, ilu)",
-    ),
-    precond_every: int = typer.Option(
-        1, help="Apply preconditioner every K iterations"
-    ),
-    precond_first_n: int | None = typer.Option(
-        None, help="Only apply preconditioner for first N iterations"
-    ),
-    reorthogonalize: str = typer.Option(
-        "full", help="Reorthogonalization strategy (none, full, partial, selective)"
-    ),
-    reorthog_window: int = typer.Option(
-        10, help="Window size for partial reorthogonalization"
-    ),
-    reorthog_threshold: float = typer.Option(
-        REORTHOG_STRICT_THRESHOLD, help="Threshold for selective reorthogonalization"
-    ),
-    checkpoint_config: Path | None = typer.Option(
-        None, "--checkpoint-config", help="TOML containing checkpoint.path override"
-    ),
-    checkpoint_path: Path | None = typer.Option(None, help="Direct checkpoint path override"),
-    enable_mlflow: bool = typer.Option(
-        False,
-        "--enable-mlflow/--no-mlflow",
-        help="Enable MLflow logging for comparisons (defaults to disabled)",
-    ),
 ):
-    """Compare preconditioner methods for all experiments in experiments.toml."""
+    """Compare preconditioner methods using configuration files."""
     experiments_path = (
         experiments if experiments is not None else DEFAULT_PROJECT_ROOT / DEFAULT_EXPERIMENTS_CONFIG
     )
 
-    specs = build_batch_comparisons(
-        experiments_path,
-        checkpoint_path=checkpoint_path.resolve() if checkpoint_path else None,
-        checkpoint_config=checkpoint_config,
-        matrix=matrix,
-        rhs=rhs,
-    )
+    specs = build_batch_comparisons(experiments_path)
 
     if not specs:
         logger.error("No comparison specs were built. Check checkpoints and inputs.")
         raise typer.Exit(code=EXIT_FAILURE)
 
-    limits = PreconditionerLimits(
-        apply_every=precond_every,
-        first_n=precond_first_n,
-        neural_iters=neural_precond_iters,
-        fallback_preconditioner=fallback_preconditioner,
-    )
-    params = ComparisonParams(
-        save_plots=plots,
-        breakdown_tol=breakdown_tol,
-        limits=limits,
-        reorthogonalize=reorthogonalize,
-        reorthog_window=reorthog_window,
-        reorthog_threshold=reorthog_threshold,
-        figures_dir=figures_dir,
-        output_dir=output_dir,
-        matrix=matrix,
-        rhs=rhs,
-    )
+    params = ComparisonParams(save_plots=plots)
 
     logger.info(f"Running comparisons for {len(specs)} experiments...")
     logger.info(f"Experiments config: {experiments_path}")
     logger.info("")
 
-    outcomes = run_comparisons(specs, params, enable_mlflow=enable_mlflow)
+    outcomes = run_comparisons(specs, params)
     _log_outcomes(outcomes)
 
 

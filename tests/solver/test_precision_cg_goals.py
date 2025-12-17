@@ -68,9 +68,9 @@ def jacobi_preconditioner_callable(A_matrix: NDArray) -> LinearOperator:
 
 
 @pytest.fixture(scope="module")
-def diagnostics_dir() -> Path:
-    out_dir = Path(__file__).resolve().parent / "solver" / "diagnostics"
-    out_dir.mkdir(parents=True, exist_ok=True)
+def diagnostics_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Create temporary diagnostics directory using pytest's tmp_path_factory."""
+    out_dir = tmp_path_factory.mktemp("diagnostics")
     return out_dir
 
 

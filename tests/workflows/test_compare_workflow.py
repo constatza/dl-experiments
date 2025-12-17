@@ -25,8 +25,8 @@ def _write_solver_config(path: Path, system_path: Path) -> None:
                 "atol = 1e-14",
                 "max_iterations = 50",
                 'stopping_criterion = "residual_norm"',
-                f'matrix = "{system_path}"',
-                f'rhs = "{system_path}"',
+                f'matrix_path = "{system_path}"',
+                f'rhs_path = "{system_path}"',
                 "",
                 "[[solvers]]",
                 'name = "none"',
@@ -55,6 +55,7 @@ def _write_data_config(path: Path, data_root: Path) -> None:
                 "",
                 "[output]",
                 f'processed_dir = "{data_root}"',
+                f'output_root = "{data_root}"',
                 "",
             ]
         ),
@@ -114,19 +115,21 @@ def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
     checkpoint_dir.mkdir()
     _write_model_config(model_cfg, checkpoint_dir)
 
-    general_params, solver_entries = load_solver_config(solver_cfg)
+    solver_cfg_model = load_solver_config(solver_cfg)
     precond_configs = build_preconditioner_configs(
-        [{"name": spec.name, "type": spec.type, **spec.args} for spec in solver_entries]
+        [{"name": spec.name, "type": spec.type, **spec.model_dump(exclude={'name', 'type'})}
+         for spec in solver_cfg_model.solvers]
     )
 
     results = compare_preconditioners(
-        general_params=general_params,
+        general_params=solver_cfg_model.general,
         preconditioner_configs=precond_configs,
         output_root=tmp_path / "output",
         figures_root=tmp_path / "figures",
     )
 
-    comparison_results = results["results"]
+    # Access results from ComparisonResult Pydantic model
+    comparison_results = results.results
     assert set(comparison_results.keys()) == {"none", "jacobi"}
     for name, info in comparison_results.items():
         assert info.iterations > 0, f"{name} did not run"

@@ -1,7 +1,6 @@
 """Functions for saving prediction diagnostics."""
 
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -14,10 +13,9 @@ def save_prediction_samples_to_csv(
     output_dir: Path,
     filename_prefix: str,
     num_samples: int = 1,
-    seed: int | None = None,
 ) -> list[Path] | None:
     """Save sampled true, predicted, and error vectors to individual CSV files.
-    
+
     Args:
         y_true: True values.
         y_pred: Predicted values.
@@ -41,13 +39,13 @@ def save_prediction_samples_to_csv(
         y_pred = y_pred.reshape(y_true.shape)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    rng = np.random.default_rng(seed)
 
     if y_true.shape != y_pred.shape and not (
         y_true.ndim == 1 and y_pred.ndim == 1 and y_true.size == y_pred.size
     ):
-        logger.warning("Shape mismatch between y_true and y_pred; cannot save samples to CSV.")
+        logger.warning(
+            "Shape mismatch between y_true and y_pred; cannot save samples to CSV."
+        )
         return None
 
     num_vectors = y_true.shape[0] if y_true.ndim > 1 else 1
@@ -60,15 +58,11 @@ def save_prediction_samples_to_csv(
         logger.info("Requested zero samples; skipping CSV save.")
         return None
 
-    sample_indices = (
-        rng.choice(num_vectors, size=effective_samples, replace=False)
-        if num_vectors > 1
-        else np.array([0])
-    )
+    indices = range(num_samples)
 
     saved_paths: list[Path] = []
 
-    for idx in sample_indices:
+    for idx in indices:
         true_vec = y_true[idx] if y_true.ndim > 1 else y_true
         pred_vec = y_pred[idx] if y_pred.ndim > 1 else y_pred
 
@@ -93,9 +87,7 @@ def save_prediction_samples_to_csv(
             logger.warning(f"No entries recorded for sampled vector {idx}; skipping.")
             continue
 
-        df = pd.DataFrame.from_records(
-            records, columns=["y_true", "y_pred", "error"]
-        )
+        df = pd.DataFrame.from_records(records, columns=["y_true", "y_pred", "error"])
 
         filepath = output_dir / f"{filename_prefix}_predictions_sample_{idx}.csv"
         df.to_csv(filepath, index=False)

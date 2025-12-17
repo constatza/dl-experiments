@@ -28,7 +28,8 @@ from ..solver import (
     summarize_best_combinations,
 )
 from ..validation import validate_matrix, validate_rhs_vector
-from ..configuration.solver import GeneralSolverParams
+from ..configuration.solver_models import GeneralSolverConfig
+from .results import ComparisonResult
 
 
 StoppingCriterion = Literal["tolerance", "fixed_iterations"]
@@ -43,7 +44,7 @@ def _map_stopping_criterion(name: str) -> StoppingCriterion:
 
 def _resolve_paths(
     *,
-    general_params: GeneralSolverParams,
+    general_params: GeneralSolverConfig,
     output_root: Path | None,
     figures_root: Path | None,
 ) -> tuple[Path, Path, Path, Path]:
@@ -91,11 +92,11 @@ def _resolve_fallback_callable(
 
 def compare_preconditioners(
     *,
-    general_params: GeneralSolverParams,
+    general_params: GeneralSolverConfig,
     preconditioner_configs: Sequence[BasePreconditionerConfig],
     output_root: Path | None = None,
     figures_root: Path | None = None,
-) -> dict[str, Any]:
+) -> ComparisonResult:
     """Run CG comparisons using structured solver config (no file I/O here)."""
     matrix_file, rhs_file, output_root, figures_root = _resolve_paths(
         general_params=general_params,
@@ -166,11 +167,11 @@ def compare_preconditioners(
 
     plot_paths = {"convergence": convergence_path}
 
-    return {
-        "results": results,
-        "summary": format_results_summary(results),
-        "plot_paths": plot_paths,
-        "preconditioners": list(preconditioners.keys()),
-        "solver_params": general_params,
-        "recommendations": recommendations,
-    }
+    return ComparisonResult(
+        results=results,
+        summary=format_results_summary(results),
+        plot_paths=plot_paths,
+        preconditioners=list(preconditioners.keys()),
+        solver_params=general_params,
+        recommendations=recommendations,
+    )

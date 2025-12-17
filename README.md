@@ -13,25 +13,30 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 
 ## Three-Config System
 
-Configurations are loaded together to keep models, data, and solver settings independent:
+Configurations are loaded together to keep models, data, and solver settings independent. The system now uses **typed Pydantic models** for validation at load time:
 
 ```python
-from src.configuration import load_config, get_solver_params
+from src.configuration.loader import load_experiment
+from src.configuration.solver import get_solver_params
 
-settings, context = load_config(
+# Load experiment with validated, typed configs
+experiment = load_experiment(
     "configs/ffnn.toml",
     data_config_path="data-configs/collect-504-solutions.toml",
     solver_config_path="solver-configs/default.toml",
 )
 
-params = get_solver_params(settings)
-features = context.data.features_file
-checkpoint_dir = context.training.checkpoint_dir
+# Access validated settings and paths
+params = get_solver_params(experiment.settings)
+workspace = experiment.workspace
+checkpoint_dir = workspace.checkpoint_dir
 ```
 
-- **Model configs (`configs/`):** architecture and training hyperparameters.
-- **Data configs (`data-configs/`):** data sources and generation strategy.
-- **Solver configs (`solver-configs/`):** CG tolerances, iteration limits, and preconditioner set.
+- **Model configs (`configs/`):** architecture and training hyperparameters (validated by `ModelConfigFile`)
+- **Data configs (`data-configs/`):** data sources and generation strategy (validated by `DataConfigFile`)
+- **Solver configs (`solver-configs/`):** CG tolerances, iteration limits, and preconditioner set (validated by `SolverConfigFile`)
+
+All configs are validated using **Pydantic** at load time, catching configuration errors early with clear, actionable error messages.
 
 `configs/experiments.toml` pairs these configs for batch workflows.
 

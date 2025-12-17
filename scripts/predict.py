@@ -18,7 +18,6 @@ from loguru import logger
 from src.constants import (
     DEFAULT_MODEL_CONFIG,
     DEFAULT_DATA_CONFIG,
-    EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
 )
 from src.workflows.prediction import run_inference
@@ -48,6 +47,15 @@ def main(
         "--enable-mlflow/--no-mlflow",
         help="Enable MLflow logging (defaults to disabled)",
     ),
+    synthetic: bool = typer.Option(
+        False,
+        "--synthetic",
+        help="Run synthetic benchmark (x_true=ones, b=Ax) instead of data loading",
+    ),
+    solver_config: Path | None = typer.Option(
+        None,
+        help="Path to solver config (used for matrix path in synthetic mode)",
+    ),
 ):
     """Run inference using a DLKit configuration."""
     graph_cg_root = Path(__file__).resolve().parent.parent
@@ -60,41 +68,33 @@ def main(
 
     logger.info(f"Loading configuration from: {config}")
 
-    try:
-        results = run_inference(
-            config_path=config,
-            data_config_path=data_config,
-            checkpoint_path=checkpoint,
-            features_path=features,
-            targets_path=targets,
-            save_plots=not no_plots,
-            figures_dir=figures_dir,
-            enable_mlflow=enable_mlflow,
-        )
+    results = run_inference(
+        config_path=config,
+        data_config_path=data_config,
+        checkpoint_path=checkpoint,
+        features_path=features,
+        targets_path=targets,
+        save_plots=not no_plots,
+        figures_dir=figures_dir,
+        enable_mlflow=enable_mlflow,
+        synthetic_benchmark=synthetic,
+        solver_config_path=solver_config,
+    )
 
-        try:
-            logger.info(f"Prediction summary: {summarize(results['predictions'])}")
-        except Exception:
-            pass
+    logger.info(f"Prediction summary: {summarize(results['predictions'])}")
 
-        if results["y_true"] is not None and results["y_pred"] is not None:
-            logger.info(f"Generated predictions for {len(results['y_true'])} samples")
-            if results["plot_path"]:
-                logger.info(f"Saved parity plot to: {results['plot_path']}")
-            if results.get("diagnostic_plot_path"):
-                logger.info(
-                    f"Saved diagnostic plot to: {results['diagnostic_plot_path']}"
-                )
+    if results["y_true"] is not None and results["y_pred"] is not None:
+        logger.info(f"Generated predictions for {len(results['y_true'])} samples")
+        if results["plot_path"]:
+            logger.info(f"Saved parity plot to: {results['plot_path']}")
+        if results.get("diagnostic_plot_path"):
+            logger.info(f"Saved diagnostic plot to: {results['diagnostic_plot_path']}")
         else:
             logger.warning(
                 "Could not extract matching prediction/target arrays for plotting."
             )
 
         logger.info(f"Inference completed in {results['duration_seconds']:.2f}s")
-
-    except Exception as exc:  # noqa: BLE001
-        logger.error(f"Error: {exc}")
-        raise typer.Exit(code=EXIT_FAILURE)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from dlkit import GeneralSettings
 
 
@@ -20,9 +20,8 @@ class ExperimentSpec(BaseModel):
     model_config_path: Path = Field(..., description="Absolute path to model.toml")
     data_config_path: Path = Field(..., description="Absolute path to resolved data config")
     solver_config_path: Path = Field(..., description="Absolute path to solver.toml")
-    
-    class Config:
-        frozen = True
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 @dataclass(frozen=True)

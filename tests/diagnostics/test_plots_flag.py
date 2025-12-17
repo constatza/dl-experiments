@@ -18,49 +18,19 @@ class TestPlotsFlag:
 
     def test_comparison_params_with_plots_enabled(self) -> None:
         """Test ComparisonParams with plots enabled."""
-        params = ComparisonParams(
-            matrix=None,
-            rhs=None,
-            output_dir=None,
-            figures_dir=None,
-            save_plots=True,
-            breakdown_tol=None,
-            reorthogonalize="full",
-            reorthog_window=10,
-            reorthog_threshold=0.01,
-        )
+        params = ComparisonParams(save_plots=True)
 
         assert params.save_plots is True
 
     def test_comparison_params_with_plots_disabled(self) -> None:
         """Test ComparisonParams with plots disabled."""
-        params = ComparisonParams(
-            matrix=None,
-            rhs=None,
-            output_dir=None,
-            figures_dir=None,
-            save_plots=False,
-            breakdown_tol=None,
-            reorthogonalize="full",
-            reorthog_window=10,
-            reorthog_threshold=0.01,
-        )
+        params = ComparisonParams(save_plots=False)
 
         assert params.save_plots is False
 
     def test_comparison_params_immutable(self) -> None:
         """Test that save_plots field is immutable."""
-        params = ComparisonParams(
-            matrix=None,
-            rhs=None,
-            output_dir=None,
-            figures_dir=None,
-            save_plots=True,
-            breakdown_tol=None,
-            reorthogonalize="full",
-            reorthog_window=10,
-            reorthog_threshold=0.01,
-        )
+        params = ComparisonParams(save_plots=True)
 
         with pytest.raises(AttributeError):
             params.save_plots = False  # type: ignore[misc]
@@ -93,17 +63,7 @@ class TestPlotsDefaultBehavior:
         parameter should be passed through to compare_preconditioners which
         controls whether plots are actually generated and saved.
         """
-        params = ComparisonParams(
-            matrix=None,
-            rhs=None,
-            output_dir=None,
-            figures_dir=None,
-            save_plots=False,
-            breakdown_tol=None,
-            reorthogonalize="full",
-            reorthog_window=10,
-            reorthog_threshold=0.01,
-        )
+        params = ComparisonParams(save_plots=False)
 
         # When save_plots=False, no plots should be generated
         assert params.save_plots is False
@@ -112,17 +72,7 @@ class TestPlotsDefaultBehavior:
     def test_plots_flag_use_case_for_testing(self) -> None:
         """Test use case: disable plots during automated testing."""
         # During testing, we don't want to generate plots
-        test_params = ComparisonParams(
-            matrix=Path("/tmp/test.npz"),
-            rhs=Path("/tmp/test.npz"),
-            output_dir=Path("/tmp/output"),
-            figures_dir=Path("/tmp/figures"),
-            save_plots=False,  # Disable for tests
-            breakdown_tol=None,
-            reorthogonalize="full",
-            reorthog_window=10,
-            reorthog_threshold=0.01,
-        )
+        test_params = ComparisonParams(save_plots=False)
 
         assert test_params.save_plots is False
         # This prevents slow I/O during tests and avoids cluttering test environments
@@ -130,17 +80,7 @@ class TestPlotsDefaultBehavior:
     def test_plots_flag_use_case_for_production(self) -> None:
         """Test use case: enable plots for production analysis."""
         # During production runs, we want to save plots for analysis
-        prod_params = ComparisonParams(
-            matrix=None,
-            rhs=None,
-            output_dir=None,
-            figures_dir=None,
-            save_plots=True,  # Enable for production
-            breakdown_tol=None,
-            reorthogonalize="full",
-            reorthog_window=10,
-            reorthog_threshold=0.01,
-        )
+        prod_params = ComparisonParams(save_plots=True)
 
         assert prod_params.save_plots is True
         # This enables visual analysis of convergence behavior

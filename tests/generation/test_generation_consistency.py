@@ -20,15 +20,37 @@ from src.generation.orchestration import build_dataset
 
 
 @pytest.fixture
-def matrix_path() -> str:
-    """Path to test matrix."""
-    return "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+def matrix_path(tmp_path: Path) -> str:
+    """Create test matrix and return its path."""
+    # Create a small SPD matrix for testing
+    n = 20
+    A = np.random.RandomState(42).randn(n, n)
+    A = A.T @ A + np.eye(n) * 10.0
+
+    matrix_file = tmp_path / "test_matrix.txt"
+    np.savetxt(matrix_file, A)
+    return str(matrix_file)
 
 
 @pytest.fixture
-def solutions_glob() -> str:
-    """Glob pattern for solution archive."""
-    return "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+def solutions_glob(tmp_path: Path, matrix_path: str) -> str:
+    """Create solution archive files and return glob pattern."""
+    # Load the matrix
+    A = np.loadtxt(matrix_path)
+    n = A.shape[0]
+
+    # Create solution archive directory
+    solutions_dir = tmp_path / "solutions"
+    solutions_dir.mkdir()
+
+    # Generate multiple solution files
+    rng = np.random.RandomState(42)
+    for i in range(100):  # Create enough samples for tests
+        solution = rng.randn(n)
+        solution_file = solutions_dir / f"solution_{i:03d}.txt"
+        np.savetxt(solution_file, solution)
+
+    return str(solutions_dir / "solution_*.txt")
 
 
 def verify_dataset_consistency(dataset_dir: Path) -> tuple[bool, float]:

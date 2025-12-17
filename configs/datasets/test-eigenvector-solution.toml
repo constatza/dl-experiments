@@ -21,7 +21,7 @@ seed = 42
 name = "eigenvector_forward"
 which = "largest"
 num_eigenvectors = 10
-samples =  6000 # Use all eigenvectors (504-dimensional system)
+samples =  6000
 
 [output]
 processed_dir = "/data/projects/graph-cg/data/processed"

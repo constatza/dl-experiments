@@ -3,8 +3,14 @@ rtol = 1.0e-9
 atol = 1.0e-14
 max_iterations = 200
 stopping_criterion = "residual_norm"  # "residual_norm" or "fixed_iterations"
-matrix = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz"
-rhs = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz"
+matrix_path = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz"
+rhs_path = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz"
+
+# CG algorithm control parameters
+breakdown_tol = 1.0e-14
+reorthogonalize = "full"  # "none", "full", "partial", "selective"
+reorthog_window = 10
+reorthog_threshold = 0.01
 
 # Solver entries (names are display labels; type must map to a known solver/preconditioner key)
 [[solvers]]
@@ -22,5 +28,8 @@ type = "ilu"
 [[solvers]]
 name = "neural"
 type = "neural"
-limit_iters = 0
+# Preconditioner control parameters
+limit_iters = 0  # 0 = unlimited, N = apply for first N iterations
+apply_every = 1  # Apply every K iterations
+fallback = "identity"  # Fallback preconditioner after limit_iters: "identity", "jacobi", "ilu"
 checkpoint_path = "/data/projects/graph-cg/data/output/test-solutions/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"

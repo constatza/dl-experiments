@@ -13,10 +13,6 @@ Usage:
 
     # Collect without solving (RHS only)
     uv run python graph-cg/scripts/process_data.py data-configs/collect-504.toml --no-solve
-
-    # Override CG parameters
-    uv run python graph-cg/scripts/process_data.py data-configs/collect-504.toml \\
-        --cg-tolerance 1e-8 --cg-max-iters 500
 """
 
 from __future__ import annotations
@@ -30,8 +26,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import typer
 
 from src.constants import (
-    DEFAULT_RTOL,
-    DEFAULT_CG_MAX_ITERATIONS,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_SUCCESS,
@@ -50,18 +44,8 @@ def main(
         "--solve/--no-solve",
         help="Solve linear systems via CG (for collection mode)",
     ),
-    cg_tolerance: float | None = typer.Option(
-        None,
-        "--cg-tolerance",
-        help=f"CG solver tolerance (relative, default: {DEFAULT_RTOL})",
-    ),
-    cg_max_iters: int | None = typer.Option(
-        None,
-        "--cg-max-iters",
-        help=f"CG solver max iterations (default: {DEFAULT_CG_MAX_ITERATIONS})",
-    ),
 ):
-    """Process data via unified pipeline (collection or generation).
+    """Process data via unified pipeline using configuration files.
 
     This script automatically detects the data processing mode based on your
     config file's strategy definitions. It handles:
@@ -70,15 +54,13 @@ def main(
     - Archive collection (rhs_archive, solution_archive strategies)
     - Mixed strategies (combination of synthetic and archive)
 
-    The --solve and CG options only affect collection mode (rhs_archive).
+    CG solver parameters are defined in the data config file.
     """
     try:
         print(f"Loading data config: {config}")
         output_path = process_data_from_config(
             config,
             solve_systems=solve,
-            cg_tolerance=cg_tolerance,
-            cg_max_iters=cg_max_iters,
         )
 
         print(f"\n{SYMBOL_SUCCESS} Data processing complete!")

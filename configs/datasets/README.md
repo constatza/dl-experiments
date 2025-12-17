@@ -90,7 +90,8 @@ Generates data based on CG residual errors.
 
 ### [output]
 Output configuration.
-- **processed_dir**: `str`. Directory where processed datasets will be saved.
+- **processed_dir**: `str`. Directory where processed datasets will be saved. Optional.
+- **output_root**: `str`. Root directory for all outputs (guides where results are saved). **Required**.
 
 ### [test]
 Optional configuration for generating a comparison set.

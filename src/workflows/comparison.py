@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable, Any
-from types import SimpleNamespace
-import tomllib
 
 from loguru import logger
 
@@ -18,12 +16,11 @@ from src.workflows.specs import (
     ComparisonSpec,
     ComparisonParams,
     ComparisonOutcome,
-    PreconditionerLimits,
 )
 from src.workflows.utils.paths import extract_model_name
 from src.workflows.compare import compare_preconditioners
 from src.io.comparison import load_solver_config
-from src.preconditioner_factory import build_preconditioner_configs
+from src.preconditioner_factory import build_preconditioner_configs_from_specs
 from src.workflows.utils.paths import resolve_output_root
 from src.mlflow_utils import build_run_config, finalize_run, open_run
 
@@ -41,16 +38,10 @@ def _make_workspace(
     return workspace
 
 
-def _build_batch_spec(
-    exp: Any,
-    checkpoint_path: Path | None,
-    checkpoint_config: Path | None,
-    matrix: Path | None,
-    rhs: Path | None,
-) -> ComparisonSpec | None:
+def _build_batch_spec(exp: Any) -> ComparisonSpec | None:
     checkpoint = resolve_checkpoint(
-        explicit=checkpoint_path,
-        config_file=checkpoint_config,
+        explicit=None,
+        config_file=None,
         solver_config=exp.spec.solver_config_path,
         checkpoint_dir=exp.workspace.checkpoint_dir,
     )
@@ -59,7 +50,6 @@ def _build_batch_spec(
             f"No checkpoint found for experiment '{exp.spec.id}'. "
             f"Checked solver config and {exp.workspace.checkpoint_dir}."
         )
-    default_matrix = matrix or exp.workspace.data_dir / "normalized.npz"
     return ComparisonSpec(
         name=exp.spec.id,
         model_config=exp.spec.model_config_path,
@@ -67,8 +57,8 @@ def _build_batch_spec(
         solver_config=exp.spec.solver_config_path,
         workspace=exp.workspace,
         checkpoint=checkpoint,
-        matrix_override=default_matrix,
-        rhs_override=rhs,
+        matrix_override=None,
+        rhs_override=None,
         figures_dir=exp.workspace.figures_dir,
         output_dir=exp.workspace.root_dir,
         settings=exp.settings,
@@ -82,10 +72,7 @@ def _build_direct_spec(
     solver_config: Path,
     workspace: ExperimentWorkspace,
     checkpoint: Path,
-    matrix: Path | None,
-    rhs: Path | None,
 ) -> ComparisonSpec:
-    default_matrix = matrix or workspace.data_dir / "normalized.npz"
     return ComparisonSpec(
         name=name,
         model_config=model_config,
@@ -93,36 +80,40 @@ def _build_direct_spec(
         solver_config=solver_config,
         workspace=workspace,
         checkpoint=checkpoint,
-        matrix_override=default_matrix,
-        rhs_override=rhs,
+        matrix_override=None,
+        rhs_override=None,
         figures_dir=workspace.figures_dir,
         output_dir=workspace.root_dir,
     )
 
 
-def _coerce_mlflow_settings(model_config: Path) -> Any | None:
+def _get_mlflow_config(model_config: Path):
+    """Load validated model config for MLflow settings.
+
+    Returns ModelConfigFile or None if loading fails.
+    """
     try:
-        with model_config.open("rb") as handle:
-            config = tomllib.load(handle)
-        mlflow_cfg = config.get("MLFLOW")
-        if not isinstance(mlflow_cfg, dict):
-            return None
-        client_cfg = mlflow_cfg.get("client") if isinstance(mlflow_cfg.get("client"), dict) else {}
-        server_cfg = mlflow_cfg.get("server") if isinstance(mlflow_cfg.get("server"), dict) else {}
-        return SimpleNamespace(
-            MLFLOW=SimpleNamespace(
-                enabled=bool(mlflow_cfg.get("enabled")),
-                client=SimpleNamespace(**client_cfg),
-                server=SimpleNamespace(**server_cfg),
-            ),
-            PATHS=SimpleNamespace(project_root=str(DEFAULT_PROJECT_ROOT)),
-        )
+        from src.configuration.loaders import load_model_config
+        return load_model_config(model_config)
     except Exception:
         return None
 
 
+def _get_mlflow_enabled(spec: ComparisonSpec) -> bool:
+    """Read MLflow enabled setting from model config."""
+    # First try settings if available
+    if spec.settings and hasattr(spec.settings, "MLFLOW"):
+        mlflow_cfg = getattr(spec.settings, "MLFLOW", None)
+        if mlflow_cfg:
+            return getattr(mlflow_cfg, "enabled", False)
+
+    # Fallback: load config directly using Pydantic model
+    model_cfg = _get_mlflow_config(spec.model_config)
+    return model_cfg.MLFLOW.enabled if model_cfg else False
+
+
 def _start_comparison_run(spec: ComparisonSpec, enable_mlflow: bool):
-    settings = spec.settings or _coerce_mlflow_settings(spec.model_config)
+    settings = spec.settings
     config = build_run_config(
         settings=settings,
         workspace_root=spec.workspace.root_dir,
@@ -158,22 +149,11 @@ def _comparison_metrics(result: dict[str, Any] | None) -> dict[str, float]:
 
 def build_batch_comparisons(
     experiments_config: Path,
-    *,
-    checkpoint_path: Path | None = None,
-    checkpoint_config: Path | None = None,
-    matrix: Path | None = None,
-    rhs: Path | None = None,
 ) -> list[ComparisonSpec]:
     batch = load_batch(experiments_config)
     specs: list[ComparisonSpec] = []
     for exp in batch.experiments:
-        spec = _build_batch_spec(
-            exp,
-            checkpoint_path,
-            checkpoint_config,
-            matrix,
-            rhs,
-        )
+        spec = _build_batch_spec(exp)
         if spec:
             specs.append(spec)
     return specs
@@ -184,69 +164,41 @@ def build_direct_comparisons(
     model_config: Path,
     data_config: Path,
     solver_config: Path,
-    output_root: Path | None,
-    processed_root: Path | None = None,
-    checkpoint_path: Path | None,
-    checkpoint_config: Path | None,
-    matrix: Path | None,
-    rhs: Path | None,
 ) -> list[ComparisonSpec]:
-    resolved_output = resolve_output_root(None) if output_root is None else output_root
-    resolved_processed = processed_root or DEFAULT_PROCESSED_DATA_DIR
+    resolved_output = resolve_output_root(None)
+    resolved_processed = DEFAULT_PROCESSED_DATA_DIR
     model_name = extract_model_name(model_config)
     data_id = data_config.stem
     workspace = _make_workspace(resolved_output, resolved_processed, data_id, model_name)
     checkpoint = resolve_checkpoint(
-        explicit=checkpoint_path,
-        config_file=checkpoint_config,
+        explicit=None,
+        config_file=None,
         solver_config=solver_config,
         checkpoint_dir=workspace.checkpoint_dir,
     )
     if checkpoint is None:
         return []
-    return [_build_direct_spec(model_name, model_config, data_config, solver_config, workspace, checkpoint, matrix, rhs)]
+    return [_build_direct_spec(model_name, model_config, data_config, solver_config, workspace, checkpoint)]
 
 
 def run_comparisons(
     specs: Iterable[ComparisonSpec],
     params: ComparisonParams,
-    *,
-    enable_mlflow: bool = False,
 ) -> list[ComparisonOutcome]:
     outcomes: list[ComparisonOutcome] = []
     for spec in specs:
-        merged_limits = PreconditionerLimits(
-            apply_every=params.limits.apply_every,
-            first_n=params.limits.first_n,
-            neural_iters=params.limits.neural_iters,
-            fallback_preconditioner=params.limits.fallback_preconditioner,
-        )
-        merged_params = ComparisonParams(
-            matrix=params.matrix or spec.matrix_override,
-            rhs=params.rhs or spec.rhs_override,
-            output_dir=params.output_dir or spec.output_dir or DEFAULT_OUTPUT_DIR,
-            figures_dir=params.figures_dir or spec.figures_dir,
-            save_plots=params.save_plots,
-            breakdown_tol=params.breakdown_tol,
-            limits=merged_limits,
-            reorthogonalize=params.reorthogonalize,
-            reorthog_window=params.reorthog_window,
-            reorthog_threshold=params.reorthog_threshold,
-        )
+        # Read MLflow setting from config
+        enable_mlflow = _get_mlflow_enabled(spec)
         mlflow_state = _start_comparison_run(spec, enable_mlflow)
         metrics: dict[str, float] | None = None
         error: Exception | None = None
         result: dict[str, Any] | None = None
         try:
-            general_params, solver_entries = load_solver_config(spec.solver_config)
-            precond_configs = build_preconditioner_configs(
-                [
-                    {"name": solver.name, "type": solver.type, **solver.args}
-                    for solver in solver_entries
-                ]
-            )
+            solver_cfg = load_solver_config(spec.solver_config)
+            # Use Pydantic SolverConfigFile directly
+            precond_configs = build_preconditioner_configs_from_specs(solver_cfg.solvers)
             result = compare_preconditioners(
-                general_params=general_params,
+                general_params=solver_cfg.general,
                 preconditioner_configs=precond_configs,
                 output_root=spec.output_dir or spec.workspace.root_dir,
                 figures_root=spec.figures_dir or spec.workspace.figures_dir,

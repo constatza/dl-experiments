@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 from .data_types import NormalizeType
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
@@ -309,14 +310,14 @@ def build_dataset(
     from .types import RawSamples
     from .helpers import _normalize_matrix_for_generation
 
-    print("Building dataset...")
-    print(f"  Matrix: {matrix_path}")
-    print(f"  Output: {dataset_dir}")
+    logger.info("Building dataset...")
+    logger.info(f"  Matrix: {matrix_path}")
+    logger.info(f"  Output: {dataset_dir}")
 
     # Step 1: Load matrix
     matrix = load_matrix(Path(matrix_path))
     dimension = matrix.shape[0]
-    print(f"  Dimension: {dimension}")
+    logger.info(f"  Dimension: {dimension}")
 
     # Step 2: Load mother RHS if provided (needed for some strategies)
     mother_rhs: np.ndarray | None
@@ -329,7 +330,7 @@ def build_dataset(
         mother_rhs = None
 
     # Step 3: Normalize matrix BEFORE strategy execution
-    print(f"  Normalization: {normalize}")
+    logger.info(f"  Normalization: {normalize}")
     matrix_norm, scale = _normalize_matrix_for_generation(
         matrix, normalize, spectral_radius_bound=None
     )
@@ -343,7 +344,7 @@ def build_dataset(
 
     # Step 5: Call generate_mixture() with ALL strategies (archives + synthetic)
     # Note: krylov_iters and residual_iters are now passed via strategy_overrides
-    print("Generating/loading samples...")
+    logger.info("Generating/loading samples...")
     X, Y, residual_traces, error_traces = generate_mixture(
         matrix_norm,
         mother_rhs_norm,
@@ -355,7 +356,7 @@ def build_dataset(
         strategy_overrides=strategy_overrides,
     )
 
-    print(f"  Generated {X.shape[0]} samples")
+    logger.info(f"  Generated {X.shape[0]} samples")
 
     # Step 6: Data is already normalized by strategies
     # Strategies receive normalized matrix and produce normalized data:
@@ -386,7 +387,7 @@ def build_dataset(
     dataset_dir_path.mkdir(parents=True, exist_ok=True)
 
     # Simple persistence - save normalized samples directly
-    print(f"Saving to: {dataset_dir}")
+    logger.info(f"Saving to: {dataset_dir}")
     normalized_file = dataset_dir_path / "normalized.npz"
     np.savez(
         normalized_file,
@@ -395,7 +396,7 @@ def build_dataset(
         solutions=raw_samples.solutions,
     )
 
-    print(f"Dataset built successfully: {dataset_dir}")
+    logger.info(f"Dataset built successfully: {dataset_dir}")
     return dataset_dir
 
 

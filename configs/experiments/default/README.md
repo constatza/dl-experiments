@@ -13,7 +13,7 @@ Global session parameters.
 Defines the neural network architecture.
 - **name**: `str`. The class name of the model. Defaults to `NormScaledConstantWidthFFNN`.
   - **Reference**: `dlkit.core.models.nn.ffnn.norm_scaled.NormScaledConstantWidthFFNN`.
-  - **Description**: Wraps a `ConstantWidthFFNN` (a residual network with constant hidden width) with input/output normalization scaling to enforce homogeneous scaling consistency (specifically for $Ax=b$ problems).
+  - **Description**: Wraps a `ConstantWidthFFNN` ([Residual Network](https://en.wikipedia.org/wiki/Residual_neural_network) with constant hidden width) with input/output normalization scaling to enforce homogeneous scaling consistency (specifically for $Ax=b$ problems).
 - **module_path**: `str`. Python module path where the model class is located (e.g., `"dlkit.nn.ffnn"`).
 - **hidden_size**: `int`. Number of neurons in each hidden layer.
 - **num_layers**: `int`. Number of hidden layers in the network.
@@ -65,7 +65,7 @@ Optimizer configuration.
 #### [TRAINING.scheduler]
 Learning rate scheduler configuration.
 - **Reference**: [torch.optim.lr_scheduler](https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate).
-- **name**: `str`. Scheduler class name (e.g., `"ReduceLROnPlateau"`).
+- **name**: `str`. Scheduler class name (e.g., `"ReduceLROnPlateau"` - see [torch.optim.lr_scheduler.ReduceLROnPlateau](https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.ReduceLROnPlateau.html)).
 - **factor**: `float`. Factor by which the learning rate will be reduced.
 - **patience**: `int`. Number of epochs with no improvement after which learning rate will be reduced. Default: `1000`.
 - **min_lr**: `float`. Lower bound on the learning rate. Default: `1e-8`.
@@ -80,13 +80,13 @@ List of custom metrics used for evaluation.
 ### [DATASET]
 Data loading configuration.
 - **name**: `str`. Dataset class name. Defaults to `FlexibleDataset`.
-  - **Reference**: `dlkit.core.datasets.flexible.FlexibleDataset`.
+  - **Reference**: `dlkit.core.datasets.flexible.FlexibleDataset` (wraps [torch.utils.data.Dataset](https://pytorch.org/docs/stable/data.html#torch.utils.data.Dataset)).
   - **Description**: A dataset capable of loading arbitrary sets of feature and target arrays (from files or memory). In this configuration, data is typically injected programmatically from pre-normalized arrays (`normalized.npz`) to avoid double normalization.
 
 ### [DATAMODULE]
 PyTorch Lightning DataModule configuration.
 - **name**: `str`. DataModule class name. Defaults to `InMemoryModule`.
-  - **Reference**: `dlkit.core.datamodules.array.InMemoryModule`.
+  - **Reference**: `dlkit.core.datamodules.array.InMemoryModule` (wraps [lightning.LightningDataModule](https://lightning.ai/docs/pytorch/stable/data/datamodule.html)).
   - **Description**: A DataModule that holds dataset splits (train, val, test) in memory and serves them via DataLoaders.
 
 #### [DATAMODULE.dataloader]
@@ -99,6 +99,7 @@ Arguments passed to the PyTorch `DataLoader`.
 
 ### [MLFLOW]
 MLflow logging configuration.
+- **Reference**: [MLflow Documentation](https://mlflow.org/docs/latest/index.html).
 - **enabled**: `bool`. Whether to enable MLflow tracking. Default: `False`.
 - **server**:
   - **backend_store_uri**: `str`. URI for the MLflow backend store (e.g., SQLite database).
@@ -106,4 +107,5 @@ MLflow logging configuration.
 
 ### [OPTUNA]
 Hyperparameter optimization configuration.
+- **Reference**: [Optuna Documentation](https://optuna.readthedocs.io/en/stable/).
 - **enabled**: `bool`. Whether to enable Optuna integration. Default: `False`.

@@ -73,7 +73,6 @@ shuffle = true
 enabled = true
 
 [MLFLOW.server]
-# MLflow server backend database and artifacts storage
 backend_store_uri = "sqlite:////data/projects/graph-cg/data/mlruns/mlflow.db"
 artifacts_destination = "/data/projects/graph-cg/data/mlartifacts"
 

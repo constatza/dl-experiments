@@ -47,10 +47,8 @@ def test_run_experiments_full_flow(tmp_path):
             ]
         },
         "output": {
-            "project_root": str(tmp_path),
             "processed_dir": str(data_dir / "processed"),
             "output_root": str(data_dir / "output"),
-            "figures_root": str(data_dir / "figures"),
         }
     }
     with open(data_config_path, "wb") as f:
@@ -67,7 +65,8 @@ def test_run_experiments_full_flow(tmp_path):
         ],
         "general": {
             "rtol": 1e-6,
-            "max_iterations": 10
+            "max_iterations": 10,
+            "matrix_path": str(matrix_path),  # Required for synthetic benchmarks
         }
     }
     with open(solver_config_path, "wb") as f:

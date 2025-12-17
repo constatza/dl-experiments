@@ -28,6 +28,7 @@ name = "NormalizedVectorNormError"
 name = "FlexibleDataset"
 [MODEL]
 name = "NormScaledConstantWidthFFNN"
+module_path = "test.module"
 """
 
 MINIMAL_LINEAR_CONFIG = """
@@ -45,6 +46,7 @@ name = "EarlyStopping"
 name = "FlexibleDataset"
 [MODEL]
 name = "LinearModel"
+module_path = "test.module"
 """
 
 MINIMAL_GNN_CONFIG = """
@@ -60,6 +62,7 @@ max_epochs = 1
 name = "GraphDataset"
 [MODEL]
 name = "GNNModel"
+module_path = "test.module"
 """
 
 

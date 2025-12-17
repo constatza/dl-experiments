@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.compare_single import main
 from src.configuration.domain import ExperimentWorkspace
-from src.workflows.specs import ComparisonSpec, ComparisonOutcome, PreconditionerLimits, ComparisonParams
+from src.workflows.specs import ComparisonSpec, ComparisonOutcome, ComparisonParams
 
 runner = CliRunner()
 
@@ -24,7 +24,7 @@ def test_single_help() -> None:
 
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "single experiment" in result.stdout.lower()
+    assert "compare preconditioner methods" in result.stdout.lower()
 
 
 @patch("scripts.compare_single.run_comparisons")
@@ -64,8 +64,6 @@ def test_single_executes(mock_build, mock_run, tmp_path: Path) -> None:
             "d.toml",
             "--solver-config",
             "s.toml",
-            "--checkpoint-path",
-            "c.pt",
             "--no-plots",
         ],
     )

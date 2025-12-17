@@ -1,198 +1,57 @@
 """Configuration loading and orchestration.
 
-This module is responsible for parsing configuration files and constructing
-strictly typed experiment definitions using the domain models.
+This module provides the main entry points for loading experiment configurations.
+It orchestrates the new loader modules (toml_loader, path_resolver, settings_builder)
+to construct strictly typed experiment definitions.
 """
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping
 
-from dlkit.tools.config import load_training_settings
 from dlkit.tools.config.core.updater import update_settings
 
 from ..constants import (
-    DEFAULT_PROJECT_ROOT,
+    DEFAULT_FIGURES_DIR,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_PROCESSED_DATA_DIR,
-    DEFAULT_FIGURES_DIR,
-    EXP_MODEL_CONFIG_NAME,
+    DEFAULT_PROJECT_ROOT,
     EXP_DATA_CONFIG_NAME,
+    EXP_MODEL_CONFIG_NAME,
     EXP_SOLVER_CONFIG_NAME,
-    ConfigKeys,
 )
 from ..validation import validate_file_exists
-from ..mlflow_utils import resolve_mlflow_paths
-
 from .domain import (
+    ExperimentBatch,
     ExperimentSpec,
     ExperimentWorkspace,
     RunnableExperiment,
-    ExperimentBatch,
+)
+from .loaders import (
+    build_path_context,
+    build_settings,
+    load_data_config,
+    load_model_config,
+    load_raw_toml,
+    load_solver_config,
+    resolve_config_path,
+    resolve_output_root,
+    resolve_processed_root,
+    resolve_project_root,
 )
 from .services import WorkspaceFactory
 
-
-def _load_toml(path: Path) -> dict[str, Any]:
-    """Load TOML file into dictionary."""
-    with open(path, "rb") as f:
-        return tomllib.load(f)
-
-
-def _apply_datamodule_overrides(settings: Any, model_config: Mapping[str, Any]) -> Any:
-    """Re-apply DATAMODULE settings, ensuring nested dataloader options are preserved."""
-    datamodule_cfg = dict(model_config.get("DATAMODULE") or {})
-    dataloader_cfg = datamodule_cfg.get("dataloader")
-    if isinstance(dataloader_cfg, Mapping):
-        dataloader_updates = dict(dataloader_cfg)
-        num_workers = dataloader_updates.get("num_workers")
-        if isinstance(num_workers, int) and num_workers <= 0:
-            dataloader_updates.setdefault("persistent_workers", False)
-        datamodule_cfg["dataloader"] = dataloader_updates
-
-    if datamodule_cfg:
-        settings = update_settings(settings, {"DATAMODULE": datamodule_cfg})
-    return settings
-
-
-def _resolve_config_path(
-    experiment_name: str,
-    config_filename: str,
-    experiment_dir: Path,
-    default_dir: Path,
-    default_filename: str | None = None,
-) -> Path:
-    """Resolve a config file path using experiment -> default fallback."""
-    exp_path = experiment_dir / config_filename
-    if exp_path.exists():
-        return exp_path
-
-    target_default_name = default_filename if default_filename else config_filename
-    default_path = default_dir / target_default_name
-    
-    if default_path.exists():
-        return default_path
-
-    raise FileNotFoundError(
-        f"Config file '{config_filename}' not found for experiment '{experiment_name}' "
-        f"in '{exp_path.parent}'. Fallback '{target_default_name}' also not found in '{default_dir}'"
-    )
-
-
-
-
-
-def _inject_paths_and_params(
-    settings: Any, 
-    workspace: ExperimentWorkspace, 
-    solver_config: dict[str, Any],
-    project_root: Path,
-) -> Any:
-    """Inject workspace paths, solver params, and MLflow config into settings."""
-    # Inject Paths
-    settings = update_settings(
-        settings,
-        {
-            "PATHS": {
-                "results_dir": str(workspace.root_dir),
-                "figures_dir": str(workspace.figures_dir),
-            },
-            "TRAINING": {
-                "trainer": {
-                    "default_root_dir": str(workspace.root_dir),
-                }
-            },
-        },
-    )
-    
-    # Inject Solver Params
-    settings = update_settings(
-        settings,
-        {
-            "EXTRAS": {
-                "solver_config": solver_config,
-            }
-        },
-    )
-
-    # Inject/Resolve MLflow Configuration
-    # We respect the value in model.toml if present, otherwise default to project/data/mlruns
-    
-    # Check if MLFLOW section exists
-    mlf_cfg = settings.MLFLOW
-    if mlf_cfg is not None:
-        server_cfg = getattr(mlf_cfg, "server", None)
-        client_cfg = getattr(mlf_cfg, "client", None)
-        backend_uri = getattr(server_cfg, "backend_store_uri", None)
-        artifact_uri = getattr(server_cfg, "artifacts_destination", None)
-        paths = resolve_mlflow_paths(
-            backend_uri,
-            artifact_uri,
-            project_root,
-            workspace.root_dir,
-        )
-        payload: dict[str, dict[str, dict[str, str]]] = {
-            "MLFLOW": {
-                "server": {
-                    "backend_store_uri": paths.tracking_uri,
-                    "artifacts_destination": paths.artifact_uri,
-                }
-            }
-        }
-        if getattr(client_cfg, "tracking_uri", None) is None:
-            payload["MLFLOW"]["client"] = {"tracking_uri": paths.tracking_uri}
-        settings = update_settings(settings, payload)
-
-    return settings
-
-
+# Import paths module for FlowContext (needed by some scripts)
 from src.paths.core import (
-    ProjectRoots,
-    FlowPaths,
-    DataPaths,
-    TrainingPaths,
-    PredictionPaths,
     ComparisonPaths,
+    DataPaths,
     FlowContext,
+    FlowPaths,
+    PredictionPaths,
+    ProjectRoots,
+    TrainingPaths,
 )
-
-
-def _coerce_project_root(model_config: Mapping[str, Any]) -> Path:
-    override = (model_config.get("PATHS") or {}).get("project_root")
-    if isinstance(override, str) and override:
-        return Path(override).resolve()
-    return DEFAULT_PROJECT_ROOT
-
-
-def _coerce_processed_root(
-    data_config: Mapping[str, Any],
-    project_root: Path,
-) -> Path:
-    processed_dir = (data_config.get("output") or {}).get(ConfigKeys.PROCESSED_DIR)
-    if isinstance(processed_dir, str) and processed_dir:
-        processed_path = Path(processed_dir)
-        if not processed_path.is_absolute():
-            processed_path = (project_root / processed_path).resolve()
-        return processed_path
-    return DEFAULT_PROCESSED_DATA_DIR
-
-
-def _resolve_output_root(
-    output_root: Path | str | None,
-    project_root: Path,
-    fallback: str | None = None,
-) -> Path:
-    if output_root:
-        return Path(output_root).expanduser().resolve()
-    if isinstance(fallback, str) and fallback:
-        candidate = Path(fallback)
-        if not candidate.is_absolute():
-            candidate = (project_root / candidate).resolve()
-        return candidate
-    return DEFAULT_OUTPUT_DIR
 
 
 def build_flow_context(
@@ -205,7 +64,10 @@ def build_flow_context(
     output_root: Path | None = None,
     figures_root: Path | None = None,
 ) -> FlowContext:
-    """Build a FlowContext using a single set of resolved roots."""
+    """Build a FlowContext using a single set of resolved roots.
+
+    This function is kept for backward compatibility with scripts that use it.
+    """
     roots = ProjectRoots.from_overrides(
         project_root=project_root,
         processed_root=processed_root or DEFAULT_PROCESSED_DATA_DIR,
@@ -215,8 +77,9 @@ def build_flow_context(
     flow_paths = FlowPaths(flow_id=spec.id, roots=roots)
     data_paths = DataPaths(flow=flow_paths, dataset_id=data_id)
 
-    data_config_raw = _load_toml(spec.data_config_path)
-    test_solutions_path = data_config_raw.get("test", {}).get("solutions_path")
+    # Load data config to check for test solutions
+    data_config = load_data_config(spec.data_config_path)
+    test_solutions_path = data_config.test.solutions_path
 
     training_paths = TrainingPaths(data=data_paths, run_id=spec.id)
     prediction_paths = PredictionPaths(training=training_paths)
@@ -239,7 +102,10 @@ def load_data_context(
     solver_config_path: Path | str | None = None,
     output_root: Path | str | None = None,
 ) -> tuple[Any | None, dict[str, Any] | None, Path | None]:
-    """Load data-specific context, optionally using a dummy model config."""
+    """Load data-specific context, optionally using a dummy model config.
+
+    This function is kept for backward compatibility with data processing scripts.
+    """
     if data_config_path is None:
         return None, None, None
 
@@ -248,29 +114,35 @@ def load_data_context(
     # If no model config is provided, use a dummy one
     if model_config_path is None:
         dummy_model_path = DEFAULT_PROJECT_ROOT / "configs" / "experiments" / "default" / "dummy_model.toml"
-        # Ensure the dummy model exists, create if not (should have been created by agent already)
+        # Ensure the dummy model exists, create if not
         if not dummy_model_path.exists():
-            # Fallback for unexpected state, should not happen if previous step worked
+            # Fallback for unexpected state
             with open(dummy_model_path, "w") as f:
-                f.write("[MODEL]\nname = \"dummy_model\"")
+                f.write("[MODEL]\nname = \"dummy_model\"\nmodule_path = \"dlkit.nn.ffnn\"")
         model_path_to_use = dummy_model_path
     else:
         model_path_to_use = validate_file_exists(model_config_path, "Model config")
 
     try:
-        model_config_raw = _load_toml(model_path_to_use)
-        project_root = _coerce_project_root(model_config_raw)
-        data_config_raw = _load_toml(data_path_resolved)
-        processed_root = _coerce_processed_root(data_config_raw, project_root)
-        global_output_dir = _resolve_output_root(output_root, project_root)
+        # Load configs using new typed loaders
+        model_cfg = load_model_config(model_path_to_use)
+        data_cfg = load_data_config(data_path_resolved)
 
+        # Resolve paths
+        project_root = resolve_project_root(model_cfg)
+        processed_root = resolve_processed_root(data_cfg, project_root)
+        global_output_dir = resolve_output_root(output_root, project_root)
+
+        # Load full experiment for context building
         experiment = load_experiment(
             model_path_to_use,
             data_path_resolved,
             solver_config_path,
             output_root,
         )
-        data_config_content = data_config_raw
+
+        # Return data config as dict for backward compatibility
+        data_config_content = load_raw_toml(data_path_resolved)
 
         context = build_flow_context(
             experiment.spec,
@@ -284,8 +156,7 @@ def load_data_context(
 
         return context, data_config_content, data_path_resolved
     except ValueError as e:
-        # If load_experiment fails for some reason, return None for context
-        # This handles cases where data_config_path is invalid even if not None
+        # If load_experiment fails, return None
         if "data_config_path is required" in str(e):
             return None, None, None
         raise e
@@ -297,79 +168,72 @@ def load_experiment(
     solver_config_path: Path | str | None = None,
     output_root: Path | str | None = None,
 ) -> RunnableExperiment:
-    """Load a single experiment configuration (CLI entry point)."""
+    """Load a single experiment configuration (CLI entry point).
+
+    Args:
+        model_config_path: Path to model.toml file.
+        data_config_path: Path to data config file (required).
+        solver_config_path: Path to solver.toml file (optional, uses default if not provided).
+        output_root: Override for output directory (optional).
+
+    Returns:
+        RunnableExperiment with validated configs and constructed workspace.
+
+    Raises:
+        ValueError: If data_config_path is not provided.
+        ConfigLoadError: If config files are invalid or cannot be loaded.
+    """
+    # 1. Validate and load model config
     model_path = validate_file_exists(model_config_path, "Model config")
+    model_cfg = load_model_config(model_path)
 
-    model_config_raw = _load_toml(model_path)
-    project_root = _coerce_project_root(model_config_raw)
-    global_output_dir = _resolve_output_root(output_root, project_root)
-
-    # 2. Resolve Data Config
-    if data_config_path:
-        data_gen_path = validate_file_exists(data_config_path, "Data config")
-    else:
-        # Try to find data config via pointer in experiment dir? 
-        # Or just fail? CLI usually requires explicit paths or has defaults.
-        # Let's fallback to checking if model config has a pointer? No, standard is explicit.
+    # 2. Validate and load data config
+    if not data_config_path:
         raise ValueError("data_config_path is required for loading a single experiment.")
+    data_path = validate_file_exists(data_config_path, "Data config")
+    data_cfg = load_data_config(data_path)
 
-    # Load data config to find processed_dir
-    data_config_raw = _load_toml(data_gen_path)
-    processed_root = _coerce_processed_root(data_config_raw, project_root)
-
-    # 3. Resolve Solver Config
+    # 3. Resolve or use default solver config
     if solver_config_path:
         solver_path = validate_file_exists(solver_config_path, "Solver config")
     else:
-        # Default solver config
         solver_path = DEFAULT_PROJECT_ROOT / "configs" / "experiments" / "default" / "solver.toml"
-        if not solver_path.exists():
-             # Fallback to absolute default if in a different env?
-             pass 
+    solver_cfg = load_solver_config(solver_path)
 
-    # 4. Extract Identifiers
-    data_id = data_gen_path.stem
-    model_name = (
-        (model_config_raw.get("SESSION") or {}).get("name") or 
-        (model_config_raw.get("MODEL") or {}).get("name")
-    )
+    # 4. Resolve paths using typed functions
+    path_ctx = build_path_context(model_cfg, data_cfg, output_root)
+
+    # 5. Extract identifiers from validated configs
+    data_id = data_path.stem
+    model_name = model_cfg.SESSION.name or model_cfg.MODEL.name
 
     if not model_name:
         raise ValueError(
             "Model name missing. Please set [SESSION].name or [MODEL].name in the model config."
         )
 
-    # 5. Build Domain Objects
-    # For CLI runs, we might not have a clean "experiment ID" from experiments.toml.
-    # We use model_name as the ID.
+    # 6. Build domain objects
     spec = ExperimentSpec(
         id=model_name,
         model_config_path=model_path,
-        data_config_path=data_gen_path,
+        data_config_path=data_path,
         solver_config_path=solver_path,
     )
 
-    # 3. Initialize Services
-    workspace_factory = WorkspaceFactory(global_output_dir, processed_root)
+    workspace_factory = WorkspaceFactory(path_ctx.output_root, path_ctx.processed_root)
     workspace = workspace_factory.create(data_id, model_name)
-    
+
     workspace.root_dir.mkdir(parents=True, exist_ok=True)
     workspace.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    # 6. Load Settings
-    settings = load_training_settings(str(model_path))
-    settings = _apply_datamodule_overrides(settings, model_config_raw)
-    solver_config = _load_toml(solver_path)
-    settings = _inject_paths_and_params(settings, workspace, solver_config, project_root)
-
-    settings = update_settings(
-        settings,
-        {
-            "PATHS": {
-                "project_root": str(project_root),
-                "processed_dir": str(processed_root),
-            }
-        }
+    # 7. Build settings using typed configuration
+    settings = build_settings(
+        model_path,
+        model_cfg,
+        solver_cfg,
+        workspace,
+        path_ctx.project_root,
+        path_ctx.processed_root,
     )
 
     return RunnableExperiment(
@@ -380,30 +244,33 @@ def load_experiment(
 
 
 def load_batch(master_config_path: Path) -> ExperimentBatch:
-    """
-    Load all experiments defined in the master configuration file.
+    """Load all experiments defined in the master configuration file.
 
     Args:
         master_config_path: Path to experiments.toml.
 
     Returns:
         A strictly typed ExperimentBatch containing all runnable experiments.
+
+    Raises:
+        FileNotFoundError: If master config or required experiment configs not found.
+        ConfigLoadError: If config validation fails.
     """
     if not master_config_path.exists():
         raise FileNotFoundError(f"Master config not found: {master_config_path}")
 
     config_dir = master_config_path.parent
-    master_config = _load_toml(master_config_path)
+    master_config = load_raw_toml(master_config_path)
 
-    # 1. Resolve Project Root
+    # 1. Resolve project root
     project_root_str = master_config.get("project_root", "..")
     project_root = (config_dir / project_root_str).resolve()
 
-    # 2. Resolve Global Output Directory (predictions/artifacts)
+    # 2. Resolve global output directory
     output_dir_str = master_config.get("output_dir")
-    global_output_dir = _resolve_output_root(None, project_root, output_dir_str)
+    global_output_dir = resolve_output_root(None, project_root, output_dir_str)
 
-    # 4. Resolve Experiment List
+    # 3. Resolve experiment list
     experiments_map = master_config.get("experiments", {})
     if not experiments_map:
         run_list = master_config.get("run", [])
@@ -416,42 +283,40 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
     for exp_id, exp_path_rel in experiments_map.items():
         exp_dir = (config_dir / exp_path_rel).resolve()
 
-        # A. Resolve Config Paths
-        model_path = _resolve_config_path(
+        # A. Resolve config paths with fallback
+        model_path = resolve_config_path(
             exp_id, EXP_MODEL_CONFIG_NAME, exp_dir, defaults_dir, default_filename="ffnn.toml"
         )
-        data_pointer_path = _resolve_config_path(
+        data_pointer_path = resolve_config_path(
             exp_id, EXP_DATA_CONFIG_NAME, exp_dir, defaults_dir
         )
-        solver_path = _resolve_config_path(
+        solver_path = resolve_config_path(
             exp_id, EXP_SOLVER_CONFIG_NAME, exp_dir, defaults_dir
         )
 
-        # B. Resolve Data Config (Dereference pointer)
-        data_pointer = _load_toml(data_pointer_path)
+        # B. Load and validate configs
+        model_cfg = load_model_config(model_path)
+        data_pointer = load_raw_toml(data_pointer_path)
+        solver_cfg = load_solver_config(solver_path)
+
+        # C. Resolve data config path (dereference pointer)
         data_gen_path_str = data_pointer.get("dataconfig")
         if not data_gen_path_str:
             raise ValueError(f"Experiment '{exp_id}': data.toml missing 'dataconfig' key.")
         data_gen_path = (project_root / data_gen_path_str).resolve()
+        data_cfg = load_data_config(data_gen_path)
 
-        # C. Extract Identifiers
-        # Data ID comes from the filename of the data generation config
+        # D. Extract identifiers
         data_id = data_gen_path.stem
-        
-        # Model Name comes STRICTLY from model.toml [MODEL] or [SESSION]
-        model_config_raw = _load_toml(model_path)
-        model_name = (
-            (model_config_raw.get("SESSION") or {}).get("name") or 
-            (model_config_raw.get("MODEL") or {}).get("name")
-        )
-        
+        model_name = model_cfg.SESSION.name or model_cfg.MODEL.name
+
         if not model_name:
             raise ValueError(
                 f"Experiment '{exp_id}': Could not determine model name from {model_path}. "
                 "Ensure [MODEL].name or [SESSION].name is set."
             )
 
-        # D. Build Domain Objects
+        # E. Build domain objects
         spec = ExperimentSpec(
             id=exp_id,
             model_config_path=model_path,
@@ -459,28 +324,30 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
             solver_config_path=solver_path,
         )
 
-        data_config_raw = _load_toml(data_gen_path)
-        processed_root = _coerce_processed_root(data_config_raw, project_root)
+        processed_root = resolve_processed_root(data_cfg, project_root)
         workspace_factory = WorkspaceFactory(global_output_dir, processed_root)
         workspace = workspace_factory.create(data_id, model_name)
-        
+
         # Ensure workspace directories exist
         workspace.root_dir.mkdir(parents=True, exist_ok=True)
         workspace.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        # E. Load and Configure Settings
-        settings = load_training_settings(str(model_path))
-        settings = _apply_datamodule_overrides(settings, model_config_raw)
-        solver_config = _load_toml(solver_path)
-        settings = _inject_paths_and_params(settings, workspace, solver_config, project_root)
+        # F. Build settings
+        settings = build_settings(
+            model_path,
+            model_cfg,
+            solver_cfg,
+            workspace,
+            project_root,
+            processed_root,
+        )
 
-        # Update settings with processed_dir
+        # Update with workspace-specific processed_dir
         settings = update_settings(
             settings,
             {
                 "PATHS": {
-                    "project_root": str(project_root),
-                    "processed_dir": str(workspace.data_dir.parent), # data_dir is specific dataset dir, processed_dir is root
+                    "processed_dir": str(workspace.data_dir.parent),
                 }
             }
         )

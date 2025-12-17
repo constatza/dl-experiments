@@ -138,13 +138,11 @@ name = "ffnn"
 """)
 
         data_config = tmp_path / "data-configs" / "test-eigenvector.toml"
-        output_root = Path("/data/projects/graph-cg/output")
+        output_root = tmp_path / "output"
 
         checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
-        expected = Path(
-            "/data/projects/graph-cg/output/test-eigenvector/ffnn/checkpoints/ffnn.ckpt"
-        )
+        expected = output_root / "test-eigenvector" / "ffnn" / "checkpoints" / "ffnn.ckpt"
         assert checkpoint_path == expected
 
     def test_path_derivation_with_string_paths(self, tmp_path: Path) -> None:

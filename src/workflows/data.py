@@ -25,16 +25,12 @@ def _apply_generation_overrides(
     config: Mapping[str, Any],
     *,
     solve_systems: bool | None = None,
-    cg_tolerance: float | None = None,
-    cg_max_iters: int | None = None,
 ) -> dict[str, Any]:
     """Apply generation section overrides to config (immutable).
 
     Args:
         config: Source configuration mapping.
         solve_systems: Override for solve_systems flag.
-        cg_tolerance: Override for CG tolerance.
-        cg_max_iters: Override for CG max iterations.
 
     Returns:
         New config dict with overrides applied.
@@ -44,10 +40,6 @@ def _apply_generation_overrides(
 
     if solve_systems is not None:
         generation["solve_systems"] = solve_systems
-    if cg_tolerance is not None:
-        generation["cg_tolerance"] = cg_tolerance
-    if cg_max_iters is not None:
-        generation["cg_max_iters"] = cg_max_iters
 
     config_copy["generation"] = generation
     return config_copy
@@ -57,8 +49,6 @@ def process_data_from_config(
     config_path: Path,
     *,
     solve_systems: bool | None = None,
-    cg_tolerance: float | None = None,
-    cg_max_iters: int | None = None,
 ) -> Path:
     """Unified entry point for data collection and generation.
 
@@ -68,8 +58,6 @@ def process_data_from_config(
     Args:
         config_path: Path to TOML data configuration file.
         solve_systems: Override for solve_systems flag (collection mode).
-        cg_tolerance: Override for CG solver tolerance.
-        cg_max_iters: Override for CG solver max iterations.
 
     Returns:
         Path to output dataset directory.
@@ -78,7 +66,5 @@ def process_data_from_config(
     config = _apply_generation_overrides(
         config,
         solve_systems=solve_systems,
-        cg_tolerance=cg_tolerance,
-        cg_max_iters=cg_max_iters,
     )
     return process_config(config, config_path=config_path)

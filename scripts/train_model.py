@@ -29,19 +29,8 @@ def main(
         None,
         help="Path to data config providing dataset metadata",
     ),
-    out_dir: Path | None = typer.Option(
-        None, help="Override Trainer default_root_dir and checkpoint dir"
-    ),
-    accelerator: str | None = typer.Option(
-        None, help="Override accelerator: cpu|gpu|auto|tpu"
-    ),
-    enable_mlflow: bool = typer.Option(
-        False,
-        "--enable-mlflow/--no-mlflow",
-        help="Enable MLflow logging (defaults to disabled)",
-    ),
 ):
-    """Train model with optional dataset/output overrides."""
+    """Train model using configuration files."""
     graph_cg_root = Path(__file__).resolve().parent.parent
 
     if config is None:
@@ -55,9 +44,6 @@ def main(
         checkpoint_path = train_model(
             config_path=config,
             data_config_path=data_config,
-            output_dir=out_dir,
-            accelerator=accelerator,
-            enable_mlflow=enable_mlflow,
         )
 
         print(f"\nTraining complete. Checkpoint saved to: {checkpoint_path}")

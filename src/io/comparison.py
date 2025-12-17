@@ -4,30 +4,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import tomllib
 from loguru import logger
 import numpy as np
 
-from ..configuration.solver import (
-    GeneralSolverParams,
-    SolverSpec,
-    parse_solver_config,
+from ..configuration.loaders.toml_loader import (
+    load_solver_config as load_pydantic_solver_config,
 )
+from ..configuration.solver_models import SolverConfigFile
 from .base import load_npz_entry as load_npz_entry_raw
 
 
 def load_solver_config(
     config_path: str | Path | None,
-) -> tuple[GeneralSolverParams, list[SolverSpec]]:
-    """Read solver config TOML from disk."""
+) -> SolverConfigFile:
+    """Read solver config TOML from disk, returning Pydantic model."""
     path = (
         Path(config_path)
         if config_path is not None
         else Path(__file__).resolve().parents[2] / "solver-configs" / "default.toml"
     )
-    with path.open("rb") as fh:
-        cfg = tomllib.load(fh)
-    return parse_solver_config(cfg)
+    return load_pydantic_solver_config(path)
 
 
 def resolve_system_paths(
@@ -49,6 +45,23 @@ def resolve_system_paths(
     return Path(matrix), Path(rhs)
 
 
+def _flatten_rhs_if_needed(arr: np.ndarray, source_path: Path) -> np.ndarray:
+    """Handle 1D/column vectors vs multiple RHS entries."""
+    # Treat (N, 1) as a single vector, not multiple problems
+    is_column_vector = arr.ndim == 2 and arr.shape[1] == 1
+
+    if arr.ndim > 1 and arr.shape[0] > 1 and not is_column_vector:
+        logger.warning(
+            f"{source_path} contains multiple RHS entries; using the first."
+        )
+
+    # Only extract the first row if it's NOT a column vector
+    if arr.ndim > 1 and not is_column_vector:
+        arr = arr[0]
+
+    return arr.reshape(-1)
+
+
 def load_npz_entry(npz_path: str | Path, key: str) -> np.ndarray:
     """Load a single entry from an NPZ file, warning when multiple are present."""
     npz_path = Path(npz_path)
@@ -57,13 +70,7 @@ def load_npz_entry(npz_path: str | Path, key: str) -> np.ndarray:
         logger.warning(f"{npz_path} contains multiple matrices; using the first slice.")
         arr = arr[0]
     if key == "rhs":
-        if arr.ndim > 1 and arr.shape[0] > 1:
-            logger.warning(
-                f"{npz_path} contains multiple RHS entries; using the first."
-            )
-        if arr.ndim > 1:
-            arr = arr[0]
-        arr = arr.reshape(-1)
+        arr = _flatten_rhs_if_needed(arr, npz_path)
 
     return arr
 
@@ -90,11 +97,6 @@ def load_system_arrays(
 
     A = _load_array(matrix_path, "matrix")
     b_raw = _load_array(rhs_path, "rhs")
-    if b_raw.ndim > 1 and b_raw.shape[0] > 1:
-        logger.warning(
-            f"{rhs_path} contains multiple RHS entries; using the first row."
-        )
-        b_raw = b_raw[0]
-    b = b_raw.reshape(-1) if b_raw is not None else None
+    b = _flatten_rhs_if_needed(b_raw, rhs_path) if b_raw is not None else None
 
     return A, b

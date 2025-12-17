@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from dataclasses import replace
+
+from loguru import logger
 
 from src.configuration.loader import load_batch
 from src.workflows.reporting import ExperimentResult
@@ -44,8 +45,6 @@ def run_experiment(
             checkpoint = train_model(
                 config_path=model_config_path,
                 data_config_path=data_config_path,
-                output_dir=output_root,
-                session_name=model_name,
             )
 
         run_inference(
@@ -54,20 +53,25 @@ def run_experiment(
             checkpoint_path=checkpoint,
             figures_dir=output_root / data_config_path.stem / model_name / "figures",
             output_root=output_root,
+            synthetic_benchmark=True,
+            solver_config_path=solver_config_path,
         )
 
-        general_params, solver_entries = load_solver_config(solver_config_path)
+        solver_cfg = load_solver_config(solver_config_path)
         normalized_path = data_dir / "normalized.npz"
-        general_params = replace(
-            general_params,
-            matrix_path=str(normalized_path),
-            rhs_path=str(normalized_path),
+        # Use Pydantic's model_copy to update paths
+        updated_general_params = solver_cfg.general.model_copy(
+            update={
+                "matrix_path": str(normalized_path),
+                "rhs_path": str(normalized_path),
+            }
         )
         precond_configs = build_preconditioner_configs(
-            [{"name": spec.name, "type": spec.type, **spec.args} for spec in solver_entries]
+            [{"name": spec.name, "type": spec.type, **spec.model_dump(exclude={'name', 'type'})}
+             for spec in solver_cfg.solvers]
         )
         compare_preconditioners(
-            general_params=general_params,
+            general_params=updated_general_params,
             preconditioner_configs=precond_configs,
             output_root=output_root / data_config_path.stem / model_name,
             figures_root=output_root / data_config_path.stem / model_name / "figures",

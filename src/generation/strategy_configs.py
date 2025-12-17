@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, ConfigDict, Field
 
 from ..constants import (
     DEFAULT_KRYLOV_ITERATIONS,
@@ -32,9 +32,10 @@ class BaseStrategyConfig(BaseModel):
     )
     shuffle: bool = Field(DEFAULT_SHUFFLE, description="Whether to shuffle the generated samples.")
 
-    class Config:
-        extra = "forbid" # Forbid extra fields to catch typos
-        frozen = True # Make configs immutable
+    model_config = ConfigDict(
+        extra="forbid",  # Forbid extra fields to catch typos
+        frozen=True,  # Make configs immutable
+    )
 
 
 class BaseEigenvectorConfig(BaseStrategyConfig):
