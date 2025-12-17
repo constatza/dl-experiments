@@ -1,5 +1,5 @@
 [project]
-name = "experiments"
+name = "neuralls"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -17,6 +17,10 @@ dependencies = [
     "tomli-w>=1.0.0",
     "typer>=0.19.2",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]  # Tells setuptools to look inside 'src'
