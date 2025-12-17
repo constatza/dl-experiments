@@ -25,7 +25,7 @@ id = "spectral-baseline"
 dataset = "collect-504-norm"
 ```
 
-All orchestrators (`scripts/train_model.py`, `scripts/predict.py`, `scripts/compare_methods.py`, PCA
+All orchestrators (`src/neuralls/cli/train_model.py`, `src/neuralls/cli/predict.py`, `src/neuralls/cli/compare_methods.py`, PCA
 helpers) accept a `--data-config` argument and call
 `load_experiment(model_config, data_config, solver_config)` to resolve unified paths with **Pydantic-validated configs**:
 
@@ -87,21 +87,21 @@ checkpoint = "/path/to/model.ckpt"  # For inference
 ### Basic Training
 ```bash
 # Train with default config (ffnn-normscaled)
-uv run python graph-cg/scripts/train_model.py --data-config graph-cg/data-configs/collect-504.toml
+uv run python src/neuralls/cli/train_model.py --data-config graph-cg/data-configs/collect-504.toml
 
 # Train with specific config
-uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml
-uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/ffnn.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml
-uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/gnn.toml --data-config graph-cg/data-configs/collect-504.toml
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/ffnn.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/gnn.toml --data-config graph-cg/data-configs/collect-504.toml
 ```
 
 ### Prediction/Inference
 ```bash
 # Predict with default config
-uv run python graph-cg/scripts/predict.py --data-config graph-cg/data-configs/collect-504.toml
+uv run python src/neuralls/cli/predict.py --data-config graph-cg/data-configs/collect-504.toml
 
 # Predict with specific config and checkpoint
-uv run python graph-cg/scripts/predict.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --checkpoint /path/to/checkpoint.ckpt
+uv run python src/neuralls/cli/predict.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --checkpoint /path/to/checkpoint.ckpt
 ```
 
 ## Better Approaches to Config Management
@@ -120,14 +120,14 @@ Keep one config per model type, override hyperparameters via CLI:
 
 ```bash
 # Train linear model with different learning rates
-uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --lr 1e-3
-uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --lr 1e-4
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --lr 1e-3
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --lr 1e-4
 
 # Train constant-width with different sizes
-uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/ffnn.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml --hidden-size 128 --num-layers 5
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/ffnn.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml --hidden-size 128 --num-layers 5
 ```
 
-**Implementation**: Add CLI arguments to `scripts/train_model.py` that override config values.
+**Implementation**: Add CLI arguments to `src/neuralls/cli/train_model.py` that override config values.
 
 #### 2. **Config Inheritance** (Most Flexible)
 Use a base config + specific overrides:
@@ -157,7 +157,7 @@ Use env vars for paths that change between environments:
 ```bash
 export GRAPH_CG_DATA_DIR=/data/projects/graph-cg
 export GRAPH_CG_OUTPUT_DIR=/data/projects/graph-cg/output
-uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.toml
 ```
 
 **Implementation**: Update config loading to substitute env vars.
@@ -182,7 +182,7 @@ name = "FFNN-NormScaled-504-lr1e3-exp1"  # Descriptive session name
 1. Keep one config per model architecture (current setup)
 2. Add CLI overrides for common hyperparameters:
    ```python
-   # In scripts/train_model.py
+   # In src/neuralls/cli/train_model.py
    from src.configuration.loader import load_experiment
 
    def main(
@@ -206,10 +206,10 @@ name = "FFNN-NormScaled-504-lr1e3-exp1"  # Descriptive session name
 3. Use descriptive session names to track variations:
    ```bash
    # Experiment with different learning rates
-   uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --lr 1e-3
+   uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.toml --lr 1e-3
    # Session name in config: "Linear-504-lr1e3"
 
-   uv run python graph-cg/scripts/train_model.py --config graph-cg/configs/linear.toml --lr 1e-4
+   uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.toml --lr 1e-4
    # Session name in config: "Linear-504-lr1e4"
    ```
 

@@ -2,7 +2,7 @@
 # Uses eigenvectors as RHS, solves A^-1 @ v for solutions (inverse mode)
 # Mirrors the forward eigenvector setup but flips RHS/solution roles
 #
-# Usage: uv run python graph-cg/scripts/process_data.py data-configs/test-eigenvector-inverse.toml
+# Usage: uv run python src/neuralls/cli/process_data.py data-configs/test-eigenvector-inverse.toml
 # Output: test-eigenvector-inverse-{normalization}/
 
 [flow]

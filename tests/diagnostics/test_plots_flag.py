@@ -9,7 +9,7 @@ import pytest
 
 # Add root to path for script imports
 
-from scripts.compare_methods import ComparisonParams
+from neuralls.cli.compare_methods import ComparisonParams
 
 
 class TestPlotsFlag:
@@ -45,7 +45,7 @@ class TestPlotsDefaultBehavior:
         which should have plots=True as the default.
         """
         # Import the main function to check its signature
-        from scripts.compare_methods import main
+        from neuralls.cli.compare_methods import main
         import inspect
 
         sig = inspect.signature(main)

@@ -16,7 +16,7 @@ from typer.testing import CliRunner
 
 # Add root to path for script imports
 
-from scripts.compare_methods import main
+from neuralls.cli.compare_methods import main
 from neuralls.configuration.domain import ExperimentWorkspace
 from neuralls.workflows.specs import ComparisonSpec, ComparisonOutcome
 
@@ -32,7 +32,7 @@ def test_script_help():
     assert result.exit_code == 0
     assert "Compare preconditioner methods" in result.stdout
 
-@patch("scripts.compare_methods.build_batch_comparisons")
+@patch("neuralls.cli.compare_methods.build_batch_comparisons")
 def test_script_execution_no_experiments(mock_build_batch):
     """Exit with failure when no comparison specs are built."""
     mock_build_batch.return_value = []
@@ -47,8 +47,8 @@ def test_script_execution_no_experiments(mock_build_batch):
     mock_build_batch.assert_called_once()
 
 
-@patch("scripts.compare_methods.run_comparisons")
-@patch("scripts.compare_methods.build_batch_comparisons")
+@patch("neuralls.cli.compare_methods.run_comparisons")
+@patch("neuralls.cli.compare_methods.build_batch_comparisons")
 def test_script_execution_mock_experiment(mock_build_batch, mock_run, tmp_path):
     """Happy-path execution with one comparison spec."""
     workspace = ExperimentWorkspace(

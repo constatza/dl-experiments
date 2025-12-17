@@ -7,7 +7,7 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 - `configs/` – Model templates (FFNN, GNN, linear) and the experiment matrix `experiments.toml`.
 - `data-configs/` – Data templates (e.g., `collect-504-solutions.toml`, `collect-2040-solutions.toml`, `test-solutions.toml`, eigenvector-based tests).
 - `solver-configs/` – CG settings decoupled from models (`default.toml`, `cg.toml`, `pcg.toml`).
-- `scripts/` – Automation entry points for data processing, training, comparison, and experiment orchestration. (Note: `test_prediction_quality.py` was removed).
+- `src/neuralls/cli/` – Automation entry points for data processing, training, comparison, and experiment orchestration. (Note: `test_prediction_quality.py` was removed).
 - `src/` – Library code (configuration, generation, solver, diagnostics, modularized workflows package).
 - `tests/` – End-to-end and unit coverage across CLI, configuration, generation, solver, and workflows.
 
@@ -44,28 +44,28 @@ All configs are validated using **Pydantic** at load time, catching configuratio
 
 - Process data (collection or generation):
   ```bash
-  uv run python scripts/process_data.py data-configs/collect-504-solutions.toml --solve
+  uv run python src/neuralls/cli/process_data.py data-configs/collect-504-solutions.toml --solve
   ```
 - Train a model:
   ```bash
-  uv run python scripts/train_model.py \
+  uv run python src/neuralls/cli/train_model.py \
     --config configs/ffnn.toml \
     --data-config data-configs/collect-504-solutions.toml \
     --solver-config solver-configs/default.toml
   ```
 - Compare preconditioners:
   ```bash
-  uv run python scripts/compare_methods.py --experiments configs/experiments.toml
+  uv run python src/neuralls/cli/compare_methods.py --experiments configs/experiments.toml
   ```
 - Run the full experiment matrix (data + train + compare):
   ```bash
-  uv run python scripts/run_experiments.py --config configs/experiments.toml
+  uv run python src/neuralls/cli/run_experiments.py --config configs/experiments.toml
   ```
 - Optional MLflow logging (adds uploads; local files remain):
   ```bash
-  uv run python scripts/train_model.py --config configs/ffnn.toml --data-config data-configs/collect-504-solutions.toml --enable-mlflow
-  uv run python scripts/predict.py --config configs/ffnn.toml --data-config data-configs/collect-504-solutions.toml --enable-mlflow
-  uv run python scripts/compare_methods.py --experiments configs/experiments.toml --enable-mlflow
+  uv run python src/neuralls/cli/train_model.py --config configs/ffnn.toml --data-config data-configs/collect-504-solutions.toml --enable-mlflow
+  uv run python src/neuralls/cli/predict.py --config configs/ffnn.toml --data-config data-configs/collect-504-solutions.toml --enable-mlflow
+  uv run python src/neuralls/cli/compare_methods.py --experiments configs/experiments.toml --enable-mlflow
   ```
 
 Prefect orchestration lives in `src/workflows/flow.py` (also exposed via the scripts above).

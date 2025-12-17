@@ -6,13 +6,13 @@ and synthetic data generation through the same pipeline.
 
 Usage:
     # Generate synthetic data
-    uv run python graph-cg/scripts/process_data.py data-configs/generate-90.toml
+    uv run python src/neuralls/cli/process_data.py data-configs/generate-90.toml
 
     # Collect data from archives (with solving)
-    uv run python graph-cg/scripts/process_data.py data-configs/collect-504.toml
+    uv run python src/neuralls/cli/process_data.py data-configs/collect-504.toml
 
     # Collect without solving (RHS only)
-    uv run python graph-cg/scripts/process_data.py data-configs/collect-504.toml --no-solve
+    uv run python src/neuralls/cli/process_data.py data-configs/collect-504.toml --no-solve
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 
-from scripts.compare_single import main
+from neuralls.cli.compare_single import main
 from neuralls.configuration.domain import ExperimentWorkspace
 from neuralls.workflows.specs import ComparisonSpec, ComparisonOutcome, ComparisonParams
 
@@ -26,8 +26,8 @@ def test_single_help() -> None:
     assert "compare preconditioner methods" in result.stdout.lower()
 
 
-@patch("scripts.compare_single.run_comparisons")
-@patch("scripts.compare_single.build_direct_comparisons")
+@patch("neuralls.cli.compare_single.run_comparisons")
+@patch("neuralls.cli.compare_single.build_direct_comparisons")
 def test_single_executes(mock_build, mock_run, tmp_path: Path) -> None:
     workspace = ExperimentWorkspace(
         root_dir=tmp_path / "root",

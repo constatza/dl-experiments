@@ -104,5 +104,5 @@ Optional configuration for generating a comparison set.
 Run the `process_data.py` script with your config:
 
 ```bash
-uv run python graph-cg/scripts/process_data.py configs/datasets/collect-504-solutions.toml
+uv run python src/neuralls/cli/process_data.py configs/datasets/collect-504-solutions.toml
 ```

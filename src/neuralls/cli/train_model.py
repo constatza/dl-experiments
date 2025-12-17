@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI wrapper for src.workflows.training.train_model."""
+"""CLI wrapper for neuralls.workflows.training.train_model."""
 
 from __future__ import annotations
 

@@ -44,8 +44,8 @@ def main(
     - Incremental computation (only reruns changed configs)
 
     Example:
-        $ uv run python scripts/run_experiments.py
-        $ uv run python scripts/run_experiments.py --config custom.toml
+        $ uv run python src/neuralls/cli/run_experiments.py
+        $ uv run python src/neuralls/cli/run_experiments.py --config custom.toml
     """
     graph_cg_root = Path(__file__).resolve().parent.parent
 

@@ -2,7 +2,7 @@
 # Uses 45x15-displacements UaVectors with pure collection - no synthetic generation
 # Pure solution-to-RHS mapping: b = A @ x for each solution vector
 #
-# Usage: uv run python graph-cg/scripts/process_data.py data-configs/test-solutions.toml
+# Usage: uv run python src/neuralls/cli/process_data.py data-configs/test-solutions.toml
 # Output: test-solutions-{normalization}/
 
 [flow]

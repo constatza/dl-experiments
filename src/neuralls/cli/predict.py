@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight CLI wrapper around src.workflows.prediction.run_inference."""
+"""Lightweight CLI wrapper around neuralls.workflows.prediction.run_inference."""
 
 from __future__ import annotations
 
