@@ -20,6 +20,10 @@ class ExperimentSpec(BaseModel):
     model_config_path: Path = Field(..., description="Absolute path to model.toml")
     data_config_path: Path = Field(..., description="Absolute path to resolved data config")
     solver_config_path: Path = Field(..., description="Absolute path to solver.toml")
+    checkpoint_path: Path | None = Field(
+        default=None,
+        description="Explicit checkpoint path from experiments.toml (for neural models)"
+    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 

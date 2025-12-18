@@ -1,13 +1,43 @@
-# This is the master configuration file.
-# It lists the active experiments and their paths relative to this file.
+# Master configuration file for all experiments.
+# New format: [[experiment]] entries with dataset + model + solver + checkpoint references
 
 project_root = ".."
-defaults_dir = "experiments/default"
 output_dir = "/data/projects/graph-cg/data/output"
 
-[experiments]
-ffnn_test_solutions = "experiments/ffnn_test_solutions"
-ffnn_test_eigenvector_solutions_largest = "experiments/ffnn_test_eigenvector_solutions_largest"
-ffnn_test_eigenvector_solutions_smallest = "experiments/ffnn_test_eigenvector_solutions_smallest"
-ffnn_test_eigenvector_rhs_largest = "experiments/ffnn_test_eigenvector_rhs_largest"
-ffnn_test_eigenvector_rhs_smallest = "experiments/ffnn_test_eigenvector_rhs_smallest"
+# Experiment definitions: dataset + model + solver + explicit checkpoint path
+# Each experiment is a unique combination of dataset and model
+
+[[experiment]]
+id = "ffnn_test_solutions"
+dataset = "test-solutions"
+model = "ffnn"
+solver = "default"
+checkpoint_path = "/data/projects/graph-cg/data/output/test-solutions/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
+
+[[experiment]]
+id = "ffnn_test_eigenvector_solutions_largest"
+dataset = "test-eigenvector-solutions-largest"
+model = "ffnn"
+solver = "default"
+checkpoint_path = "/data/projects/graph-cg/data/output/test-eigenvector-solutions-largest/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
+
+[[experiment]]
+id = "ffnn_test_eigenvector_solutions_smallest"
+dataset = "test-eigenvector-solutions-smallest"
+model = "ffnn"
+solver = "default"
+checkpoint_path = "/data/projects/graph-cg/data/output/test-eigenvector-solutions-smallest/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
+
+[[experiment]]
+id = "ffnn_test_eigenvector_rhs_largest"
+dataset = "test-eigenvector-rhs-largest"
+model = "ffnn"
+solver = "default"
+checkpoint_path = "/data/projects/graph-cg/data/output/test-eigenvector-rhs-largest/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
+
+[[experiment]]
+id = "ffnn_test_eigenvector_rhs_smallest"
+dataset = "test-eigenvector-rhs-smallest"
+model = "ffnn"
+solver = "default"
+checkpoint_path = "/data/projects/graph-cg/data/output/test-eigenvector-rhs-smallest/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"

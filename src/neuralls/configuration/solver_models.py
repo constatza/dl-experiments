@@ -110,10 +110,14 @@ class SolverSpecConfig(BaseModel):
         default="identity",
         description="Fallback preconditioner after limit_iters",
     )
-    # Neural-specific
+    # Neural-specific: checkpoint resolution via EITHER explicit path OR experiment reference
     checkpoint_path: Path | None = Field(
         default=None,
-        description="Path to neural network checkpoint (for neural type)",
+        description="Explicit path to neural network checkpoint (for neural type)",
+    )
+    experiment: str | None = Field(
+        default=None,
+        description="Reference to experiment ID from experiments.toml (resolves checkpoint at runtime)",
     )
 
     model_config = ConfigDict(

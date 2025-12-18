@@ -181,10 +181,95 @@ def build_direct_comparisons(
     return [_build_direct_spec(model_name, model_config, data_config, solver_config, workspace, checkpoint)]
 
 
+def _resolve_neural_preconditioners(
+    solver_specs: list,
+    experiments_map: dict[str, Any],
+) -> list:
+    """Resolve checkpoints for neural preconditioners from experiment references.
+
+    For each neural solver with 'experiment' field:
+    1. Look up experiment by ID in experiments_map
+    2. Get checkpoint_path from that experiment
+    3. Return updated solver spec with resolved checkpoint
+
+    Args:
+        solver_specs: List of SolverSpecConfig from solver.toml
+        experiments_map: Dict mapping experiment IDs to RunnableExperiment objects
+
+    Returns:
+        List of solver specs with resolved checkpoints
+
+    Raises:
+        ValueError: If experiment reference is invalid
+        FileNotFoundError: If checkpoint not found for referenced experiment
+    """
+    resolved_specs = []
+
+    for spec in solver_specs:
+        if spec.type != "neural":
+            # Non-neural solvers don't need checkpoint resolution
+            resolved_specs.append(spec)
+            continue
+
+        # Neural solver must have either checkpoint_path OR experiment reference
+        if spec.checkpoint_path:
+            # Explicit checkpoint path (for cross-experiment reuse or external checkpoints)
+            resolved_specs.append(spec)
+        elif spec.experiment:
+            # Reference to experiment ID
+            exp_id = spec.experiment
+            if exp_id not in experiments_map:
+                raise ValueError(
+                    f"Neural solver '{spec.name}' references unknown experiment '{exp_id}'. "
+                    f"Available experiments: {list(experiments_map.keys())}"
+                )
+
+            experiment = experiments_map[exp_id]
+            checkpoint = experiment.spec.checkpoint_path
+
+            if not checkpoint or not checkpoint.exists():
+                raise FileNotFoundError(
+                    f"No checkpoint found for experiment '{exp_id}' "
+                    f"(referenced by solver '{spec.name}'). "
+                    f"Expected: {checkpoint}"
+                )
+
+            # Create updated spec with resolved checkpoint
+            resolved_spec = spec.model_copy(update={"checkpoint_path": checkpoint})
+            resolved_specs.append(resolved_spec)
+        else:
+            raise ValueError(
+                f"Neural solver '{spec.name}' must specify either 'checkpoint_path' or 'experiment'"
+            )
+
+    return resolved_specs
+
+
 def run_comparisons(
     specs: Iterable[ComparisonSpec],
     params: ComparisonParams,
 ) -> list[ComparisonOutcome]:
+    """Run comparisons with checkpoint resolution from experiment references.
+
+    Args:
+        specs: Comparison specifications
+        params: Comparison parameters
+
+    Returns:
+        List of comparison outcomes
+    """
+    # Load experiments map for checkpoint resolution
+    # This allows solver configs to reference experiments by ID
+    try:
+        from neuralls.configuration.loader import load_batch
+        from neuralls.constants import DEFAULT_PROJECT_ROOT
+        experiments_toml = DEFAULT_PROJECT_ROOT / "configs" / "experiments.toml"
+        batch = load_batch(experiments_toml)
+        experiments_map = {exp.spec.id: exp for exp in batch.experiments}
+    except Exception as e:
+        logger.warning(f"Could not load experiments map for checkpoint resolution: {e}")
+        experiments_map = {}
+
     outcomes: list[ComparisonOutcome] = []
     for spec in specs:
         # Read MLflow setting from config
@@ -195,8 +280,18 @@ def run_comparisons(
         result: dict[str, Any] | None = None
         try:
             solver_cfg = load_solver_config(spec.solver_config)
+
+            # Resolve checkpoints for neural preconditioners that reference experiments
+            if experiments_map:
+                resolved_specs = _resolve_neural_preconditioners(
+                    solver_cfg.solvers,
+                    experiments_map,
+                )
+            else:
+                resolved_specs = solver_cfg.solvers
+
             # Use Pydantic SolverConfigFile directly
-            precond_configs = build_preconditioner_configs_from_specs(solver_cfg.solvers)
+            precond_configs = build_preconditioner_configs_from_specs(resolved_specs)
             result = compare_preconditioners(
                 general_params=solver_cfg.general,
                 preconditioner_configs=precond_configs,

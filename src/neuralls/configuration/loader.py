@@ -7,10 +7,13 @@ to construct strictly typed experiment definitions.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from dlkit.tools.config.core.updater import update_settings
+
+logger = logging.getLogger(__name__)
 
 from ..constants import (
     DEFAULT_FIGURES_DIR,
@@ -246,6 +249,13 @@ def load_experiment(
 def load_batch(master_config_path: Path) -> ExperimentBatch:
     """Load all experiments defined in the master configuration file.
 
+    Supports new format with [[experiment]] entries containing:
+    - id: Experiment identifier
+    - dataset: Dataset ID (references configs/datasets/{dataset}.toml)
+    - model: Model ID (references configs/models/{model}.toml)
+    - solver: Solver ID (references configs/solvers/{solver}.toml, defaults to "default")
+    - checkpoint_path: Optional explicit checkpoint path
+
     Args:
         master_config_path: Path to experiments.toml.
 
@@ -270,44 +280,56 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
     output_dir_str = master_config.get("output_dir")
     global_output_dir = resolve_output_root(None, project_root, output_dir_str)
 
-    # 3. Resolve experiment list
-    experiments_map = master_config.get("experiments", {})
-    if not experiments_map:
-        run_list = master_config.get("run", [])
-        experiments_map = {name: f"experiments/{name}" for name in run_list}
-
-    defaults_dir = (config_dir / master_config.get("defaults_dir", "experiments/default")).resolve()
+    # 3. Load experiment entries (new format: [[experiment]] array)
+    experiments_list = master_config.get("experiment", [])
+    if not experiments_list:
+        raise ValueError(
+            "No experiments defined in experiments.toml. "
+            "Expected [[experiment]] entries with id, dataset, model, solver fields."
+        )
 
     resolved_experiments = []
 
-    for exp_id, exp_path_rel in experiments_map.items():
-        exp_dir = (config_dir / exp_path_rel).resolve()
+    for exp_entry in experiments_list:
+        # A. Extract experiment definition
+        exp_id = exp_entry.get("id")
+        dataset_id = exp_entry.get("dataset")
+        model_id = exp_entry.get("model")
+        solver_id = exp_entry.get("solver", "default")
+        checkpoint_path_str = exp_entry.get("checkpoint_path")
 
-        # A. Resolve config paths with fallback
-        model_path = resolve_config_path(
-            exp_id, EXP_MODEL_CONFIG_NAME, exp_dir, defaults_dir
-        )
-        data_pointer_path = resolve_config_path(
-            exp_id, EXP_DATA_CONFIG_NAME, exp_dir, defaults_dir
-        )
-        solver_path = resolve_config_path(
-            exp_id, EXP_SOLVER_CONFIG_NAME, exp_dir, defaults_dir
-        )
+        if not exp_id or not dataset_id or not model_id:
+            raise ValueError(
+                f"Experiment entry missing required fields. "
+                f"Got: {exp_entry}. Required: id, dataset, model."
+            )
 
-        # B. Load and validate configs
+        # B. Resolve config paths from shared directories
+        data_path = (config_dir / "datasets" / f"{dataset_id}.toml").resolve()
+        model_path = (config_dir / "models" / f"{model_id}.toml").resolve()
+        solver_path = (config_dir / "solvers" / f"{solver_id}.toml").resolve()
+
+        # Validate paths exist
+        if not data_path.exists():
+            raise FileNotFoundError(
+                f"Experiment '{exp_id}': Dataset config not found: {data_path}"
+            )
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"Experiment '{exp_id}': Model config not found: {model_path}"
+            )
+        if not solver_path.exists():
+            raise FileNotFoundError(
+                f"Experiment '{exp_id}': Solver config not found: {solver_path}"
+            )
+
+        # C. Load and validate configs
         model_cfg = load_model_config(model_path)
-        data_pointer = load_raw_toml(data_pointer_path)
+        data_cfg = load_data_config(data_path)
         solver_cfg = load_solver_config(solver_path)
 
-        # C. Resolve data config path (dereference pointer)
-        data_gen_path_str = data_pointer.get("dataconfig")
-        if not data_gen_path_str:
-            raise ValueError(f"Experiment '{exp_id}': data.toml missing 'dataconfig' key.")
-        data_gen_path = (project_root / data_gen_path_str).resolve()
-        data_cfg = load_data_config(data_gen_path)
-
         # D. Extract identifiers
-        data_id = data_gen_path.stem
+        data_id = data_path.stem
         model_name = model_cfg.SESSION.name or model_cfg.MODEL.name
 
         if not model_name:
@@ -316,12 +338,23 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
                 "Ensure [MODEL].name or [SESSION].name is set."
             )
 
-        # E. Build domain objects
+        # E. Resolve checkpoint path if provided
+        checkpoint_path: Path | None = None
+        if checkpoint_path_str:
+            checkpoint_path = Path(checkpoint_path_str).resolve()
+            if not checkpoint_path.exists():
+                logger.warning(
+                    f"Experiment '{exp_id}': Checkpoint not found: {checkpoint_path}. "
+                    "Will use latest from checkpoint_dir at runtime."
+                )
+
+        # F. Build domain objects
         spec = ExperimentSpec(
             id=exp_id,
             model_config_path=model_path,
-            data_config_path=data_gen_path,
+            data_config_path=data_path,
             solver_config_path=solver_path,
+            checkpoint_path=checkpoint_path,
         )
 
         processed_root = resolve_processed_root(data_cfg, project_root)
