@@ -9,8 +9,10 @@ solver. All test data is created via fixtures following project guidelines:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from scipy.sparse import diags
@@ -464,3 +466,60 @@ def zero_initial_guess_small() -> NDArray:
         Initial residual r0 = b - A*0 = b.
     """
     return np.zeros(SMALL_MATRIX_SIZE, dtype=np.float64)
+
+
+# =============================================================================
+# Plot Saving Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def solver_plots_dir() -> Path:
+    """Directory for solver convergence plots.
+
+    Returns:
+        Path to tests/artifacts/solver_plots/ directory.
+    """
+    plots_dir = Path(__file__).parent.parent / "artifacts" / "solver_plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    return plots_dir
+
+
+@pytest.fixture
+def save_convergence_plot(solver_plots_dir: Path) -> Callable:
+    """Create function to save convergence plots.
+
+    Args:
+        solver_plots_dir: Directory for saving plots.
+
+    Returns:
+        Function that saves convergence plot: save_plot(name, history, out_dir=None)
+    """
+    def _save_plot(
+        name: str,
+        history: list[float] | np.ndarray,
+        out_dir: Path | None = None,
+    ) -> None:
+        """Save convergence history plot.
+
+        Args:
+            name: Test name for plot title and filename.
+            history: Residual history values.
+            out_dir: Optional output directory (defaults to solver_plots_dir).
+        """
+        if not history or len(history) == 0:
+            return
+
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.semilogy(history, marker="o")
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Residual norm")
+        ax.set_title(name)
+        fig.tight_layout()
+
+        output_dir = out_dir if out_dir is not None else solver_plots_dir
+        output_path = output_dir / f"{name}.png"
+        fig.savefig(output_path)
+        plt.close(fig)
+
+    return _save_plot

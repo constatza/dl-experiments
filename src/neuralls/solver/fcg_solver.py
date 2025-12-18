@@ -43,10 +43,12 @@ from ..constants import (
     DEFAULT_FCG_HISTORY_LIMIT,
     DEFAULT_M_MAX,
     DEFAULT_RESIDUAL_REPLACEMENT_FREQ,
+    get_breakdown_tol,
 )
 from .convergence import CombinedToleranceCriterion, IConvergenceCriterion
 from .direction_strategies import TruncatedOrthogonalDirection
 from .helpers import (
+    _stable_dot_product,
     convergence_check,
     curvature,
     initialize_state,
@@ -123,6 +125,59 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
         6. Update solution: x_{i+1} = x_i + α_i p_i
         7. Update residual: r_{i+1} = r_i - α_i q_i
 
+    Restart Mechanism (Key FCG Feature):
+        FCG handles non-SPD preconditioners via automatic restart:
+
+        **When Restart Triggers:**
+        - Curvature d = p^T A p < eps^2 (numerical breakdown)
+        - Curvature d < eps_curv * ||p||^2 (relative threshold)
+        - Curvature d <= 0 (negative curvature from non-SPD)
+        - Beta ||r_new||^2 / ||r_old||^2 out of bounds
+
+        **What Happens During Restart:**
+        1. Replace search direction: p ← z (steepest descent)
+        2. Recompute matrix product: q ← A @ p
+        3. Recompute curvature: d ← p^T q with overflow protection
+        4. Check if steepest descent also fails → breakdown if yes
+        5. Continue iteration with fresh direction (conjugacy reset)
+
+        **Impact on Convergence:**
+        - Temporarily loses conjugacy (accumulated history cleared)
+        - Convergence rate drops to steepest descent for ONE iteration
+        - Next iteration rebuilds conjugacy via Gram-Schmidt
+        - Overall: Slower convergence but algorithm remains stable
+
+        **Restart vs Breakdown:**
+        - Restart: Recoverable → continues with steepest descent
+        - Breakdown: Terminal → algorithm stops, returns current solution
+        - Restart = temporary setback, Breakdown = numerical collapse
+
+        **Why Standard CG Can't Do This:**
+        Standard CG assumes SPD preconditioner and never checks curvature.
+        With non-SPD preconditioners, standard CG would:
+        - Compute negative step lengths (wrong direction)
+        - Overflow in divisions (denominator near zero)
+        - Diverge or produce NaN/Inf
+
+        FCG's restart mechanism is what enables it to handle neural network
+        preconditioners and other non-SPD operators.
+
+    Numerical Stability (Following SciPy BICG/BICGSTAB):
+        **Breakdown Detection:**
+        - Threshold: eps^2 ≈ 4.93e-32 for float64 (machine epsilon squared)
+        - Checks: Curvature, step length denominators, residual norms
+        - Action: Immediate termination (like SciPy BICG return code -10)
+
+        **Overflow Prevention:**
+        - Uses _stable_dot_product for all p^T q, p^T r computations
+        - Balanced scaling when max(|a|, |b|) > sqrt(0.1 * finfo.max)
+        - Threshold: ~1.3e154 for float64 (well below overflow at 1.8e308)
+
+        **Underflow Handling:**
+        - norm() instead of dot(r, r) for squared norms (LAPACK-based)
+        - Detects when ||r||^2 < eps^2 and triggers restart
+        - Zero dot products (orthogonal vectors) handled correctly
+
     Design:
         - Uses TruncatedOrthogonalDirection for step 3 (Gram-Schmidt)
         - Optional TraceRecorder for iteration history
@@ -137,8 +192,9 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
     Mathematical Properties:
         - Handles non-SPD preconditioners via restart mechanism
         - Periodic reset of orthogonalization history (m_i calculation)
-        - Numerical safety: curvature checks, breakdown detection
-        - Residual management for long iterations
+        - Numerical safety: curvature checks, breakdown detection (eps^2)
+        - Residual management for long iterations (every 50 iterations)
+        - Overflow protection in all dot products via stable computation
 
     Examples:
         >>> # Basic solve with identity preconditioner
@@ -339,10 +395,48 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             # Check curvature d = p^T q
             d, state = curvature(p, q, z, eps_curv, state)
             if state.restart:
-                # Restart: replace p with z and recompute q
+                # RESTART OPERATION: Recovery from Non-SPD Preconditioner
+                # ========================================================
+                # What is Restart?
+                #   When curvature d_k = p^T A p is negative or too small (below eps^2 or
+                #   relative threshold), the search direction p_k is no longer safe. This
+                #   happens with non-SPD preconditioners (e.g., neural networks).
+                #
+                # Why Restart Works:
+                #   Replace p with z (preconditioned residual = steepest descent direction).
+                #   For any SPD preconditioner M, z = M^-1 r is guaranteed to be a descent
+                #   direction, allowing the algorithm to recover and continue.
+                #
+                # How It Affects Algorithm:
+                #   1. Temporarily loses conjugacy (accumulated orthogonalization history)
+                #   2. Reverts to steepest descent for ONE iteration
+                #   3. Next iteration rebuilds conjugacy via Gram-Schmidt orthogonalization
+                #   4. Convergence rate temporarily slows but algorithm remains stable
+                #
+                # Difference from Breakdown:
+                #   - Restart: Recoverable, algorithm continues with steepest descent
+                #   - Breakdown: Terminal, algorithm cannot proceed (returns immediately)
+                #
+                # SciPy Comparison:
+                #   Standard CG (assumes SPD): No restart, would diverge/fail
+                #   BICG/BICGSTAB: Returns with error code, no recovery
+                #   Our FCG: Restarts and continues (essential for non-SPD preconditioners)
+
                 p = z.copy()
                 q = A @ p
-                d = float(np.dot(p, q))
+
+                # Recompute curvature with consistent numerical stability
+                d = _stable_dot_product(p, q)
+
+                # Check if steepest descent direction also fails
+                # (If yes, preconditioner is producing pathologically bad outputs)
+                breakdown_tol = get_breakdown_tol(np.float64)
+                if np.abs(d) < breakdown_tol:
+                    # Even steepest descent has vanishing curvature - terminal breakdown
+                    state = replace(state, breakdown=True)
+                    break
+
+                # Clear restart flag and continue with steepest descent direction
                 state = replace(state, restart=False)
 
             # Step 5: Compute step length α = (p^T r) / d (FCG formula)

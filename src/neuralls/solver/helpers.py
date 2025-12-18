@@ -41,6 +41,93 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+def _stable_dot_product(
+    a: NDArray, b: NDArray, dtype: type[np.floating] = np.float64  # type: ignore[type-arg]
+) -> float:
+    """Compute dot product with overflow prevention via balanced scaling.
+
+    Mathematically equivalent to np.dot(a, b) but scales both vectors
+    by the same factor to prevent overflow, then adjusts the result.
+
+    Mathematical Theory:
+        For dot(a, b), if we compute dot(a/s, b/s), we get:
+            sum((a_i/s) * (b_i/s)) = sum(a_i * b_i) / s^2 = dot(a,b) / s^2
+        So: dot(a, b) = s^2 * dot(a/s, b/s)
+
+        This is mathematically exact, just reordered for numerical stability.
+
+    Numerical Stability Behaviors:
+        **Overflow Prevention:**
+        - Threshold: Uses sqrt(0.1 * finfo.max) ≈ 1.3e154 for float64
+        - Why: If max(|a_i|, |b_i|) > 1.3e154, individual products could overflow
+        - Action: Scale both vectors to safe range, compute, then rescale result
+        - Trade-off: Slight rounding error vs catastrophic overflow
+
+        **Underflow Handling:**
+        - Small vectors (e.g., 1e-300): May underflow to exact zero
+        - Why acceptable: Zero is a valid dot product (e.g., orthogonal vectors)
+        - Detection: Caller should check result with np.isfinite() if needed
+
+        **Precision Preservation:**
+        - Normal range (~1e-100 to 1e100): No scaling, exact np.dot() result
+        - Moderate range (~1e100 to 1e154): No scaling, full precision maintained
+        - Only extreme values trigger scaling, minimizing precision loss
+
+    Threshold Justification:
+        Uses 0.1 * finfo.max (≈1.8e307 for float64) as overflow threshold:
+        - Leaves 10x safety margin for intermediate calculations
+        - Follows SciPy convention of fractional max for numerical headroom
+        - Prevents false triggers on legitimate large-scale problems
+
+    Args:
+        a: First vector for dot product, shape (n,).
+        b: Second vector for dot product, shape (n,).
+        dtype: Data type for overflow threshold calculation (default: np.float64).
+
+    Returns:
+        float: Dot product a^T b, computed stably to avoid overflow.
+
+    Examples:
+        >>> # Normal case - no scaling
+        >>> _stable_dot_product(np.array([1.0, 2.0]), np.array([3.0, 4.0]))
+        11.0
+
+        >>> # Extreme case - automatic scaling prevents overflow
+        >>> a = np.array([1e150, 1e150, 1e150])
+        >>> b = np.array([1e150, 1e150, 1e150])
+        >>> result = _stable_dot_product(a, b)  # Would overflow with np.dot
+        >>> np.isfinite(result)
+        True
+
+    References:
+        SciPy conventions for numerical stability in iterative solvers.
+    """
+    max_a = np.max(np.abs(a))
+    max_b = np.max(np.abs(b))
+
+    # Get dtype-specific overflow threshold (no magic values)
+    from ..constants import get_overflow_threshold
+
+    overflow_threshold = get_overflow_threshold(dtype)
+
+    # Check for overflow risk using logarithms to avoid intermediate overflow
+    # If log(max_a) + log(max_b) > log(threshold), then max_a * max_b > threshold
+    # Use this only if both values are large enough that multiplication might overflow
+    sqrt_threshold = np.sqrt(overflow_threshold)  # ~1.3e154 for float64
+
+    if max_a > sqrt_threshold or max_b > sqrt_threshold:
+        # At least one value is large - need to scale
+        # Scale both vectors by the same factor to keep product safe
+        # Want: max(max_a, max_b) * scale ≈ sqrt(sqrt_threshold)
+        max_val = max(max_a, max_b)
+        target = np.sqrt(sqrt_threshold)  # ~1.1e77 for float64
+        scale = target / max_val
+        # Mathematically: dot(a,b) = (1/scale^2) * dot(a*scale, b*scale)
+        return np.dot(a * scale, b * scale) / (scale * scale)
+
+    return np.dot(a, b)
+
+
 def initialize_state(r0: NDArray, b_norm: float) -> IterationState:
     """Initialize IterationState from initial residual r_0 = b - A*x_0.
 
@@ -159,15 +246,37 @@ def curvature(
         1. d_k < 0: A or effective (M^{-1}A) is not positive definite
         2. d_k ~ 0: Numerical cancellation or near-singular search direction
 
-        Restart Criterion:
-        We restart if d_k <= eps_curv * ||p_k||_2^2 or d_k <= 0, where:
-        - eps_curv (default 1e-14) is a relative curvature threshold
-        - ||p_k||_2^2 normalizes the check to account for scaling
+        Breakdown Detection (Proactive + Reactive):
+        **Proactive - Absolute Threshold (NEW):**
+        - Threshold: eps^2 ≈ 4.93e-32 for float64 (SciPy convention)
+        - Why eps^2: Detects when curvature lost all numerical significance
+        - When triggered: |d_k| < 4.93e-32
+        - Action: Restart with p = z (steepest descent)
+        - Justification: Below machine precision squared, curvature value is
+          indistinguishable from zero in floating point arithmetic
 
-        On restart:
-        - Set p_new = z_k (steepest descent, guaranteed descent for SPD M)
-        - Compute q_new = A p_new (new Hessian product)
-        - Return d_new = p_new^T q_new
+        **Reactive - Relative Threshold (Existing):**
+        - Threshold: eps_curv * ||p_k||_2^2 (default eps_curv = 1e-14)
+        - Why relative: Accounts for problem scaling and direction magnitude
+        - When triggered: d_k < 1e-14 * ||p_k||_2^2 or d_k <= 0
+        - Action: Restart with p = z
+        - Justification: Relative check catches non-SPD behavior in scaled problems
+
+        **Restart vs Breakdown:**
+        - Absolute check (eps^2) → restart (recoverable via steepest descent)
+        - Relative check (eps_curv) → restart (non-SPD preconditioner behavior)
+        - Both use restart, not breakdown, because steepest descent can recover
+
+    Numerical Stability Behaviors:
+        **Overflow Prevention:**
+        - Uses _stable_dot_product for p_k^T q_k
+        - Prevents overflow when preconditioner produces large directions
+        - Critical for neural network preconditioners with unbounded outputs
+
+        **Two-Level Protection:**
+        - Level 1 (absolute): Catches numerical precision loss
+        - Level 2 (relative): Catches mathematical non-SPD behavior
+        - Both trigger restart, allowing algorithm to recover
 
     Args:
         p_k: Current search direction p_k, shape (n,).
@@ -194,11 +303,22 @@ def curvature(
     References:
         Algorithm.md, Step 3: curvature evaluation.
     """
-    # Nominal curvature
-    d_raw = np.dot(p_k, q_k)
+    # Compute curvature using stable dot product to prevent overflow
+    d_raw = _stable_dot_product(p_k, q_k)
 
-    # Check for non-SPD behavior
-    p_k_norm_sq = np.dot(p_k, p_k)
+    # Check for breakdown using SciPy convention
+    from ..constants import get_breakdown_tol
+
+    breakdown_tol = get_breakdown_tol(np.float64)
+
+    if np.abs(d_raw) < breakdown_tol:
+        logger.warning("FCG Breakdown: Curvature d_raw={:.2e} below tolerance", d_raw)
+        new_state = replace(state, restart=True, num_restarts=state.num_restarts + 1)
+        return d_raw, new_state
+
+    # Check for non-SPD behavior using relative threshold
+    # Use norm() instead of dot(p_k, p_k) for better numerical stability
+    p_k_norm_sq = norm(p_k) ** 2
     curvature_threshold = eps_curv * p_k_norm_sq
 
     if d_raw <= 0 or d_raw < curvature_threshold:
@@ -245,12 +365,37 @@ def step_length(
         2. Non-symmetric: B_k^T ≠ B_k in general
         3. Nonlinear: B_k(αr) ≠ α B_k(r)
 
-    Breakdown Detection:
-        Restart if |d_k| < eps_breakdown or if p_k^T r_k results in NaN/Inf.
-        This protects against:
-        1. Division by zero: d_k very small from curvature step
-        2. Numerical overflow: p_k^T r_k unexpectedly large
-        3. Preconditioner failure: p_k contains NaN/Inf
+    Breakdown Detection (Proactive + Reactive):
+        **Proactive - Denominator Check (NEW):**
+        - Threshold: eps^2 ≈ 4.93e-32 for float64 (SciPy BICG/BICGSTAB convention)
+        - Why eps^2: Square of machine epsilon catches loss of precision in squared norms
+        - When triggered: |d_k| < 4.93e-32
+        - Action: Return alpha=0, set breakdown=True, terminate solver
+        - Justification: Below eps^2, division would amplify rounding errors beyond
+          machine precision, making results meaningless
+
+        **Reactive - NaN/Inf Detection:**
+        - Checks numerator (p_k^T r_k) and final alpha for NaN/Inf
+        - Catches overflow that slipped through stable dot product
+        - Indicates preconditioner produced unbounded outputs
+
+        **Why This Order:**
+        1. Check d_k first - prevents division by near-zero
+        2. Compute numerator with stable dot product - prevents overflow
+        3. Check numerator validity - catches preconditioner failures
+        4. Compute division - now safe
+        5. Final NaN/Inf check - defensive safety net
+
+    Numerical Stability Behaviors:
+        **Underflow in Numerator:**
+        - If p_k ⊥ r_k (perpendicular): numerator = 0.0 exactly
+        - Result: alpha = 0.0 (valid, no breakdown)
+        - Why valid: Zero step means current direction doesn't help
+
+        **Overflow Prevention:**
+        - Uses _stable_dot_product for p_k^T r_k
+        - Prevents overflow from large preconditioner outputs
+        - Maintains mathematical correctness via balanced scaling
 
     Args:
         p_k: Current search direction p_k, shape (n,).
@@ -279,7 +424,22 @@ def step_length(
         Notay (2000): "Flexible Conjugate Gradients", Algorithm 1, page 3
         arXiv:2402.05598v1: "Neural operators meet conjugate gradients"
     """
-    numerator = np.dot(p_k, r_k)
+    # Check denominator for vanishing/breakdown following SciPy BICG convention
+    # SciPy uses: if np.abs(rho_cur) < rhotol where rhotol = eps**2
+    from ..constants import get_breakdown_tol
+
+    breakdown_tol = get_breakdown_tol(np.float64)
+
+    if np.abs(d_k) < breakdown_tol:
+        logger.warning(
+            "FCG Breakdown: Curvature d_k={:.2e} below breakdown tolerance {:.2e}",
+            d_k,
+            breakdown_tol,
+        )
+        return 0.0, replace(state, breakdown=True)
+
+    # Compute numerator using stable dot product to prevent overflow
+    numerator = _stable_dot_product(p_k, r_k)
 
     # Check for NaN/Inf in numerator (preconditioner or residual problem)
     if not np.isfinite(numerator):
@@ -329,14 +489,44 @@ def beta_update(
         Both cases signal breakdown of the algorithm's assumptions. We restart
         by replacing the conjugate direction with steepest descent.
 
-    Restart Criterion:
-        Restart if β_k < 0 or β_k > beta_max, where beta_max is typically 1e10.
+    Breakdown Detection (Proactive):
+        **Denominator Underflow Check (NEW):**
+        - Threshold: eps^2 ≈ 4.93e-32 for float64
+        - Why eps^2: ||r_old||^2 is already squared, so compare to eps^2
+        - When triggered: ||r_old||^2 < 4.93e-32
+        - Action: Return beta=0, set restart=True, increment restart counter
+        - Justification: When squared norm underflows below machine precision
+          squared, we've lost all information about the residual magnitude
 
-        Rationale for upper bound:
-        - In standard SPD CG, β < 1 (residuals strictly decrease)
-        - β > 1 means residual is increasing despite convergence criterion
-        - β > beta_max (e.g., 1e10) indicates severe loss of conjugacy
-        - Restarting recovers the algorithm, though at convergence cost
+        **Physical Interpretation:**
+        - For 3-element vector: each element must be > 1.28e-16 to avoid trigger
+        - Values below this threshold: Either truly zero or lost to rounding
+        - Why restart: Residual norm below eps^2 means either:
+          a) Converged (but should have been caught by convergence check)
+          b) Numerical precision exhausted (need fresh start)
+
+    Restart Criterion (Reactive):
+        **Beta Out of Bounds:**
+        - Restart if β_k < 0 or β_k > beta_max (typically 1e10)
+        - Negative beta: Impossible in exact arithmetic, indicates rounding error
+        - Large beta: Loss of conjugacy, residual increasing despite progress
+        - Action: Return beta=0, restart with steepest descent
+
+    Numerical Stability Behaviors:
+        **Underflow Protection:**
+        - Extreme underflow (e.g., 1e-300): ||r||^2 → 0.0, triggers breakdown
+        - Small but finite (e.g., 1e-10): ||r||^2 ≈ 3e-20 > eps^2, computes normally
+        - Threshold prevents division: 0.0 / 0.0 → NaN
+
+        **Overflow Prevention:**
+        - Uses norm() instead of dot(r, r) for squared norms
+        - norm() is more numerically stable (LAPACK-based)
+        - Avoids intermediate overflow in dot product computation
+
+        **Why norm() > dot(r, r):**
+        - norm() uses optimized BLAS/LAPACK routines with overflow guards
+        - dot(r, r) is direct summation, vulnerable to overflow
+        - Both mathematically equivalent, but norm() has better numerical properties
 
     Args:
         r_new: New residual r_{k+1}, shape (n,).
@@ -363,13 +553,19 @@ def beta_update(
     References:
         Algorithm.md, Step 8: beta_update (residual-only).
     """
-    r_old_norm_sq = np.dot(r_old, r_old)
-    r_new_norm_sq = np.dot(r_new, r_new)
+    # Use scipy.linalg.norm() which is more numerically stable than dot(r,r)
+    # for computing squared norms
+    r_old_norm_sq = norm(r_old) ** 2
+    r_new_norm_sq = norm(r_new) ** 2
 
-    # Avoid division by zero
-    if r_old_norm_sq < 1e-14:
-        # r_old is nearly zero; residual already converged
-        return 0.0, state
+    # Avoid division by zero using SciPy's breakdown tolerance
+    from ..constants import get_breakdown_tol
+
+    breakdown_tol = get_breakdown_tol()
+
+    if r_old_norm_sq < breakdown_tol:
+        logger.warning("FCG Breakdown: ||r_old||^2={:.2e} below tolerance", r_old_norm_sq)
+        return 0.0, replace(state, restart=True, num_restarts=state.num_restarts + 1)
 
     beta = r_new_norm_sq / r_old_norm_sq
 

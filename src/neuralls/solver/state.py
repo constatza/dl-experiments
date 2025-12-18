@@ -113,6 +113,15 @@ class IterationState:
     iterations: int = 0
     """Count of completed iterations. Used for frequency-based decisions."""
 
+    max_p_norm: float = 0.0
+    """Maximum observed search direction norm. For numerical stability diagnostics."""
+
+    max_r_norm: float = 0.0
+    """Maximum observed residual norm. For numerical stability diagnostics."""
+
+    max_z_norm: float = 0.0
+    """Maximum observed preconditioned residual norm. For numerical stability diagnostics."""
+
     def __post_init__(self) -> None:
         """Validate state invariants.
 

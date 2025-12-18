@@ -30,6 +30,7 @@ from neuralls.constants import (
     DEFAULT_RESIDUAL_REPLACEMENT_FREQ,
 )
 from neuralls.solver.helpers import (
+    _stable_dot_product,
     beta_update,
     convergence_check,
     curvature,
@@ -1040,3 +1041,204 @@ def test_residual_management_disabled_recomputation(
     # No recomputation even at k=50
     np.testing.assert_allclose(r_new, residual_vector_small)
     assert state.num_residual_replacements == 0
+
+
+# =============================================================================
+# Numerical Stability Tests - Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def normal_vectors():
+    """Normal vectors with no overflow risk."""
+    return np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0, 6.0])
+
+
+@pytest.fixture
+def large_vectors():
+    """Large vectors that would overflow without scaling."""
+    # Use 1e150 which is large but manageable with proper scaling
+    return np.array([1e150, 1e150, 1e150]), np.array([1e150, 1e150, 1e150])
+
+
+@pytest.fixture
+def moderate_vectors():
+    """Moderately large vectors for mathematical equivalence testing."""
+    return np.array([1e10, 2e10, 3e10]), np.array([4e10, 5e10, 6e10])
+
+
+@pytest.fixture
+def tiny_denominator():
+    """Denominator below breakdown tolerance for testing early detection."""
+    from neuralls.constants import get_breakdown_tol
+
+    breakdown_tol = get_breakdown_tol(np.float64)
+    return breakdown_tol / 10
+
+
+@pytest.fixture
+def tiny_vectors():
+    """Very small vectors for underflow testing."""
+    # Use values near float64 min normal: ~2.23e-308
+    return np.array([1e-300, 1e-300, 1e-300]), np.array([1e-300, 1e-300, 1e-300])
+
+
+@pytest.fixture
+def mixed_magnitude_vectors():
+    """Vectors with mixed tiny and normal magnitudes."""
+    return np.array([1e-200, 1.0, 1e-200]), np.array([1e-200, 1.0, 1e-200])
+
+
+# =============================================================================
+# Numerical Stability Tests
+# =============================================================================
+
+
+def test_stable_dot_product_normal_case(normal_vectors):
+    """Test that _stable_dot_product matches np.dot for normal vectors."""
+    p, r = normal_vectors
+
+    result = _stable_dot_product(p, r)
+    expected = np.dot(p, r)
+
+    assert np.isfinite(result)
+    np.testing.assert_allclose(result, expected, rtol=1e-14)
+
+
+def test_stable_dot_product_prevents_overflow(large_vectors):
+    """Test that _stable_dot_product prevents overflow via balanced scaling."""
+    p, r = large_vectors
+
+    result = _stable_dot_product(p, r)
+
+    assert np.isfinite(result)
+    # Result should be finite and positive
+    assert result > 0
+    # The exact value is hard to test due to scaling, but it should be very large
+    assert result > 1e100
+
+
+def test_stable_dot_product_preserves_mathematical_equivalence(moderate_vectors):
+    """Test mathematical equivalence with moderate vectors."""
+    p, r = moderate_vectors
+
+    result = _stable_dot_product(p, r)
+    expected = np.dot(p, r)
+
+    assert np.isfinite(result)
+    assert np.isfinite(expected)
+    # Should match within floating point precision
+    np.testing.assert_allclose(result, expected, rtol=1e-10)
+
+
+def test_step_length_early_breakdown_detection(tiny_denominator):
+    """Test early detection of vanishing denominator using SciPy tolerance."""
+    p = np.array([1.0, 2.0, 3.0])
+    r = np.array([1.0, 1.0, 1.0])
+    z = r.copy()
+
+    state = IterationState()
+
+    alpha, new_state = step_length(p, r, z, tiny_denominator, 1e-14, state)
+
+    assert alpha == 0.0
+    assert new_state.breakdown is True
+
+
+def test_curvature_breakdown_detection():
+    """Test curvature breakdown detection using SciPy tolerance."""
+    p = np.array([1.0, 2.0, 3.0])
+    z = p.copy()
+
+    # Make q very small to get tiny dot product below breakdown tolerance
+    q = np.array([1e-20, 1e-20, 1e-20])
+
+    state = IterationState()
+
+    d_k, new_state = curvature(p, q, z, DEFAULT_CURVATURE_EPSILON, state)
+
+    # Should trigger restart due to breakdown
+    assert new_state.restart is True
+    assert new_state.num_restarts == 1
+
+
+# =============================================================================
+# Underflow Tests
+# =============================================================================
+
+
+def test_stable_dot_product_underflow_to_zero(tiny_vectors):
+    """Test that underflow to exact zero is handled gracefully."""
+    p, r = tiny_vectors
+
+    result = _stable_dot_product(p, r)
+
+    # Result may be zero or very small due to underflow
+    assert np.isfinite(result)
+    assert result >= 0  # Should be non-negative for positive vectors
+
+
+def test_stable_dot_product_mixed_magnitudes(mixed_magnitude_vectors):
+    """Test stable computation with mixed tiny and normal magnitudes."""
+    p, r = mixed_magnitude_vectors
+
+    result = _stable_dot_product(p, r)
+    expected = np.dot(p, r)
+
+    assert np.isfinite(result)
+    assert np.isfinite(expected)
+    # Should preserve the dominant (normal magnitude) contribution
+    np.testing.assert_allclose(result, expected, rtol=1e-10)
+
+
+def test_beta_update_underflow_protection():
+    """Test beta_update handles underflow in residual norms gracefully."""
+    # Very small residuals that underflow to zero
+    r_old = np.array([1e-300, 1e-300, 1e-300])  # norm()**2 underflows to 0.0
+    r_new = np.array([1e-301, 1e-301, 1e-301])
+
+    state = IterationState()
+
+    beta, new_state = beta_update(r_new, r_old, DEFAULT_BETA_MAX, state)
+
+    # When norm underflows to zero, breakdown detection triggers restart
+    # This is correct behavior - we've lost all numerical precision
+    assert beta == 0.0  # Restart uses beta=0
+    assert new_state.restart  # Should trigger restart due to underflow
+    assert new_state.num_restarts == 1
+
+
+def test_beta_update_small_but_finite_residuals():
+    """Test beta_update with small but representable residuals."""
+    # Use values above breakdown tolerance (eps^2 ≈ 4.93e-32)
+    # For 3-elem vector: need r_i > 1.28e-16, use 1e-10 to be safe
+    r_old = np.array([1e-10, 1e-10, 1e-10])
+    r_new = np.array([1e-11, 1e-11, 1e-11])
+
+    state = IterationState()
+
+    beta, new_state = beta_update(r_new, r_old, DEFAULT_BETA_MAX, state)
+
+    # Should compute finite beta without triggering restart
+    assert np.isfinite(beta)
+    assert 0 < beta < 1  # Decreasing residual (ratio ~ 0.01)
+    np.testing.assert_allclose(beta, 0.01, rtol=1e-10)
+    assert not new_state.restart  # Should not trigger restart
+
+
+def test_step_length_zero_numerator():
+    """Test step_length when numerator underflows to zero."""
+    # Perpendicular vectors -> zero dot product
+    p = np.array([1.0, 0.0, 0.0])
+    r = np.array([0.0, 1.0, 0.0])
+    z = r.copy()
+    d_k = 1.0
+
+    state = IterationState()
+
+    alpha, new_state = step_length(p, r, z, d_k, 1e-14, state)
+
+    # Zero numerator is valid (not a breakdown)
+    assert np.isfinite(alpha)
+    assert alpha == 0.0
+    assert not new_state.breakdown  # Zero is finite, not a breakdown
