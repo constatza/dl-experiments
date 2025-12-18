@@ -126,8 +126,9 @@ def make_identity_preconditioner() -> PreconditionerFn:
 
 def make_jacobi_preconditioner(A: np.ndarray) -> PreconditionerFn:
     diag = np.diag(A)
-    eps = 1e-8
-    diag_safe = np.where(np.abs(diag) > eps, np.abs(diag), eps)
+    eps = 1e-14
+    # If diagonal element is effectively zero, substitute with 1.0 (no scaling)
+    diag_safe = np.where(np.abs(diag) < eps, 1.0, diag)
     diag_inv = 1.0 / diag_safe
     return lambda x: diag_inv * x
 

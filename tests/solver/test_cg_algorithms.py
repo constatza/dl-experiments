@@ -374,3 +374,90 @@ def test_selective_reorthog_strict_threshold() -> None:
     # Should have triggered reorthogonalization
     assert info.triggered
     assert info.reorthog_count > 0
+
+
+def test_jacobi_factory_preserves_signs() -> None:
+    """Test that factory-created Jacobi preserves diagonal signs (including negatives)."""
+    from neuralls.preconditioner_factory import make_jacobi_preconditioner
+
+    # Create matrix with negative diagonal element
+    A = np.array([[4.0, 1.0, 0.0], [1.0, -3.0, 0.5], [0.0, 0.5, 2.0]], dtype=np.float64)
+    diag = np.diag(A)
+
+    # Factory version
+    jacobi_factory = make_jacobi_preconditioner(A)
+
+    # Inline version (correct reference)
+    def jacobi_inline(r: np.ndarray) -> np.ndarray:
+        return r / diag
+
+    # Test with various residual vectors
+    test_residuals = [
+        np.array([1.0, 1.0, 1.0]),
+        np.array([1.0, -2.0, 3.0]),
+        np.array([-1.0, -1.0, -1.0]),
+    ]
+
+    for r in test_residuals:
+        z_factory = jacobi_factory(r)
+        z_inline = jacobi_inline(r)
+
+        # Should match exactly (no tolerance needed for this operation)
+        np.testing.assert_allclose(
+            z_factory,
+            z_inline,
+            rtol=1e-14,
+            atol=1e-14,
+            err_msg=f"Factory Jacobi doesn't match inline for residual {r}",
+        )
+
+    # Verify sign preservation explicitly for negative diagonal
+    r_test = np.array([0.0, 1.0, 0.0])  # Only second component non-zero
+    z = jacobi_factory(r_test)
+    # diag[1] = -3.0, so z[1] should be negative: 1.0 / -3.0 = -0.333...
+    assert z[1] < 0, "Jacobi should preserve negative sign for negative diagonal element"
+    assert np.isclose(z[1], 1.0 / -3.0), "Jacobi should compute correct reciprocal"
+
+
+def test_jacobi_factory_convergence_with_fcg() -> None:
+    """Test that factory Jacobi improves convergence vs no preconditioning."""
+    from neuralls.preconditioner_factory import make_jacobi_preconditioner
+
+    # Create a well-conditioned SPD system where Jacobi should help
+    n = 20
+    A = np.diag(np.arange(1, n + 1, dtype=np.float64))  # Diagonal matrix
+    x_true = np.ones(n, dtype=np.float64)
+    b = A @ x_true
+    x0 = np.zeros_like(b)
+
+    # Baseline: no preconditioning
+    _, info_baseline = flexible_cg(
+        A,
+        b,
+        x0,
+        atol=1e-4,  # Relaxed tolerance since residual management is disabled
+        rtol=1e-6,
+        max_iter=100,
+    )
+
+    # With factory Jacobi preconditioning
+    jacobi_precond = make_jacobi_preconditioner(A)
+    _, info_jacobi = flexible_cg(
+        A,
+        b,
+        x0,
+        preconditioner=jacobi_precond,
+        atol=1e-4,  # Relaxed tolerance
+        rtol=1e-6,
+        max_iter=100,
+    )
+
+    # With Jacobi, should converge (diagonal preconditioning for diagonal matrix is perfect)
+    assert info_jacobi.converged, "Jacobi should converge for diagonal matrix"
+
+    # Jacobi should achieve better final residual than baseline
+    assert info_jacobi.residual_abs <= info_baseline.residual_abs, (
+        f"Jacobi should not make convergence worse! "
+        f"Baseline residual: {info_baseline.residual_abs:.2e}, "
+        f"Jacobi residual: {info_jacobi.residual_abs:.2e}"
+    )

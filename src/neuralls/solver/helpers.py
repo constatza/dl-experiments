@@ -659,115 +659,20 @@ def residual_management(
     gamma_div: float,
     context_builder: Callable[[int], object],
 ) -> tuple[NDArray, NDArray, NDArray, IterationState]:
-    """Check for divergence and periodically recompute true residual.
+    """Residual management disabled - returns inputs unchanged.
 
-    Mathematical Justification:
-        Rounding errors accumulate in the update formulas:
-            x_{k+1} = x_k + α_k p_k
-            r_{k+1} = r_k - α_k q_k
+    This function previously performed:
+    - Periodic true residual recomputation (every m_replacement iterations)
+    - Divergence detection and recovery
 
-        After many iterations, the computed residual r_k may differ significantly
-        from the true residual r_true = b - A x_k. This leads to:
-        1. Incorrect convergence checks
-        2. Preconditioner receiving stale residual
-        3. Wrong search direction computation
-
-        Periodic True Residual Recomputation:
-        Every m_replacement iterations (default 50), we recompute:
-            r_true = b - A x_k
-            z_new = M^{-1} r_true
-            p_new = z_new
-
-        This corrects accumulated error at a cost of O(m_replacement) matrix-vector
-        products.
-
-    Divergence Detection:
-        If ||r_k||_2 > gamma_div * ||b||_2, the algorithm is diverging.
-        This triggers immediate true residual recomputation and restart:
-            1. Compute r_true = b - A x_k (correct residual)
-            2. Reapply preconditioner: z_new = M^{-1} r_true
-            3. Reset search direction: p_new = z_new
-            4. Set divergence flag to signal caller
-
-        Why this approach?
-        - Gives algorithm one more chance to recover before terminating
-        - Resets all state vectors to true values
-        - Often solves divergence caused by accumulated rounding error
+    Now disabled to allow pure CG algorithm without artificial interventions.
+    Only the restart mechanism (for non-SPD preconditioners) remains active.
 
     Args:
-        A: System matrix, shape (n, n).
-        precond_fn: Preconditioner function precond_fn(residual, iteration) -> z.
-        b: Right-hand side vector, shape (n,).
-        x_k: Current solution estimate x_k, shape (n,).
-        r_k: Current residual r_k (possibly accumulated error), shape (n,).
-        z_k: Current preconditioned residual z_k, shape (n,).
-        p_k: Current search direction p_k, shape (n,).
-        state: Current iteration state.
-        k: Current iteration number.
-        m_replacement: Frequency of true residual recomputation. Typical: 50.
-        gamma_div: Divergence threshold multiplier on ||b||. Typical: 1e10.
-        context_builder: Function context_builder(iteration) -> IterationContext
-            for passing context to preconditioner.
+        All arguments maintained for API compatibility.
 
     Returns:
-        Tuple of (r_new, z_new, p_new, updated_state):
-        - r_new (ndarray): Corrected residual (true or original), shape (n,)
-        - z_new (ndarray): Corrected preconditioned residual, shape (n,)
-        - p_new (ndarray): Corrected search direction, shape (n,)
-        - updated_state (IterationState): With divergence flag set if triggered,
-            and num_residual_replacements incremented if recomputation occurred
-
-    Theory:
-        Why m_replacement = 50?
-        - In well-conditioned systems, error grows slowly
-        - Every 50 iterations: ~1 extra matrix-vector product per iteration averaged
-        - Balances cost vs. accuracy improvement
-
-        Why gamma_div = 1e10?
-        - If ||r_k|| grows to 10 billion times ||b||, clearly wrong
-        - Allows algorithm to run a while before declaring divergence
-        - Avoids false positives on difficult systems that oscillate
-
-        When to use residual_management:
-        - Always call it at STEP 10 (end of each iteration)
-        - It's cheap if no recomputation is triggered (just checks norms)
-        - Correction is invisible to rest of algorithm (same interface)
-
-    References:
-        Algorithm.md, Step 10: residual_management.
+        Tuple of (r_k, z_k, p_k, state) unchanged.
     """
-    # Check for divergence
-    r_k_norm = norm(r_k)
-    b_norm = norm(b)
-
-    # Check if residual has diverged
-    if r_k_norm > gamma_div * b_norm:
-        # Recompute true residual and restart
-        r_true = b - A @ x_k
-        context = context_builder(k)
-        z_true = precond_fn(r_true, context)
-        p_true = z_true.copy()
-
-        updated_state = replace(
-            state,
-            divergence=True,
-            num_residual_replacements=state.num_residual_replacements + 1,
-        )
-        return r_true, z_true, p_true, updated_state
-
-    # Check if it's time for periodic recomputation
-    if m_replacement > 0 and k > 0 and (k % m_replacement) == 0:
-        # Periodic true residual recomputation
-        r_true = b - A @ x_k
-        context = context_builder(k)
-        z_true = precond_fn(r_true, context)
-        p_true = z_true.copy()
-
-        updated_state = replace(
-            state,
-            num_residual_replacements=state.num_residual_replacements + 1,
-        )
-        return r_true, z_true, p_true, updated_state
-
-    # No recomputation needed
+    # Disabled - return inputs unchanged
     return r_k, z_k, p_k, state

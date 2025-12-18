@@ -91,7 +91,7 @@ uv run python src/neuralls/cli/train_model.py --data-config graph-cg/data-config
 
 # Train with specific config
 uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml
-uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/ffnn.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/model.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml
 uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/gnn.toml --data-config graph-cg/data-configs/collect-504.toml
 ```
 
@@ -124,7 +124,7 @@ uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.t
 uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/linear.toml --data-config graph-cg/data-configs/collect-504.toml --lr 1e-4
 
 # Train constant-width with different sizes
-uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/ffnn.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml --hidden-size 128 --num-layers 5
+uv run python src/neuralls/cli/train_model.py --config graph-cg/configs/model.toml --data-config graph-cg/data-configs/generate-90-krylov50.toml --hidden-size 128 --num-layers 5
 ```
 
 **Implementation**: Add CLI arguments to `src/neuralls/cli/train_model.py` that override config values.
