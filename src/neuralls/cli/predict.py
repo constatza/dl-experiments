@@ -16,6 +16,7 @@ from loguru import logger
 from neuralls.constants import (
     DEFAULT_MODEL_CONFIG,
     DEFAULT_DATA_CONFIG,
+    DEFAULT_PROJECT_ROOT,
     EXIT_KEYBOARD_INTERRUPT,
 )
 from neuralls.workflows.prediction import run_inference
@@ -56,13 +57,11 @@ def main(
     ),
 ):
     """Run inference using a DLKit configuration."""
-    graph_cg_root = Path(__file__).resolve().parent.parent
-
     # Resolve defaults
     if config is None:
-        config = graph_cg_root / DEFAULT_MODEL_CONFIG
+        config = DEFAULT_PROJECT_ROOT / DEFAULT_MODEL_CONFIG
     if data_config is None:
-        data_config = graph_cg_root / DEFAULT_DATA_CONFIG
+        data_config = DEFAULT_PROJECT_ROOT / DEFAULT_DATA_CONFIG
 
     logger.info(f"Loading configuration from: {config}")
 

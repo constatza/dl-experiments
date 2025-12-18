@@ -12,6 +12,7 @@ import typer
 from neuralls.workflows.runner import run_experiment_matrix
 from neuralls.constants import (
     DEFAULT_EXPERIMENTS_CONFIG,
+    DEFAULT_PROJECT_ROOT,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
 )
@@ -47,11 +48,9 @@ def main(
         $ uv run python src/neuralls/cli/run_experiments.py
         $ uv run python src/neuralls/cli/run_experiments.py --config custom.toml
     """
-    graph_cg_root = Path(__file__).resolve().parent.parent
-
     # Resolve defaults
     if config is None:
-        config = graph_cg_root / DEFAULT_EXPERIMENTS_CONFIG
+        config = DEFAULT_PROJECT_ROOT / DEFAULT_EXPERIMENTS_CONFIG
 
     if not config.exists():
         print(f"Error: Config file not found: {config}")
@@ -66,7 +65,7 @@ def main(
         results = run_experiment_matrix(
             experiments_config_path=config,
             force=force,
-            project_root=graph_cg_root,
+            project_root=DEFAULT_PROJECT_ROOT,
         )
 
         print("\n" + "=" * 80)

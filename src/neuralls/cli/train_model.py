@@ -12,6 +12,7 @@ import typer
 from neuralls.constants import (
     DEFAULT_MODEL_CONFIG,
     DEFAULT_DATA_CONFIG,
+    DEFAULT_PROJECT_ROOT,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
 )
@@ -29,12 +30,10 @@ def main(
     ),
 ):
     """Train model using configuration files."""
-    graph_cg_root = Path(__file__).resolve().parent.parent
-
     if config is None:
-        config = graph_cg_root / DEFAULT_MODEL_CONFIG
+        config = DEFAULT_PROJECT_ROOT / DEFAULT_MODEL_CONFIG
     if data_config is None:
-        data_config = graph_cg_root / DEFAULT_DATA_CONFIG
+        data_config = DEFAULT_PROJECT_ROOT / DEFAULT_DATA_CONFIG
 
     print(f"Loading configuration from: {config}")
 

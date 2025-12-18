@@ -19,9 +19,9 @@ EXIT_KEYBOARD_INTERRUPT = 130
 # =============================================================================
 # Default Paths
 # =============================================================================
-# Dynamically determine project root relative to this file (src/constants.py)
-# src/constants.py -> src -> project_root
-DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Dynamically determine project root relative to this file (src/neuralls/constants.py)
+# src/neuralls/constants.py -> src/neuralls -> src -> project_root
+DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_PROCESSED_DATA_DIR = DEFAULT_PROJECT_ROOT / "data" / "processed"
 DEFAULT_OUTPUT_DIR = DEFAULT_PROJECT_ROOT / "data" / "output"
 DEFAULT_FIGURES_DIR = DEFAULT_PROJECT_ROOT / "data" / "figures"
