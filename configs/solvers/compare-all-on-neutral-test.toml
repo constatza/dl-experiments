@@ -1,0 +1,64 @@
+# Solver comparison config: All neural preconditioners + baselines on neutral test
+#
+# This config compares multiple neural preconditioners (from different experiments)
+# against standard baselines (none, jacobi, ilu) on a shared neutral test dataset.
+#
+# Neural preconditioners reference experiments by ID, and checkpoints are resolved
+# automatically from the experiment's checkpoint_path in experiments.toml.
+#
+# Usage: uv run python src/neuralls/cli/compare_methods.py --solver-config configs/solvers/compare-all-on-neutral-test.toml
+
+[general]
+# Test on shared neutral dataset (x=ones, b=A@x)
+matrix_path = "/data/projects/graph-cg/data/processed/neutral-tests/neutral-test-45x15-displacements/normalized.npz"
+rhs_path = "/data/projects/graph-cg/data/processed/neutral-tests/neutral-test-45x15-displacements/normalized.npz"
+
+# CG solver parameters
+rtol = 1.0e-9
+atol = 1.0e-14
+max_iterations = 200
+stopping_criterion = "residual_norm"
+reorthogonalize = "full"
+
+# ============================================================================
+# BASELINE PRECONDITIONERS
+# ============================================================================
+
+[[solvers]]
+name = "none"
+type = "none"
+
+[[solvers]]
+name = "jacobi"
+type = "jacobi"
+
+[[solvers]]
+name = "ilu"
+type = "ilu"
+
+# ============================================================================
+# NEURAL PRECONDITIONERS (referenced by experiment ID)
+# ============================================================================
+# These reference experiments defined in experiments.toml
+# Checkpoints are resolved from the experiment's checkpoint_path field
+
+[[solvers]]
+name = "neural_ffnn_test_solutions"
+type = "neural"
+experiment = "ffnn_test_solutions"  # References experiment.id from experiments.toml
+limit_iters = 1
+fallback = "identity"
+
+[[solvers]]
+name = "neural_ffnn_eigenvector_largest"
+type = "neural"
+experiment = "ffnn_test_eigenvector_solutions_largest"
+limit_iters = 1
+fallback = "identity"
+
+[[solvers]]
+name = "neural_ffnn_eigenvector_smallest"
+type = "neural"
+experiment = "ffnn_test_eigenvector_solutions_smallest"
+limit_iters = 1
+fallback = "identity"

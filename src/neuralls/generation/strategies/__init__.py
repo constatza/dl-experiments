@@ -8,6 +8,7 @@ from . import (
     eigenvector,
     rhs_archive,
     solution_archive,
+    neutral_ones,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "eigenvector",
     "rhs_archive",
     "solution_archive",
+    "neutral_ones",
 ]
