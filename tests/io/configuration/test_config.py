@@ -61,15 +61,16 @@ def temp_config_structure(tmp_path: Path) -> Path:
 def test_load_experiment_success(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
     """Test that load_experiment correctly loads a single experiment."""
     monkeypatch.chdir(temp_config_structure)
-    
+
     model_path = temp_config_structure / "configs" / "experiments" / "exp1" / EXP_MODEL_CONFIG_NAME
     data_path = temp_config_structure / "configs" / "datasets" / "exp1_data.toml"
     solver_path = temp_config_structure / "configs" / "experiments" / "exp1" / EXP_SOLVER_CONFIG_NAME
-    
+
     experiment = load_experiment(
         model_config_path=model_path,
         data_config_path=data_path,
         solver_config_path=solver_path,
+        output_root=temp_config_structure / "output",
     )
 
     assert isinstance(experiment, RunnableExperiment)

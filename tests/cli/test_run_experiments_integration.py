@@ -160,7 +160,8 @@ def test_run_experiments_full_flow(tmp_path):
     # 6. Create Master Experiment Config
     master_config_path = configs_dir / "experiments.toml"
     master_config = {
-        "run": [exp_name]
+        "run": [exp_name],
+        "output_dir": str(data_dir / "output"),
     }
     with open(master_config_path, "wb") as f:
         tomli_w.dump(master_config, f)

@@ -220,12 +220,13 @@ def test_flexible_pcg_tridiagonal_with_jacobi_preconditioner(
 # =============================================================================
 
 
-def test_flexible_pcg_tridiagonal_high_precision_solution(
+def test_flexible_pcg_tridiagonal_double_precision_accuracy(
     tridiagonal_system_known_solution: tuple[NDArray, NDArray, NDArray],
     zero_initial_guess_small: NDArray,
     tight_tolerances: tuple[float, float],
+    save_convergence_plot: Callable,
 ) -> None:
-    """Solve tridiagonal system to near machine precision and verify solution."""
+    """Test flexible PCG reaches double precision accuracy on tridiagonal system."""
     a, b, x_exact = tridiagonal_system_known_solution
     rtol, atol = tight_tolerances
 
@@ -246,6 +247,11 @@ def test_flexible_pcg_tridiagonal_high_precision_solution(
     # Residual meets strict tolerance
     rel_residual = norm(a @ x - b) / norm(b)
     assert rel_residual < 1e-13
+
+    # Save convergence plot for high-precision test
+    if info.event_log is not None:
+        residual_history = info.event_log.get_history("residual_norm")
+        save_convergence_plot("flexible_pcg_tridiagonal_double_precision", residual_history)
 
 
 # =============================================================================

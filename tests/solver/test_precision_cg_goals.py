@@ -68,10 +68,18 @@ def jacobi_preconditioner_callable(A_matrix: NDArray) -> LinearOperator:
 
 
 @pytest.fixture(scope="module")
-def diagnostics_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Create temporary diagnostics directory using pytest's tmp_path_factory."""
-    out_dir = tmp_path_factory.mktemp("diagnostics")
-    return out_dir
+def diagnostics_dir() -> Path:
+    """Directory for high-precision solver diagnostics and plots.
+
+    Returns:
+        Path to tests/artifacts/solver_plots/ directory.
+
+    Notes:
+        Plots are persistent for debugging and visual inspection.
+    """
+    plots_dir = Path(__file__).parent.parent / "artifacts" / "solver_plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    return plots_dir
 
 
 def test_pcg_jacobi_double_precision_accuracy(
@@ -128,12 +136,12 @@ def test_pcg_jacobi_double_precision_accuracy(
     #     )
 
 
-def test_fcg_jacobi_double_precision_accuracy(
+def test_flexible_pcg_jacobi_double_precision_accuracy(
     spd_system: tuple[NDArray, NDArray, NDArray], diagnostics_dir: Path
 ) -> None:
     """
     Tests that flexible_cg with Jacobi preconditioner can reach double precision accuracy
-    for the spd_system. This is a challenging goal for FCG.
+    for the spd_system. This is a challenging goal for flexible PCG.
     """
     A, b, x_true = spd_system
     x0 = np.zeros_like(b)
@@ -165,7 +173,7 @@ def test_fcg_jacobi_double_precision_accuracy(
             ]
         )
         np.savetxt(
-            diagnostics_dir / "fcg_double_precision_residual_norms.csv",
+            diagnostics_dir / "flexible_pcg_jacobi_double_precision_residual_norms.csv",
             data,
             delimiter=",",
             fmt=["%.6e", "%.6e"],
@@ -173,7 +181,7 @@ def test_fcg_jacobi_double_precision_accuracy(
             comments="",
         )
     if info.residual_history is not None:
-        _plot_history("fcg_double_precision_history", info.residual_history, diagnostics_dir)
+        _plot_history("flexible_pcg_jacobi_double_precision", info.residual_history, diagnostics_dir)
     # Uncomment to persist residual vectors for inspection (requires capture_traces=True above).
     # if info.residual_vectors is not None:
     #     np.savetxt(

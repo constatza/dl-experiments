@@ -108,9 +108,10 @@ def test_training_sections_round_trip(
     data_path.write_text('[flow]\ndataset="dummy_dataset"')
 
     experiment = load_experiment(
-        config_path, 
-        data_config_path=data_path, 
-        solver_config_path=solver_path
+        config_path,
+        data_config_path=data_path,
+        solver_config_path=solver_path,
+        output_root=tmp_path / "output",
     )
     settings = experiment.settings
     training = settings.TRAINING

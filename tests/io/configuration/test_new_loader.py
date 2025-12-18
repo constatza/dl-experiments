@@ -39,6 +39,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
     with open(project_root / "configs" / "experiments.toml", "w") as f:
         f.write('project_root = ".."\n')
         f.write('defaults_dir = "default"\n')
+        f.write(f'output_dir = "{project_root / "output"}"\n')
         f.write('[experiments]\n')
         f.write('exp1 = "experiments/exp1"\n')
         f.write('exp2_fallback = "experiments/exp2_fallback"\n')
@@ -117,6 +118,7 @@ def test_load_experiments_file_not_found(temp_config_structure: Path, monkeypatc
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
         f.write('project_root = ".."\n')
         f.write('defaults_dir = "default"\n')
+        f.write(f'output_dir = "{temp_config_structure / "output"}"\n')
         f.write('[experiments]\n')
         f.write('exp1 = "experiments/exp1"\n')
         f.write('exp2_fallback = "experiments/exp2_fallback"\n')

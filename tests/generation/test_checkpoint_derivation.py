@@ -30,14 +30,14 @@ seed = 42
 
     def test_extract_from_filename_when_session_missing(self, tmp_path: Path) -> None:
         """Test fallback to filename when SESSION.name not present."""
-        config_path = tmp_path / "ffnn.toml"
+        config_path = tmp_path / "model.toml"
         config_path.write_text("""
 [MODEL]
 name = "SomeModel"
 """)
 
         model_name = extract_model_name(config_path)
-        assert model_name == "ffnn"
+        assert model_name == config_path.stem
 
     def test_extract_from_filename_when_session_name_empty(
         self, tmp_path: Path
@@ -70,7 +70,7 @@ class TestDeriveCheckpointPath:
 
     def test_basic_path_derivation(self, tmp_path: Path) -> None:
         """Test basic checkpoint path derivation."""
-        model_config = tmp_path / "configs" / "ffnn.toml"
+        model_config = tmp_path / "configs" / "model.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
 [SESSION]
@@ -130,7 +130,7 @@ name = "custom_model_name"
 
     def test_path_derivation_with_absolute_paths(self, tmp_path: Path) -> None:
         """Test path derivation with absolute paths."""
-        model_config = tmp_path / "configs" / "ffnn.toml"
+        model_config = tmp_path / "configs" / "model.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
 [SESSION]
@@ -142,7 +142,9 @@ name = "ffnn"
 
         checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
-        expected = output_root / "test-eigenvector" / "ffnn" / "checkpoints" / "ffnn.ckpt"
+        expected = (
+            output_root / "test-eigenvector" / "ffnn" / "checkpoints" / "ffnn.ckpt"
+        )
         assert checkpoint_path == expected
 
     def test_path_derivation_with_string_paths(self, tmp_path: Path) -> None:
@@ -198,8 +200,8 @@ name = "test_model"
             },
             {
                 "model_name": "linear",
-                "data_stem": "test-eigenvector-solution",
-                "expected_suffix": "test-eigenvector-solution/linear/checkpoints/linear.ckpt",
+                "data_stem": "test-eigenvector-solutions-largest",
+                "expected_suffix": "test-eigenvector-solutions-largest/linear/checkpoints/linear.ckpt",
             },
             {
                 "model_name": "gnn",
