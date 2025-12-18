@@ -1,0 +1,27 @@
+# Test config: Eigenvector-based inverse generation (smallest eigenvalues)
+# Uses eigenvectors as RHS, solves A^-1 @ v for solutions (inverse mode)
+# Mirrors the forward eigenvector setup but flips RHS/solution roles
+#
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/test-eigenvector-rhs-smallest.toml
+# Output: test-eigenvector-rhs-smallest-{normalization}/
+
+[flow]
+
+[source]
+matrix_path = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+
+[generation]
+# Spectral normalization preserves eigenvalue properties
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+# Use smallest eigenvectors as RHS, solutions solved via inverse mode
+[[generation.strategy]]
+name = "eigenvector_inverse"
+which = "smallest"
+num_eigenvectors = 100
+samples = 6000
+
+[output]
+processed_dir = "/data/projects/graph-cg/data/processed"

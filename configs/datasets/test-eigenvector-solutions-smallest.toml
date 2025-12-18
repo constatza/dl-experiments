@@ -1,9 +1,9 @@
-# Test config: Eigenvector-based solution generation
+# Test config: Eigenvector-based solution generation (smallest eigenvalues)
 # Uses eigenvectors as solutions, RHS computed as b = λ * v (forward mode)
 # Useful for testing CG performance with high-precision eigenvector-based problems
 #
-# Usage: uv run python src/neuralls/cli/process_data.py data-configs/test-eigenvector-largest.toml
-# Output: test-eigenvalue-solution-{normalization}/
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/test-eigenvector-solutions-smallest.toml
+# Output: test-eigenvector-solutions-smallest-{normalization}/
 
 [flow]
 
@@ -16,12 +16,12 @@ normalize = "matrix"
 shuffle = true
 seed = 42
 
-# Use all eigenvectors as solutions, RHS = eigenvalue * eigenvector
+# Use smallest eigenvectors as solutions, RHS = eigenvalue * eigenvector
 [[generation.strategy]]
 name = "eigenvector_forward"
-which = "largest"
-num_eigenvectors = 10
-samples =  6000
+which = "smallest"
+num_eigenvectors = 100
+samples = 6000
 
 [output]
 processed_dir = "/data/projects/graph-cg/data/processed"

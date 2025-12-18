@@ -1,9 +1,9 @@
-# Test config: Eigenvector-based inverse generation
+# Test config: Eigenvector-based inverse generation (largest eigenvalues)
 # Uses eigenvectors as RHS, solves A^-1 @ v for solutions (inverse mode)
 # Mirrors the forward eigenvector setup but flips RHS/solution roles
 #
-# Usage: uv run python src/neuralls/cli/process_data.py data-configs/test-eigenvector-inverse.toml
-# Output: test-eigenvector-inverse-{normalization}/
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/test-eigenvector-rhs-largest.toml
+# Output: test-eigenvector-rhs-largest-{normalization}/
 
 [flow]
 
@@ -16,11 +16,11 @@ normalize = "matrix"
 shuffle = true
 seed = 42
 
-# Use eigenvectors as RHS, solutions solved via inverse mode
+# Use largest eigenvectors as RHS, solutions solved via inverse mode
 [[generation.strategy]]
 name = "eigenvector_inverse"
 which = "largest"
-num_eigenvectors = 10
+num_eigenvectors = 100
 samples = 6000
 
 [output]
