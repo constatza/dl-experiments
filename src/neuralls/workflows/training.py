@@ -268,11 +268,13 @@ def train_model(
     config_path: str | Path,
     data_config_path: str | Path | None = None,
     session_name: str | None = None,
+    output_root: Path | str | None = None,
 ) -> Path:
     """Train a DLKit model using resolved data+config context."""
     experiment = load_experiment(
         config_path,
         data_config_path,
+        output_root=output_root,
     )
     settings = experiment.settings
     workspace = experiment.workspace

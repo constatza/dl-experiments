@@ -285,7 +285,7 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
 
         # A. Resolve config paths with fallback
         model_path = resolve_config_path(
-            exp_id, EXP_MODEL_CONFIG_NAME, exp_dir, defaults_dir, default_filename="ffnn.toml"
+            exp_id, EXP_MODEL_CONFIG_NAME, exp_dir, defaults_dir
         )
         data_pointer_path = resolve_config_path(
             exp_id, EXP_DATA_CONFIG_NAME, exp_dir, defaults_dir

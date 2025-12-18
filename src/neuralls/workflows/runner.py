@@ -45,6 +45,7 @@ def run_experiment(
             checkpoint = train_model(
                 config_path=model_config_path,
                 data_config_path=data_config_path,
+                output_root=output_root,
             )
 
         run_inference(

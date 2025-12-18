@@ -33,8 +33,8 @@ def extract_model_name(model_config_path: str | Path) -> str:
         Model name from SESSION.name, or config filename if not set
 
     Example:
-        >>> extract_model_name("configs/ffnn.toml")
-        'ffnn'
+        >>> extract_model_name("configs/model.toml")
+        'model'
     """
     model_config_path = Path(model_config_path)
 
@@ -72,7 +72,7 @@ def derive_checkpoint_path(
 
     Example:
         >>> derive_checkpoint_path(
-        ...     "configs/ffnn.toml",
+        ...     "configs/model.toml",
         ...     "data-configs/test-solutions.toml",
         ...     "/data/projects/graph-cg/data/output"
         ... )
