@@ -1,43 +1,39 @@
 # Master configuration file for all experiments.
-# New format: [[experiment]] entries with dataset + model + solver + checkpoint references
+# Format: [[experiment]] entries with dataset + model + checkpoint references
 
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
 
-# Experiment definitions: dataset + model + solver + explicit checkpoint path
+# Experiment definitions: dataset + model + explicit checkpoint path
 # Each experiment is a unique combination of dataset and model
+
 
 [[experiment]]
 id = "ffnn_test_solutions"
 dataset = "test-solutions"
 model = "ffnn"
-solver = "default"
 checkpoint_path = "/data/projects/graph-cg/data/output/test-solutions/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
 
 [[experiment]]
 id = "ffnn_test_eigenvector_solutions_largest"
 dataset = "test-eigenvector-solutions-largest"
 model = "ffnn"
-solver = "default"
 checkpoint_path = "/data/projects/graph-cg/data/output/test-eigenvector-solutions-largest/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
 
 [[experiment]]
 id = "ffnn_test_eigenvector_solutions_smallest"
 dataset = "test-eigenvector-solutions-smallest"
 model = "ffnn"
-solver = "default"
 checkpoint_path = "/data/projects/graph-cg/data/output/test-eigenvector-solutions-smallest/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
 
 [[experiment]]
 id = "ffnn_test_eigenvector_rhs_largest"
 dataset = "test-eigenvector-rhs-largest"
 model = "ffnn"
-solver = "default"
 checkpoint_path = "/data/projects/graph-cg/data/output/test-eigenvector-rhs-largest/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
 
 [[experiment]]
 id = "ffnn_test_eigenvector_rhs_smallest"
 dataset = "test-eigenvector-rhs-smallest"
 model = "ffnn"
-solver = "default"
 checkpoint_path = "/data/projects/graph-cg/data/output/test-eigenvector-rhs-smallest/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"

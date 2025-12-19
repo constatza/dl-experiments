@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""CLI wrapper for preconditioner comparison - batch mode only.
+"""CLI wrapper for preconditioner comparison (aggregated per solver config).
 
-This script runs preconditioner comparisons for ALL experiments defined in experiments.toml.
-It uses the unified configuration architecture where experiments.toml is the single source of truth.
-"""
+Experiments (optional) are only used to resolve neural checkpoints; the comparison itself
+runs once for the provided solver config and writes shared diagnostics."""
 
 from __future__ import annotations
 
@@ -12,7 +11,6 @@ from pathlib import Path
 
 
 import os
-from typing import Any
 
 import typer
 from loguru import logger
@@ -24,10 +22,8 @@ from neuralls.constants import (
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_CHECKMARK,
 )
-from neuralls.workflows.comparison import (
-    build_batch_comparisons,
-    run_comparisons,
-)
+from neuralls.workflows.comparison import run_batch_comparison
+from neuralls.workflows.results import ComparisonResult
 from neuralls.workflows.specs import (
     ComparisonParams,
     ComparisonOutcome,
@@ -36,22 +32,18 @@ from neuralls.workflows.specs import (
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 
-def _log_comparison_results(result: dict[str, Any]) -> None:
-    logger.info(f"Available preconditioners: {result.get('preconditioners')}")
-    metadata = result.get("preconditioner_metadata", {})
-    neural = metadata.get("neural") if isinstance(metadata, dict) else None
-    if neural is not None:
-        residual_iters = getattr(neural, "residual_iters", "unknown")
-        applied_iters = getattr(neural, "applied_iters", None)
-        applied = applied_iters if applied_iters is not None else residual_iters
-        logger.info(f"Neural preconditioner: residual_iters={residual_iters} applied={applied}")
-    summary = result.get("summary")
+def _log_comparison_results(result: ComparisonResult) -> None:
+    preconditioners = result.preconditioners
+    summary = result.summary
+    recommendations = result.recommendations
+
+    logger.info(f"Available preconditioners: {preconditioners}")
     if summary:
         logger.info("=" * 60)
         logger.info(summary)
         logger.info("=" * 60)
-    recs = result.get("recommendations", {}) if isinstance(result, dict) else {}
-    best = recs.get("best_overall") if isinstance(recs, dict) else None
+
+    best = recommendations.get("best_overall") if isinstance(recommendations, dict) else None
     if best:
         logger.info(
             f"Best preconditioner: method={best.get('label')} "
@@ -92,6 +84,12 @@ def main(
         "-e",
         help="Path to experiments config (defaults to configs/experiments.toml)",
     ),
+    solver_config: Path = typer.Option(
+        ...,
+        "--solver-config",
+        "-s",
+        help="Path to solver config (e.g., configs/solvers/default.toml)",
+    ),
     plots: bool = typer.Option(
         True,
         "--plots/--no-plots",
@@ -102,20 +100,14 @@ def main(
     experiments_path = (
         experiments if experiments is not None else DEFAULT_PROJECT_ROOT / DEFAULT_EXPERIMENTS_CONFIG
     )
-
-    specs = build_batch_comparisons(experiments_path)
-
-    if not specs:
-        logger.error("No comparison specs were built. Check checkpoints and inputs.")
-        raise typer.Exit(code=EXIT_FAILURE)
-
     params = ComparisonParams(save_plots=plots)
 
-    logger.info(f"Running comparisons for {len(specs)} experiments...")
-    logger.info(f"Experiments config: {experiments_path}")
-    logger.info("")
+    try:
+        outcomes = run_batch_comparison(experiments_path, solver_config, params)
+    except ValueError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=EXIT_FAILURE) from exc
 
-    outcomes = run_comparisons(specs, params)
     _log_outcomes(outcomes)
 
 

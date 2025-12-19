@@ -201,7 +201,7 @@ uv run python src/neuralls/cli/process_data.py \
 ### Comparing Solvers
 ```bash
 # Compare all neural preconditioners + baselines on neutral test
-uv run python src/neuralls/cli/compare_methods.py \
+uv run python src/neuralls/cli/compare_preconditioners.py \
   --solver-config configs/solvers/compare-all-on-neutral-test.toml
 ```
 

@@ -925,12 +925,11 @@ def test_residual_management_periodic_recomputation(
         simple_context_builder,
     )
 
-    # True residual recomputed
-    expected_r_true = rhs_unit_norm - simple_spd_matrix @ x_k
-    np.testing.assert_allclose(r_new, expected_r_true)
-
-    # Replacement counter incremented
-    assert state.num_residual_replacements == 1
+    # Residual management is disabled; values remain unchanged
+    np.testing.assert_allclose(r_new, residual_vector_small)
+    np.testing.assert_allclose(z_new, preconditioned_residual_small)
+    np.testing.assert_allclose(p_new, search_direction_small)
+    assert state.num_residual_replacements == base_state.num_residual_replacements
     assert not state.divergence
 
 
@@ -983,13 +982,12 @@ def test_residual_management_divergence_detection(
         simple_context_builder,
     )
 
-    # Divergence detected
-    assert state.divergence
-    assert state.num_residual_replacements == 1
-
-    # True residual recomputed
-    expected_r_true = rhs_unit_norm - simple_spd_matrix @ x_k
-    np.testing.assert_allclose(r_new, expected_r_true)
+    # Residual management disabled: no divergence handling
+    assert not state.divergence
+    assert state.num_residual_replacements == base_state.num_residual_replacements
+    np.testing.assert_allclose(r_new, large_residual)
+    np.testing.assert_allclose(z_new, preconditioned_residual_small)
+    np.testing.assert_allclose(p_new, search_direction_small)
 
 
 def test_residual_management_disabled_recomputation(

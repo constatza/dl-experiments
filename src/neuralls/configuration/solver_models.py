@@ -72,6 +72,10 @@ class GeneralSolverConfig(BaseModel):
         ge=0.0,
         le=1.0,
     )
+    output_root: Path = Field(
+        ...,
+        description="Base directory for comparison outputs",
+    )
 
     model_config = ConfigDict(
         extra="allow",  # Allow extra fields for extensibility

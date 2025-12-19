@@ -6,7 +6,7 @@
 # Neural preconditioners reference experiments by ID, and checkpoints are resolved
 # automatically from the experiment's checkpoint_path in experiments.toml.
 #
-# Usage: uv run python src/neuralls/cli/compare_methods.py --solver-config configs/solvers/compare-all-on-neutral-test.toml
+# Usage: uv run python src/neuralls/cli/compare_preconditioners.py --solver-config configs/solvers/compare-all-on-neutral-test.toml
 
 [general]
 # Test on shared neutral dataset (x=ones, b=A@x)
@@ -18,7 +18,8 @@ rtol = 1.0e-9
 atol = 1.0e-14
 max_iterations = 200
 stopping_criterion = "residual_norm"
-reorthogonalize = "full"
+reorthogonalize = "partial"
+output_root = "/data/projects/graph-cg/data/output"
 
 # ============================================================================
 # BASELINE PRECONDITIONERS
@@ -47,6 +48,7 @@ name = "neural_ffnn_test_solutions"
 type = "neural"
 experiment = "ffnn_test_solutions"  # References experiment.id from experiments.toml
 limit_iters = 1
+m_max = 30
 fallback = "identity"
 
 [[solvers]]

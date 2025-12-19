@@ -52,7 +52,6 @@ from .helpers import (
     convergence_check,
     curvature,
     initialize_state,
-    residual_management,
     step_length,
 )
 from .info import IterationContext, SolverResult
@@ -489,43 +488,22 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
                     name="preconditioner",
                 )
 
-            r_managed, z_managed, p_managed, state = residual_management(
-                A,
-                precond_with_iteration,
-                b,
-                x,
-                r_new,
-                z_new,
-                p_new,
-                state,
-                iteration + 1,
-                m_replacement,
-                gamma_div,
-                lambda i: IterationContext(
-                    iteration=i,
-                    residual=r_new.copy(),
-                    solution=x.copy(),
-                    matrix=A,
-                    rhs=b,
-                ),
-            )
-
             # Optional reorthogonalization hook shared across solvers
             reorth_info: ReorthogonalizationReport | None = None
             if reorthogonalize is not None:
-                p_managed, reorth_info = apply_reorthogonalization(
+                p_new, reorth_info = apply_reorthogonalization(
                     reorthogonalize,
-                    p_managed,
+                    p_new,
                     history.p_vectors,
                     iteration + 1,
                 )
                 if reorth_info.breakdown:
                     state = replace(state, breakdown=True)
-                    q = A @ p_managed
+                    q = A @ p_new
             reorth_applied = bool(reorth_info) and not reorth_info.skipped
 
             # Update iteration state
-            current_res_norm = norm(r_managed)
+            current_res_norm = norm(r_new)
             threshold = criterion.threshold(b_norm)
             is_converged_now = current_res_norm <= threshold
 
@@ -540,9 +518,9 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
 
             # Log iteration values through the active logger
             if logger is not None:
-                logger.log("residual", r_managed)
+                logger.log("residual", r_new)
                 logger.log("solution", x)
-                logger.log("search_direction", p_managed)
+                logger.log("search_direction", p_new)
                 logger.log("residual_norm", current_res_norm)
                 if capture_traces and capture_search_directions:
                     q_to_log = q_managed if q_managed is not None else q
@@ -552,20 +530,18 @@ class FlexibleConjugateGradientSolver(IIterativeSolver):
             # If residual_management did a restart, p_managed is the new steepest descent
             if state.num_residual_replacements > num_residual_replacements_before:
                 # Residual replacement occurred, p was reset to z
-                q_managed = A @ p_managed
+                q_managed = A @ p_new
             else:
                 q_managed = (
-                    A @ p_managed if reorth_applied else q
+                    A @ p_new if reorth_applied else q
                 )  # Track reorthogonalized direction
 
-            history = history.update(
-                p_managed, q_managed, r, z, m_max=self.history_limit
-            )
+            history = history.update(p_new, q_managed, r, z, m_max=self.history_limit)
 
             # Update state vectors for next iteration
-            r = r_managed
-            z = z_managed
-            p = p_managed
+            r = r_new
+            z = z_new
+            p = p_new
 
             # Check for convergence and exit if appropriate
             if state.breakdown:

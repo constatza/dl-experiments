@@ -1,6 +1,6 @@
 """Tests for Pydantic configuration models.
 
-Tests cover validation of model.toml structure using Pydantic models.
+Tests cover validation of linear.toml structure using Pydantic models.
 """
 
 from __future__ import annotations
@@ -77,15 +77,11 @@ class TestModelConfig:
         """Test ModelConfig field validation."""
         # Negative hidden_size should fail
         with pytest.raises(ValidationError):
-            ModelConfig(
-                name="TestModel", module_path="test.module", hidden_size=-1
-            )
+            ModelConfig(name="TestModel", module_path="test.module", hidden_size=-1)
 
         # Dropout > 1.0 should fail
         with pytest.raises(ValidationError):
-            ModelConfig(
-                name="TestModel", module_path="test.module", dropout=1.5
-            )
+            ModelConfig(name="TestModel", module_path="test.module", dropout=1.5)
 
 
 class TestMLflowConfig:

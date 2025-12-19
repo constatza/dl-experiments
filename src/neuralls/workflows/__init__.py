@@ -13,6 +13,7 @@ __all__ = ["run_experiment_matrix"]
 
 def run_experiment_matrix(
     experiments_config_path: Path,
+    solver_config_path: Path,
     *,
     force: bool = False,
     project_root: Path | None = None,
@@ -22,6 +23,7 @@ def run_experiment_matrix(
 
     return _run(
         experiments_config_path,
+        solver_config_path,
         force=force,
         project_root=project_root,
         **kwargs,

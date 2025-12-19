@@ -30,7 +30,7 @@ seed = 42
 
     def test_extract_from_filename_when_session_missing(self, tmp_path: Path) -> None:
         """Test fallback to filename when SESSION.name not present."""
-        config_path = tmp_path / "model.toml"
+        config_path = tmp_path / "linear.toml"
         config_path.write_text("""
 [MODEL]
 name = "SomeModel"
@@ -70,7 +70,7 @@ class TestDeriveCheckpointPath:
 
     def test_basic_path_derivation(self, tmp_path: Path) -> None:
         """Test basic checkpoint path derivation."""
-        model_config = tmp_path / "configs" / "model.toml"
+        model_config = tmp_path / "configs" / "linear.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
 [SESSION]
@@ -130,7 +130,7 @@ name = "custom_model_name"
 
     def test_path_derivation_with_absolute_paths(self, tmp_path: Path) -> None:
         """Test path derivation with absolute paths."""
-        model_config = tmp_path / "configs" / "model.toml"
+        model_config = tmp_path / "configs" / "linear.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
 [SESSION]
@@ -172,7 +172,7 @@ class TestPathConventionConsistency:
 
     def test_matches_workflow_convention(self, tmp_path: Path) -> None:
         """Test that derived path matches prepare_experiment_outputs convention."""
-        model_config = tmp_path / "model.toml"
+        model_config = tmp_path / "linear.toml"
         model_config.write_text("""
 [SESSION]
 name = "test_model"

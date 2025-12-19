@@ -23,29 +23,35 @@ def main(
         None,
         "--config",
         "-c",
-        help="Path to experiments definition file",
+        help="Path to experiments definition file (default: configs/experiments.toml)",
     ),
     force: bool = typer.Option(
         False,
         "--force",
         "-f",
-        help="Force re-run all experiments (ignore filesystem checks and cache)",
+        help="Force re-train all models (ignore existing checkpoints)",
     ),
 ):
-    """Run all experiments defined in configs/experiments.toml.
+    """Train all models defined in experiments.toml.
 
-    This command orchestrates the entire experiment matrix:
+    This command:
     1. Reads experiment definitions from configs/experiments.toml
-    2. Generates all unique datasets in parallel (with caching)
-    3. Trains all models in parallel
+    2. Generates all unique datasets (with caching)
+    3. Trains all models (skips if checkpoint exists, unless --force)
 
-    Prefect automatically handles:
-    - Caching (data generation runs once per unique config)
-    - Parallel execution of independent tasks
-    - Incremental computation (only reruns changed configs)
+    For solver comparison after training, use:
+        $ uv run python src/neuralls/cli/compare_preconditioners.py \\
+            --experiments configs/experiments.toml \\
+            --solver-config configs/solvers/default.toml
 
     Example:
+        # Train all experiments
         $ uv run python src/neuralls/cli/run_experiments.py
+
+        # Force retrain even if checkpoints exist
+        $ uv run python src/neuralls/cli/run_experiments.py --force
+
+        # Use custom experiments file
         $ uv run python src/neuralls/cli/run_experiments.py --config custom.toml
     """
     # Resolve defaults
@@ -57,9 +63,9 @@ def main(
         raise typer.Exit(code=EXIT_FAILURE)
 
     try:
-        print(f"Running experiments from: {config}")
+        print(f"Training experiments from: {config}")
         if force:
-            print("Force mode enabled: ignoring caches and filesystem checks")
+            print("Force mode enabled: will retrain even if checkpoints exist")
         print()
 
         results = run_experiment_matrix(

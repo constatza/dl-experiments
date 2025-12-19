@@ -15,7 +15,6 @@ from dlkit.tools.config.core.updater import update_settings
 from ..data_models import DataConfigFile
 from ..domain import ExperimentWorkspace
 from ..models import DatamoduleConfig, ModelConfigFile
-from ..solver_models import SolverConfigFile
 from ...mlflow_utils import resolve_mlflow_paths
 
 
@@ -99,7 +98,6 @@ def inject_mlflow_paths(
 def build_settings(
     model_path: Path,
     model_cfg: ModelConfigFile,
-    solver_cfg: SolverConfigFile,
     workspace: ExperimentWorkspace,
     project_root: Path,
     processed_root: Path,
@@ -112,7 +110,6 @@ def build_settings(
     Args:
         model_path: Path to model config file (for dlkit loader).
         model_cfg: Validated model configuration.
-        solver_cfg: Validated solver configuration.
         workspace: Experiment workspace.
         project_root: Project root directory.
         processed_root: Processed data directory.

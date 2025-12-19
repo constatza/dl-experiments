@@ -1,19 +1,18 @@
 """Pydantic models for model configuration validation.
 
-This module provides Pydantic models for validating model.toml structure.
+This module provides Pydantic models for validating linear.toml structure.
 Separation: Pydantic models (validation) → used directly or converted to runtime types.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class SessionConfig(BaseModel):
-    """Validates [SESSION] section from model.toml."""
+    """Validates [SESSION] section from linear.toml."""
 
     seed: int = Field(
         default=42,
@@ -35,7 +34,7 @@ class SessionConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """Validates [MODEL] section from model.toml."""
+    """Validates [MODEL] section from linear.toml."""
 
     name: str = Field(
         ...,
@@ -69,7 +68,7 @@ class ModelConfig(BaseModel):
 
 
 class PathsConfig(BaseModel):
-    """Validates [PATHS] section from model.toml."""
+    """Validates [PATHS] section from linear.toml."""
 
     project_root: str | None = Field(
         default=None,
@@ -135,7 +134,7 @@ class MLflowClientConfig(BaseModel):
 
 
 class MLflowConfig(BaseModel):
-    """Validates [MLFLOW] section from model.toml."""
+    """Validates [MLFLOW] section from linear.toml."""
 
     enabled: bool = Field(
         default=False,
@@ -189,7 +188,7 @@ class DataloaderConfig(BaseModel):
 
 
 class DatamoduleConfig(BaseModel):
-    """Validates [DATAMODULE] section from model.toml."""
+    """Validates [DATAMODULE] section from linear.toml."""
 
     name: str = Field(
         default="InMemoryModule",
@@ -207,7 +206,7 @@ class DatamoduleConfig(BaseModel):
 
 
 class ModelConfigFile(BaseModel):
-    """Complete model.toml structure with validation.
+    """Complete linear.toml structure with validation.
 
     This model validates the top-level sections of a model configuration file.
     Sections like TRAINING, DATASET, and OPTUNA use extra="allow" to support

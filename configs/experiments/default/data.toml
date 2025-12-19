@@ -1,2 +1,0 @@
-# This file points to the data generation config to use for this experiment.
-dataconfig = "configs/datasets/test-solutions.toml"

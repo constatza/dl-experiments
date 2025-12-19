@@ -5,6 +5,7 @@ max_iterations = 200
 stopping_criterion = "residual_norm"  # "residual_norm" or "fixed_iterations"
 matrix_path = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz"
 rhs_path = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz"
+output_root = "/data/projects/graph-cg/data/output"
 
 # CG algorithm control parameters
 reorthogonalize = "full"  # "none", "full", "partial", "selective"

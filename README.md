@@ -60,20 +60,20 @@ All CLI scripts are located in `src/neuralls/cli/` and use the `neuralls` packag
   ```bash
   # Using model config and data config
   uv run python src/neuralls/cli/train_model.py \
-    configs/experiments/default/model.toml \
+    configs/experiments/default/linear.toml \
     --data-config configs/datasets/collect-504-solutions.toml
   ```
 
 - **Make predictions**:
   ```bash
   uv run python src/neuralls/cli/predict.py \
-    configs/experiments/default/model.toml \
+    configs/experiments/default/linear.toml \
     --data-config configs/datasets/collect-504-solutions.toml
   ```
 
 - **Compare preconditioners** across experiments:
   ```bash
-  uv run python src/neuralls/cli/compare_methods.py --experiments configs/experiments.toml
+uv run python src/neuralls/cli/compare_preconditioners.py --experiments configs/experiments.toml
   ```
 
 - **Run full experiment matrix** (data + train + compare):
@@ -84,7 +84,7 @@ All CLI scripts are located in `src/neuralls/cli/` and use the `neuralls` packag
 - **Optional MLflow logging** (adds remote tracking; local files remain):
   ```bash
   # Add --enable-mlflow to any CLI command
-  uv run python src/neuralls/cli/train_model.py configs/experiments/default/model.toml \
+  uv run python src/neuralls/cli/train_model.py configs/experiments/default/linear.toml \
     --data-config configs/datasets/collect-504-solutions.toml --enable-mlflow
   ```
 

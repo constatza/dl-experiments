@@ -37,12 +37,12 @@ DEFAULT_RESULTS_DIR = str(DEFAULT_OUTPUT_DIR)
 DEFAULT_FIGURES_DIR_STR = str(DEFAULT_FIGURES_DIR)
 
 # Default configuration file paths (relative to graph-cg root)
-DEFAULT_MODEL_CONFIG = "configs/experiments/default/model.toml"
+DEFAULT_MODEL_CONFIG = "configs/experiments/default/linear.toml"
 DEFAULT_DATA_CONFIG = "configs/datasets/collect-504-solutions.toml"
 DEFAULT_EXPERIMENTS_CONFIG = "configs/experiments.toml"
 
 # Default Experiment Config Filenames
-EXP_MODEL_CONFIG_NAME = "model.toml"
+EXP_MODEL_CONFIG_NAME = "linear.toml"
 EXP_DATA_CONFIG_NAME = "data.toml"
 EXP_SOLVER_CONFIG_NAME = "solver.toml"
 

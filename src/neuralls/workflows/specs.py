@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable, TYPE_CHECKING
+from typing import Protocol, runtime_checkable, TYPE_CHECKING
 
 from neuralls.configuration.domain import ExperimentWorkspace
 
@@ -26,7 +26,6 @@ class ComparisonSpec:
     rhs_override: Path | None = None
     figures_dir: Path | None = None
     output_dir: Path | None = None
-    settings: Any | None = None
 
 
 @dataclass(frozen=True)

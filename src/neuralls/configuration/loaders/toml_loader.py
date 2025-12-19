@@ -24,7 +24,7 @@ class ConfigLoadError(Exception):
 
 
 def load_model_config(path: Path) -> ModelConfigFile:
-    """Load and validate model.toml file.
+    """Load and validate linear.toml file.
 
     Args:
         path: Path to model configuration TOML file.
@@ -44,9 +44,7 @@ def load_model_config(path: Path) -> ModelConfigFile:
     try:
         return ModelConfigFile(**raw)
     except ValidationError as exc:
-        raise ConfigLoadError(
-            f"Invalid model config {path}:\n{exc}"
-        ) from exc
+        raise ConfigLoadError(f"Invalid model config {path}:\n{exc}") from exc
 
 
 def load_data_config(path: Path) -> DataConfigFile:
@@ -70,9 +68,7 @@ def load_data_config(path: Path) -> DataConfigFile:
     try:
         return DataConfigFile(**raw)
     except ValidationError as exc:
-        raise ConfigLoadError(
-            f"Invalid data config {path}:\n{exc}"
-        ) from exc
+        raise ConfigLoadError(f"Invalid data config {path}:\n{exc}") from exc
 
 
 def load_solver_config(path: Path) -> SolverConfigFile:
@@ -96,9 +92,7 @@ def load_solver_config(path: Path) -> SolverConfigFile:
     try:
         return SolverConfigFile(**raw)
     except ValidationError as exc:
-        raise ConfigLoadError(
-            f"Invalid solver config {path}:\n{exc}"
-        ) from exc
+        raise ConfigLoadError(f"Invalid solver config {path}:\n{exc}") from exc
 
 
 def load_raw_toml(path: Path) -> dict[str, Any]:

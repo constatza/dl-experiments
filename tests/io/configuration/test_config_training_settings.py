@@ -80,12 +80,12 @@ def test_training_sections_round_trip(
     """Ensure load_experiment preserves trainer callbacks/metrics from a temporary file."""
     # Create necessary directories that dlkit expects
     (tmp_path / "output").mkdir()
-    
+
     # Inject the temporary path into the config content
     config_content = config_content_template.format(tmp_dir=str(tmp_path))
-    
+
     # Setup temporary config file
-    config_path = tmp_path / "model.toml"
+    config_path = tmp_path / "linear.toml"
     config_path.write_text(config_content)
 
     with config_path.open("rb") as fh:
@@ -99,10 +99,6 @@ def test_training_sections_round_trip(
     raw_metrics = tuple(raw_training.get("metrics", ()))
     expected_metric_names = tuple(m.get("name") for m in raw_metrics)
 
-    # Use a dummy default solver config to avoid filesystem dependency
-    solver_path = tmp_path / "solver.toml"
-    solver_path.write_text("[general]")
-    
     # Create dummy data config
     data_path = tmp_path / "data.toml"
     data_path.write_text('[flow]\ndataset="dummy_dataset"')
@@ -110,7 +106,6 @@ def test_training_sections_round_trip(
     experiment = load_experiment(
         config_path,
         data_config_path=data_path,
-        solver_config_path=solver_path,
         output_root=tmp_path / "output",
     )
     settings = experiment.settings

@@ -53,7 +53,10 @@ def _resolve_paths(
     matrix_file = Path(general_params.matrix_path)
     rhs_file = Path(general_params.rhs_path)
 
-    output_base = output_root or Path.cwd() / "output"
+    base_root = output_root or getattr(general_params, "output_root", None)
+    if base_root is None:
+        raise ValueError("output_root must be set in solver general config.")
+    output_base = Path(base_root).expanduser().resolve()
     figs_base = figures_root or output_base / "figures"
     ensure_dir(output_base)
     ensure_dir(figs_base)
@@ -96,8 +99,9 @@ def compare_preconditioners(
     preconditioner_configs: Sequence[BasePreconditionerConfig],
     output_root: Path | None = None,
     figures_root: Path | None = None,
+    save_plots: bool = True,
 ) -> ComparisonResult:
-    """Run CG comparisons using structured solver config (no file I/O here)."""
+    """Run CG comparisons once per solver config and emit shared diagnostics."""
     matrix_file, rhs_file, output_root, figures_root = _resolve_paths(
         general_params=general_params,
         output_root=output_root,
@@ -158,14 +162,13 @@ def compare_preconditioners(
 
     recommendations = summarize_best_combinations(results)
 
-    suffix = matrix_file.stem or "comparison"
-    plot_condition_numbers(cond_numbers, save_dir=figures_root, suffix=suffix)
-    convergence_path = figures_root / f"preconditioner_convergence_{suffix}.png"
-    plot_convergence_comparison(
-        results, metadata=None, save_path=convergence_path
-    )
-
-    plot_paths = {"convergence": convergence_path}
+    plot_paths: dict[str, Path] = {}
+    if save_plots:
+        suffix = matrix_file.stem or "comparison"
+        plot_condition_numbers(cond_numbers, save_dir=figures_root, suffix=suffix)
+        convergence_path = figures_root / f"preconditioner_convergence_{suffix}.png"
+        plot_convergence_comparison(results, metadata=None, save_path=convergence_path)
+        plot_paths = {"convergence": convergence_path}
 
     return ComparisonResult(
         results=results,

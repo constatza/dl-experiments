@@ -38,14 +38,12 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write('id = "exp1"\n')
         f.write('dataset = "exp1_data"\n')
         f.write('model = "exp1_model"\n')
-        f.write('solver = "default"\n')
         f.write(f'checkpoint_path = "{project_root / "checkpoints" / "exp1.ckpt"}"\n\n')
         f.write('# Experiment 2: Config without checkpoint (will warn)\n')
         f.write('[[experiment]]\n')
         f.write('id = "exp2"\n')
         f.write('dataset = "exp2_data"\n')
         f.write('model = "exp2_model"\n')
-        f.write('solver = "default"\n')
 
     # Dataset configs
     with open(project_root / "configs" / "datasets" / "exp1_data.toml", "w") as f:
@@ -118,8 +116,6 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     assert "models" in str(exp1.spec.model_config_path)
     assert exp1.spec.data_config_path.name == "exp1_data.toml"
     assert "datasets" in str(exp1.spec.data_config_path)
-    assert exp1.spec.solver_config_path.name == "default.toml"
-    assert "solvers" in str(exp1.spec.solver_config_path)
 
     # Check checkpoint path
     assert exp1.spec.checkpoint_path is not None
@@ -133,8 +129,6 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     assert "models" in str(exp2.spec.model_config_path)
     assert exp2.spec.data_config_path.name == "exp2_data.toml"
     assert "datasets" in str(exp2.spec.data_config_path)
-    assert exp2.spec.solver_config_path.name == "default.toml"
-    assert "solvers" in str(exp2.spec.solver_config_path)
 
     # No checkpoint for exp2
     assert exp2.spec.checkpoint_path is None
@@ -152,7 +146,6 @@ def test_load_experiments_missing_config(temp_config_structure: Path, monkeypatc
         f.write('id = "exp_missing"\n')
         f.write('dataset = "missing_dataset"\n')
         f.write('model = "exp1_model"\n')
-        f.write('solver = "default"\n')
 
     with pytest.raises(FileNotFoundError, match="Dataset config not found"):
         load_batch(

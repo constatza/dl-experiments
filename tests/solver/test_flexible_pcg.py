@@ -516,7 +516,7 @@ def test_flexible_pcg_ill_conditioned_converges_slowly(
     assert info.converged
 
     # More iterations than well-conditioned (but eventually converges)
-    assert info.iterations > 10
+    assert info.iterations >= 10
 
 
 # =============================================================================

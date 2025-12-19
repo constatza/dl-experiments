@@ -10,7 +10,7 @@ from loguru import logger
 from neuralls.configuration.loader import load_batch
 from neuralls.configuration.services import WorkspaceFactory
 from neuralls.configuration.domain import ExperimentWorkspace
-from neuralls.constants import DEFAULT_OUTPUT_DIR, DEFAULT_PROCESSED_DATA_DIR, DEFAULT_PROJECT_ROOT
+from neuralls.constants import DEFAULT_PROCESSED_DATA_DIR, DEFAULT_PROJECT_ROOT
 from neuralls.workflows.checkpoints import resolve_checkpoint
 from neuralls.workflows.specs import (
     ComparisonSpec,
@@ -22,10 +22,6 @@ from neuralls.workflows.compare import compare_preconditioners
 from neuralls.io.comparison import load_solver_config
 from neuralls.preconditioner_factory import build_preconditioner_configs_from_specs
 from neuralls.workflows.utils.paths import resolve_output_root
-from neuralls.mlflow_utils import build_run_config, finalize_run, open_run
-
-
-COMPARISON_ARTIFACTS: tuple[str, ...] = ("figures", "reports", "metrics")
 
 
 def _make_workspace(
@@ -38,30 +34,30 @@ def _make_workspace(
     return workspace
 
 
-def _build_batch_spec(exp: Any) -> ComparisonSpec | None:
+def _build_batch_spec(exp: Any, solver_config: Path) -> ComparisonSpec | None:
     checkpoint = resolve_checkpoint(
         explicit=None,
         config_file=None,
-        solver_config=exp.spec.solver_config_path,
+        solver_config=solver_config,
         checkpoint_dir=exp.workspace.checkpoint_dir,
     )
     if checkpoint is None:
-        raise FileNotFoundError(
+        logger.error(
             f"No checkpoint found for experiment '{exp.spec.id}'. "
             f"Checked solver config and {exp.workspace.checkpoint_dir}."
         )
+        return None
     return ComparisonSpec(
         name=exp.spec.id,
         model_config=exp.spec.model_config_path,
         data_config=exp.spec.data_config_path,
-        solver_config=exp.spec.solver_config_path,
+        solver_config=solver_config,
         workspace=exp.workspace,
         checkpoint=checkpoint,
         matrix_override=None,
         rhs_override=None,
         figures_dir=exp.workspace.figures_dir,
         output_dir=exp.workspace.root_dir,
-        settings=exp.settings,
     )
 
 
@@ -87,73 +83,21 @@ def _build_direct_spec(
     )
 
 
-def _get_mlflow_config(model_config: Path):
-    """Load validated model config for MLflow settings.
-
-    Returns ModelConfigFile or None if loading fails.
-    """
-    try:
-        from neuralls.configuration.loaders import load_model_config
-        return load_model_config(model_config)
-    except Exception:
-        return None
-
-
-def _get_mlflow_enabled(spec: ComparisonSpec) -> bool:
-    """Read MLflow enabled setting from model config."""
-    # First try settings if available
-    if spec.settings and hasattr(spec.settings, "MLFLOW"):
-        mlflow_cfg = getattr(spec.settings, "MLFLOW", None)
-        if mlflow_cfg:
-            return getattr(mlflow_cfg, "enabled", False)
-
-    # Fallback: load config directly using Pydantic model
-    model_cfg = _get_mlflow_config(spec.model_config)
-    return model_cfg.MLFLOW.enabled if model_cfg else False
-
-
-def _start_comparison_run(spec: ComparisonSpec, enable_mlflow: bool):
-    settings = spec.settings
-    config = build_run_config(
-        settings=settings,
-        workspace_root=spec.workspace.root_dir,
-        dataset_id=spec.data_config.stem,
-        model_name=f"{spec.name}-compare",
-        enabled=enable_mlflow,
-    )
-    if config is None:
-        return None
-    try:
-        return open_run(config)
-    except ModuleNotFoundError:
-        logger.info("MLflow not installed; skipping MLflow logging.")
-        return None
-
-
-def _comparison_metrics(result: dict[str, Any] | None) -> dict[str, float]:
-    if not result:
-        return {}
-    recs = result.get("recommendations") if isinstance(result, dict) else None
-    best = recs.get("best_overall") if isinstance(recs, dict) else None
-    if not isinstance(best, dict):
-        return {}
-    metrics: dict[str, float] = {}
-    for key, target in (("residual", "best_residual"), ("iterations", "best_iterations")):
-        value = best.get(key)
-        try:
-            metrics[target] = float(value)
-        except (TypeError, ValueError):
-            continue
-    return metrics
+def _comparison_output_root(general_params: Any, solver_config_path: Path) -> Path:
+    configured_root = getattr(general_params, "output_root", None)
+    if configured_root is None:
+        raise ValueError("general.output_root is required for comparisons.")
+    return Path(configured_root).expanduser().resolve() / solver_config_path.stem
 
 
 def build_batch_comparisons(
     experiments_config: Path,
+    solver_config: Path,
 ) -> list[ComparisonSpec]:
     batch = load_batch(experiments_config)
     specs: list[ComparisonSpec] = []
     for exp in batch.experiments:
-        spec = _build_batch_spec(exp)
+        spec = _build_batch_spec(exp, solver_config)
         if spec:
             specs.append(spec)
     return specs
@@ -248,38 +192,35 @@ def _resolve_neural_preconditioners(
 def run_comparisons(
     specs: Iterable[ComparisonSpec],
     params: ComparisonParams,
+    experiments_map: dict[str, Any] | None = None,
 ) -> list[ComparisonOutcome]:
     """Run comparisons with checkpoint resolution from experiment references.
 
-    Args:
-        specs: Comparison specifications
-        params: Comparison parameters
-
-    Returns:
-        List of comparison outcomes
+    A comparison run executes each solver listed in the solver TOML exactly once and
+    produces shared diagnostics (plots, summaries) for that solver set. Experiments
+    are only used to resolve neural checkpoints; comparisons do not repeat per
+    experiment.
     """
-    # Load experiments map for checkpoint resolution
-    # This allows solver configs to reference experiments by ID
-    try:
-        from neuralls.configuration.loader import load_batch
-        from neuralls.constants import DEFAULT_PROJECT_ROOT
-        experiments_toml = DEFAULT_PROJECT_ROOT / "configs" / "experiments.toml"
-        batch = load_batch(experiments_toml)
-        experiments_map = {exp.spec.id: exp for exp in batch.experiments}
-    except Exception as e:
-        logger.warning(f"Could not load experiments map for checkpoint resolution: {e}")
-        experiments_map = {}
+    if experiments_map is None:
+        try:
+            from neuralls.configuration.loader import load_batch
+            from neuralls.constants import DEFAULT_PROJECT_ROOT
+            experiments_toml = DEFAULT_PROJECT_ROOT / "configs" / "experiments.toml"
+            batch = load_batch(experiments_toml)
+            experiments_map = {exp.spec.id: exp for exp in batch.experiments}
+        except Exception as e:
+            logger.warning(f"Could not load experiments map for checkpoint resolution: {e}")
+            experiments_map = {}
 
     outcomes: list[ComparisonOutcome] = []
     for spec in specs:
-        # Read MLflow setting from config
-        enable_mlflow = _get_mlflow_enabled(spec)
-        mlflow_state = _start_comparison_run(spec, enable_mlflow)
-        metrics: dict[str, float] | None = None
         error: Exception | None = None
         result: dict[str, Any] | None = None
         try:
             solver_cfg = load_solver_config(spec.solver_config)
+            comparison_root = _comparison_output_root(
+                solver_cfg.general, spec.solver_config
+            )
 
             # Resolve checkpoints for neural preconditioners that reference experiments
             if experiments_map:
@@ -295,20 +236,11 @@ def run_comparisons(
             result = compare_preconditioners(
                 general_params=solver_cfg.general,
                 preconditioner_configs=precond_configs,
-                output_root=spec.output_dir or spec.workspace.root_dir,
-                figures_root=spec.figures_dir or spec.workspace.figures_dir,
+                output_root=comparison_root,
+                save_plots=params.save_plots,
             )
         except Exception as exc:  # noqa: BLE001
             error = exc
-        finally:
-            metrics = _comparison_metrics(result)
-            finalize_run(
-                mlflow_state,
-                metrics=metrics,
-                workspace_root=spec.workspace.root_dir,
-                allowlist=COMPARISON_ARTIFACTS,
-                failed=error is not None,
-            )
         if error:
             outcomes.append(
                 ComparisonOutcome(name=spec.name, success=False, error=str(error))
@@ -318,3 +250,25 @@ def run_comparisons(
                 ComparisonOutcome(name=spec.name, success=True, payload=result)
             )
     return outcomes
+
+
+def run_batch_comparison(
+    experiments_config: Path, solver_config: Path, params: ComparisonParams
+) -> list[ComparisonOutcome]:
+    """Run a single aggregated comparison for a solver config.
+
+    Experiments are read only to resolve neural checkpoints; the comparison itself
+    runs once for the solver config and writes shared diagnostics under
+    general.output_root/<solver-stem>/.
+    """
+    batch = load_batch(experiments_config)
+    if not batch.experiments:
+        raise ValueError("No experiments found to resolve checkpoints for neural solvers.")
+
+    specs = [_build_batch_spec(exp, solver_config) for exp in batch.experiments]
+    specs = [s for s in specs if s is not None]
+    if not specs:
+        raise ValueError("No checkpoints found for any experiments; cannot run comparison.")
+
+    experiments_map = {exp.spec.id: exp for exp in batch.experiments}
+    return run_comparisons([specs[0]], params, experiments_map=experiments_map)

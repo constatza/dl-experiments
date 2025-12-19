@@ -14,10 +14,14 @@ def test_run_experiments_full_flow(tmp_path):
     
     configs_dir = tmp_path / "configs"
     configs_dir.mkdir()
-    experiments_dir = configs_dir / "experiments"
-    experiments_dir.mkdir()
-    default_dir = experiments_dir / "default"
-    default_dir.mkdir()
+
+    # Create shared config directories (NEW FORMAT)
+    datasets_dir = configs_dir / "datasets"
+    datasets_dir.mkdir()
+    models_dir = configs_dir / "models"
+    models_dir.mkdir()
+    solvers_dir = configs_dir / "solvers"
+    solvers_dir.mkdir()
     
     # 1. Create Dummy Data
     matrix_path = raw_dir / "matrix.txt"
@@ -31,8 +35,8 @@ def test_run_experiments_full_flow(tmp_path):
     np.savetxt(matrix_path, A)
     np.savetxt(rhs_path, b)
     
-    # 2. Create Data Config (pointing to dummy data)
-    data_config_path = configs_dir / "test_data_gen.toml"
+    # 2. Create Data Config in shared datasets directory (NEW FORMAT)
+    data_config_path = datasets_dir / "test_data_gen.toml"
     data_config = {
         "source": {
             "matrix_path": str(matrix_path),
@@ -54,8 +58,8 @@ def test_run_experiments_full_flow(tmp_path):
     with open(data_config_path, "wb") as f:
         tomli_w.dump(data_config, f)
         
-    # 3. Create Solver Config
-    solver_config_path = default_dir / "solver.toml"
+    # 3. Create Solver Config in shared solvers directory (NEW FORMAT)
+    solver_config_path = solvers_dir / "default.toml"
     solver_config = {
         "solvers": [
             {
@@ -67,17 +71,16 @@ def test_run_experiments_full_flow(tmp_path):
             "rtol": 1e-6,
             "max_iterations": 10,
             "matrix_path": str(matrix_path),  # Required for synthetic benchmarks
+            "output_root": str(data_dir / "output"),
         }
     }
     with open(solver_config_path, "wb") as f:
         tomli_w.dump(solver_config, f)
         
-    # 4. Create Model Config
+    # 4. Create Model Config in shared models directory (NEW FORMAT)
     exp_name = "test_experiment"
-    exp_dir = experiments_dir / exp_name
-    exp_dir.mkdir()
-    
-    model_config_path = exp_dir / "model.toml"
+
+    model_config_path = models_dir / f"{exp_name}_model.toml"
     model_config = {
                                 "SESSION": {
                                     "seed": 42,
@@ -148,28 +151,21 @@ def test_run_experiments_full_flow(tmp_path):
     }
     with open(model_config_path, "wb") as f:
         tomli_w.dump(model_config, f)
-        
-    # 5. Create Experiment Data Pointer
-    exp_data_config_path = exp_dir / "data.toml"
-    exp_data_config = {
-        "dataconfig": str(data_config_path) # Absolute path
-    }
-    with open(exp_data_config_path, "wb") as f:
-        tomli_w.dump(exp_data_config, f)
-        
-    # 6. Create Master Experiment Config
+
+    # 5. Create Master Experiment Config (NEW FORMAT with [[experiment]] entries)
     master_config_path = configs_dir / "experiments.toml"
-    master_config = {
-        "run": [exp_name],
-        "output_dir": str(data_dir / "output"),
-    }
-    with open(master_config_path, "wb") as f:
-        tomli_w.dump(master_config, f)
+    with open(master_config_path, "w") as f:
+        f.write(f'project_root = ".."\n')
+        f.write(f'output_dir = "{data_dir / "output"}"\n\n')
+        f.write('[[experiment]]\n')
+        f.write(f'id = "{exp_name}"\n')
+        f.write(f'dataset = "test_data_gen"\n')
+        f.write(f'model = "{exp_name}_model"\n')
     
     # Set GRAPH_CG_OUTPUT_DIR to ensure no contamination (although we passed project_root)
     os.environ["GRAPH_CG_OUTPUT_DIR"] = str(data_dir / "output")
 
-    # 7. Run the flow
+    # 6. Run the flow
     results = run_experiment_matrix(
         experiments_config_path=master_config_path,
         force=True,

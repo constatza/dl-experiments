@@ -17,6 +17,7 @@ def _write_normalized_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:
 
 
 def _write_solver_config(path: Path, system_path: Path) -> None:
+    output_root = path.parent / "output"
     path.write_text(
         "\n".join(
             [
@@ -27,6 +28,7 @@ def _write_solver_config(path: Path, system_path: Path) -> None:
                 'stopping_criterion = "residual_norm"',
                 f'matrix_path = "{system_path}"',
                 f'rhs_path = "{system_path}"',
+                f'output_root = "{output_root}"',
                 "",
                 "[[solvers]]",
                 'name = "none"',
@@ -124,8 +126,6 @@ def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
     results = compare_preconditioners(
         general_params=solver_cfg_model.general,
         preconditioner_configs=precond_configs,
-        output_root=tmp_path / "output",
-        figures_root=tmp_path / "figures",
     )
 
     # Access results from ComparisonResult Pydantic model

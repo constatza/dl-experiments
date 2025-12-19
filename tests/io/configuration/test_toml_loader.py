@@ -23,7 +23,7 @@ class TestLoadModelConfig:
 
     def test_load_valid_model_config(self, tmp_path: Path):
         """Test loading a valid model config."""
-        config_file = tmp_path / "model.toml"
+        config_file = tmp_path / "linear.toml"
         config_file.write_text(
             """
 [SESSION]
@@ -45,7 +45,7 @@ hidden_size = 256
 
     def test_load_model_config_missing_required_field(self, tmp_path: Path):
         """Test loading model config with missing required field."""
-        config_file = tmp_path / "model.toml"
+        config_file = tmp_path / "linear.toml"
         config_file.write_text(
             """
 [SESSION]
@@ -63,7 +63,7 @@ name = "TestModel"
 
     def test_load_model_config_invalid_toml(self, tmp_path: Path):
         """Test loading invalid TOML syntax."""
-        config_file = tmp_path / "model.toml"
+        config_file = tmp_path / "linear.toml"
         config_file.write_text("invalid [ toml")
 
         with pytest.raises(ConfigLoadError) as exc_info:
@@ -161,12 +161,14 @@ class TestLoadSolverConfig:
     def test_load_valid_solver_config(self, tmp_path: Path):
         """Test loading a valid solver config."""
         config_file = tmp_path / "solver.toml"
+        output_root = tmp_path / "output"
         config_file.write_text(
-            """
+            f"""
 [general]
 rtol = 1e-6
 atol = 1e-12
 max_iterations = 100
+output_root = "{output_root}"
 
 [[solvers]]
 name = "test_solver"
@@ -184,10 +186,12 @@ type = "jacobi"
     def test_load_solver_config_with_defaults(self, tmp_path: Path):
         """Test loading solver config with defaults."""
         config_file = tmp_path / "solver.toml"
+        output_root = tmp_path / "output"
         config_file.write_text(
-            """
+            f"""
 [general]
 # Use all defaults
+output_root = "{output_root}"
 
 [[solvers]]
 name = "default_solver"
