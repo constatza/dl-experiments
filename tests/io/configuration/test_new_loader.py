@@ -18,115 +18,158 @@ from dlkit import GeneralSettings
 
 from neuralls.configuration.loader import load_batch
 from neuralls.configuration.domain import ExperimentBatch, RunnableExperiment, ExperimentWorkspace
-from neuralls.constants import (
-    EXP_MODEL_CONFIG_NAME,
-    EXP_DATA_CONFIG_NAME,
-    EXP_SOLVER_CONFIG_NAME,
-)
 
 
 @pytest.fixture
 def temp_config_structure(tmp_path: Path) -> Path:
-    """Create a temporary directory structure for config files."""
+    """Create a temporary directory structure for NEW config format."""
     project_root = tmp_path
     (project_root / "configs").mkdir()
     (project_root / "configs" / "datasets").mkdir()
-    (project_root / "configs" / "experiments").mkdir()
-    (project_root / "configs" / "default").mkdir()
-    (project_root / "configs" / "experiments" / "exp1").mkdir()
+    (project_root / "configs" / "models").mkdir()
+    (project_root / "configs" / "solvers").mkdir()
 
-    # Master config
+    # Master config (NEW FORMAT: [[experiment]] entries)
     with open(project_root / "configs" / "experiments.toml", "w") as f:
         f.write('project_root = ".."\n')
-        f.write('defaults_dir = "default"\n')
-        f.write(f'output_dir = "{project_root / "output"}"\n')
-        f.write('[experiments]\n')
-        f.write('exp1 = "experiments/exp1"\n')
-        f.write('exp2_fallback = "experiments/exp2_fallback"\n')
+        f.write(f'output_dir = "{project_root / "output"}"\n\n')
+        f.write('# Experiment 1: Full config with explicit checkpoint\n')
+        f.write('[[experiment]]\n')
+        f.write('id = "exp1"\n')
+        f.write('dataset = "exp1_data"\n')
+        f.write('model = "exp1_model"\n')
+        f.write('solver = "default"\n')
+        f.write(f'checkpoint_path = "{project_root / "checkpoints" / "exp1.ckpt"}"\n\n')
+        f.write('# Experiment 2: Config without checkpoint (will warn)\n')
+        f.write('[[experiment]]\n')
+        f.write('id = "exp2"\n')
+        f.write('dataset = "exp2_data"\n')
+        f.write('model = "exp2_model"\n')
+        f.write('solver = "default"\n')
 
-    # Exp1 configs
-    with open(project_root / "configs" / "experiments" / "exp1" / EXP_MODEL_CONFIG_NAME, "w") as f:
-        f.write('[SESSION]\nname = "exp1_model"\n\n[MODEL]\nname = "TestModel"\nmodule_path = "test.module"')
-    with open(project_root / "configs" / "experiments" / "exp1" / EXP_DATA_CONFIG_NAME, "w") as f:
-        f.write('dataconfig = "configs/datasets/exp1_data.toml"')
-    with open(project_root / "configs" / "experiments" / "exp1" / EXP_SOLVER_CONFIG_NAME, "w") as f:
-        f.write('[general]\nrtol = 1e-5')
-
-    # Fallback experiment (exp2)
-    (project_root / "configs" / "experiments" / "exp2_fallback").mkdir()
-    with open(project_root / "configs" / "experiments" / "exp2_fallback" / EXP_MODEL_CONFIG_NAME, "w") as f:
-        f.write('[SESSION]\nname = "exp2_model"\n\n[MODEL]\nname = "TestModel"\nmodule_path = "test.module"')
-
-    # Default configs
-    with open(project_root / "configs" / "default" / EXP_DATA_CONFIG_NAME, "w") as f:
-        f.write('dataconfig = "configs/datasets/default_data.toml"')
-    with open(project_root / "configs" / "default" / EXP_SOLVER_CONFIG_NAME, "w") as f:
-        f.write('[general]\nrtol = 1e-6')
-        
     # Dataset configs
     with open(project_root / "configs" / "datasets" / "exp1_data.toml", "w") as f:
-        f.write('[flow]\ndataset="exp1_data_dataset"')
-    with open(project_root / "configs" / "datasets" / "default_data.toml", "w") as f:
-        f.write('[flow]\ndataset="default_data_dataset"')
-        
+        f.write('[flow]\n\n')
+        f.write('[source]\n')
+        f.write('matrix_path = "/tmp/matrix.txt"\n\n')
+        f.write('[generation]\n')
+        f.write('normalize = "matrix"\n')
+        f.write('shuffle = false\n')
+        f.write('seed = 42\n\n')
+        f.write('[output]\n')
+        f.write(f'processed_dir = "{project_root / "data"}"\n')
+
+    with open(project_root / "configs" / "datasets" / "exp2_data.toml", "w") as f:
+        f.write('[flow]\n\n')
+        f.write('[source]\n')
+        f.write('matrix_path = "/tmp/matrix2.txt"\n\n')
+        f.write('[generation]\n')
+        f.write('normalize = "matrix"\n')
+        f.write('shuffle = false\n')
+        f.write('seed = 42\n\n')
+        f.write('[output]\n')
+        f.write(f'processed_dir = "{project_root / "data"}"\n')
+
+    # Model configs
+    with open(project_root / "configs" / "models" / "exp1_model.toml", "w") as f:
+        f.write('[SESSION]\n')
+        f.write('name = "exp1_model"\n\n')
+        f.write('[MODEL]\n')
+        f.write('name = "TestModel"\n')
+        f.write('module_path = "test.module"\n')
+
+    with open(project_root / "configs" / "models" / "exp2_model.toml", "w") as f:
+        f.write('[SESSION]\n')
+        f.write('name = "exp2_model"\n\n')
+        f.write('[MODEL]\n')
+        f.write('name = "TestModel2"\n')
+        f.write('module_path = "test.module2"\n')
+
+    # Solver config (shared)
+    with open(project_root / "configs" / "solvers" / "default.toml", "w") as f:
+        f.write('[general]\n')
+        f.write('rtol = 1e-6\n')
+        f.write('atol = 1e-10\n')
+        f.write('max_iterations = 100\n')
+
     return project_root
 
 
 def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
-    """Test that load_batch correctly loads and resolves a mix of experiments."""
+    """Test that load_batch correctly loads experiments with NEW format."""
     monkeypatch.chdir(temp_config_structure)
-    
+
     batch = load_batch(
         master_config_path=temp_config_structure / "configs" / "experiments.toml",
     )
 
     assert len(batch.experiments) == 2
-    
+
     exp1 = batch.experiments[0]
     exp2 = batch.experiments[1]
 
-    # --- Check Experiment 1 (all files present) ---
+    # --- Check Experiment 1 (with checkpoint) ---
     assert exp1.spec.id == "exp1"
     assert exp1.settings is not None
     assert isinstance(exp1.workspace, ExperimentWorkspace)
-    
-    # Check paths are correct
-    assert exp1.spec.model_config_path.name == EXP_MODEL_CONFIG_NAME
-    assert "exp1" in str(exp1.spec.model_config_path)
+
+    # Check paths resolve to shared directories
+    assert exp1.spec.model_config_path.name == "exp1_model.toml"
+    assert "models" in str(exp1.spec.model_config_path)
     assert exp1.spec.data_config_path.name == "exp1_data.toml"
     assert "datasets" in str(exp1.spec.data_config_path)
-    assert exp1.spec.solver_config_path.name == EXP_SOLVER_CONFIG_NAME
-    assert "exp1" in str(exp1.spec.solver_config_path)
+    assert exp1.spec.solver_config_path.name == "default.toml"
+    assert "solvers" in str(exp1.spec.solver_config_path)
 
-    # --- Check Experiment 2 (fallback) ---
-    assert exp2.spec.id == "exp2_fallback"
+    # Check checkpoint path
+    assert exp1.spec.checkpoint_path is not None
+    assert "exp1.ckpt" in str(exp1.spec.checkpoint_path)
 
-    # Check paths are correct (data and solver should point to default)
-    assert exp2.spec.model_config_path.name == EXP_MODEL_CONFIG_NAME
-    assert "exp2_fallback" in str(exp2.spec.model_config_path)
-    assert exp2.spec.data_config_path.name == "default_data.toml" # Fallback
+    # --- Check Experiment 2 (without checkpoint) ---
+    assert exp2.spec.id == "exp2"
+
+    # Check paths resolve to shared directories
+    assert exp2.spec.model_config_path.name == "exp2_model.toml"
+    assert "models" in str(exp2.spec.model_config_path)
+    assert exp2.spec.data_config_path.name == "exp2_data.toml"
     assert "datasets" in str(exp2.spec.data_config_path)
-    assert exp2.spec.solver_config_path.name == EXP_SOLVER_CONFIG_NAME # Fallback
-    assert "default" in str(exp2.spec.solver_config_path)
+    assert exp2.spec.solver_config_path.name == "default.toml"
+    assert "solvers" in str(exp2.spec.solver_config_path)
+
+    # No checkpoint for exp2
+    assert exp2.spec.checkpoint_path is None
 
 
-def test_load_experiments_file_not_found(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
-    """Test that a FileNotFoundError is raised for a missing config."""
+def test_load_experiments_missing_config(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
+    """Test that FileNotFoundError is raised for missing dataset/model/solver configs."""
     monkeypatch.chdir(temp_config_structure)
-    
-    # Create a new experiments.toml for this specific test case
+
+    # Create experiments.toml with reference to non-existent dataset
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
         f.write('project_root = ".."\n')
-        f.write('defaults_dir = "default"\n')
+        f.write(f'output_dir = "{temp_config_structure / "output"}"\n\n')
+        f.write('[[experiment]]\n')
+        f.write('id = "exp_missing"\n')
+        f.write('dataset = "missing_dataset"\n')
+        f.write('model = "exp1_model"\n')
+        f.write('solver = "default"\n')
+
+    with pytest.raises(FileNotFoundError, match="Dataset config not found"):
+        load_batch(
+            master_config_path=temp_config_structure / "configs" / "experiments.toml",
+        )
+
+
+def test_load_experiments_no_experiments(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
+    """Test that ValueError is raised when no experiments defined."""
+    monkeypatch.chdir(temp_config_structure)
+
+    # Create empty experiments.toml
+    with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
+        f.write('project_root = ".."\n')
         f.write(f'output_dir = "{temp_config_structure / "output"}"\n')
-        f.write('[experiments]\n')
-        f.write('exp1 = "experiments/exp1"\n')
-        f.write('exp2_fallback = "experiments/exp2_fallback"\n')
-        f.write('exp3_missing = "experiments/exp3_missing"\n')
-    
-    (temp_config_structure / "configs" / "experiments" / "exp3_missing").mkdir()
-    
-    with pytest.raises(FileNotFoundError, match=EXP_MODEL_CONFIG_NAME):
+
+    with pytest.raises(ValueError, match="No experiments defined"):
         load_batch(
             master_config_path=temp_config_structure / "configs" / "experiments.toml",
         )
