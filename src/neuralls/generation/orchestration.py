@@ -386,15 +386,25 @@ def build_dataset(
     dataset_dir_path = Path(dataset_dir)
     dataset_dir_path.mkdir(parents=True, exist_ok=True)
 
-    # Simple persistence - save normalized samples directly
+    # Persist normalized samples WITH scale metadata for denormalization
     logger.info(f"Saving to: {dataset_dir}")
     normalized_file = dataset_dir_path / "normalized.npz"
-    np.savez(
-        normalized_file,
-        matrix=raw_samples.matrix,
-        rhs=raw_samples.rhs,
-        solutions=raw_samples.solutions,
-    )
+
+    # Build save dict with normalized data
+    save_dict = {
+        "matrix": raw_samples.matrix,
+        "rhs": raw_samples.rhs,
+        "solutions": raw_samples.solutions,
+        "normalize_type": normalize,  # Save normalization type for reconstruction
+    }
+
+    # Add scale parameters using IScale.to_dict() (for denormalization)
+    if scale is not None:
+        scale_params = scale.to_dict()
+        save_dict.update(scale_params)  # Merge scale parameters into save dict
+        logger.debug(f"  Saved scale metadata: {list(scale_params.keys())}")
+
+    np.savez(normalized_file, **save_dict)
 
     logger.info(f"Dataset built successfully: {dataset_dir}")
     return dataset_dir
