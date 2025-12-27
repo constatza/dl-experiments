@@ -9,73 +9,14 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.configuration.loaders.toml_loader import (
-    ConfigLoadError,
+from neuralls.io.toml_loader import (
     load_data_config,
-    load_model_config,
     load_raw_toml,
     load_solver_config,
 )
 
-
-class TestLoadModelConfig:
-    """Tests for load_model_config function."""
-
-    def test_load_valid_model_config(self, tmp_path: Path):
-        """Test loading a valid model config."""
-        config_file = tmp_path / "linear.toml"
-        config_file.write_text(
-            """
-[SESSION]
-seed = 123
-precision = "float32"
-
-[MODEL]
-name = "TestModel"
-module_path = "test.module"
-hidden_size = 256
-"""
-        )
-
-        config = load_model_config(config_file)
-        assert config.SESSION.seed == 123
-        assert config.SESSION.precision == "float32"
-        assert config.MODEL.name == "TestModel"
-        assert config.MODEL.hidden_size == 256
-
-    def test_load_model_config_missing_required_field(self, tmp_path: Path):
-        """Test loading model config with missing required field."""
-        config_file = tmp_path / "linear.toml"
-        config_file.write_text(
-            """
-[SESSION]
-seed = 123
-
-[MODEL]
-name = "TestModel"
-# Missing module_path - should fail
-"""
-        )
-
-        with pytest.raises(ConfigLoadError) as exc_info:
-            load_model_config(config_file)
-        assert "Invalid model config" in str(exc_info.value)
-
-    def test_load_model_config_invalid_toml(self, tmp_path: Path):
-        """Test loading invalid TOML syntax."""
-        config_file = tmp_path / "linear.toml"
-        config_file.write_text("invalid [ toml")
-
-        with pytest.raises(ConfigLoadError) as exc_info:
-            load_model_config(config_file)
-        assert "Failed to load model config" in str(exc_info.value)
-
-    def test_load_model_config_nonexistent_file(self, tmp_path: Path):
-        """Test loading nonexistent file."""
-        config_file = tmp_path / "nonexistent.toml"
-
-        with pytest.raises(ConfigLoadError):
-            load_model_config(config_file)
+import tomllib
+from pydantic import ValidationError
 
 
 class TestLoadDataConfig:
@@ -115,7 +56,7 @@ solutions_path = "/data/test/solutions.txt"
         assert config.generation.normalize == "matrix"
         assert len(config.generation.strategy) == 1
         assert config.generation.strategy[0].name == "solution_archive"
-        assert config.output.processed_dir == "/data/processed"
+        assert config.output.processed_dir == Path("/data/processed")
         assert config.test.solutions_path == "/data/test/solutions.txt"
 
     def test_load_data_config_with_defaults(self, tmp_path: Path):
@@ -150,9 +91,9 @@ residual_iters = 0  # Should be >= 1
 """
         )
 
-        with pytest.raises(ConfigLoadError) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             load_data_config(config_file)
-        assert "Invalid data config" in str(exc_info.value)
+        assert "validation error for DataConfigFile" in str(exc_info.value)
 
 
 class TestLoadSolverConfig:
@@ -229,5 +170,5 @@ number = 42
         config_file = tmp_path / "test.toml"
         config_file.write_text("invalid [ syntax")
 
-        with pytest.raises(ConfigLoadError):
+        with pytest.raises(tomllib.TOMLDecodeError):
             load_raw_toml(config_file)

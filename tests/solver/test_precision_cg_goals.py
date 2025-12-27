@@ -101,8 +101,8 @@ def test_pcg_jacobi_double_precision_accuracy(
         preconditioner=jacobi_M,
         atol=DOUBLE_PRECISION_ATOL,
         rtol=DOUBLE_PRECISION_RTOL,
-        max_iter=200, # Sufficiently high max_iter
-        capture_traces=True,
+        max_iterations=200,  # Sufficiently high max_iterations
+        trace_mode="full",  # Replaced capture_traces=True
     )
 
     assert info.converged
@@ -126,7 +126,7 @@ def test_pcg_jacobi_double_precision_accuracy(
         )
     if info.residual_history is not None:
         _plot_history("pcg_double_precision_history", info.residual_history, diagnostics_dir)
-    # Uncomment to persist residual vectors for inspection (requires capture_traces=True above).
+    # Uncomment to persist residual vectors for inspection (requires trace_mode="full" above).
     # if info.residual_vectors is not None:
     #     np.savetxt(
     #         diagnostics_dir / "pcg_double_precision_residual_vectors.csv",
@@ -155,10 +155,9 @@ def test_flexible_pcg_jacobi_double_precision_accuracy(
         preconditioner=jacobi_M,
         atol=DOUBLE_PRECISION_ATOL,
         rtol=DOUBLE_PRECISION_RTOL,
-        max_iter=200, # Sufficiently high max_iter
-        m_max=20, # Use a larger m_max for better orthogonalization
-        # Using default eps_curv and eps_breakdown
-        capture_traces=True,
+        max_iterations=200,  # Sufficiently high max_iterations
+        m_max=20,  # Use a larger m_max for better orthogonalization
+        trace_mode="full",  # Replaced capture_traces=True
     )
 
     assert info.converged
@@ -182,7 +181,7 @@ def test_flexible_pcg_jacobi_double_precision_accuracy(
         )
     if info.residual_history is not None:
         _plot_history("flexible_pcg_jacobi_double_precision", info.residual_history, diagnostics_dir)
-    # Uncomment to persist residual vectors for inspection (requires capture_traces=True above).
+    # Uncomment to persist residual vectors for inspection (requires trace_mode="full" above).
     # if info.residual_vectors is not None:
     #     np.savetxt(
     #         diagnostics_dir / "fcg_double_precision_residual_vectors.csv",

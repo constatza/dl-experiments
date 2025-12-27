@@ -107,7 +107,8 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     exp2 = batch.experiments[1]
 
     # --- Check Experiment 1 (with checkpoint) ---
-    assert exp1.spec.id == "exp1"
+    # spec.id comes from model config SESSION.name, not from master config experiment.id
+    assert exp1.spec.id == "exp1_model"
     assert exp1.settings is not None
     assert isinstance(exp1.workspace, ExperimentWorkspace)
 
@@ -122,7 +123,8 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     assert "exp1.ckpt" in str(exp1.spec.checkpoint_path)
 
     # --- Check Experiment 2 (without checkpoint) ---
-    assert exp2.spec.id == "exp2"
+    # spec.id comes from model config SESSION.name, not from master config experiment.id
+    assert exp2.spec.id == "exp2_model"
 
     # Check paths resolve to shared directories
     assert exp2.spec.model_config_path.name == "exp2_model.toml"

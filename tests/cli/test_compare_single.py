@@ -30,12 +30,10 @@ def test_single_help() -> None:
 @patch("neuralls.cli.compare_single.build_direct_comparisons")
 def test_single_executes(mock_build, mock_run, tmp_path: Path) -> None:
     workspace = ExperimentWorkspace(
+        dataset_id="test-dataset",
+        run_id="m",
         root_dir=tmp_path / "root",
         data_dir=tmp_path / "data",
-        checkpoint_dir=tmp_path / "ckpts",
-        figures_dir=tmp_path / "figs",
-        predictions_dir=tmp_path / "preds",
-        run_id="m",
     )
     spec = ComparisonSpec(
         name="exp",

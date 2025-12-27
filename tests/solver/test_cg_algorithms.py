@@ -86,9 +86,7 @@ def test_pcg_captures_residual_history(
     assert len(info.residual_history) >= info.iterations
     assert not np.isnan(info.residual_history).any()
     assert info.event_log is not None
-    residual_events = info.event_log.get_history("residual")
-    assert len(residual_events) > 0
-    assert len(residual_events) >= info.iterations
+    # Check scalar residual norms (logged in MINIMAL mode)
     residual_norms = np.asarray(
         info.event_log.get_history("residual_norm"), dtype=np.float64
     )
@@ -114,13 +112,14 @@ def test_pcg_captures_vector_traces(
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
         max_iter=15,
-        capture_traces=True,
+        trace_mode="full",
     )
 
     assert info.residual_vectors is not None
     assert info.solution_vectors is not None
-    assert info.residual_vectors.shape[0] == info.iterations
-    assert info.solution_vectors.shape[0] == info.iterations
+    # Vectors include iteration 0, so shape[0] = iterations + 1
+    assert info.residual_vectors.shape[0] == info.iterations + 1
+    assert info.solution_vectors.shape[0] == info.iterations + 1
     assert info.residual_vectors.shape[1] == b.shape[0]
     assert info.solution_vectors.shape[1] == b.shape[0]
     final_solution = info.solution_vectors[-1]
@@ -176,8 +175,7 @@ def test_flexible_cg_with_torch_linear_preconditioner(
     _, base_info = flexible_cg(
         A,
         b,
-        max_iter=20,
-        stopping_criterion="fixed_iterations",
+        max_iterations=20,
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
     )
@@ -197,8 +195,7 @@ def test_flexible_cg_with_torch_linear_preconditioner(
     _, neural_info = flexible_cg(
         A,
         b,
-        max_iter=20,
-        stopping_criterion="fixed_iterations",
+        max_iterations=20,
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
         preconditioner=torch_precond,
@@ -230,12 +227,12 @@ def test_run_cg_comparison_preconditioners(
 def test_flexible_pcg_no_traces_by_default(
     spd_system: tuple[NDArray, NDArray, NDArray],
 ) -> None:
-    """Test that traces are not captured when capture_traces=False."""
+    """Test that traces are not captured when trace_mode='disabled'."""
     A, b, _ = spd_system
     x0 = np.zeros_like(b)
 
     _, info = flexible_cg(
-        A, b, x0, max_iter=50, capture_traces=False, atol=FUNCTIONAL_ATOL
+        A, b, x0, max_iterations=50, trace_mode="disabled", atol=FUNCTIONAL_ATOL
     )
 
     assert info.residual_vectors is None
@@ -253,8 +250,8 @@ def test_flexible_pcg_traces_satisfy_residual_equation(
         A,
         b,
         x0,
-        max_iter=200,
-        capture_traces=True,
+        max_iterations=200,
+        trace_mode="full",
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
     )
@@ -377,15 +374,18 @@ def test_selective_reorthog_strict_threshold() -> None:
 
 
 def test_jacobi_factory_preserves_signs() -> None:
-    """Test that factory-created Jacobi preserves diagonal signs (including negatives)."""
-    from neuralls.preconditioner_factory import make_jacobi_preconditioner
-
+    """Test that Jacobi preconditioner preserves diagonal signs (including negatives)."""
     # Create matrix with negative diagonal element
     A = np.array([[4.0, 1.0, 0.0], [1.0, -3.0, 0.5], [0.0, 0.5, 2.0]], dtype=np.float64)
     diag = np.diag(A)
 
-    # Factory version
-    jacobi_factory = make_jacobi_preconditioner(A)
+    # Jacobi preconditioner using builder pattern
+    from neuralls.preconditioner.builders import JacobiBuilder
+    from neuralls.configuration.preconditioner import StandardPreconditionerConfig
+
+    builder = JacobiBuilder()
+    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
+    jacobi_factory = builder.build(A, config)
 
     # Inline version (correct reference)
     def jacobi_inline(r: np.ndarray) -> np.ndarray:
@@ -420,9 +420,7 @@ def test_jacobi_factory_preserves_signs() -> None:
 
 
 def test_jacobi_factory_convergence_with_fcg() -> None:
-    """Test that factory Jacobi improves convergence vs no preconditioning."""
-    from neuralls.preconditioner_factory import make_jacobi_preconditioner
-
+    """Test that Jacobi preconditioner improves convergence vs no preconditioning."""
     # Create a well-conditioned SPD system where Jacobi should help
     n = 20
     A = np.diag(np.arange(1, n + 1, dtype=np.float64))  # Diagonal matrix
@@ -440,8 +438,13 @@ def test_jacobi_factory_convergence_with_fcg() -> None:
         max_iter=100,
     )
 
-    # With factory Jacobi preconditioning
-    jacobi_precond = make_jacobi_preconditioner(A)
+    # With Jacobi preconditioning using builder pattern
+    from neuralls.preconditioner.builders import JacobiBuilder
+    from neuralls.configuration.preconditioner import StandardPreconditionerConfig
+
+    builder = JacobiBuilder()
+    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
+    jacobi_precond = builder.build(A, config)
     _, info_jacobi = flexible_cg(
         A,
         b,

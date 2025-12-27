@@ -5,6 +5,8 @@ Tests cover validation of data config TOML structure using Pydantic models.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -132,7 +134,7 @@ class TestDataConfigFile:
         assert config.flow.id is None
         assert config.source.matrix_path is None
         assert config.generation.normalize == "matrix"
-        assert config.output.processed_dir is None
+        assert config.output.processed_dir == Path('.')
         assert config.test.solutions_path is None
 
     def test_data_config_file_full(self):
@@ -160,7 +162,7 @@ class TestDataConfigFile:
         assert config.flow.id == "test_flow"
         assert config.source.type == "solution_archive"
         assert config.generation.strategy[0].name == "solution_archive"
-        assert config.output.processed_dir == "/data/processed"
+        assert config.output.processed_dir == Path("/data/processed")
         assert config.test.solutions_path == "/data/test/solutions.txt"
 
     def test_data_config_file_immutable(self):

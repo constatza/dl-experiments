@@ -5,8 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from neuralls.workflows.compare import compare_preconditioners
-from neuralls.io.comparison import load_solver_config
-from neuralls.preconditioner_factory import build_preconditioner_configs
+from neuralls.io.toml_loader import load_solver_config
 
 
 def _write_normalized_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:
@@ -82,7 +81,7 @@ def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
                 "",
                 "[TRAINING.optimizer]",
                 "lr = 0.001",
-                "name = \"AdamW\"",
+                'name = "AdamW"',
                 "",
                 "[DATAMODULE.dataloader]",
                 "batch_size = 32",
@@ -118,14 +117,10 @@ def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
     _write_model_config(model_cfg, checkpoint_dir)
 
     solver_cfg_model = load_solver_config(solver_cfg)
-    precond_configs = build_preconditioner_configs(
-        [{"name": spec.name, "type": spec.type, **spec.model_dump(exclude={'name', 'type'})}
-         for spec in solver_cfg_model.solvers]
-    )
 
     results = compare_preconditioners(
         general_params=solver_cfg_model.general,
-        preconditioner_configs=precond_configs,
+        preconditioner_configs=solver_cfg_model.solvers,
     )
 
     # Access results from ComparisonResult Pydantic model

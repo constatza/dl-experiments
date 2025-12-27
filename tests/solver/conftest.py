@@ -31,8 +31,16 @@ MEDIUM_MATRIX_SIZE = 50
 TRIDIAGONAL_DIAG_VALUE = 4.0
 TRIDIAGONAL_OFFDIAG_VALUE = -1.0
 TEST_SEED = 42
-DEFAULT_RTOL = 1e-6
-DEFAULT_ATOL = 1e-14
+
+# Tolerance constants for two test levels
+INTEGRATION_RTOL = 1e-6      # Integration test relative tolerance
+INTEGRATION_ATOL = 1e-14     # Integration test absolute tolerance
+CONVERGENCE_RTOL = 1e-12     # Convergence test relative tolerance
+CONVERGENCE_ATOL = 1e-14     # Convergence test absolute tolerance
+
+# Legacy constants (kept for backward compatibility during migration)
+DEFAULT_RTOL = INTEGRATION_RTOL
+DEFAULT_ATOL = INTEGRATION_ATOL
 DEFAULT_ASSERT_RTOL = 1e-5
 DEFAULT_MAX_ITER = 1000
 
@@ -158,6 +166,48 @@ def ill_conditioned_spd_small(test_seed: int) -> NDArray:
 
 
 # =============================================================================
+# Medium Matrix Fixtures (for convergence tests)
+# =============================================================================
+
+
+@pytest.fixture
+def tridiagonal_spd_medium() -> NDArray:
+    """Medium tridiagonal SPD matrix (50x50) - for convergence tests.
+
+    Returns:
+        50x50 tridiagonal matrix: diag=4, off-diag=-1.
+
+    Theory:
+        Same structure as small version but larger size for more
+        realistic convergence testing. Condition number κ ≈ 160.
+    """
+    n = MEDIUM_MATRIX_SIZE
+    sparse_mat = diags(
+        [TRIDIAGONAL_OFFDIAG_VALUE, TRIDIAGONAL_DIAG_VALUE, TRIDIAGONAL_OFFDIAG_VALUE],
+        [-1, 0, 1],
+        shape=(n, n),
+        format="csr",
+        dtype=np.float64,
+    )
+    return sparse_mat.toarray()
+
+
+@pytest.fixture
+def diagonal_spd_medium() -> NDArray:
+    """Medium diagonal SPD matrix (50x50) - for convergence tests.
+
+    Returns:
+        50x50 diagonal matrix with entries [1, 2, ..., 50].
+
+    Theory:
+        Diagonal matrix with entries 1 to 50.
+        Condition number κ = 50/1 = 50 (well-conditioned).
+    """
+    n = MEDIUM_MATRIX_SIZE
+    return np.diag(np.arange(1, n + 1, dtype=np.float64))
+
+
+# =============================================================================
 # RHS Vector Fixtures
 # =============================================================================
 
@@ -203,6 +253,16 @@ def rhs_zero_small() -> NDArray:
         CG should converge immediately (iteration 0).
     """
     return np.zeros(SMALL_MATRIX_SIZE, dtype=np.float64)
+
+
+@pytest.fixture
+def rhs_ones_medium() -> NDArray:
+    """RHS vector of all ones (size 50) - for convergence tests.
+
+    Returns:
+        50D vector of ones.
+    """
+    return np.ones(MEDIUM_MATRIX_SIZE, dtype=np.float64)
 
 
 # =============================================================================
@@ -283,6 +343,51 @@ def diagonal_system_known_solution(
 
 
 # =============================================================================
+# Medium Test System Fixtures (for convergence tests)
+# =============================================================================
+
+
+@pytest.fixture
+def tridiagonal_system_medium(
+    tridiagonal_spd_medium: NDArray,
+    rhs_ones_medium: NDArray,
+) -> tuple[NDArray, NDArray, NDArray]:
+    """Medium tridiagonal SPD system with known solution - for convergence tests.
+
+    Args:
+        tridiagonal_spd_medium: 50×50 tridiagonal matrix.
+        rhs_ones_medium: 50D RHS vector.
+
+    Returns:
+        Tuple of (A, b, x_exact) where A @ x_exact = b.
+    """
+    a = tridiagonal_spd_medium
+    b = rhs_ones_medium
+    x_exact = np.linalg.solve(a, b)
+    return a, b, x_exact
+
+
+@pytest.fixture
+def diagonal_system_medium(
+    diagonal_spd_medium: NDArray,
+    rhs_ones_medium: NDArray,
+) -> tuple[NDArray, NDArray, NDArray]:
+    """Medium diagonal SPD system with known solution - for convergence tests.
+
+    Args:
+        diagonal_spd_medium: 50×50 diagonal matrix.
+        rhs_ones_medium: 50D RHS vector.
+
+    Returns:
+        Tuple of (A, b, x_exact) where A @ x_exact = b.
+    """
+    a = diagonal_spd_medium
+    b = rhs_ones_medium
+    x_exact = b / np.diag(a)
+    return a, b, x_exact
+
+
+# =============================================================================
 # Preconditioner Fixtures
 # =============================================================================
 
@@ -316,7 +421,7 @@ def identity_preconditioner() -> Callable[[NDArray, object], NDArray]:
 
 @pytest.fixture
 def jacobi_preconditioner_factory() -> Callable[
-    [NDArray], Callable[[NDArray, object], NDArray]
+    [NDArray], Callable[[NDArray], NDArray]
 ]:
     """Factory for Jacobi preconditioner M = diag(A).
 
@@ -329,7 +434,7 @@ def jacobi_preconditioner_factory() -> Callable[
         Cheap to compute and apply.
     """
 
-    def factory(a: NDArray) -> Callable[[NDArray, object], NDArray]:
+    def factory(a: NDArray) -> Callable[[NDArray], NDArray]:
         """Create Jacobi preconditioner for matrix A.
 
         Args:
@@ -340,12 +445,11 @@ def jacobi_preconditioner_factory() -> Callable[
         """
         diag_inv = 1.0 / np.diag(a)
 
-        def precond(r: NDArray, context: object) -> NDArray:
+        def precond(r: NDArray) -> NDArray:
             """Apply Jacobi preconditioner.
 
             Args:
                 r: Residual vector.
-                context: Iteration context (unused).
 
             Returns:
                 z = diag(A)^{-1} r.
@@ -361,9 +465,9 @@ def jacobi_preconditioner_factory() -> Callable[
 def jacobi_preconditioner_tridiagonal(
     tridiagonal_spd_small: NDArray,
     jacobi_preconditioner_factory: Callable[
-        [NDArray], Callable[[NDArray, object], NDArray]
+        [NDArray], Callable[[NDArray], NDArray]
     ],
-) -> Callable[[NDArray, object], NDArray]:
+) -> Callable[[NDArray], NDArray]:
     """Jacobi preconditioner for tridiagonal test matrix.
 
     Args:
@@ -374,6 +478,118 @@ def jacobi_preconditioner_tridiagonal(
         Preconditioner function for tridiagonal matrix.
     """
     return jacobi_preconditioner_factory(tridiagonal_spd_small)
+
+
+@pytest.fixture
+def ilu_preconditioner_factory() -> Callable[
+    [NDArray], Callable[[NDArray], NDArray]
+]:
+    """Factory for ILU preconditioner using scipy.sparse.linalg.spilu.
+
+    Returns:
+        Factory function that creates ILU preconditioner from matrix A.
+
+    Theory:
+        ILU (Incomplete LU) preconditioner: approximates A ≈ LU with sparse factors.
+        More effective than Jacobi for general sparse matrices.
+        Uses scipy's spilu which performs sparse ILU factorization with threshold
+        dropping to control fill-in.
+    """
+
+    def factory(a: NDArray) -> Callable[[NDArray], NDArray]:
+        """Create ILU preconditioner for matrix A.
+
+        Args:
+            a: System matrix.
+
+        Returns:
+            Preconditioner function.
+        """
+        from scipy.sparse import csc_matrix
+        from scipy.sparse.linalg import spilu
+
+        # Convert to CSC format for efficient factorization
+        a_csc = csc_matrix(a)
+        ilu = spilu(a_csc)
+
+        def precond(r: NDArray) -> NDArray:
+            """Apply ILU preconditioner.
+
+            Args:
+                r: Residual vector.
+
+            Returns:
+                z = (LU)^{-1} r via forward/backward substitution.
+            """
+            return ilu.solve(r)
+
+        return precond
+
+    return factory
+
+
+@pytest.fixture
+def ilu_preconditioner_tridiagonal(
+    tridiagonal_spd_small: NDArray,
+    ilu_preconditioner_factory: Callable[
+        [NDArray], Callable[[NDArray], NDArray]
+    ],
+) -> Callable[[NDArray], NDArray]:
+    """ILU preconditioner for tridiagonal test matrix.
+
+    Args:
+        tridiagonal_spd_small: Tridiagonal matrix.
+        ilu_preconditioner_factory: Factory for creating ILU preconditioner.
+
+    Returns:
+        Preconditioner function for tridiagonal matrix.
+    """
+    return ilu_preconditioner_factory(tridiagonal_spd_small)
+
+
+@pytest.fixture
+def ilu_preconditioner_diagonal(
+    diagonal_spd_small: NDArray,
+    ilu_preconditioner_factory: Callable[
+        [NDArray], Callable[[NDArray], NDArray]
+    ],
+) -> Callable[[NDArray], NDArray]:
+    """ILU preconditioner for diagonal test matrix.
+
+    Args:
+        diagonal_spd_small: Diagonal matrix.
+        ilu_preconditioner_factory: Factory for creating ILU preconditioner.
+
+    Returns:
+        Preconditioner function for diagonal matrix.
+
+    Theory:
+        For diagonal matrices, ILU factorization is exact: L=I, U=D.
+        Should give identical results to Jacobi preconditioner.
+    """
+    return ilu_preconditioner_factory(diagonal_spd_small)
+
+
+@pytest.fixture
+def jacobi_preconditioner_medium(
+    jacobi_preconditioner_factory: Callable[
+        [NDArray], Callable[[NDArray], NDArray]
+    ],
+    tridiagonal_spd_medium: NDArray,
+) -> Callable[[NDArray], NDArray]:
+    """Jacobi preconditioner for medium tridiagonal matrix - for convergence tests."""
+    return jacobi_preconditioner_factory(tridiagonal_spd_medium)
+
+
+@pytest.fixture
+def ilu_preconditioner_medium(
+    ilu_preconditioner_factory: Callable[
+        [NDArray], Callable[[NDArray], NDArray]
+    ],
+    tridiagonal_spd_medium: NDArray,
+) -> Callable[[NDArray], NDArray]:
+    """ILU preconditioner for medium tridiagonal matrix - for convergence tests."""
+    return ilu_preconditioner_factory(tridiagonal_spd_medium)
 
 
 @pytest.fixture
@@ -419,13 +635,74 @@ def test_seed() -> int:
 
 
 @pytest.fixture
+def integration_tolerances() -> tuple[float, float]:
+    """Integration test tolerances (rtol=1e-6, atol=1e-14).
+
+    Use for functionality tests, smoke tests, and general solver validation.
+    These tolerances verify that the algorithm works correctly without requiring
+    extreme precision.
+
+    Returns:
+        Tuple of (rtol, atol) for integration testing.
+
+    Theory:
+        rtol=1e-6 allows ~6 digits of relative accuracy, sufficient for
+        verifying correctness. atol=1e-14 handles near-zero values.
+    """
+    return INTEGRATION_RTOL, INTEGRATION_ATOL
+
+
+@pytest.fixture
 def default_tolerances() -> tuple[float, float]:
     """Default convergence tolerances (rtol, atol).
+
+    DEPRECATED: Use integration_tolerances() instead.
+    Kept for backward compatibility during migration.
 
     Returns:
         Tuple of (rtol, atol) for convergence testing.
     """
     return DEFAULT_RTOL, DEFAULT_ATOL
+
+
+@pytest.fixture
+def integration_rtol() -> float:
+    """Integration test relative tolerance (1e-6).
+
+    Returns:
+        Integration test rtol value.
+    """
+    return INTEGRATION_RTOL
+
+
+@pytest.fixture
+def integration_atol() -> float:
+    """Integration test absolute tolerance (1e-14).
+
+    Returns:
+        Integration test atol value.
+    """
+    return INTEGRATION_ATOL
+
+
+@pytest.fixture
+def convergence_rtol() -> float:
+    """Convergence test relative tolerance (1e-12).
+
+    Returns:
+        Convergence test rtol value.
+    """
+    return CONVERGENCE_RTOL
+
+
+@pytest.fixture
+def convergence_atol() -> float:
+    """Convergence test absolute tolerance (1e-14).
+
+    Returns:
+        Convergence test atol value.
+    """
+    return CONVERGENCE_ATOL
 
 
 @pytest.fixture
@@ -439,8 +716,30 @@ def default_assert_rtol() -> float:
 
 
 @pytest.fixture
+def convergence_tolerances() -> tuple[float, float]:
+    """Convergence test tolerances (rtol=1e-12, atol=1e-14).
+
+    Use for high-precision validation, double-precision accuracy checks,
+    and comparison against direct solvers.
+
+    Returns:
+        Tuple of (rtol, atol) for convergence testing.
+
+    Theory:
+        rtol=1e-12 verifies ~12 digits of relative accuracy, which is
+        appropriate for double-precision iterative solvers. This is strict
+        but achievable for well-conditioned systems with good preconditioners.
+    """
+    return CONVERGENCE_RTOL, CONVERGENCE_ATOL
+
+
+@pytest.fixture
 def tight_tolerances() -> tuple[float, float]:
-    """Tight convergence tolerances for high-accuracy checks."""
+    """Tight convergence tolerances for high-accuracy checks.
+
+    DEPRECATED: Use convergence_tolerances() instead.
+    Kept for backward compatibility during migration.
+    """
     return 1e-14, 1e-14
 
 
@@ -466,6 +765,29 @@ def zero_initial_guess_small() -> NDArray:
         Initial residual r0 = b - A*0 = b.
     """
     return np.zeros(SMALL_MATRIX_SIZE, dtype=np.float64)
+
+
+@pytest.fixture
+def solver_factories() -> dict[str, Callable]:
+    """Map of solver names to factory functions.
+
+    Returns:
+        Dictionary mapping solver names to factory functions:
+        {"fcg": flexible_cg, "pcg": preconditioned_cg, "scipy_cg": scipy_cg}
+
+    Use this fixture for parametrized tests that need to test all solvers:
+        @pytest.mark.parametrize("solver_name", ["fcg", "pcg", "scipy_cg"])
+        def test_something(solver_name, solver_factories):
+            solver = solver_factories[solver_name]
+            x, result = solver(A, b, ...)
+    """
+    from neuralls.solver import flexible_cg, preconditioned_cg, scipy_cg
+
+    return {
+        "fcg": flexible_cg,
+        "pcg": preconditioned_cg,
+        "scipy_cg": scipy_cg,
+    }
 
 
 # =============================================================================

@@ -173,7 +173,7 @@ def test_flexible_pcg_tridiagonal_converges(
 
 def test_flexible_pcg_tridiagonal_with_jacobi_preconditioner(
     tridiagonal_system_known_solution: tuple[NDArray, NDArray, NDArray],
-    jacobi_preconditioner_tridiagonal: Callable[[NDArray, object], NDArray],
+    jacobi_preconditioner_tridiagonal: Callable[[NDArray], NDArray],
     zero_initial_guess_small: NDArray,
     default_tolerances: tuple[float, float],
     default_assert_rtol: float,
@@ -605,6 +605,7 @@ def test_flexible_pcg_residual_history_decreasing(
     )
 
     # Check residual history exists and has values
+    # Note: Strings work fine, auto-converted to EventType internally
     assert info.event_log is not None
     residual_history = info.event_log.get_history("residual_norm")
     assert len(residual_history) > 0
@@ -641,6 +642,8 @@ def test_flexible_pcg_custom_parameters(
     # Using default tolerances for base case
     default_rtol, default_atol = default_tolerances
 
+    # Note: Old API had eps_curv, eps_breakdown, m_replacement, gamma_div
+    # New API handles these internally - just use tolerances
     x, info = flexible_pcg(
         a,
         b,
@@ -648,10 +651,6 @@ def test_flexible_pcg_custom_parameters(
         rtol=default_rtol,
         atol=default_atol,
         max_iterations=100,
-        eps_curv=1e-12,  # Custom curvature threshold
-        eps_breakdown=1e-12,  # Custom breakdown threshold
-        m_replacement=25,  # Custom residual replacement frequency
-        gamma_div=1e8,  # Custom divergence threshold
     )
 
     # Still converges

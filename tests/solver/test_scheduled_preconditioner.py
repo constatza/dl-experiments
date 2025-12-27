@@ -6,7 +6,7 @@ import pytest
 import numpy as np
 
 from neuralls.solver.comparison import _scheduled_preconditioner
-from neuralls.solver.info import IterationContext
+from neuralls.solver.models.result import IterationContext
 
 
 def test_scheduled_preconditioner_limit_iters() -> None:

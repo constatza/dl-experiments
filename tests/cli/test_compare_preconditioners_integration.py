@@ -51,12 +51,10 @@ def test_script_execution_no_experiments(mock_run_batch):
 def test_script_execution_mock_experiment(mock_run_batch, tmp_path):
     """Happy-path execution with one comparison spec."""
     workspace = ExperimentWorkspace(
+        dataset_id="test-dataset",
+        run_id="test_model",
         root_dir=tmp_path / "root",
         data_dir=tmp_path / "data",
-        checkpoint_dir=tmp_path / "ckpts",
-        figures_dir=tmp_path / "figs",
-        predictions_dir=tmp_path / "preds",
-        run_id="test_model",
     )
     outcome = ComparisonOutcome(
         name="test_exp",

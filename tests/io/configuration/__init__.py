@@ -1,1 +1,1 @@
-"""Tests for configuration loaders package."""
+"""Tests for configuration resolve package."""

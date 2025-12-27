@@ -77,14 +77,14 @@ def test_load_experiment_success(temp_config_structure: Path, monkeypatch: pytes
     assert experiment.spec.model_config_path == model_path
     assert experiment.spec.data_config_path == data_path
 
-    # Check paths injection
-    assert experiment.settings.PATHS.results_dir == str(experiment.workspace.root_dir)
+    # Check paths injection - default_root_dir is now a Path
+    assert Path(experiment.settings.TRAINING.trainer.default_root_dir) == experiment.workspace.root_dir
 
 
 def test_load_experiment_missing_data_config(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
-    """Test that missing data config raises ValueError."""
+    """Test that missing data config raises TypeError (required parameter)."""
     monkeypatch.chdir(temp_config_structure)
     model_path = temp_config_structure / "configs" / "experiments" / "exp1" / EXP_MODEL_CONFIG_NAME
-    
-    with pytest.raises(ValueError, match="data_config_path is required"):
-        load_experiment(model_config_path=model_path)
+
+    with pytest.raises(TypeError, match="missing 1 required positional argument: 'data_config_path'"):
+        load_experiment(model_config_path=model_path)  # type: ignore

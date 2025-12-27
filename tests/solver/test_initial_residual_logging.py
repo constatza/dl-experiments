@@ -1,8 +1,8 @@
-"""Test initial residual logging in scipy CG wrapper."""
+"""Test initial residual logging in CG solvers."""
 
 import numpy as np
-from neuralls.solver.pcg_solver import cg_solve
-from neuralls.solver.trace_recorder import TraceRecorder
+from neuralls.solver.factories import preconditioned_cg
+from neuralls.solver.monitoring.trace_recorder import TraceRecorder
 
 
 def test_vector_logger_prepend_scalar():
@@ -34,26 +34,25 @@ def test_scipy_cg_initial_residual_zero_guess():
     A = np.eye(n) * 2.0 + np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
     b = np.ones(n)
 
-    event_log = TraceRecorder()
-    x, result = cg_solve(
+    x, result = preconditioned_cg(
         A,
         b,
         x0=None,  # Zero guess
-        tol=1e-6,
-        maxiter=20,
-        callback_type="x",
-        event_log=event_log,
+        rtol=1e-6,
+        max_iterations=20,
+        trace_mode="minimal",
     )
 
     # Check history includes iteration 0
-    history = result.residual_history
+    assert result.event_log is not None
+    history = result.event_log.get_history("residual_norm")
     assert history is not None
     assert len(history) > 0
 
     # Initial residual should equal ||b|| when x0 = 0
     expected_r0 = np.linalg.norm(b)
     b_norm = np.linalg.norm(b)
-    assert np.isclose(history[0], expected_r0 / b_norm)  # Relative residual
+    assert np.isclose(history[0], expected_r0)
 
 
 def test_scipy_cg_initial_residual_nonzero_guess():
@@ -63,27 +62,25 @@ def test_scipy_cg_initial_residual_nonzero_guess():
     b = np.ones(n)
     x0 = np.random.rand(n) * 0.1
 
-    event_log = TraceRecorder()
-    x, result = cg_solve(
+    x, result = preconditioned_cg(
         A,
         b,
         x0=x0,
-        tol=1e-6,
-        maxiter=20,
-        callback_type="x",
-        event_log=event_log,
+        rtol=1e-6,
+        max_iterations=20,
+        trace_mode="minimal",
     )
 
     # Check history includes iteration 0
-    history = result.residual_history
+    assert result.event_log is not None
+    history = result.event_log.get_history("residual_norm")
     assert history is not None
     assert len(history) > 0
 
     # Initial residual should equal ||b - A @ x0||
     r0 = b - A @ x0
     expected_r0 = np.linalg.norm(r0)
-    b_norm = np.linalg.norm(b)
-    assert np.isclose(history[0], expected_r0 / b_norm)
+    assert np.isclose(history[0], expected_r0, rtol=1e-5)
 
 
 def test_scipy_cg_vs_fcg_consistency():
