@@ -25,17 +25,20 @@ Experiments are organized as config bundles that combine model, data, and solver
 from neuralls.configuration.loader import load_experiment
 from neuralls.configuration.solver import get_solver_params
 
-# Load experiment with model, data, and solver configs
+# Load experiment with model and data configs
 experiment = load_experiment(
-    model_config_path="configs/experiments/default/model.toml",
+    model_config_path="configs/models/ffnn.toml",
     data_config_path="configs/datasets/collect-504-solutions.toml",
-    solver_config_path="configs/experiments/default/solver.toml",  # optional
 )
 
-# Access validated settings and paths
+# Access validated settings and workspace paths
 params = get_solver_params(experiment.settings)
 workspace = experiment.workspace
-checkpoint_dir = workspace.checkpoint_dir
+checkpoint_dir = workspace.checkpoint_dir  # Derived from MLflow artifact_uri
+
+# Access paths from workspace
+data_dir = workspace.data_dir         # Where datasets live
+output_root = workspace.root_dir      # Master output directory (from MLflow)
 ```
 
 **Configuration structure:**
@@ -46,6 +49,76 @@ checkpoint_dir = workspace.checkpoint_dir
 All configs are validated using **Pydantic** at load time, catching configuration errors early with clear, actionable error messages.
 
 The master `configs/experiments.toml` file orchestrates multiple experiment bundles for batch workflows.
+
+## Recent API Changes
+
+### Configuration Loader (Breaking Changes)
+
+**Simplified `load_experiment()` signature:**
+- **Removed:** `solver_config_path` parameter - solver configs are now only used at comparison time, not during experiment loading
+- **Added:** `output_root` optional parameter for overriding the master output directory
+- **Before:**
+  ```python
+  load_experiment(model_config, data_config, solver_config)  # solver config removed
+  ```
+- **After:**
+  ```python
+  load_experiment(model_config, data_config, output_root=None)  # clean separation
+  ```
+
+**Removed legacy functions:**
+- `build_flow_context()` - Use `build_path_context()` and `WorkspaceFactory` instead
+- `load_data_context()` - Use `load_experiment()` with dedicated data processing utilities
+- Import paths: `from neuralls.configuration.loader import load_experiment, load_batch` (not from top-level `__init__.py`)
+
+**New path resolution system:**
+- Moved from `neuralls.paths.core` → `neuralls.configuration.paths`
+- Simplified from `FlowContext`/`ProjectRoots` → `PathContext`/`build_path_context()`
+- Three core functions: `resolve_project_root()`, `resolve_output_root()`, `resolve_processed_root()`
+
+### Solver Module (Major Refactoring)
+
+**Modular architecture replacing monolithic files:**
+- **`core/`** - Abstract base classes (`ISolver`, `IterativeSolverBase`, `KrylovSolverBase`)
+- **`solvers/`** - Concrete implementations (`FlexibleCGSolver`, `PreconditionedCGSolver`)
+- **`models/`** - Immutable state hierarchy (`SolverState`, `KrylovState`, `CGState`, `SolverResult`)
+- **`monitoring/`** - Diagnostics (`TraceRecorder`, `HistoryTracker`)
+- **`strategies/`** - Strategy patterns (`OrthogonalizationStrategy`, `ReorthogonalizationStrategy`, `IConvergenceCriterion`)
+
+**Removed monolithic files:**
+- `fcg_solver.py`, `pcg_solver.py` → `solvers/` directory with focused implementations
+- `state.py`, `info.py` → `models/` directory with type-safe state containers
+- `trace_recorder.py`, `convergence.py` → `monitoring/` directory
+- `helpers.py`, `reorthogonalization.py` → `utils/` and `strategies/`
+
+**Factory function updates:**
+- `flexible_cg()` - Now uses `FlexibleCGSolver` class internally
+- `preconditioned_cg()` - Now uses `PreconditionedCGSolver` class internally
+- Import from: `from neuralls.solver.factories import flexible_cg, preconditioned_cg`
+
+### Preconditioner Module (New)
+
+**New dedicated package: `neuralls.preconditioner/`**
+- **`builders.py`** - Factory functions for preconditioner construction
+- **`registry.py`** - Type-safe preconditioner registry and lookup
+- **`predictor.py`** - Neural preconditioner prediction interface
+
+**Removed from solver package:**
+- `preconditioner_factory.py` → Consolidated into `preconditioner/builders.py`
+
+### IO and Comparison
+
+**Moved functions:**
+- `load_solver_config()`: `io.comparison` → `io.toml_loader` (canonical location with other loaders)
+
+**Import updates:**
+```python
+# Before
+from neuralls.io.comparison import load_solver_config
+
+# After
+from neuralls.io.toml_loader import load_solver_config
+```
 
 ## Workflows and CLI
 
@@ -114,4 +187,13 @@ uv run pyright src/neuralls
 - Override via environment: `export GRAPH_CG_OUTPUT_DIR=/custom/path`
 - Or configure in `configs/experiments.toml` under the `output_dir` key
 
-All experiment outputs are organized by experiment name and include checkpoints, predictions, comparisons, and visualizations.
+The `output_root` is the single source of truth for all experiment artifacts. MLflow tracking database and artifact storage are automatically derived from it:
+- MLflow tracking: `{output_root}/mlruns/mlflow.db`
+- MLflow artifacts: `{output_root}/mlartifacts/{experiment_id}/{run_id}/`
+
+Processed datasets live separately in the `processed_root` directory (configurable per dataset config).
+
+All path resolution is handled by three simple functions in `src/neuralls/configuration/paths.py`:
+- `resolve_project_root()` - Project base directory
+- `resolve_output_root()` - Master output directory (drives MLflow paths)
+- `resolve_processed_root()` - Processed data directory
