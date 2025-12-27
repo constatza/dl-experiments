@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from typing import Any, Literal
 from collections.abc import Callable, Sequence
 
@@ -11,35 +10,11 @@ from scipy.linalg import norm
 
 from ..constants import DEFAULT_ATOL, DEFAULT_RTOL
 from .factories import flexible_cg, preconditioned_cg as _preconditioned_cg
-from .info import CGComparisonResult, IterationContext, SolverResult
-from .reorthogonalization import ReorthogonalizationStrategy
+from .models.result import CGComparisonResult, IterationContext, SolverResult
+from .strategies.reorthogonalization import ReorthogonalizationStrategy
 
 
-def _detect_preconditioner_pattern(func: Callable[..., np.ndarray]) -> str:
-    try:
-        params = list(inspect.signature(func).parameters.values())
-    except (TypeError, ValueError):
-        return "residual"
-    if not params:
-        return "residual"
-    if len(params) == 1 and params[0].name in {"ctx", "context", "iteration_context"}:
-        return "context"
-    if len(params) >= 2:
-        return "residual_context"
-    return "residual"
-
-
-def _invoke_preconditioner(
-    func: Callable[..., np.ndarray],
-    pattern: str,
-    residual: np.ndarray,
-    context: Any,
-) -> np.ndarray:
-    if pattern == "context":
-        return func(context)
-    if pattern == "residual_context":
-        return func(residual, context)
-    return func(residual)
+# Signature detection removed: all preconditioners now have uniform signature (residual) -> result
 
 
 def _scheduled_preconditioner(
@@ -55,23 +30,14 @@ def _scheduled_preconditioner(
 
     active_precond = preconditioner or (lambda residual: residual)
     fallback_precond = fallback or (lambda residual: residual)
-    active_pattern = _detect_preconditioner_pattern(active_precond)
-    fallback_pattern = _detect_preconditioner_pattern(fallback_precond)
 
     def wrapped(context: IterationContext) -> np.ndarray:
-        """Scheduled preconditioner that takes only IterationContext.
+        """Scheduled preconditioner taking IterationContext.
 
-        This avoids double-wrapping issues by using the context-only pattern
-        that CallablePreconditioner expects for iteration-aware preconditioners.
+        All preconditioners now have uniform signature: (residual) -> result.
+        No signature detection needed.
         """
-        # Extract iteration and residual from context
         iteration = context.iteration
-
-        # Defensive: Handle edge case where context.iteration is nested IterationContext
-        # This can happen in complex preconditioner wrapping scenarios
-        if isinstance(iteration, IterationContext):
-            iteration = iteration.iteration
-
         residual = context.residual
 
         # Determine which preconditioner to use based on scheduling
@@ -83,13 +49,10 @@ def _scheduled_preconditioner(
         if apply_every > 1 and iteration % apply_every != 0:
             use_main = False
 
+        # All preconditioners have signature: (residual) -> result
         if use_main:
-            return _invoke_preconditioner(
-                active_precond, active_pattern, residual, context
-            )
-        return _invoke_preconditioner(
-            fallback_precond, fallback_pattern, residual, context
-        )
+            return active_precond(residual)
+        return fallback_precond(residual)
 
     return wrapped
 
@@ -109,16 +72,15 @@ def preconditioned_cg(
     """Preconditioned Conjugate Gradient solver wrapper."""
     if x0 is None:
         x0 = np.zeros_like(b, dtype=np.float64)
+    # Note: stopping_criterion and breakdown_tol are legacy parameters, not passed to factory
     return _preconditioned_cg(
         A,
         b,
         x0,
-        tol=rtol,
+        rtol=rtol,
         atol=atol,
         max_iter=max_iter,
         preconditioner=preconditioner,
-        stopping_criterion=stopping_criterion,
-        breakdown_tol=breakdown_tol,
     )
 
 
@@ -222,8 +184,6 @@ def run_cg_comparison(
                     atol=atol,
                     max_iter=max_iter,
                     preconditioner=scheduled_precond,
-                    stopping_criterion=stopping_criterion,
-                    breakdown_tol=breakdown_tol,
                     reorthogonalize=reorthogonalize,
                 )
         except Exception as solver_exc:  # noqa: BLE001

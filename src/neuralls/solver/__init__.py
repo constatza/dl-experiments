@@ -1,100 +1,90 @@
-"""Flexible PCG solver module with non-SPD preconditioner support.
+"""Flexible CG solver module with modular architecture.
 
-This package provides a complete implementation of the Flexible Preconditioned
-Conjugate Gradient (Flexible PCG) algorithm, designed to handle time-varying
-and non-symmetric preconditioners while maintaining numerical robustness.
+This package provides a complete implementation of Conjugate Gradient algorithms
+with support for flexible preconditioning, non-SPD preconditioners, and strategy-based
+design patterns.
 
-Key Components:
+Architecture Overview:
 
-1. **IterationState & DirectionHistory** (state.py):
-   Immutable dataclasses tracking algorithm progress, convergence status,
-   restart events, numerical diagnostics, and direction history buffers.
+1. **Core Abstractions** (core/):
+   - ISolver, IIterativeSolver: Solver interfaces
+   - IterativeSolverBase: Template method base class
+   - KrylovSolverBase: Krylov subspace method base
 
-2. **Direction Strategies** (direction_strategies.py):
-   - DirectionStrategy: Abstract base class for direction computation
-   - FlexibleCGDirection: Classical two-term recurrence with residual-only beta
-   - TruncatedOrthogonalDirection: (Future) Explicit Gram-Schmidt orthogonalization
+2. **Solver Implementations** (solvers/):
+   - FlexibleCGSolver: FCG with truncated orthogonalization
+   - PreconditionedCGSolver: PCG with two-term recurrence
+   - ConjugateGradientBase: CG-specific base class
 
-3. **Helper Functions** (helpers.py):
-   - initialize_state: Initialize state from initial residual
-   - convergence_check: Check convergence criterion
-   - curvature: Evaluate A-conjugacy with non-SPD restart
-   - step_length: Compute step length with breakdown detection
-   - beta_update: Compute residual ratio with restart bounds
-   - direction_update: Update search direction
-   - residual_management: Periodic recomputation and divergence detection
+3. **Strategies** (strategies/):
+   - OrthogonalizationStrategy: Direction orthogonalization
+   - ReorthogonalizationStrategy: Secondary orthogonalization
+   - IConvergenceCriterion: Convergence testing
 
-4. **Main Algorithm** (fcg_solver.py):
-   FlexibleConjugateGradientSolver implementing the FCG algorithm
-   with full error handling and diagnostic reporting.
+4. **State Management** (models/):
+   - SolverState, KrylovState, CGState: Immutable state hierarchy
+   - DirectionHistory, ResidualHistory: History tracking
+   - SolverResult: Result container
 
 5. **Factory Functions** (factories.py):
-   - flexible_cg: FCG with Gram-Schmidt orthogonalization (neural preconditioners)
-   - preconditioned_cg: PCG with two-term recurrence (classical preconditioners or baseline when preconditioner=None)
+   - flexible_cg(): FCG for neural/non-SPD preconditioners
+   - preconditioned_cg(): PCG for classical preconditioners
 
-6. **Result Structure** (info.py):
-   SolverResult dataclass containing convergence metrics and optional event log.
+6. **Monitoring** (monitoring/):
+   - TraceRecorder: Iteration diagnostics and event logging
+   - HistoryTracker: Residual and solution tracking
 
 Mathematical Background:
 
-Flexible PCG extends standard CG to handle:
-- Time-varying preconditioners M_k (k-dependent)
-- Non-symmetric preconditioners (M_k^T != M_k)
-- Non-SPD preconditioners (negative curvature possible)
+Conjugate Gradient methods solve SPD linear systems Ax = b iteratively.
+This package supports:
+- Time-varying preconditioners M_k (flexible preconditioning)
+- Non-symmetric preconditioners (neural networks)
+- Explicit orthogonalization for numerical stability
+- Strategy-based algorithm customization
 
-The algorithm uses a residual-only beta formula:
-    β_k = ||r_{k+1}||^2 / ||r_k||^2
-
-instead of the standard CG formula, which would require M_k to be
-symmetric and positive definite.
-
-Numerical Robustness Features:
-- Restart on loss of conjugacy (large beta)
-- Restart on negative/small curvature
-- Divergence detection and recovery via residual recomputation
-- Periodic true residual recomputation to correct rounding errors
-- Explicit breakdown detection (NaN/Inf) with safe termination
+Design Principles:
+- SOLID: Single responsibility, open/closed, dependency inversion
+- Strategy Pattern: Inject orthogonalization, convergence criteria
+- Template Method: Base classes define algorithm structure
+- Immutable State: Thread-safe, functional updates
 
 References:
-    Flexible CG for multiple shifts: Golub & van der Vorst (2000)
-    Flexible GMRES: Saad (1993)
-    CG Theory: Hestenes & Stiefel (1952), Nocedal & Wright (2006)
-    Non-symmetric preconditioners: Saad (2003)
+    - Notay, Y. (2000). Flexible Conjugate Gradients. SIAM J. Sci. Comput.
+    - Saad, Y. (2003). Iterative Methods for Sparse Linear Systems.
+    - Hestenes & Stiefel (1952). Methods of Conjugate Gradients.
 """
 
 from __future__ import annotations
 
-from .comparison import (
-    format_results_summary,
-    run_cg_comparison,
-    summarize_best_combinations,
+# Factory functions (primary entry points)
+from .factories import flexible_cg, preconditioned_cg, scipy_cg
+
+# Solver classes
+from .solvers.fcg_solver import FlexibleCGSolver
+from .solvers.pcg_solver import PreconditionedCGSolver
+from .solvers.scipy_cg_solver import SciPyCGSolver
+from .solvers.cg_base import ConjugateGradientBase
+
+# Core interfaces and bases
+from .core.interfaces import IIterativeSolver, ISolver
+from .core.base import IterativeSolverBase
+from .core.krylov_base import KrylovSolverBase
+
+# State models
+from .models.state import CGState, KrylovState, SolverState
+from .models.history import DirectionHistory, ResidualHistory
+from .models.result import CGComparisonResult, IterationContext, SolverResult
+
+# Strategies
+from .strategies.convergence import CombinedToleranceCriterion, IConvergenceCriterion
+from .strategies.orthogonalization import (
+    OrthogonalizationStrategy,
+    TruncatedGramSchmidt,
+    ModifiedGramSchmidt,
+    FullOrthogonalization,
 )
-from .direction_strategies import (
-    DirectionStrategy,
-    FlexibleCGDirection,
-    TruncatedOrthogonalDirection,
-)
-from .convergence import CombinedToleranceCriterion, IConvergenceCriterion
-from .trace_recorder import TraceRecorder
-from .factories import flexible_cg, preconditioned_cg
-from .fcg_solver import FlexibleConjugateGradientSolver
-from .helpers import (
-    beta_update,
-    convergence_check,
-    curvature,
-    direction_update,
-    initialize_state,
-    residual_management,
-    step_length,
-)
-from .info import CGComparisonResult, IterationContext, SolverResult
-from .interfaces import IIterativeSolver, ISolver
-from .preconditioners import (
-    CallablePreconditioner,
-    IdentityPreconditioner,
-    Preconditioner,
-)
-from .reorthogonalization import (
+from .strategies.reorthogonalization import (
     FullReorthogonalization,
     PartialReorthogonalization,
     ReorthogonalizationReport,
@@ -102,57 +92,95 @@ from .reorthogonalization import (
     SelectiveReorthogonalization,
     create_reorthogonalization_strategy,
 )
-from .state import DirectionHistory, IterationState
+
+# Preconditioners
+from .preconditioners import (
+    FunctionPreconditioner,
+    IdentityPreconditioner,
+    Preconditioner,
+)
+
+# Monitoring (with type-safe events)
+from .monitoring.events import EventType
+from .monitoring.trace_mode import TraceMode
+from .monitoring.trace_recorder import TraceRecorder
+from .monitoring.history_tracker import HistoryTracker
+from .monitoring.callbacks import SciPyCallbackAdapter, InitialStateComputer
+
+# Protocols for type-safe state access
+from .models.protocols import HasVectors, HasDirectionHistory
+
+# Comparison tools
+from .comparison import (
+    format_results_summary,
+    run_cg_comparison,
+    summarize_best_combinations,
+)
+
+# Utilities
+from .utils.numerics import stable_dot_product, compute_curvature, check_breakdown
 
 __all__ = [
-    # Solver interfaces
-    "ISolver",
-    "IIterativeSolver",
-    # Core solver classes
-    "FlexibleConjugateGradientSolver",
-    # Factory functions
+    # Factory functions (recommended entry points)
     "flexible_cg",
     "preconditioned_cg",
-    "run_cg_comparison",
-    "format_results_summary",
-    "summarize_best_combinations",
-    # State management
-    "IterationState",
+    "scipy_cg",
+    # Solver classes
+    "FlexibleCGSolver",
+    "PreconditionedCGSolver",
+    "SciPyCGSolver",
+    "ConjugateGradientBase",
+    # Core interfaces and bases
+    "ISolver",
+    "IIterativeSolver",
+    "IterativeSolverBase",
+    "KrylovSolverBase",
+    # State models
+    "SolverState",
+    "KrylovState",
+    "CGState",
     "DirectionHistory",
-    "ReorthogonalizationReport",
-    "IterationContext",
-    # Result structures
+    "ResidualHistory",
     "SolverResult",
     "CGComparisonResult",
-    # Trace recording
-    "TraceRecorder",  # Trace recording for iteration history
-    # Convergence rules
+    "IterationContext",
+    # Strategies
     "IConvergenceCriterion",
     "CombinedToleranceCriterion",
-    # Direction strategies
-    "DirectionStrategy",
-    "FlexibleCGDirection",
-    "TruncatedOrthogonalDirection",
-    # Preconditioners
-    "Preconditioner",
-    "IdentityPreconditioner",
-    "CallablePreconditioner",
-    # Reorthogonalization strategies
+    "OrthogonalizationStrategy",
+    "TruncatedGramSchmidt",
+    "ModifiedGramSchmidt",
+    "FullOrthogonalization",
     "ReorthogonalizationStrategy",
     "FullReorthogonalization",
     "PartialReorthogonalization",
     "SelectiveReorthogonalization",
+    "ReorthogonalizationReport",
     "create_reorthogonalization_strategy",
-    # Helper functions
-    "initialize_state",
-    "convergence_check",
-    "curvature",
-    "step_length",
-    "beta_update",
-    "direction_update",
-    "residual_management",
+    # Preconditioners
+    "Preconditioner",
+    "IdentityPreconditioner",
+    "FunctionPreconditioner",
+    # Monitoring (type-safe events)
+    "EventType",
+    "TraceMode",
+    "TraceRecorder",
+    "HistoryTracker",
+    "SciPyCallbackAdapter",
+    "InitialStateComputer",
+    # Protocols
+    "HasVectors",
+    "HasDirectionHistory",
+    # Comparison
+    "run_cg_comparison",
+    "format_results_summary",
+    "summarize_best_combinations",
+    # Utilities
+    "stable_dot_product",
+    "compute_curvature",
+    "check_breakdown",
 ]
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __author__ = "Graph-CG Contributors"
-__description__ = "Flexible PCG solver with non-SPD preconditioner support"
+__description__ = "Modular Flexible CG solver with strategy pattern design"

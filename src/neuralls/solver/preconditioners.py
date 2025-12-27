@@ -1,89 +1,99 @@
-"""Preconditioner abstractions for Flexible PCG.
+"""Preconditioner abstractions for iterative solvers.
 
-This module defines the Preconditioner abstraction and concrete implementations
-for use in the Flexible PCG solver. It follows the Open/Closed principle by
-providing an abstract base class that can be extended with new preconditioner
-types without modifying existing code.
+This module defines the Preconditioner protocol and concrete implementations.
+Preconditioners can be linear (matrix-based) or non-linear (neural networks,
+adaptive strategies), providing maximum flexibility for solver acceleration.
+
+Design Principles:
+    - Protocol-based: Duck typing for maximum flexibility
+    - General operators: Support both linear (M^{-1}) and non-linear transformations
+    - No context coupling: Simpler interface, context via closures if needed
 
 Mathematical Background:
-    In preconditioned conjugate gradient methods, a preconditioner M approximates
-    the system matrix A to accelerate convergence. At each iteration k, we solve:
+    Preconditioners accelerate iterative solvers by transforming the linear system.
+    At each iteration k, we compute:
 
-        M z_k = r_k
+        z_k = M^{-1}(r_k)  or  z_k = f(r_k)
 
-    where r_k is the current residual and z_k is the preconditioned residual.
-    The preconditioner M should satisfy:
+    where:
+    - r_k is the current residual
+    - z_k is the preconditioned residual
+    - M is an approximation to A (for linear preconditioners)
+    - f is a learned/adaptive function (for non-linear preconditioners)
 
-    1. M ≈ A (good approximation for fast convergence)
-    2. M is easy to invert (computationally efficient)
-    3. M is SPD for standard CG (relaxed in Flexible PCG)
+    Desirable properties:
+    1. M ≈ A or f approximates A^{-1} (fast convergence)
+    2. Application is computationally cheap
+    3. For CG: M should be SPD (relaxed in Flexible CG)
 
-    Flexible PCG allows M_k to vary with iteration and even be non-symmetric,
+    Flexible CG allows M_k to vary with iteration and be non-symmetric,
     enabling neural preconditioners and adaptive strategies.
 
-Theory References:
+References:
     - Notay, Y. (2000). Flexible Conjugate Gradients. SIAM J. Sci. Comput.
     - Saad, Y. (2003). Iterative Methods for Sparse Linear Systems. Ch. 9.
 """
 
 from __future__ import annotations
 
-import inspect
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from collections.abc import Callable
 
 import numpy as np
 from scipy.sparse.linalg import LinearOperator
 
-from .info import IterationContext
-
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-class Preconditioner(ABC):
-    """Abstract base class for CG preconditioners.
+class Preconditioner(Protocol):
+    """Protocol for preconditioner operators.
 
-    A preconditioner transforms the residual r_k into a preconditioned direction z_k
-    that better approximates the error. Concrete implementations can leverage matrix
-    factorizations, neural networks, or other strategies.
+    A preconditioner transforms residual r_k into preconditioned direction z_k.
+    Can be linear (matrix-based: z = M^{-1}r) or non-linear (learned: z = f(r)).
 
-    Mathematical Role:
-        The preconditioner implements the mapping M^{-1}: R^n → R^n where we want
-        M ≈ A for good convergence but M^{-1} is cheap to compute. In practice,
-        we don't form M explicitly but provide the action z = M^{-1} r.
+    This is a Protocol (structural typing), not an ABC, allowing maximum flexibility.
+    Any object with an apply(residual) method satisfies this protocol.
+
+    Examples of valid preconditioners:
+        - Linear: Identity, Jacobi, ILU, incomplete Cholesky
+        - Non-linear: Neural networks, learned approximations
+        - Adaptive: Change behavior based on iteration (via closure)
+
+    Mathematical interpretation:
+        z = M^{-1}(r)  [linear preconditioner]
+        z = f_θ(r)     [non-linear preconditioner, e.g., neural network]
+
+    where the goal is to accelerate convergence of the iterative solver.
     """
 
-    @abstractmethod
-    def apply(self, residual: NDArray, context: IterationContext) -> NDArray:
+    def apply(self, residual: NDArray) -> NDArray:
         """Apply preconditioner to residual vector.
 
-        Computes z_k = M_k^{-1} r_k, transforming the residual into a preconditioned
-        search direction component. The context provides iteration number, solution
-        estimate, and matrix for adaptive preconditioning strategies.
+        Computes z = M^{-1}(r) for linear preconditioners or z = f(r) for
+        non-linear preconditioners. The output must match the input shape.
 
         Args:
-            residual: Current residual vector r_k ∈ R^n.
-            context: Iteration context containing current state (iteration number,
-                solution estimate x_k, matrix A, right-hand side b).
+            residual: Residual vector r ∈ R^n
 
         Returns:
-            Preconditioned residual z_k ∈ R^n with shape matching input residual.
+            Preconditioned residual z ∈ R^n with shape matching input
 
-        Raises:
-            ValueError: If output shape doesn't match input residual shape.
-
-        Mathematical Notes:
-            - Identity: z_k = r_k (no preconditioning)
-            - Jacobi: z_k = D^{-1} r_k where D = diag(A)
-            - ILU: z_k = (LU)^{-1} r_k via forward/backward substitution
-            - Neural: z_k = f_θ(r_k, x_k, k) via learned network f_θ
+        Examples:
+            >>> # Identity preconditioner
+            >>> z = precond.apply(r)  # z = r
+            >>> assert z.shape == r.shape
+            >>>
+            >>> # Jacobi preconditioner
+            >>> z = precond.apply(r)  # z = D^{-1}r
+            >>>
+            >>> # Neural preconditioner
+            >>> z = precond.apply(r)  # z = network(r)
         """
         ...
 
 
-class IdentityPreconditioner(Preconditioner):
+class IdentityPreconditioner:
     """Identity preconditioner (no preconditioning).
 
     Returns the residual unchanged, equivalent to M = I. Used for standard
@@ -92,27 +102,25 @@ class IdentityPreconditioner(Preconditioner):
 
     Mathematical Properties:
         - M = I (identity matrix)
-        - z_k = M^{-1} r_k = I r_k = r_k
+        - z = M^{-1}r = Ir = r
         - Convergence rate: O(√κ(A)) where κ(A) = λ_max(A) / λ_min(A)
-        - No computational overhead beyond standard CG
+        - No computational overhead
 
     Usage:
         >>> precond = IdentityPreconditioner()
         >>> r = np.array([1.0, 2.0, 3.0])
-        >>> ctx = IterationContext(iteration=5, residual=r, ...)
-        >>> z = precond.apply(r, ctx)
+        >>> z = precond.apply(r)
         >>> assert np.array_equal(z, r)  # z = r for identity
     """
 
-    def apply(self, residual: NDArray, context: IterationContext) -> NDArray:
+    def apply(self, residual: NDArray) -> NDArray:
         """Return residual unchanged (identity preconditioning).
 
         Args:
-            residual: Current residual vector r_k.
-            context: Iteration context (unused for identity preconditioner).
+            residual: Residual vector r
 
         Returns:
-            Copy of input residual vector.
+            Copy of input residual vector (z = r)
         """
         return residual.copy()
 
@@ -151,7 +159,8 @@ class LinearOperatorPreconditioner(Preconditioner):
     def __init__(self, operator: LinearOperator) -> None:
         self.operator = operator
 
-    def apply(self, residual: NDArray, context: IterationContext) -> NDArray:
+    def apply(self, residual: NDArray) -> NDArray:
+        """Apply linear operator to residual (no context needed)."""
         return _ensure_vector(
             self.operator.matvec(np.asarray(residual, dtype=np.float64, copy=False)),
             residual,
@@ -159,139 +168,37 @@ class LinearOperatorPreconditioner(Preconditioner):
         )
 
 
-class CallablePreconditioner(Preconditioner):
-    """Wraps user-provided callable preconditioners with flexible signatures.
+class FunctionPreconditioner(Preconditioner):
+    """Wrap a simple function (residual → result) as a Preconditioner.
 
-    Adapts arbitrary Python callables (functions, lambdas, neural networks) into
-    the Preconditioner interface by inspecting their signature and providing
-    appropriate arguments. Supports multiple signature patterns:
-
-    Supported Signatures:
-        1. `f(r)` - Takes residual only
-        2. `f(r, ctx)` - Takes residual and full context
-        3. `f(ctx)` - Takes full context only (if param named ctx/context/iteration_context)
-
-    The wrapper uses Python's inspect module to detect the signature and adapts
-    the calling convention automatically, enabling seamless integration of diverse
-    preconditioner implementations.
-
-    Mathematical Interpretation:
-        Regardless of the Python signature, the callable must implement:
-            z_k = M_k^{-1}(r_k, x_k, k)
-        where the dependencies on x_k and k are optional (accessed via context).
+    This is a simple adapter with no signature detection - the function
+    must take a single NDArray argument (the residual) and return an NDArray.
 
     Args:
-        preconditioner: Callable implementing the preconditioning operation.
-            Must return ndarray matching input residual shape.
+        func: Function taking residual and returning preconditioned result
 
-    Raises:
-        ValueError: If preconditioner returns None or wrong shape.
-
-    Usage:
-        >>> # Simple function signature
-        >>> def jacobi_precond(r):
-        ...     return r / diag_A
-        >>> precond = CallablePreconditioner(jacobi_precond)
-
-        >>> # Context-aware signature
-        >>> def adaptive_precond(r, ctx):
-        ...     if ctx.iteration < 10:
-        ...         return simple_precond(r)
-        ...     return expensive_precond(r)
-        >>> precond = CallablePreconditioner(adaptive_precond)
-
-        >>> # Neural preconditioner using context only
-        >>> def neural_precond(ctx):
-        ...     features = extract_features(ctx)
-        ...     return model.predict(features)
-        >>> precond = CallablePreconditioner(neural_precond)
+    Example:
+        >>> jacobi_fn = lambda r: r / diag_A
+        >>> precond = FunctionPreconditioner(jacobi_fn)
+        >>> z = precond.apply(residual)
     """
 
-    def __init__(self, preconditioner: Callable[..., np.ndarray]) -> None:
-        """Initialize callable preconditioner wrapper.
+    def __init__(self, func: Callable[[NDArray], NDArray]) -> None:
+        """Initialize function preconditioner.
 
         Args:
-            preconditioner: Callable implementing M^{-1} operation.
+            func: Callable taking residual → preconditioned_residual
         """
-        self._preconditioner = preconditioner
-        self._call_pattern = self._detect_signature(preconditioner)
+        self._func = func
 
-    def _detect_signature(
-        self, func: Callable[..., np.ndarray]
-    ) -> Callable[[IterationContext], np.ndarray]:
-        """Detect callable signature and create appropriate wrapper.
-
-        Uses Python's inspect module to examine the function signature and
-        determine how to invoke it from an IterationContext. This enables
-        flexible preconditioner APIs without requiring a single rigid signature.
-
-        Detection Logic:
-            1. No parameters → assume f(r) signature
-            2. One parameter:
-                - Named ctx/context/iteration_context → f(ctx)
-                - Otherwise → f(r)
-            3. Two+ parameters → f(r, ctx)
+    def apply(self, residual: NDArray) -> NDArray:
+        """Apply function to residual.
 
         Args:
-            func: User-provided preconditioner callable.
+            residual: Current residual vector r_k
 
         Returns:
-            Wrapper function taking IterationContext and returning ndarray.
-
-        Notes:
-            - Signature detection handles lambdas, functions, and bound methods
-            - Fallback to f(r) signature if inspect fails (e.g., C extensions)
+            Preconditioned residual z_k = f(r_k)
         """
-        try:
-            signature = inspect.signature(func)
-            params = list(signature.parameters.values())
-        except (TypeError, ValueError):
-            # Signature inspection failed (e.g., builtin, C extension)
-            # Default to residual-only signature
-            params = None
-
-        if not params:
-            # No parameters or inspection failed → residual-only
-            return lambda ctx: _ensure_vector(
-                self._preconditioner(ctx.residual),
-                ctx.residual,
-                name="preconditioner",
-            )
-
-        first_name = params[0].name
-        if len(params) == 1:
-            # Single parameter → check if it expects context
-            if first_name in {"ctx", "context", "iteration_context"}:
-                return lambda ctx: _ensure_vector(
-                    self._preconditioner(ctx),
-                    ctx.residual,
-                    name="preconditioner",
-                )
-            # Otherwise assume it wants residual
-            return lambda ctx: _ensure_vector(
-                self._preconditioner(ctx.residual),
-                ctx.residual,
-                name="preconditioner",
-            )
-
-        # Two+ parameters → pass both residual and context
-        return lambda ctx: _ensure_vector(
-            self._preconditioner(ctx.residual, ctx),
-            ctx.residual,
-            name="preconditioner",
-        )
-
-    def apply(self, residual: NDArray, context: IterationContext) -> NDArray:
-        """Apply wrapped preconditioner using detected signature.
-
-        Args:
-            residual: Current residual vector r_k.
-            context: Iteration context providing full solver state.
-
-        Returns:
-            Preconditioned residual z_k = M^{-1} r_k.
-
-        Raises:
-            ValueError: If preconditioner returns None or wrong shape.
-        """
-        return self._call_pattern(context)
+        result = self._func(residual)
+        return _ensure_vector(result, residual, name="function_preconditioner")

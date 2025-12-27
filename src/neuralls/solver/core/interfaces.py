@@ -33,8 +33,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from .info import SolverResult
-    from .convergence import IConvergenceCriterion
+    from ..models.result import SolverResult
+    from ..strategies.convergence import IConvergenceCriterion
 
 
 class ISolver(ABC):
@@ -69,7 +69,7 @@ class ISolver(ABC):
     @abstractmethod
     def solve(
         self,
-        A: NDArray,
+        matrix: NDArray,
         b: NDArray,
         x0: NDArray | None = None,
         **kwargs: object,
@@ -80,7 +80,7 @@ class ISolver(ABC):
         algorithm is left to the implementation.
 
         Args:
-            A: System matrix, shape (n, n). Must be square.
+            matrix: System matrix, shape (n, n). Must be square.
             b: Right-hand side vector, shape (n,).
             x0: Initial guess for solution, shape (n,). Optional.
                 - Direct solvers typically ignore this
@@ -111,7 +111,7 @@ class ISolver(ABC):
 
         Examples:
             >>> solver = MySolver()
-            >>> x, result = solver.solve(A, b, rtol=1e-6)
+            >>> x, result = solver.solve(matrix, b, rtol=1e-6)
             >>> print(f"Converged: {result.converged}")
         """
         pass

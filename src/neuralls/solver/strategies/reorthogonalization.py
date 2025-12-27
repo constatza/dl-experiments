@@ -9,7 +9,7 @@ from typing import Any, Literal, Optional
 import numpy as np
 from scipy.linalg import norm
 
-from ..constants import (
+from ...constants import (
     REORTHOG_MAX_COEFF,
     REORTHOG_ZERO_NORM_TOL,
 )
