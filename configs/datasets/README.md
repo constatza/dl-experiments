@@ -90,8 +90,8 @@ Generates data based on CG residual errors.
 
 ### [output]
 Output configuration.
-- **processed_dir**: `str`. Directory where processed datasets will be saved. Optional.
-- **output_root**: `str`. Root directory for all outputs (guides where results are saved). **Required**.
+- **processed_dir**: `str`. Directory where processed datasets will be saved (separate from experiment artifacts). Optional. If not provided, defaults to `DEFAULT_PROCESSED_DATA_DIR` from constants.
+- **output_root**: `str`. DEPRECATED (not used by data processing). Master output root for experiment artifacts is specified at experiment load time, not in data configs.
 
 ### [test]
 Optional configuration for generating a comparison set.

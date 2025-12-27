@@ -1,45 +1,75 @@
-"""Configuration services for path resolution and workspace creation.
+"""Services for creating experiment workspaces.
 
-This module contains the logic for calculating directory structures, separating
-path generation policies from data containers.
+WorkspaceFactory creates directory structures for experiments.
+MLflow lifecycle is handled by dlkit, not here.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from .domain import ExperimentWorkspace
+from neuralls.configuration.domain import ExperimentWorkspace
 
 
 class WorkspaceFactory:
     """Factory for creating experiment workspaces."""
 
-    def __init__(self, global_output_dir: Path, processed_root: Path):
-        """Initialize with the global root for all artifacts."""
-        self.base_dir = global_output_dir
+    def __init__(
+        self,
+        output_root: Path,
+        processed_root: Path,
+    ):
+        """Initialize with base paths.
+
+        Args:
+            output_root: Master output root (SINGLE SOURCE OF TRUTH).
+            processed_root: Where processed datasets live.
+        """
+        self.output_root = output_root
         self.processed_root = processed_root
 
-    def create(self, data_id: str, model_name: str) -> ExperimentWorkspace:
-        """
-        Calculate the nested directory structure for an experiment.
-        
-        Structure: global_output / data_id / model_name
-        
+    def create(
+        self,
+        dataset_id: str,
+        run_id: str,
+    ) -> ExperimentWorkspace:
+        """Create workspace directory structure.
+
+        Structure created:
+            output_root/
+              {dataset_id}/
+                {run_id}/
+                  checkpoints/
+                  figures/
+                  predictions/
+
         Args:
-            data_id: Identifier for the dataset (e.g., 'test-solutions')
-            model_name: Identifier for the model run (e.g., 'NormScaledFFNN')
-            
+            dataset_id: Dataset identifier (e.g., 'test-solutions').
+            run_id: Model/run identifier (e.g., 'NormScaledLinearFFNN').
+
         Returns:
-            Resolved ExperimentWorkspace with all artifact paths.
+            ExperimentWorkspace with all paths resolved.
         """
-        experiment_root = self.base_dir / data_id / model_name
-        data_dir = self.processed_root / data_id
-        
-        return ExperimentWorkspace(
-            root_dir=experiment_root,
+        # Experiment root: output_root / dataset_id / run_id
+        root_dir = self.output_root / dataset_id / run_id
+
+        # Data directory: processed_root / dataset_id
+        data_dir = self.processed_root / dataset_id
+
+        # Create workspace
+        workspace = ExperimentWorkspace(
+            dataset_id=dataset_id,
+            run_id=run_id,
+            root_dir=root_dir,
             data_dir=data_dir,
-            checkpoint_dir=experiment_root / "checkpoints",
-            figures_dir=experiment_root / "figures",
-            predictions_dir=experiment_root / "predictions",
-            run_id=model_name
         )
+
+        # Ensure directories exist
+        workspace.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        workspace.figures_dir.mkdir(parents=True, exist_ok=True)
+        workspace.predictions_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ensure data directory exists
+        workspace.data_dir.mkdir(parents=True, exist_ok=True)
+
+        return workspace

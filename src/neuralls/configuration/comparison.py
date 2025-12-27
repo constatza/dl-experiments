@@ -1,25 +1,26 @@
-"""Pydantic models for solver configuration validation.
+"""Solver comparison configuration models.
 
-These models validate TOML solver configs before conversion to runtime dataclasses.
-Separation: Pydantic models (validation) → frozen dataclasses (runtime use).
+These Pydantic models validate solver comparison TOML configs.
+Focused on solver parameters, not preconditioner or data generation.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..constants import (
+from neuralls.constants import (
     DEFAULT_RTOL,
     DEFAULT_ATOL,
     REORTHOG_STRICT_THRESHOLD,
 )
+from neuralls.configuration.preconditioner import PreconditionerConfig
 
 
 class GeneralSolverConfig(BaseModel):
-    """Validates [general] section from solver TOML."""
+    """Validates [general] section from solver comparison TOML."""
 
     rtol: float = Field(
         default=DEFAULT_RTOL,
@@ -83,53 +84,6 @@ class GeneralSolverConfig(BaseModel):
     )
 
 
-class SolverSpecConfig(BaseModel):
-    """Validates individual [[solvers]] entries from solver TOML."""
-
-    name: str = Field(
-        ...,
-        description="Display name for this solver/preconditioner",
-    )
-    type: str = Field(
-        ...,
-        description="Solver/preconditioner type (none, jacobi, ilu, neural, etc.)",
-    )
-    # Preconditioner control parameters
-    limit_iters: int = Field(
-        default=0,
-        description="Apply for first N iterations (0 = unlimited)",
-        ge=0,
-    )
-    apply_every: int = Field(
-        default=1,
-        description="Apply preconditioner every K iterations",
-        ge=1,
-    )
-    first_n: int | None = Field(
-        default=None,
-        description="Only apply for first N total iterations",
-        ge=1,
-    )
-    fallback: Literal["identity", "jacobi", "ilu"] = Field(
-        default="identity",
-        description="Fallback preconditioner after limit_iters",
-    )
-    # Neural-specific: checkpoint resolution via EITHER explicit path OR experiment reference
-    checkpoint_path: Path | None = Field(
-        default=None,
-        description="Explicit path to neural network checkpoint (for neural type)",
-    )
-    experiment: str | None = Field(
-        default=None,
-        description="Reference to experiment ID from experiments.toml (resolves checkpoint at runtime)",
-    )
-
-    model_config = ConfigDict(
-        extra="allow",  # Allow extra fields for different solver types
-        frozen=True,
-    )
-
-
 class DataGenerationConfig(BaseModel):
     """Validates [data_generation] section (optional)."""
 
@@ -144,14 +98,14 @@ class DataGenerationConfig(BaseModel):
     )
 
 
-class SolverConfigFile(BaseModel):
-    """Top-level solver configuration file structure."""
+class ComparisonConfig(BaseModel):
+    """Top-level solver comparison configuration file structure."""
 
     general: GeneralSolverConfig = Field(
-        default_factory=GeneralSolverConfig,
+        ...,
         description="Global solver parameters",
     )
-    solvers: list[SolverSpecConfig] = Field(
+    solvers: list[PreconditionerConfig] = Field(
         default_factory=list,
         description="List of solver/preconditioner configurations",
     )

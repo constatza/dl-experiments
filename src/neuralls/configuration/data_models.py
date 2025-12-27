@@ -7,6 +7,7 @@ These models validate the structure of data generation/collection configuration 
 from __future__ import annotations
 
 from typing import Literal
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -101,7 +102,9 @@ class StrategyConfig(BaseModel):
         description="Glob pattern for RHS vector files",
     )
 
-    model_config = ConfigDict(extra="allow", frozen=True)  # Allow strategy-specific parameters
+    model_config = ConfigDict(
+        extra="allow", frozen=True
+    )  # Allow strategy-specific parameters
 
 
 class GenerationConfig(BaseModel):
@@ -138,16 +141,16 @@ class GenerationConfig(BaseModel):
 class OutputConfig(BaseModel):
     """Validates [output] section from data config."""
 
-    processed_dir: str | None = Field(
-        default=None,
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    processed_dir: Path = Field(
+        default_factory=Path,
         description="Directory for processed/generated data",
     )
-    output_root: str | None = Field(
-        default=None,
+    output_root: Path = Field(
+        default_factory=Path,
         description="Output root directory that guides all outputs",
     )
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class DataTestConfig(BaseModel):
@@ -196,4 +199,6 @@ class DataConfigFile(BaseModel):
         description="Test data configuration",
     )
 
-    model_config = ConfigDict(extra="allow", frozen=True)  # Allow additional sections for future extension
+    model_config = ConfigDict(
+        extra="allow", frozen=True
+    )  # Allow additional sections for future extension

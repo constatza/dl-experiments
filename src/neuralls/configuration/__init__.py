@@ -1,21 +1,27 @@
-"""Configuration package."""
+"""Configuration loading and domain models for neuralls experiments.
 
-from .domain import (
+For loading experiments, import directly from submodules:
+    from neuralls.configuration.loader import load_experiment, load_batch
+"""
+
+from neuralls.configuration.domain import (
+    ExperimentBatch,
     ExperimentSpec,
     ExperimentWorkspace,
     RunnableExperiment,
-    ExperimentBatch,
 )
-from .loader import load_batch, load_experiment, build_flow_context
-from .services import WorkspaceFactory
+from neuralls.configuration.paths import PathContext, build_path_context
+from neuralls.configuration.services import WorkspaceFactory
 
 __all__ = [
+    # Domain models
     "ExperimentSpec",
     "ExperimentWorkspace",
     "RunnableExperiment",
     "ExperimentBatch",
-    "load_batch",
-    "load_experiment",
-    "build_flow_context",
+    # Path resolution
+    "PathContext",
+    "build_path_context",
+    # Services
     "WorkspaceFactory",
 ]

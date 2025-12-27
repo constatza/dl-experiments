@@ -7,23 +7,7 @@ from pathlib import Path
 from loguru import logger
 import numpy as np
 
-from ..configuration.loaders.toml_loader import (
-    load_solver_config as load_pydantic_solver_config,
-)
-from ..configuration.solver_models import SolverConfigFile
 from .base import load_npz_entry as load_npz_entry_raw
-
-
-def load_solver_config(
-    config_path: str | Path | None,
-) -> SolverConfigFile:
-    """Read solver config TOML from disk, returning Pydantic model."""
-    path = (
-        Path(config_path)
-        if config_path is not None
-        else Path(__file__).resolve().parents[2] / "solver-configs" / "default.toml"
-    )
-    return load_pydantic_solver_config(path)
 
 
 def resolve_system_paths(
@@ -51,9 +35,7 @@ def _flatten_rhs_if_needed(arr: np.ndarray, source_path: Path) -> np.ndarray:
     is_column_vector = arr.ndim == 2 and arr.shape[1] == 1
 
     if arr.ndim > 1 and arr.shape[0] > 1 and not is_column_vector:
-        logger.warning(
-            f"{source_path} contains multiple RHS entries; using the first."
-        )
+        logger.warning(f"{source_path} contains multiple RHS entries; using the first.")
 
     # Only extract the first row if it's NOT a column vector
     if arr.ndim > 1 and not is_column_vector:

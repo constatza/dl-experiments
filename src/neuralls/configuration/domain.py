@@ -8,22 +8,27 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-from dlkit import GeneralSettings
 
 
 class ExperimentSpec(BaseModel):
-    """Static definition of an experiment's inputs (Immutable)."""
+    """Static definition of an experiment's inputs (Immutable).
 
-    id: str = Field(..., description="Unique identifier from experiments.toml")
-    model_config_path: Path = Field(..., description="Absolute path to linear.toml")
-    data_config_path: Path = Field(
-        ..., description="Absolute path to resolved data config"
-    )
+    Attributes:
+        id: Unique identifier.
+        model_config_path: Path to model config TOML.
+        data_config_path: Path to data config TOML.
+        checkpoint_path: Optional explicit checkpoint path.
+    """
+
+    id: str = Field(..., description="Unique identifier")
+    model_config_path: Path = Field(..., description="Path to model config")
+    data_config_path: Path = Field(..., description="Path to data config")
     checkpoint_path: Path | None = Field(
         default=None,
-        description="Explicit checkpoint path from experiments.toml (for neural models)",
+        description="Explicit checkpoint path (optional)",
     )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -31,14 +36,34 @@ class ExperimentSpec(BaseModel):
 
 @dataclass(frozen=True)
 class ExperimentWorkspace:
-    """Resolved filesystem layout for artifacts (Outputs)."""
+    """Resolved filesystem layout for experiment artifacts.
 
-    root_dir: Path  # The specific root for this experiment
-    data_dir: Path  # Directory containing input data (normalized.npz)
-    checkpoint_dir: Path  # root_dir / checkpoints
-    figures_dir: Path  # root_dir / figures
-    predictions_dir: Path  # root_dir / predictions
-    run_id: str  # The Model ID (from config) used for MLflow tracking
+    Attributes:
+        dataset_id: Dataset identifier (for organizing experiments).
+        run_id: Model/run identifier (for organizing within dataset).
+        root_dir: Experiment root directory (for this specific run).
+        data_dir: Directory containing input data (normalized.npz).
+    """
+
+    dataset_id: str
+    run_id: str
+    root_dir: Path
+    data_dir: Path
+
+    @property
+    def checkpoint_dir(self) -> Path:
+        """Checkpoint directory under root."""
+        return self.root_dir / "checkpoints"
+
+    @property
+    def figures_dir(self) -> Path:
+        """Figures directory under root."""
+        return self.root_dir / "figures"
+
+    @property
+    def predictions_dir(self) -> Path:
+        """Predictions directory under root."""
+        return self.root_dir / "predictions"
 
 
 @dataclass(frozen=True)
@@ -46,17 +71,27 @@ class RunnableExperiment:
     """Fully resolved experiment ready for execution.
 
     Combines the 'what' (Spec), the 'where' (Workspace), and the
-    'how' (Settings/Context).
+    'how' (Settings).
+
+    Attributes:
+        spec: Experiment specification.
+        workspace: Filesystem workspace.
+        settings: dlkit GeneralSettings with injected paths.
     """
 
     spec: ExperimentSpec
     workspace: ExperimentWorkspace
-    settings: GeneralSettings
+    settings: Any  # dlkit GeneralSettings (avoid import)
 
 
 @dataclass(frozen=True)
 class ExperimentBatch:
-    """Complete definition of the requested workload."""
+    """Complete definition of a batch workload.
 
-    global_output_dir: Path
+    Attributes:
+        output_root: Master output root for all experiments.
+        experiments: List of runnable experiments.
+    """
+
+    output_root: Path
     experiments: list[RunnableExperiment]

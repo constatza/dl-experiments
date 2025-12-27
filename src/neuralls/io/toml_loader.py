@@ -5,25 +5,18 @@ using Pydantic models, providing clear error messages on validation failures.
 """
 
 from __future__ import annotations
+from dlkit.tools.config import TrainingWorkflowSettings, load_training_settings
+
 
 import tomllib
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
-
-from ..data_models import DataConfigFile
-from ..models import ModelConfigFile
-from ..solver_models import SolverConfigFile
+from neuralls.configuration.data_models import DataConfigFile
+from neuralls.configuration.comparison import ComparisonConfig
 
 
-class ConfigLoadError(Exception):
-    """Configuration loading or validation failed."""
-
-    pass
-
-
-def load_model_config(path: Path) -> ModelConfigFile:
+def load_model_config(path: Path) -> TrainingWorkflowSettings:
     """Load and validate linear.toml file.
 
     Args:
@@ -35,16 +28,7 @@ def load_model_config(path: Path) -> ModelConfigFile:
     Raises:
         ConfigLoadError: If file cannot be read or validation fails.
     """
-    try:
-        with open(path, "rb") as f:
-            raw = tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ConfigLoadError(f"Failed to load model config {path}: {exc}") from exc
-
-    try:
-        return ModelConfigFile(**raw)
-    except ValidationError as exc:
-        raise ConfigLoadError(f"Invalid model config {path}:\n{exc}") from exc
+    return load_training_settings(path)
 
 
 def load_data_config(path: Path) -> DataConfigFile:
@@ -59,19 +43,11 @@ def load_data_config(path: Path) -> DataConfigFile:
     Raises:
         ConfigLoadError: If file cannot be read or validation fails.
     """
-    try:
-        with open(path, "rb") as f:
-            raw = tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ConfigLoadError(f"Failed to load data config {path}: {exc}") from exc
-
-    try:
-        return DataConfigFile(**raw)
-    except ValidationError as exc:
-        raise ConfigLoadError(f"Invalid data config {path}:\n{exc}") from exc
+    raw = load_raw_toml(path)
+    return DataConfigFile(**raw)
 
 
-def load_solver_config(path: Path) -> SolverConfigFile:
+def load_solver_config(path: Path) -> ComparisonConfig:
     """Load and validate solver.toml file.
 
     Args:
@@ -83,16 +59,8 @@ def load_solver_config(path: Path) -> SolverConfigFile:
     Raises:
         ConfigLoadError: If file cannot be read or validation fails.
     """
-    try:
-        with open(path, "rb") as f:
-            raw = tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ConfigLoadError(f"Failed to load solver config {path}: {exc}") from exc
-
-    try:
-        return SolverConfigFile(**raw)
-    except ValidationError as exc:
-        raise ConfigLoadError(f"Invalid solver config {path}:\n{exc}") from exc
+    raw = load_raw_toml(path)
+    return ComparisonConfig(**raw)
 
 
 def load_raw_toml(path: Path) -> dict[str, Any]:
@@ -114,4 +82,4 @@ def load_raw_toml(path: Path) -> dict[str, Any]:
         with open(path, "rb") as f:
             return tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ConfigLoadError(f"Failed to load TOML {path}: {exc}") from exc
+        raise exc
