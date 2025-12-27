@@ -67,14 +67,18 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
         iteration_indices: list[np.ndarray] = []
 
         for sample_idx, (rhs_vec, true_sol) in enumerate(zip(rhs_samples, sols)):
+            # Run CG for fixed number of iterations to collect error traces
+            # Set very tight tolerances to avoid early convergence
+            # Use "full" trace mode to capture all vectors
             _, info_result = flexible_cg(
                 matrix,
                 rhs_vec,
                 x0=np.zeros(n, dtype=np.float64),
-                max_iter=cg_iters,
+                max_iterations=cg_iters,
                 preconditioner=None,
-                stopping_criterion="fixed_iterations",
-                tol=1e-12,
+                rtol=1e-20,  # Very tight to run full iterations
+                atol=1e-20,  # Very tight to avoid early convergence
+                trace_mode="full",  # Need full tracing for residual/solution vectors
             )
             info = (
                 SolverResult(**info_result)
@@ -82,12 +86,10 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
                 else info_result
             )
 
+            # Extract vectors from event log (get_history already returns NDArray for vectors)
             assert info.event_log is not None
-            residual_list = info.event_log.get_history("residual")
-            solution_list = info.event_log.get_history("solution")
-
-            residual_seq = np.array(residual_list)
-            solution_seq = np.array(solution_list)
+            residual_seq = info.event_log.get_history("residual")
+            solution_seq = info.event_log.get_history("solution")
             num_pairs = residual_seq.shape[0]
 
             error_seq = np.array(

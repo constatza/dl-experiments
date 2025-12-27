@@ -505,14 +505,18 @@ def residual_trace_strategy(
     iteration_indices: list[np.ndarray] = []
 
     for sample_idx, rhs_vec in enumerate(rhs_samples):
+        # Run CG for fixed number of iterations to collect Krylov subspace data
+        # Set very tight tolerances to avoid early convergence
+        # Use "full" trace mode to capture all vectors for Krylov sampling
         _, info_result = flexible_cg(
             A,
             rhs_vec,
             x0=np.zeros(n, dtype=np.float64),
-            max_iter=cg_iters,
+            max_iterations=cg_iters,
             preconditioner=None,
-            stopping_criterion="fixed_iterations",
-            tol=1e-12,
+            rtol=1e-20,  # Very tight to run full iterations
+            atol=1e-20,  # Very tight to avoid early convergence
+            trace_mode="full",  # Need full tracing for Krylov vectors
         )
         info = (
             SolverResult(**info_result)
@@ -520,14 +524,11 @@ def residual_trace_strategy(
             else info_result
         )
 
+        # Extract vectors from event log (get_history already returns NDArray for vectors)
         assert info.event_log is not None
-        residual_list = info.event_log.get_history("residual")
-        solution_list = info.event_log.get_history("solution")
-        search_direction_list = info.event_log.get_history("search_direction")
-
-        residual_seq = np.array(residual_list)
-        solution_seq = np.array(solution_list)
-        search_direction_seq = np.array(search_direction_list)
+        residual_seq = info.event_log.get_history("residual")
+        solution_seq = info.event_log.get_history("solution")
+        search_direction_seq = info.event_log.get_history("direction")
         search_direction_products_seq = np.array(
             [A @ search_direction for search_direction in search_direction_seq]
         )
@@ -582,14 +583,18 @@ def residual_error_strategy(
     iteration_indices: list[np.ndarray] = []
 
     for sample_idx, (rhs_vec, true_sol) in enumerate(zip(rhs_samples, sols)):
+        # Run CG for fixed number of iterations to collect Krylov subspace data
+        # Set very tight tolerances to avoid early convergence
+        # Use "full" trace mode to capture all vectors for Krylov sampling
         _, info_result = flexible_cg(
             A,
             rhs_vec,
             x0=np.zeros(n, dtype=np.float64),
-            max_iter=cg_iters,
+            max_iterations=cg_iters,
             preconditioner=None,
-            stopping_criterion="fixed_iterations",
-            tol=1e-12,
+            rtol=1e-20,  # Very tight to run full iterations
+            atol=1e-20,  # Very tight to avoid early convergence
+            trace_mode="full",  # Need full tracing for Krylov vectors
         )
         info = (
             SolverResult(**info_result)
@@ -597,12 +602,10 @@ def residual_error_strategy(
             else info_result
         )
 
+        # Extract vectors from event log (get_history already returns NDArray for vectors)
         assert info.event_log is not None
-        residual_list = info.event_log.get_history("residual")
-        solution_list = info.event_log.get_history("solution")
-
-        residual_seq = np.array(residual_list)
-        solution_seq = np.array(solution_list)
+        residual_seq = info.event_log.get_history("residual")
+        solution_seq = info.event_log.get_history("solution")
         num_pairs = residual_seq.shape[0]
 
         error_seq = np.array([true_sol - x_k for x_k in solution_seq], dtype=np.float64)

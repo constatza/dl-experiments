@@ -52,12 +52,6 @@ def validate_rhs_vector(b: np.ndarray | None, A: np.ndarray | None = None) -> No
         )
 
 
-# Backward compatibility
-def validate_rhs(b: np.ndarray | None, A: np.ndarray | None = None) -> None:
-    """Validate RHS vector; prefer direct use of validate_rhs_vector."""
-    validate_rhs_vector(b, A)
-
-
 def validate_data_exists(
     data_dir: Path | str,
     required_files: list[str],
@@ -98,85 +92,4 @@ def validate_data_exists(
         files_str = "\n  - ".join(missing_files)
         raise FileNotFoundError(
             f"Required data files not found in {data_dir}:\n  - {files_str}"
-        )
-
-
-def validate_file_exists(path: str | Path, description: str = "File") -> Path:
-    """Validate that a file exists.
-
-    Args:
-        path: File path
-        description: Description of the file for error messages
-
-    Returns:
-        Validated Path object
-
-    Raises:
-        FileNotFoundError: If file doesn't exist
-    """
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"{description} not found: {path}")
-    return path
-
-
-def validate_directory_writable(
-    path: str | Path, description: str = "Directory"
-) -> Path:
-    """Validate that a directory exists and is writable.
-
-    Args:
-        path: Directory path
-        description: Description for error messages
-
-    Returns:
-        Validated Path object
-
-    Raises:
-        ValueError: If directory is not writable
-    """
-    path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
-
-    if not path.is_dir():
-        raise ValueError(f"{description} is not a directory: {path}")
-
-    # Test if we can write to the directory
-    test_file = path / ".write_test"
-    try:
-        test_file.touch()
-        test_file.unlink()
-    except (PermissionError, OSError) as e:
-        raise ValueError(f"{description} is not writable: {path}") from e
-
-    return path
-
-
-def validate_solver_params(
-    rtol: float, atol: float, max_iter: int, stopping_criterion: str
-) -> None:
-    """Validate CG solver parameters.
-
-    Args:
-        rtol: Relative tolerance
-        atol: Absolute tolerance
-        max_iter: Maximum iterations
-        stopping_criterion: Stopping criterion
-
-    Raises:
-        ValueError: If parameters are invalid
-    """
-    if rtol <= 0:
-        raise ValueError(f"Relative tolerance must be positive, got {rtol}")
-
-    if atol <= 0:
-        raise ValueError(f"Absolute tolerance must be positive, got {atol}")
-
-    if max_iter <= 0:
-        raise ValueError(f"Max iterations must be positive, got {max_iter}")
-
-    valid_criteria = ["tolerance", "fixed_iterations", "residual_norm"]
-    if stopping_criterion not in valid_criteria:
-        raise ValueError(
-            f"Stopping criterion must be one of {valid_criteria}, got {stopping_criterion}"
         )

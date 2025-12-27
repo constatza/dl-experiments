@@ -13,7 +13,7 @@ from matplotlib import cm
 import numpy as np
 from loguru import logger
 
-from .solver.info import CGComparisonResult
+from .solver.models.result import CGComparisonResult
 
 
 def plot_parity_and_residuals(

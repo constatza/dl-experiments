@@ -5,8 +5,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
-
+from typing import Any
+from collections.abc import Mapping
 
 
 import numpy as np
@@ -19,8 +19,8 @@ from ..constants import (
     DEFAULT_SHUFFLE,
 )
 from .plan import GenerationPlan, StrategySpec, parse_generation_plan
-from ..paths import ProjectRoots, FlowPaths, DataPaths, parse_flow_keys
 from ..io.base import load_matrix
+from ..constants import DEFAULT_PROCESSED_DATA_DIR
 from .orchestration import build_dataset
 from .runner import run_generation
 
@@ -60,15 +60,21 @@ def _build_context(
     generation_cfg = _coerce_mapping(config.get(ConfigSections.GENERATION, {}))
     output_cfg = _coerce_mapping(config.get(ConfigSections.OUTPUT, {}))
 
-    flow_id, dataset_id = parse_flow_keys(config, config_path=config_path)
-    roots = ProjectRoots.from_overrides(
-        project_root=output_cfg.get("project_root"),
-        processed_root=output_cfg.get(ConfigKeys.PROCESSED_DIR),
-        output_root=output_cfg.get("output_root"),
-        figures_root=output_cfg.get("figures_root"),
-    )
-    flow_paths = FlowPaths(flow_id=flow_id, roots=roots)
-    data_paths = DataPaths(flow=flow_paths, dataset_id=dataset_id)
+    # Extract dataset_id from config or filename
+    if config_path:
+        dataset_id = Path(config_path).stem
+    else:
+        flow_section = config.get("flow", {})
+        dataset_id = flow_section.get("dataset", "default")
+
+    # Resolve processed data directory
+    processed_dir_str = output_cfg.get(ConfigKeys.PROCESSED_DIR)
+    if processed_dir_str:
+        processed_root = Path(processed_dir_str)
+    else:
+        processed_root = DEFAULT_PROCESSED_DATA_DIR
+
+    dataset_dir = processed_root / dataset_id
 
     matrix_path = _coerce_optional_str(source_cfg.get(ConfigKeys.MATRIX_PATH))
     if not matrix_path:
@@ -91,7 +97,7 @@ def _build_context(
     return DataGenerationContext(
         matrix_path=matrix_path,
         rhs_path=rhs_path,
-        dataset_dir=data_paths.base_dir,
+        dataset_dir=dataset_dir,
         normalize=normalize,
         source_cfg=source_cfg,
         generation_cfg=generation_cfg,
