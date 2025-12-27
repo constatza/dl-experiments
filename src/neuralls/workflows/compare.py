@@ -8,19 +8,14 @@ from collections.abc import Callable, Sequence
 
 import numpy as np
 
+from neuralls.configuration.preconditioner import PreconditionerConfig
+from neuralls.configuration.comparison import GeneralSolverConfig
 from ..constants import REORTHOG_STRICT_THRESHOLD
 from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from ..file_operations import ensure_dir
 from ..io.comparison import load_system_arrays
 from ..plotting import plot_convergence_comparison
-from ..preconditioner_factory import (
-    BasePreconditionerConfig,
-    build_preconditioner_configs,
-    build_preconditioners,
-    make_ilu_preconditioner,
-    make_identity_preconditioner,
-    make_jacobi_preconditioner,
-)
+from ..preconditioner import create_default_registry
 from ..solver import (
     create_reorthogonalization_strategy,
     format_results_summary,
@@ -28,7 +23,6 @@ from ..solver import (
     summarize_best_combinations,
 )
 from ..validation import validate_matrix, validate_rhs_vector
-from ..configuration.solver_models import GeneralSolverConfig
 from .results import ComparisonResult
 
 
@@ -63,45 +57,38 @@ def _resolve_paths(
     return matrix_file, rhs_file, output_base, figs_base
 
 
-def _update_neural_metadata_with_limits(
-    metadata: dict[str, NeuralPreconditionerMetadata | None],
-    configs: Sequence[BasePreconditionerConfig],
-) -> None:
-    for cfg in configs:
-        if cfg.type != "neural":
-            continue
-        limit = cfg.limit_iters if cfg.limit_iters >= 0 else None
-        meta = metadata.get(cfg.name)
-        if meta is not None:
-            metadata[cfg.name] = NeuralPreconditionerMetadata(
-                residual_iters=meta.residual_iters,
-                applied_iters=limit,
-            )
-
-
 def _resolve_fallback_callable(
     name: str, A: np.ndarray, preconditioners: dict[str, Any]
 ) -> Callable[[np.ndarray], np.ndarray]:
-    if name == "identity":
-        return make_identity_preconditioner()
-    if name == "jacobi":
-        return make_jacobi_preconditioner(A)
-    if name == "ilu":
-        return make_ilu_preconditioner(A)
+    """Resolve fallback preconditioner by name.
+
+    This uses the registry pattern to create preconditioners on-demand,
+    eliminating code duplication from the old factory approach.
+    """
+    # Check if already created
     if name in preconditioners:
         return preconditioners[name]
-    return make_identity_preconditioner()
+
+    # Create on-demand using registry
+    from neuralls.configuration.preconditioner import StandardPreconditionerConfig
+
+    registry = create_default_registry()
+    config = StandardPreconditionerConfig(name=name, type=name)
+    return registry.create(A, config)
 
 
 def compare_preconditioners(
     *,
     general_params: GeneralSolverConfig,
-    preconditioner_configs: Sequence[BasePreconditionerConfig],
+    preconditioner_configs: Sequence[PreconditionerConfig],
     output_root: Path | None = None,
     figures_root: Path | None = None,
     save_plots: bool = True,
 ) -> ComparisonResult:
     """Run CG comparisons once per solver config and emit shared diagnostics."""
+    if not preconditioner_configs:
+        raise ValueError("At least one preconditioner config must be provided.")
+
     matrix_file, rhs_file, output_root, figures_root = _resolve_paths(
         general_params=general_params,
         output_root=output_root,
@@ -112,26 +99,26 @@ def compare_preconditioners(
     validate_matrix(A)
     validate_rhs_vector(b, A)
 
-    precond_configs = list(preconditioner_configs) or build_preconditioner_configs(
-        [{"name": "none", "type": "none"}]
-    )
-    if not precond_configs:
-        precond_configs = build_preconditioner_configs(
-            [{"name": "none", "type": "none"}]
-        )
-    preconditioners, solver_types = build_preconditioners(A, precond_configs)
+    # Create preconditioners using registry pattern
+    registry = create_default_registry()
+    preconditioners = {cfg.name: registry.create(A, cfg) for cfg in preconditioner_configs}
+    solver_types = {cfg.name: cfg.type for cfg in preconditioner_configs}
 
     cond_numbers = compute_condition_numbers(A, preconditioners)
 
     solver_options: dict[str, dict[str, Any]] = {}
-    for cfg in precond_configs:
+    for cfg in preconditioner_configs:
         limit = cfg.limit_iters if cfg.limit_iters >= 0 else None
         solver_options[cfg.name] = {
             "limit_iters": limit,
             "fallback": _resolve_fallback_callable(cfg.fallback, A, preconditioners),
         }
 
-    fallback_precond = make_identity_preconditioner()
+    # Create fallback identity preconditioner using registry
+    from neuralls.configuration.preconditioner import StandardPreconditionerConfig
+
+    fallback_config = StandardPreconditionerConfig(name="identity", type="identity")
+    fallback_precond = registry.create(A, fallback_config)
     stopping_criterion = _map_stopping_criterion(general_params.stopping_criterion)
     reorthogonalize = create_reorthogonalization_strategy(
         "full",

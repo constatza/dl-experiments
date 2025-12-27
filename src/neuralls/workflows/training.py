@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from datetime import datetime
 from dlkit import GeneralSettings
 from dlkit.interfaces.api import execute
 from dlkit.tools.config.core.updater import update_settings
@@ -20,16 +19,9 @@ from dlkit.tools.config.data_entries import (
 )
 from dlkit.tools.config.dataset_settings import DatasetSettings
 
-from neuralls.configuration import ExperimentWorkspace, load_experiment
-from neuralls.mlflow_utils import (
-    MlflowRunState,
-    build_run_config,
-    finalize_run,
-    open_run,
-)
+from neuralls.configuration import ExperimentWorkspace
+from neuralls.configuration.loader import load_experiment
 from neuralls.system_loading import get_latest_checkpoint
-from neuralls.validation import validate_directory_writable
-from loguru import logger
 
 
 @dataclass(frozen=True)
@@ -209,8 +201,7 @@ def _configure_output_paths(
     trainer_cfg = training_cfg.trainer
     callbacks = list(trainer_cfg.callbacks or [])
 
-    validated_dir = validate_directory_writable(output_dir, "Output directory")
-    trainer_cfg = trainer_cfg.update_with({"default_root_dir": str(validated_dir)})
+    trainer_cfg = trainer_cfg.update_with({"default_root_dir": str(output_dir)})
 
     trainer_cfg = trainer_cfg.update_with({"callbacks": callbacks})
     training_cfg = training_cfg.update_with({"trainer": trainer_cfg})

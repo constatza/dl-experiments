@@ -3,25 +3,25 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Any
+from typing import Any
+from collections.abc import Iterable
 
 from loguru import logger
 
+from neuralls.constants import DEFAULT_PROCESSED_DATA_DIR
 from neuralls.configuration.loader import load_batch
 from neuralls.configuration.services import WorkspaceFactory
 from neuralls.configuration.domain import ExperimentWorkspace
-from neuralls.constants import DEFAULT_PROCESSED_DATA_DIR, DEFAULT_PROJECT_ROOT
 from neuralls.workflows.checkpoints import resolve_checkpoint
 from neuralls.workflows.specs import (
     ComparisonSpec,
     ComparisonParams,
     ComparisonOutcome,
 )
-from neuralls.workflows.utils.paths import extract_model_name
+from neuralls.workflows.utils.paths import resolve_output_root, extract_model_name
 from neuralls.workflows.compare import compare_preconditioners
-from neuralls.io.comparison import load_solver_config
-from neuralls.preconditioner_factory import build_preconditioner_configs_from_specs
-from neuralls.workflows.utils.paths import resolve_output_root
+from neuralls.io.toml_loader import load_solver_config
+from neuralls.configuration.preconditioner import PreconditionerConfig
 
 
 def _make_workspace(
@@ -113,7 +113,9 @@ def build_direct_comparisons(
     resolved_processed = DEFAULT_PROCESSED_DATA_DIR
     model_name = extract_model_name(model_config)
     data_id = data_config.stem
-    workspace = _make_workspace(resolved_output, resolved_processed, data_id, model_name)
+    workspace = _make_workspace(
+        resolved_output, resolved_processed, data_id, model_name
+    )
     checkpoint = resolve_checkpoint(
         explicit=None,
         config_file=None,
@@ -122,13 +124,17 @@ def build_direct_comparisons(
     )
     if checkpoint is None:
         return []
-    return [_build_direct_spec(model_name, model_config, data_config, solver_config, workspace, checkpoint)]
+    return [
+        _build_direct_spec(
+            model_name, model_config, data_config, solver_config, workspace, checkpoint
+        )
+    ]
 
 
 def _resolve_neural_preconditioners(
     solver_specs: list,
     experiments_map: dict[str, Any],
-) -> list:
+) -> list[PreconditionerConfig]:
     """Resolve checkpoints for neural preconditioners from experiment references.
 
     For each neural solver with 'experiment' field:
@@ -159,32 +165,33 @@ def _resolve_neural_preconditioners(
         if spec.checkpoint_path:
             # Explicit checkpoint path (for cross-experiment reuse or external checkpoints)
             resolved_specs.append(spec)
-        elif spec.experiment:
-            # Reference to experiment ID
-            exp_id = spec.experiment
-            if exp_id not in experiments_map:
-                raise ValueError(
-                    f"Neural solver '{spec.name}' references unknown experiment '{exp_id}'. "
-                    f"Available experiments: {list(experiments_map.keys())}"
-                )
 
-            experiment = experiments_map[exp_id]
-            checkpoint = experiment.spec.checkpoint_path
-
-            if not checkpoint or not checkpoint.exists():
-                raise FileNotFoundError(
-                    f"No checkpoint found for experiment '{exp_id}' "
-                    f"(referenced by solver '{spec.name}'). "
-                    f"Expected: {checkpoint}"
-                )
-
-            # Create updated spec with resolved checkpoint
-            resolved_spec = spec.model_copy(update={"checkpoint_path": checkpoint})
-            resolved_specs.append(resolved_spec)
-        else:
+        if not spec.experiment:
             raise ValueError(
                 f"Neural solver '{spec.name}' must specify either 'checkpoint_path' or 'experiment'"
             )
+
+        # Reference to experiment ID
+        exp_id = spec.experiment
+        if exp_id not in experiments_map:
+            raise ValueError(
+                f"Neural solver '{spec.name}' references unknown experiment '{exp_id}'. "
+                f"Available experiments: {list(experiments_map.keys())}"
+            )
+
+        experiment = experiments_map[exp_id]
+        checkpoint = experiment.spec.checkpoint_path
+
+        if not checkpoint or not checkpoint.exists():
+            raise FileNotFoundError(
+                f"No checkpoint found for experiment '{exp_id}' "
+                f"(referenced by solver '{spec.name}'). "
+                f"Expected: {checkpoint}"
+            )
+
+        # Create updated spec with resolved checkpoint
+        resolved_spec = spec.model_copy(update={"checkpoint_path": checkpoint})
+        resolved_specs.append(resolved_spec)
 
     return resolved_specs
 
@@ -205,17 +212,19 @@ def run_comparisons(
         try:
             from neuralls.configuration.loader import load_batch
             from neuralls.constants import DEFAULT_PROJECT_ROOT
+
             experiments_toml = DEFAULT_PROJECT_ROOT / "configs" / "experiments.toml"
             batch = load_batch(experiments_toml)
             experiments_map = {exp.spec.id: exp for exp in batch.experiments}
         except Exception as e:
-            logger.warning(f"Could not load experiments map for checkpoint resolution: {e}")
+            logger.warning(
+                f"Could not load experiments map for checkpoint resolution: {e}"
+            )
             experiments_map = {}
 
     outcomes: list[ComparisonOutcome] = []
     for spec in specs:
         error: Exception | None = None
-        result: dict[str, Any] | None = None
         try:
             solver_cfg = load_solver_config(spec.solver_config)
             comparison_root = _comparison_output_root(
@@ -232,10 +241,9 @@ def run_comparisons(
                 resolved_specs = solver_cfg.solvers
 
             # Use Pydantic SolverConfigFile directly
-            precond_configs = build_preconditioner_configs_from_specs(resolved_specs)
             result = compare_preconditioners(
                 general_params=solver_cfg.general,
-                preconditioner_configs=precond_configs,
+                preconditioner_configs=resolved_specs,
                 output_root=comparison_root,
                 save_plots=params.save_plots,
             )
@@ -263,12 +271,16 @@ def run_batch_comparison(
     """
     batch = load_batch(experiments_config)
     if not batch.experiments:
-        raise ValueError("No experiments found to resolve checkpoints for neural solvers.")
+        raise ValueError(
+            "No experiments found to resolve checkpoints for neural solvers."
+        )
 
     specs = [_build_batch_spec(exp, solver_config) for exp in batch.experiments]
     specs = [s for s in specs if s is not None]
     if not specs:
-        raise ValueError("No checkpoints found for any experiments; cannot run comparison.")
+        raise ValueError(
+            "No checkpoints found for any experiments; cannot run comparison."
+        )
 
     experiments_map = {exp.spec.id: exp for exp in batch.experiments}
     return run_comparisons([specs[0]], params, experiments_map=experiments_map)

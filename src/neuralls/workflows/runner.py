@@ -104,7 +104,7 @@ def run_experiment_matrix(
         result = run_experiment(
             model_config_path=exp.spec.model_config_path,
             data_config_path=exp.spec.data_config_path,
-            output_root=batch.global_output_dir,
+            output_root=batch.output_root,
             force=force,
             src_hash=src_hash,
         )

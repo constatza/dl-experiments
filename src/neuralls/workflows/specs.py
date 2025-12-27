@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from neuralls.configuration.domain import ExperimentWorkspace
 
@@ -35,11 +35,6 @@ class ComparisonParams:
     save_plots: bool = True
 
 
-@runtime_checkable
-class ComparisonParamsProtocol(Protocol):
-    save_plots: bool
-
-
 @dataclass(frozen=True)
 class ComparisonOutcome:
     """Result for a single comparison."""
@@ -47,4 +42,4 @@ class ComparisonOutcome:
     name: str
     success: bool
     error: str | None = None
-    payload: "ComparisonResult | None" = None
+    payload: ComparisonResult | None = None
