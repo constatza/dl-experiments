@@ -74,7 +74,7 @@ class ScalarHistory(np.ndarray):
         try:
             a = np.asarray(self, dtype=np.float64)
             b = np.asarray(other, dtype=np.float64)
-        except Exception:
+        except (TypeError, ValueError):
             return False
         return bool(np.allclose(a, b))
 

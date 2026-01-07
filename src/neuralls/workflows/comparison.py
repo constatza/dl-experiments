@@ -404,7 +404,7 @@ def run_comparisons(
             experiments_toml = DEFAULT_PROJECT_ROOT / "configs" / "experiments.toml"
             batch = load_batch(experiments_toml)
             experiments_map = {exp.spec.id: exp for exp in batch.experiments}
-        except Exception as e:
+        except (FileNotFoundError, ValueError, OSError) as e:
             logger.warning(
                 f"Could not load experiments map for checkpoint resolution: {e}"
             )
@@ -435,7 +435,7 @@ def run_comparisons(
                 output_root=comparison_root,
                 save_plots=params.save_plots,
             )
-        except Exception as exc:  # noqa: BLE001
+        except (ValueError, RuntimeError, OSError, FileNotFoundError) as exc:
             error = exc
         if error:
             outcomes.append(

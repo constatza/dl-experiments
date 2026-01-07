@@ -455,15 +455,10 @@ def process_config(
     After generating the main dataset, this also checks for a [test] section
     and generates comparison.npz if test solutions are specified.
     """
-    # TODO: Move persist_comparison_samples to generation module
-    # For now, skip comparison sample generation
-    # from ..data_pipeline import persist_comparison_samples
-
     context, plan = _build_context(config=config, config_path=config_path)
     dataset_dir = _execute_plan(context, plan)
 
     # Generate comparison data if [test] section is present
-    # TODO: Re-implement persist_comparison_samples in generation module
     test_config = config.get("test", {})
     if test_config:
         solutions_glob = test_config.get("solutions_glob")

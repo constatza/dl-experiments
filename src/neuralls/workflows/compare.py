@@ -63,7 +63,7 @@ from neuralls.configuration.preconditioner import PreconditionerConfig
 from neuralls.configuration.comparison import GeneralSolverConfig
 from ..constants import REORTHOG_STRICT_THRESHOLD
 from ..diagnostics import compute_condition_numbers, plot_condition_numbers
-from ..file_operations import ensure_dir
+from neuralls.io.filesystem import ensure_dir
 from ..io.comparison import load_system_arrays
 from ..plotting import plot_convergence_comparison
 from ..preconditioner import create_default_registry
@@ -205,6 +205,26 @@ class PreconditionerService:
         }
 
 
+# Registry for stopping criterion name mappings
+# Easy to extend: just add new mappings to this dict
+_STOPPING_CRITERION_REGISTRY: dict[str, StoppingCriterion] = {
+    "tolerance": "tolerance",
+    "residual_norm": "tolerance",  # Config name -> internal name
+    "fixed": "fixed_iterations",
+    "fixed_iterations": "fixed_iterations",
+}
+
+
+def register_stopping_criterion(name: str, criterion: StoppingCriterion) -> None:
+    """Register a stopping criterion name mapping.
+
+    Args:
+        name: The criterion name (e.g., "my_criterion")
+        criterion: The typed literal ("tolerance" or "fixed_iterations")
+    """
+    _STOPPING_CRITERION_REGISTRY[name.lower()] = criterion
+
+
 def _map_stopping_criterion(name: str) -> StoppingCriterion:
     """Map string stopping criterion to typed literal.
 
@@ -213,11 +233,19 @@ def _map_stopping_criterion(name: str) -> StoppingCriterion:
 
     Returns:
         Typed literal "tolerance" or "fixed_iterations"
+
+    Raises:
+        ValueError: If the criterion name is not registered
     """
     normalized = name.lower()
-    if normalized in {"fixed_iterations", "fixed"}:
-        return "fixed_iterations"
-    return "tolerance"
+    criterion = _STOPPING_CRITERION_REGISTRY.get(normalized)
+    if criterion is None:
+        valid_names = ", ".join(sorted(_STOPPING_CRITERION_REGISTRY.keys()))
+        raise ValueError(
+            f"Unknown stopping criterion: '{name}'. "
+            f"Valid options: {valid_names}"
+        )
+    return criterion
 
 
 def _resolve_comparison_paths(

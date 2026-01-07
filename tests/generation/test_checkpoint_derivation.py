@@ -10,7 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from neuralls.system_loading import derive_checkpoint_path, extract_model_name
+from neuralls.io.arrays import derive_checkpoint_path
+from neuralls.workflows.utils.paths import extract_model_name
 
 
 class TestExtractModelName:
@@ -28,8 +29,8 @@ seed = 42
         model_name = extract_model_name(config_path)
         assert model_name == "my_model"
 
-    def test_extract_from_filename_when_session_missing(self, tmp_path: Path) -> None:
-        """Test fallback to filename when SESSION.name not present."""
+    def test_extract_from_model_name_when_session_missing(self, tmp_path: Path) -> None:
+        """Test using MODEL.name when SESSION.name not present."""
         config_path = tmp_path / "linear.toml"
         config_path.write_text("""
 [MODEL]
@@ -37,12 +38,14 @@ name = "SomeModel"
 """)
 
         model_name = extract_model_name(config_path)
-        assert model_name == config_path.stem
+        assert model_name == "SomeModel"
 
-    def test_extract_from_filename_when_session_name_empty(
+    def test_extract_raises_error_when_session_name_empty_and_no_model(
         self, tmp_path: Path
     ) -> None:
-        """Test fallback to filename when SESSION.name is empty."""
+        """Test error raised when SESSION.name is empty and MODEL.name missing."""
+        import pytest
+
         config_path = tmp_path / "linear.toml"
         config_path.write_text("""
 [SESSION]
@@ -50,19 +53,30 @@ name = ""
 seed = 42
 """)
 
-        model_name = extract_model_name(config_path)
-        assert model_name == "linear"
+        with pytest.raises(ValueError, match="Model name missing"):
+            extract_model_name(config_path)
 
-    def test_extract_from_filename_when_session_name_none(self, tmp_path: Path) -> None:
-        """Test fallback to filename when SESSION.name is None."""
+    def test_extract_raises_error_when_session_name_none_and_no_model(
+        self, tmp_path: Path
+    ) -> None:
+        """Test error raised when SESSION.name is None and MODEL.name missing."""
+        import pytest
+
         config_path = tmp_path / "gnn.toml"
         config_path.write_text("""
 [SESSION]
 seed = 42
 """)
 
+        with pytest.raises(ValueError, match="Model name missing"):
+            extract_model_name(config_path)
+
+    def test_extract_from_filename_when_file_unreadable(self, tmp_path: Path) -> None:
+        """Test fallback to filename when config file can't be read."""
+        config_path = tmp_path / "nonexistent.toml"
+        # File doesn't exist - should fallback to stem
         model_name = extract_model_name(config_path)
-        assert model_name == "gnn"
+        assert model_name == "nonexistent"
 
 
 class TestDeriveCheckpointPath:

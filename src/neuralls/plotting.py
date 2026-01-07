@@ -116,8 +116,9 @@ def plot_residual_history(
 
     for method_name, result in results.items():
         # Handle both dict and dataclass results
+        residuals = None
         if hasattr(result, "residual_history"):
-            residuals = result.residual_history
+            residuals = getattr(result, "residual_history")
         elif isinstance(result, dict):
             residuals = result.get("residual_history") or result.get("residuals")
         else:
@@ -214,29 +215,90 @@ def plot_convergence_comparison(
         plt.close(fig)
 
 
-def plot_prediction_diagnostics(
-    y_pred: np.ndarray,
-    y_true: np.ndarray,
-    sample: int = 0,
+def plot_noise_robustness(
+    noise_results: dict[str, dict[str, dict]],
     save_path: str | Path | None = None,
     show: bool = False,
 ) -> None:
-    """Create comprehensive diagnostic plots for predictions vs targets.
-
-    This function creates separate visualizations for predictions and targets
-    to help identify scaling issues, normalization problems, and data quality issues.
+    """Plot noise robustness analysis results.
 
     Args:
-        y_pred: Predicted values (1D array)
-        y_true: True target values (1D array)
-        sample: Sample number for title
-        save_path: Path to save plot
+        noise_results: Nested dict: noise_level -> method -> results
+        save_path: Optional path to save the plot
         show: Whether to show plot
     """
-    y_pred = np.asarray(y_pred).ravel()
-    y_true = np.asarray(y_true).ravel()
+    noise_levels = sorted(noise_results.keys(), key=float)
+    methods = set()
+    for level_results in noise_results.values():
+        methods.update(level_results.keys())
+    methods = sorted(methods)
 
-    # Calculate comprehensive statistics
+    # Use matplotlib Set1 colormap for consistent colors
+    colormap = cm.get_cmap("Set1")
+    colors = colormap(np.linspace(0, 1, max(len(methods), 3)))
+    method_colors = {
+        method: colors[i % len(colors)] for i, method in enumerate(methods)
+    }
+
+    fig = plt.figure(figsize=(12, 8))
+
+    for method in methods:
+        iterations = []
+        levels_numeric = []
+
+        for level in noise_levels:
+            if method in noise_results[level]:
+                result = noise_results[level][method]
+                # Handle both dict and dataclass results
+                iters = 0
+                if hasattr(result, "iterations"):
+                    iters = getattr(result, "iterations")
+                elif isinstance(result, dict):
+                    iters = result.get("iterations", 0)
+                else:
+                    iters = 0
+                iterations.append(iters)
+                levels_numeric.append(float(level))
+
+        if iterations:
+            plt.plot(
+                levels_numeric,
+                iterations,
+                "o-",
+                label=method,
+                color=method_colors[method],
+                linewidth=2,
+                markersize=6,
+            )
+
+    plt.xlabel("Noise Level (%)")
+    plt.ylabel("CG Iterations to Convergence")
+    plt.title("Noise Robustness Analysis")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, dpi=200, bbox_inches="tight")
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
+# Private helpers for plot_prediction_diagnostics
+def _compute_prediction_stats(y_pred: np.ndarray, y_true: np.ndarray) -> tuple[dict[str, float], dict[str, float], dict[str, float], float]:
+    """Compute comprehensive statistics for predictions and targets.
+
+    Args:
+        y_pred: Predicted values
+        y_true: True target values
+
+    Returns:
+        Tuple of (pred_stats, true_stats, error_stats, scale_ratio)
+    """
     pred_stats = {
         "min": float(np.min(y_pred)),
         "max": float(np.max(y_pred)),
@@ -262,164 +324,206 @@ def plot_prediction_diagnostics(
         "max_abs": float(np.max(np.abs(error))),
     }
 
-    # Compute scale ratio
     scale_ratio = pred_stats["norm"] / max(true_stats["norm"], 1e-15)
 
-    # Create comprehensive diagnostic figure
-    fig = plt.figure(figsize=(18, 12))
-    gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.3)
+    return pred_stats, true_stats, error_stats, scale_ratio
 
-    # Row 1: Value distributions
+
+def _plot_distribution_row(
+    fig: Any,
+    gs: Any,
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    pred_stats: dict[str, float],
+    true_stats: dict[str, float],
+    error_stats: dict[str, float],
+) -> None:
+    """Plot histograms for predictions, targets, and errors.
+
+    Args:
+        fig: Matplotlib figure
+        gs: GridSpec object
+        y_pred: Predicted values
+        y_true: True target values
+        pred_stats: Prediction statistics
+        true_stats: Target statistics
+        error_stats: Error statistics
+    """
+    error = y_pred - y_true
+
+    # Prediction distribution
     ax1 = fig.add_subplot(gs[0, 0])
     ax1.hist(y_pred, bins=50, alpha=0.7, color="blue", edgecolor="black")
-    ax1.axvline(
-        pred_stats["mean"],
-        color="red",
-        linestyle="--",
-        linewidth=2,
-        label=f"Mean: {pred_stats['mean']:.3e}",
-    )
-    ax1.axvline(
-        pred_stats["median"],
-        color="green",
-        linestyle="--",
-        linewidth=2,
-        label=f"Median: {pred_stats['median']:.3e}",
-    )
+    ax1.axvline(pred_stats["mean"], color="red", linestyle="--", linewidth=2, label=f"Mean: {pred_stats['mean']:.3e}")
+    ax1.axvline(pred_stats["median"], color="green", linestyle="--", linewidth=2, label=f"Median: {pred_stats['median']:.3e}")
     ax1.set_xlabel("Value", fontsize=11)
     ax1.set_ylabel("Count", fontsize=11)
     ax1.set_title("Prediction Distribution", fontsize=12, fontweight="bold")
     ax1.legend(fontsize=9, loc="upper left")
     ax1.grid(True, alpha=0.3)
 
+    # Target distribution
     ax2 = fig.add_subplot(gs[0, 1])
     ax2.hist(y_true, bins=50, alpha=0.7, color="orange", edgecolor="black")
-    ax2.axvline(
-        true_stats["mean"],
-        color="red",
-        linestyle="--",
-        linewidth=2,
-        label=f"Mean: {true_stats['mean']:.3e}",
-    )
-    ax2.axvline(
-        true_stats["median"],
-        color="green",
-        linestyle="--",
-        linewidth=2,
-        label=f"Median: {true_stats['median']:.3e}",
-    )
+    ax2.axvline(true_stats["mean"], color="red", linestyle="--", linewidth=2, label=f"Mean: {true_stats['mean']:.3e}")
+    ax2.axvline(true_stats["median"], color="green", linestyle="--", linewidth=2, label=f"Median: {true_stats['median']:.3e}")
     ax2.set_xlabel("Value", fontsize=11)
     ax2.set_ylabel("Count", fontsize=11)
     ax2.set_title("Target Distribution", fontsize=12, fontweight="bold")
     ax2.legend(fontsize=9, loc="upper left")
     ax2.grid(True, alpha=0.3)
 
+    # Error distribution
     ax3 = fig.add_subplot(gs[0, 2])
     ax3.hist(error, bins=50, alpha=0.7, color="red", edgecolor="black")
     ax3.axvline(0, color="black", linestyle="-", linewidth=2)
-    ax3.axvline(
-        error_stats["mae"],
-        color="blue",
-        linestyle="--",
-        linewidth=2,
-        label=f"MAE: {error_stats['mae']:.3e}",
-    )
+    ax3.axvline(error_stats["mae"], color="blue", linestyle="--", linewidth=2, label=f"MAE: {error_stats['mae']:.3e}")
     ax3.set_xlabel("Error (Pred - True)", fontsize=11)
     ax3.set_ylabel("Count", fontsize=11)
     ax3.set_title("Error Distribution", fontsize=12, fontweight="bold")
     ax3.legend(fontsize=9, loc="upper left")
     ax3.grid(True, alpha=0.3)
 
-    # Row 2: Time series plots (showing first N values)
+
+def _plot_timeseries_row(
+    fig: Any,
+    gs: Any,
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+) -> None:
+    """Plot time series views of predictions and targets.
+
+    Args:
+        fig: Matplotlib figure
+        gs: GridSpec object
+        y_pred: Predicted values
+        y_true: True target values
+    """
     n_show = min(200, len(y_pred))
     indices = np.arange(n_show)
 
+    # Predictions time series
     ax4 = fig.add_subplot(gs[1, 0])
-    ax4.plot(
-        indices, y_pred[:n_show], "b-", linewidth=1, alpha=0.7, label="Predictions"
-    )
+    ax4.plot(indices, y_pred[:n_show], "b-", linewidth=1, alpha=0.7, label="Predictions")
     ax4.set_xlabel("Index", fontsize=11)
     ax4.set_ylabel("Value", fontsize=11)
-    ax4.set_title(
-        f"Predictions (first {n_show} values)", fontsize=12, fontweight="bold"
-    )
+    ax4.set_title(f"Predictions (first {n_show} values)", fontsize=12, fontweight="bold")
     ax4.grid(True, alpha=0.3)
     ax4.legend(fontsize=9, loc="upper left")
 
+    # Targets time series
     ax5 = fig.add_subplot(gs[1, 1])
-    ax5.plot(
-        indices, y_true[:n_show], "orange", linewidth=1, alpha=0.7, label="Targets"
-    )
+    ax5.plot(indices, y_true[:n_show], "orange", linewidth=1, alpha=0.7, label="Targets")
     ax5.set_xlabel("Index", fontsize=11)
     ax5.set_ylabel("Value", fontsize=11)
     ax5.set_title(f"Targets (first {n_show} values)", fontsize=12, fontweight="bold")
     ax5.grid(True, alpha=0.3)
     ax5.legend(fontsize=9, loc="upper left")
 
+    # Overlay
     ax6 = fig.add_subplot(gs[1, 2])
-    ax6.plot(
-        indices, y_pred[:n_show], "b-", linewidth=1, alpha=0.6, label="Predictions"
-    )
-    ax6.plot(
-        indices, y_true[:n_show], "orange", linewidth=1, alpha=0.6, label="Targets"
-    )
+    ax6.plot(indices, y_pred[:n_show], "b-", linewidth=1, alpha=0.6, label="Predictions")
+    ax6.plot(indices, y_true[:n_show], "orange", linewidth=1, alpha=0.6, label="Targets")
     ax6.set_xlabel("Index", fontsize=11)
     ax6.set_ylabel("Value", fontsize=11)
     ax6.set_title(f"Overlay (first {n_show} values)", fontsize=12, fontweight="bold")
     ax6.grid(True, alpha=0.3)
     ax6.legend(fontsize=9, loc="upper left")
 
-    # Row 3: Statistical comparisons
-    ax7 = fig.add_subplot(gs[2, 0])
+
+def _plot_stats_bar_chart(
+    fig: Any,
+    gs: Any,
+    pred_stats: dict[str, float],
+    true_stats: dict[str, float],
+) -> None:
+    """Plot statistics comparison bar chart.
+
+    Args:
+        fig: Matplotlib figure
+        gs: GridSpec object
+        pred_stats: Prediction statistics
+        true_stats: Target statistics
+    """
+    ax = fig.add_subplot(gs[2, 0])
     stats_names = ["min", "max", "mean", "median", "std", "norm"]
     pred_vals = [pred_stats[k] for k in stats_names]
     true_vals = [true_stats[k] for k in stats_names]
     x_pos = np.arange(len(stats_names))
     width = 0.35
 
-    ax7.bar(
-        x_pos - width / 2,
-        pred_vals,
-        width,
-        label="Predictions",
-        alpha=0.8,
-        color="blue",
-    )
-    ax7.bar(
-        x_pos + width / 2, true_vals, width, label="Targets", alpha=0.8, color="orange"
-    )
-    ax7.set_xticks(x_pos)
-    ax7.set_xticklabels(stats_names, rotation=45, ha="right", fontsize=9)
-    ax7.set_ylabel("Value", fontsize=11)
-    ax7.set_title("Statistics Comparison", fontsize=12, fontweight="bold")
-    ax7.legend(fontsize=9, loc="upper left")
-    ax7.grid(True, alpha=0.3, axis="y")
-    ax7.set_yscale("symlog")
+    ax.bar(x_pos - width / 2, pred_vals, width, label="Predictions", alpha=0.8, color="blue")
+    ax.bar(x_pos + width / 2, true_vals, width, label="Targets", alpha=0.8, color="orange")
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(stats_names, rotation=45, ha="right", fontsize=9)
+    ax.set_ylabel("Value", fontsize=11)
+    ax.set_title("Statistics Comparison", fontsize=12, fontweight="bold")
+    ax.legend(fontsize=9, loc="upper left")
+    ax.grid(True, alpha=0.3, axis="y")
+    ax.set_yscale("symlog")
 
-    ax8 = fig.add_subplot(gs[2, 1])
-    # Parity plot
+
+def _plot_parity_subplot(
+    fig: Any,
+    gs: Any,
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+) -> None:
+    """Plot parity subplot.
+
+    Args:
+        fig: Matplotlib figure
+        gs: GridSpec object
+        y_pred: Predicted values
+        y_true: True target values
+    """
+    ax = fig.add_subplot(gs[2, 1])
     y_min = float(np.min([y_true.min(), y_pred.min()]))
     y_max = float(np.max([y_true.max(), y_pred.max()]))
     pad = 0.05 * (y_max - y_min) if y_max > y_min else 1.0
 
-    ax8.scatter(y_true, y_pred, s=5, alpha=0.5, color="purple")
-    ax8.plot(
-        [y_min - pad, y_max + pad],
-        [y_min - pad, y_max + pad],
-        "k--",
-        linewidth=2,
-        label="Perfect prediction",
-    )
-    ax8.set_xlabel("True Values", fontsize=11)
-    ax8.set_ylabel("Predicted Values", fontsize=11)
-    ax8.set_title("Parity Plot", fontsize=12, fontweight="bold")
-    ax8.grid(True, alpha=0.3)
-    ax8.legend(fontsize=9, loc="upper left")
-    ax8.axis("equal")
+    ax.scatter(y_true, y_pred, s=5, alpha=0.5, color="purple")
+    ax.plot([y_min - pad, y_max + pad], [y_min - pad, y_max + pad], "k--", linewidth=2, label="Perfect prediction")
+    ax.set_xlabel("True Values", fontsize=11)
+    ax.set_ylabel("Predicted Values", fontsize=11)
+    ax.set_title("Parity Plot", fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=9, loc="upper left")
+    ax.axis("equal")
 
-    ax9 = fig.add_subplot(gs[2, 2])
-    # Text summary
-    ax9.axis("off")
+
+def _plot_summary_text(
+    fig: Any,
+    gs: Any,
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    pred_stats: dict[str, float],
+    true_stats: dict[str, float],
+    scale_ratio: float,
+    sample: int,
+) -> None:
+    """Plot summary text panel.
+
+    Args:
+        fig: Matplotlib figure
+        gs: GridSpec object
+        y_pred: Predicted values
+        y_true: True target values
+        pred_stats: Prediction statistics
+        true_stats: Target statistics
+        scale_ratio: Ratio of prediction norm to target norm
+        sample: Sample number for title
+    """
+    ax = fig.add_subplot(gs[2, 2])
+    ax.axis("off")
+
+    error = y_pred - y_true
+    error_stats = {
+        "mae": float(np.mean(np.abs(error))),
+        "rmse": float(np.sqrt(np.mean(error**2))),
+        "max_abs": float(np.max(np.abs(error))),
+    }
+
     summary_text = f"""
 DIAGNOSTIC SUMMARY (Sample {sample})
 
@@ -447,18 +551,84 @@ ERRORS:
 SCALE ANALYSIS:
   ||pred|| / ||true||: {scale_ratio:.6e}
 
-{"⚠️  WARNING: Scale ratio > 10x!" if scale_ratio > 10 or scale_ratio < 0.1 else "✓ Scale ratio looks reasonable"}
+{"WARNING: Scale ratio > 10x!" if scale_ratio > 10 or scale_ratio < 0.1 else "Scale ratio looks reasonable"}
     """
-    ax9.text(
+    ax.text(
         0.05,
         0.95,
         summary_text,
-        transform=ax9.transAxes,
+        transform=ax.transAxes,
         fontsize=9,
         verticalalignment="top",
         fontfamily="monospace",
         bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
     )
+
+
+def _plot_comparison_row(
+    fig: Any,
+    gs: Any,
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    pred_stats: dict[str, float],
+    true_stats: dict[str, float],
+    scale_ratio: float,
+    sample: int,
+) -> None:
+    """Plot statistical comparisons, parity plot, and summary.
+
+    Args:
+        fig: Matplotlib figure
+        gs: GridSpec object
+        y_pred: Predicted values
+        y_true: True target values
+        pred_stats: Prediction statistics
+        true_stats: Target statistics
+        scale_ratio: Ratio of prediction norm to target norm
+        sample: Sample number for title
+    """
+    _plot_stats_bar_chart(fig, gs, pred_stats, true_stats)
+    _plot_parity_subplot(fig, gs, y_pred, y_true)
+    _plot_summary_text(fig, gs, y_pred, y_true, pred_stats, true_stats, scale_ratio, sample)
+
+
+def plot_prediction_diagnostics(
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    sample: int = 0,
+    save_path: str | Path | None = None,
+    show: bool = False,
+) -> None:
+    """Create comprehensive diagnostic plots for predictions vs targets.
+
+    This function creates separate visualizations for predictions and targets
+    to help identify scaling issues, normalization problems, and data quality issues.
+
+    Args:
+        y_pred: Predicted values (1D array)
+        y_true: True target values (1D array)
+        sample: Sample number for title
+        save_path: Path to save plot
+        show: Whether to show plot
+    """
+    y_pred = np.asarray(y_pred).ravel()
+    y_true = np.asarray(y_true).ravel()
+
+    # Compute statistics
+    pred_stats, true_stats, error_stats, scale_ratio = _compute_prediction_stats(y_pred, y_true)
+
+    # Create comprehensive diagnostic figure
+    fig = plt.figure(figsize=(18, 12))
+    gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.3)
+
+    # Row 1: Distributions
+    _plot_distribution_row(fig, gs, y_pred, y_true, pred_stats, true_stats, error_stats)
+
+    # Row 2: Time series
+    _plot_timeseries_row(fig, gs, y_pred, y_true)
+
+    # Row 3: Comparisons and summary
+    _plot_comparison_row(fig, gs, y_pred, y_true, pred_stats, true_stats, scale_ratio, sample)
 
     fig.suptitle(
         "Prediction Diagnostics - Scaling Analysis", fontsize=16, fontweight="bold"
@@ -492,7 +662,7 @@ def plot_data_norms(
     data_dir = Path(data_dir)
 
     # Load data from normalized.npz
-    from .io_utils import load_dataset
+    from neuralls.io.datasets import load_dataset
 
     data = load_dataset(data_dir, variant="normalized")
     rhs_samples = data["rhs"].astype(np.float64, copy=False)

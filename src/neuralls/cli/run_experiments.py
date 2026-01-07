@@ -30,7 +30,7 @@ def main(
         "-f",
         help="Force re-train all models (ignore existing checkpoints)",
     ),
-):
+) -> None:
     """Train all models defined in experiments.toml.
 
     This command:
@@ -86,7 +86,7 @@ def main(
         if failures:
             raise typer.Exit(code=EXIT_FAILURE)
 
-    except Exception as e:
+    except (FileNotFoundError, ValueError, OSError, RuntimeError) as e:
         print(f"\nError: {e}")
         raise typer.Exit(code=EXIT_FAILURE)
 

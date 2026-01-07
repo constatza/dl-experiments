@@ -15,7 +15,7 @@ from loguru import logger
 from neuralls.configuration.domain import ExperimentWorkspace
 from neuralls.diagnostics import save_prediction_samples_to_csv
 from neuralls.diagnostics.synthetic import save_synthetic_results
-from neuralls.file_operations import derive_model_identifier, sanitize_identifier
+from neuralls.io.filesystem import derive_model_identifier, sanitize_identifier
 from neuralls.plotting import plot_parity_and_residuals, plot_prediction_diagnostics
 from neuralls.mlflow_utils import build_run_config, finalize_run, open_run
 from neuralls.workflows.inference.config import InferencePredictions, InferenceOutputs

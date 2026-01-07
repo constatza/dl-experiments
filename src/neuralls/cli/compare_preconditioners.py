@@ -94,7 +94,7 @@ def main(
         "--plots/--no-plots",
         help="Save comparison plots to disk (default: True)",
     ),
-):
+) -> None:
     """Compare preconditioner methods using configuration files."""
     experiments_path = (
         experiments if experiments is not None else DEFAULT_PROJECT_ROOT / DEFAULT_EXPERIMENTS_CONFIG

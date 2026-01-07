@@ -30,7 +30,7 @@ def main(
         "--plots/--no-plots",
         help="Save comparison plots to disk (default: True)",
     ),
-):
+) -> None:
     """Compare preconditioner methods using configuration files."""
     params = ComparisonParams(save_plots=plots)
 

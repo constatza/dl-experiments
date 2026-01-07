@@ -10,10 +10,10 @@ This module provides a clean, composable API for normalizing linear systems:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 
@@ -1014,6 +1014,121 @@ def log_normalization_stats(strategy: str, result: NormalizedSystem) -> None:
 # =============================================================================
 
 
+def _create_matrix_scale(
+    matrix: np.ndarray,
+    spectral_radius_bound: float | None = None,
+    **_kwargs: Any,
+) -> MatrixScale:
+    """Create matrix normalization scale.
+
+    Args:
+        matrix: System matrix A
+        spectral_radius_bound: Optional spectral radius bound (computed if None)
+
+    Returns:
+        MatrixScale object
+    """
+    dimension = matrix.shape[0]
+    if spectral_radius_bound is None:
+        spectral_radius_bound = compute_spectral_bound(matrix)
+    dimension_scale = compute_dim_scale(dimension)
+    return MatrixScale(
+        spectral_radius_bound=spectral_radius_bound,
+        dimension_scale=dimension_scale,
+    )
+
+
+def _create_diagonal_scale(
+    matrix: np.ndarray,
+    **_kwargs: Any,
+) -> DiagonalScale:
+    """Create diagonal (Jacobi) normalization scale.
+
+    Args:
+        matrix: System matrix A
+
+    Returns:
+        DiagonalScale object
+    """
+    diagonal = extract_diagonal(matrix)
+    validate_diagonal(diagonal)
+    diagonal_sqrt_inv = 1.0 / np.sqrt(diagonal)
+    return DiagonalScale(diagonal_sqrt_inv=diagonal_sqrt_inv)
+
+
+def _create_spectral_scale(
+    matrix: np.ndarray,
+    rhs_samples: np.ndarray | None = None,
+    solution_samples: np.ndarray | None = None,
+    **_kwargs: Any,
+) -> list[SpectralScale]:
+    """Create spectral normalization scales (one per sample).
+
+    Args:
+        matrix: System matrix A
+        rhs_samples: Optional RHS samples (shape: n_samples x dimension)
+        solution_samples: Optional solution samples (shape: n_samples x dimension)
+
+    Returns:
+        List of SpectralScale objects (one per sample)
+
+    Raises:
+        ValueError: If both or neither samples provided
+    """
+    # Guard: Validate mutually exclusive parameters
+    if rhs_samples is not None and solution_samples is not None:
+        raise ValueError(
+            "Cannot provide both rhs_samples and solution_samples for spectral normalization. "
+            "Provide only one."
+        )
+
+    if rhs_samples is None and solution_samples is None:
+        raise ValueError(
+            "Spectral normalization requires either rhs_samples or solution_samples"
+        )
+
+    dimension = matrix.shape[0]
+    spectral_norm = calculate_spectral_norm(matrix)
+    dimension_scale = compute_dim_scale(dimension)
+
+    # Case A: RHS archive provided
+    if rhs_samples is not None:
+        rhs_norms = compute_rhs_norms(rhs_samples)
+        return [
+            SpectralScale(
+                spectral_norm=spectral_norm,
+                dimension_scale=dimension_scale,
+                rhs_norm=rhs_norm,
+            )
+            for rhs_norm in rhs_norms
+        ]
+
+    # Case B: Solution archive provided (compute RHS as b = A @ x)
+    # Type guard ensures solution_samples is not None here
+    assert solution_samples is not None
+    scales = []
+    for solution in solution_samples:
+        # Compute what RHS would be: b = A @ x
+        rhs = matrix @ solution
+        rhs_norm = float(np.linalg.norm(rhs, ord=2))
+        scales.append(
+            SpectralScale(
+                spectral_norm=spectral_norm,
+                dimension_scale=dimension_scale,
+                rhs_norm=rhs_norm,
+            )
+        )
+    return scales
+
+
+# Simple registry - no elaborate framework, just dict dispatch
+_SCALE_CREATORS: dict[str, Callable[..., IScale | Sequence[IScale]]] = {
+    "matrix": _create_matrix_scale,
+    "diagonal": _create_diagonal_scale,
+    "spectral": _create_spectral_scale,
+}
+
+
 def create_scale_from_config(
     normalize_type: Literal["none", "matrix", "spectral", "diagonal"],
     matrix: np.ndarray,
@@ -1025,8 +1140,7 @@ def create_scale_from_config(
     """Create normalization scale object from configuration.
 
     Pure function that creates IScale objects based on normalization type
-    and required parameters. Handles both single-scale strategies (matrix,
-    diagonal) and per-sample strategies (spectral).
+    and required parameters. Uses dispatch pattern for clean extensibility.
 
     Args:
         normalize_type: Type of normalization ("none", "matrix", "spectral", "diagonal")
@@ -1065,74 +1179,29 @@ def create_scale_from_config(
         >>> isinstance(scales, list)
         True
     """
+    # Guard: Handle "none" early
     if normalize_type == "none":
         return None
 
-    if normalize_type == "matrix":
-        dimension = matrix.shape[0]
-        if spectral_radius_bound is None:
-            spectral_radius_bound = compute_spectral_bound(matrix)
-        dimension_scale = compute_dim_scale(dimension)
-        return MatrixScale(
-            spectral_radius_bound=spectral_radius_bound,
-            dimension_scale=dimension_scale,
+    # Guard: Validate normalize_type
+    creator = _SCALE_CREATORS.get(normalize_type)
+    if creator is None:
+        raise ValueError(
+            f"Invalid normalize_type: {normalize_type}. "
+            f"Must be one of: none, matrix, spectral, diagonal"
         )
 
-    if normalize_type == "diagonal":
-        diagonal = extract_diagonal(matrix)
-        validate_diagonal(diagonal)
-        diagonal_sqrt_inv = 1.0 / np.sqrt(diagonal)
-        return DiagonalScale(diagonal_sqrt_inv=diagonal_sqrt_inv)
-
-    if normalize_type == "spectral":
-        # Validate mutually exclusive parameters
-        if rhs_samples is not None and solution_samples is not None:
-            raise ValueError(
-                "Cannot provide both rhs_samples and solution_samples for spectral normalization. "
-                "Provide only one."
-            )
-
-        if rhs_samples is None and solution_samples is None:
-            raise ValueError(
-                "Spectral normalization requires either rhs_samples or solution_samples"
-            )
-
-        dimension = matrix.shape[0]
-        spectral_norm = calculate_spectral_norm(matrix)
-        dimension_scale = compute_dim_scale(dimension)
-
-        # Case A: RHS archive provided
-        if rhs_samples is not None:
-            rhs_norms = compute_rhs_norms(rhs_samples)
-            return [
-                SpectralScale(
-                    spectral_norm=spectral_norm,
-                    dimension_scale=dimension_scale,
-                    rhs_norm=rhs_norm,
-                )
-                for rhs_norm in rhs_norms
-            ]
-
-        # Case B: Solution archive provided (compute RHS as b = A @ x)
-        if solution_samples is not None:
-            scales = []
-            for solution in solution_samples:
-                # Compute what RHS would be: b = A @ x
-                rhs = matrix @ solution
-                rhs_norm = float(np.linalg.norm(rhs, ord=2))
-                scales.append(
-                    SpectralScale(
-                        spectral_norm=spectral_norm,
-                        dimension_scale=dimension_scale,
-                        rhs_norm=rhs_norm,
-                    )
-                )
-            return scales
-
-    raise ValueError(
-        f"Invalid normalize_type: {normalize_type}. "
-        f"Must be one of: none, matrix, spectral, diagonal"
+    # Dispatch to appropriate creator
+    result = creator(
+        matrix=matrix,
+        spectral_radius_bound=spectral_radius_bound,
+        rhs_samples=rhs_samples,
+        solution_samples=solution_samples,
     )
+    # Convert Sequence to list for return type compatibility
+    if isinstance(result, Sequence) and not isinstance(result, list):
+        return list(result)
+    return result
 
 
 # =============================================================================

@@ -56,6 +56,12 @@ DEFAULT_ATOL = (
 DEFAULT_CG_MAX_ITERATIONS = 1000
 DEFAULT_CG_STOPPING_CRITERION = "tolerance"
 
+# Breakdown tolerance for CG algorithms (used in comparison and solver internals)
+DEFAULT_BREAKDOWN_TOL = 1e-12  # Threshold for detecting numerical breakdown in denominators
+
+# Prediction diagnostic thresholds
+PREDICTION_NORM_EPSILON = 1e-12  # Epsilon for safe division in prediction norm ratio
+
 # Reorthogonalization numerical tolerances
 REORTHOG_ZERO_NORM_TOL = 1e-14  # Threshold for considering a norm as zero
 REORTHOG_MAX_COEFF = 1e10  # Maximum safe reorthogonalization coefficient

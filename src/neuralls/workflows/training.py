@@ -42,7 +42,7 @@ from dlkit.tools.config.dataset_settings import DatasetSettings
 
 from neuralls.configuration import ExperimentWorkspace
 from neuralls.configuration.loader import load_experiment
-from neuralls.io_utils import get_latest_checkpoint
+from neuralls.io.checkpoints import get_latest_checkpoint
 
 
 @dataclass(frozen=True)

@@ -27,7 +27,7 @@ def main(
         None,
         help="Path to data config providing dataset metadata",
     ),
-):
+) -> None:
     """Train model using configuration files."""
     if config is None:
         config = DEFAULT_PROJECT_ROOT / DEFAULT_MODEL_CONFIG
@@ -44,7 +44,7 @@ def main(
 
         print(f"\nTraining complete. Checkpoint saved to: {checkpoint_path}")
 
-    except Exception as exc:  # noqa: BLE001
+    except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         print(f"Error: {exc}")
         raise typer.Exit(code=EXIT_FAILURE)
 

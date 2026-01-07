@@ -109,7 +109,7 @@ class DLKitPredictor(PredictorPort):
                 f"Model device: {self._device}, Residual shape: {residual.shape}"
             ) from e
 
-        except Exception as e:
+        except (TypeError, AttributeError, ValueError) as e:
             raise RuntimeError(
                 f"Unexpected error during neural inference: {type(e).__name__}: {e}"
             ) from e
@@ -142,7 +142,7 @@ class DLKitPredictor(PredictorPort):
 
             logger.debug("Predictor cleanup complete")
 
-        except Exception as e:
+        except (RuntimeError, OSError, AttributeError) as e:
             logger.warning(f"Error during predictor cleanup: {e}")
             # Don't raise - cleanup should be best-effort
 
@@ -241,7 +241,7 @@ class DLKitAdapter(PredictorAdapter):
                 "DLKit not installed. Install with: pip install dlkit"
             ) from e
 
-        except Exception as e:
+        except (FileNotFoundError, OSError, ValueError, RuntimeError) as e:
             raise RuntimeError(
                 f"Failed to load model from {checkpoint_path}: {type(e).__name__}: {e}"
             ) from e

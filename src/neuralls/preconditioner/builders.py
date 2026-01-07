@@ -33,6 +33,8 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse.linalg import spilu
 
+from ..constants import REORTHOG_ZERO_NORM_TOL
+
 if TYPE_CHECKING:
     from neuralls.configuration.preconditioner import (
         PreconditionerConfig,
@@ -173,9 +175,8 @@ class JacobiBuilder:
             reduce effectiveness for poorly conditioned diagonals.
         """
         diag = np.diag(matrix)
-        eps = 1e-14
         # Protect against division by zero: replace tiny values with 1.0
-        diag_safe = np.where(np.abs(diag) < eps, 1.0, diag)
+        diag_safe = np.where(np.abs(diag) < REORTHOG_ZERO_NORM_TOL, 1.0, diag)
         diag_inv = 1.0 / diag_safe
 
         return lambda residual: diag_inv * residual

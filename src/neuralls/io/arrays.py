@@ -17,7 +17,7 @@ import numpy as np
 
 from loguru import logger
 
-from .io.base import load_npz_entry
+from neuralls.io.base import load_npz_entry
 
 
 def derive_checkpoint_path(
@@ -47,7 +47,7 @@ def derive_checkpoint_path(
         ... )
         PosixPath('/data/projects/graph-cg/data/output/test-solutions/ffnn/checkpoints/ffnn.ckpt')
     """
-    from .workflows.utils.paths import extract_model_name
+    from neuralls.workflows.utils.paths import extract_model_name
 
     model_name = extract_model_name(model_template)
     data_config_name = Path(data_config).stem
@@ -68,7 +68,7 @@ def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
     Returns:
         Matrix array as float64
     """
-    from .io_utils import load_dataset
+    from neuralls.io.datasets import load_dataset
 
     matrix_path = Path(matrix_path)
 
@@ -109,7 +109,7 @@ def _load_rhs_file(rhs_path: str | Path) -> np.ndarray:
     Returns:
         RHS vector as float64, reshaped to 1D
     """
-    from .io_utils import load_dataset
+    from neuralls.io.datasets import load_dataset
 
     rhs_path = Path(rhs_path)
 
@@ -219,7 +219,7 @@ def save_training_data(
         features_path: Output path for features
         targets_path: Output path for targets
     """
-    from .io_utils import ensure_dir
+    from neuralls.io.filesystem import ensure_dir
 
     features_path = Path(features_path)
     targets_path = Path(targets_path)
@@ -253,7 +253,7 @@ def load_case_data(
         >>> R = data["rhs"]
         >>> X = data["solutions"]
     """
-    from .io_utils import load_dataset
+    from neuralls.io.datasets import load_dataset
 
     data_dir = Path(data_dir)
 
@@ -290,7 +290,7 @@ def list_available_cases(
         >>> for case in cases:
         ...     print(f"{case['name']}: {case['dimension']}-dim, {case['source_type']}")
     """
-    from .constants import DEFAULT_PROCESSED_DIR
+    from neuralls.constants import DEFAULT_PROCESSED_DIR
 
     if processed_dir is None:
         processed_dir = Path(DEFAULT_PROCESSED_DIR)

@@ -28,7 +28,7 @@ from neuralls.generation import process_config
 from neuralls.workflows.utils.paths import extract_model_name
 from neuralls.workflows.training import train_model
 from neuralls.validation import validate_data_exists
-from neuralls.io_utils import get_latest_checkpoint
+from neuralls.io.checkpoints import get_latest_checkpoint
 
 
 def run_experiment(
@@ -104,8 +104,8 @@ def run_experiment(
             experiment_id=model_name,
             status="Success",
         )
-    except Exception as exc:  # noqa: BLE001
-        # Catch all exceptions to ensure batch runs continue even if one experiment fails
+    except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
+        # Catch expected exceptions to ensure batch runs continue even if one experiment fails
         logger.error(f"Experiment {model_name} failed: {exc}")
         return ExperimentResult(
             experiment_id=model_name, status="Failed", error=str(exc)

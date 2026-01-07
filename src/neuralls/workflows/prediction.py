@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from collections.abc import Iterable, Iterator
@@ -12,11 +13,47 @@ from loguru import logger
 from dlkit.tools.io import load_array
 
 from ..configuration.loader import load_experiment
-from ..file_operations import derive_model_identifier
+from neuralls.io.filesystem import derive_model_identifier
 from ..mlflow_utils import build_run_config, open_run
+from ..constants import PREDICTION_NORM_EPSILON
 
 
 PREDICTION_ARTIFACTS: tuple[str, ...] = ("figures", "predictions")
+
+
+@dataclass(frozen=True)
+class InferenceConfig:
+    """Configuration for inference execution.
+
+    Simple frozen dataclass to replace 11-parameter function signature.
+    This is NOT a Pydantic model - just a parameter container for internal use.
+    The actual Pydantic config models (DataConfigFile, etc.) are preserved.
+
+    Attributes:
+        config_path: Path to model configuration file
+        checkpoint_path: Path to model checkpoint (required, validated at runtime)
+        data_config_path: Path to data configuration file (optional)
+        features_path: Path to features file (for standard inference)
+        targets_path: Path to targets file (for standard inference)
+        save_plots: Whether to generate diagnostic plots
+        figures_dir: Custom figures directory (optional)
+        enable_mlflow: Whether to log to MLflow
+        output_root: Custom output root directory (optional)
+        synthetic_benchmark: Use synthetic benchmark data
+        solver_config_path: Path to solver config (for synthetic)
+    """
+
+    config_path: Path
+    checkpoint_path: Path | None
+    data_config_path: Path | None = None
+    features_path: Path | None = None
+    targets_path: Path | None = None
+    save_plots: bool = True
+    figures_dir: Path | None = None
+    enable_mlflow: bool = False
+    output_root: Path | None = None
+    synthetic_benchmark: bool = False
+    solver_config_path: Path | None = None
 
 
 # NOTE: Minimal dataset functions removed - no longer needed with InferenceWorkflowConfig
@@ -311,7 +348,7 @@ def _log_prediction_diagnostics(
 
     stats_true = _summarize_vector(y_true)
     stats_pred = _summarize_vector(y_pred)
-    denom = max(stats_true["l2"], 1e-12)
+    denom = max(stats_true["l2"], PREDICTION_NORM_EPSILON)
     norm_ratio = stats_pred["l2"] / denom
     max_abs = float(np.max(np.abs(y_pred - y_true)))
     mean_abs = float(np.mean(np.abs(y_pred - y_true)))
@@ -406,6 +443,141 @@ def _derive_run_identifier(
     return derive_model_identifier(settings, context, config_path)
 
 
+def _validate_inference_config(config: InferenceConfig) -> None:
+    """Validate inference configuration early.
+
+    Args:
+        config: Inference configuration to validate
+
+    Raises:
+        ValueError: If checkpoint path not provided
+
+    Note:
+        After this function returns, checkpoint_path is guaranteed non-None.
+    """
+    if config.checkpoint_path is None:
+        raise ValueError("No checkpoint path specified")
+
+
+def _load_experiment_settings(config: InferenceConfig) -> tuple[Any, Any, str]:
+    """Load experiment configuration in inference mode.
+
+    Args:
+        config: Inference configuration
+
+    Returns:
+        Tuple of (settings, workspace, dataset_id)
+
+    Raises:
+        ValueError: If data_config_path not provided
+    """
+    # Guard: Validate data_config_path exists
+    if config.data_config_path is None:
+        raise ValueError("data_config_path is required for inference")
+
+    experiment = load_experiment(
+        config.config_path,
+        config.data_config_path,
+        output_root=config.output_root,
+        mode="inference",  # Use InferenceWorkflowConfig
+    )
+    settings = experiment.settings
+    workspace = experiment.workspace
+    dataset_id = experiment.spec.data_config_path.stem
+    return settings, workspace, dataset_id
+
+
+def _execute_inference_pipeline(
+    config: InferenceConfig,
+    settings: Any,
+    workspace: Any,
+    dataset_id: str,
+) -> tuple[Any, dict[str, float], list[Path]]:
+    """Execute core inference pipeline.
+
+    Args:
+        config: Inference configuration
+        settings: Experiment settings
+        workspace: Workspace paths
+        dataset_id: Dataset identifier
+
+    Returns:
+        Tuple of (predictions, metrics_dict, plot_paths)
+    """
+    from neuralls.workflows.inference import (
+        load_inference_data,
+        create_predictor,
+        run_prediction,
+        save_inference_outputs,
+        save_synthetic_predictions,
+    )
+
+    # Type guard: checkpoint_path validated before this function is called
+    assert config.checkpoint_path is not None
+
+    # Load data (strategy pattern: standard vs synthetic)
+    data = load_inference_data(
+        workspace=workspace,
+        features_path=config.features_path,
+        targets_path=config.targets_path,
+        synthetic_benchmark=config.synthetic_benchmark,
+        solver_config_path=config.solver_config_path,
+    )
+
+    # Run prediction (transforms applied automatically from checkpoint)
+    with create_predictor(config.checkpoint_path, settings) as predictor:
+        predictions = run_prediction(predictor, data, settings)
+
+    # Save synthetic results separately (if applicable)
+    if config.synthetic_benchmark and data.metadata.get("source") == "synthetic":
+        from neuralls.io.filesystem import sanitize_identifier
+        run_identifier = sanitize_identifier(
+            str(workspace.run_id or config.checkpoint_path.stem)
+        )
+        dataset_slug = sanitize_identifier(str(dataset_id))
+        identifier = f"{dataset_slug}-{run_identifier}"
+        save_synthetic_predictions(predictions, workspace.predictions_dir, identifier)
+
+    # Save outputs (CSV + plots)
+    outputs = save_inference_outputs(
+        predictions=predictions,
+        workspace=workspace,
+        settings=settings,
+        checkpoint_path=config.checkpoint_path,
+        config_path=config.config_path,
+        dataset_id=dataset_id,
+        save_plots=config.save_plots,
+        figures_dir=config.figures_dir,
+    )
+
+    return predictions, outputs.metrics, outputs.plot_paths
+
+
+def _build_result_dict(
+    predictions: Any,
+    metrics: dict[str, float],
+    plot_paths: list[Path],
+) -> dict[str, Any]:
+    """Build backward-compatible result dictionary.
+
+    Args:
+        predictions: Prediction results
+        metrics: Performance metrics
+        plot_paths: Generated plot paths
+
+    Returns:
+        Backward-compatible result dictionary
+    """
+    return {
+        "predictions": predictions.predictions.get("y_pred"),
+        "y_true": predictions.targets.get("y_true"),
+        "y_pred": predictions.predictions.get("y_pred"),
+        "duration_seconds": metrics.get("duration_seconds", 0.0),
+        "plot_path": plot_paths[0] if len(plot_paths) > 0 else None,
+        "diagnostic_plot_path": plot_paths[1] if len(plot_paths) > 1 else None,
+    }
+
+
 def run_inference(
     *,
     config_path: str | Path,
@@ -423,7 +595,7 @@ def run_inference(
     """Run inference for parity plot generation.
 
     This is a pure orchestration function that composes single-responsibility
-    functions from the inference module. No business logic here - only composition.
+    functions. No business logic here - only composition.
 
     Args:
         config_path: Path to model configuration file
@@ -452,102 +624,56 @@ def run_inference(
         FileNotFoundError: If required files don't exist
     """
     from neuralls.workflows.inference import (
-        load_inference_data,
-        create_predictor,
-        run_prediction,
-        save_inference_outputs,
         start_mlflow_run,
         finalize_mlflow_run,
-        save_synthetic_predictions,
     )
 
-    # 1. Validate inputs
-    if checkpoint_path is None:
-        raise ValueError("No checkpoint path specified")
-
-    checkpoint = Path(checkpoint_path)
-    config = Path(config_path)
-
-    # 2. Load experiment configuration in INFERENCE MODE
-    # Inference mode uses InferenceWorkflowConfig (DATASET/DATAMODULE optional)
-    # Transforms are loaded from checkpoint metadata
-    experiment = load_experiment(
-        config,
-        data_config_path,
-        output_root=output_root,
-        mode="inference",  # Use InferenceWorkflowConfig
+    # Build config object to replace 11 parameters
+    config = InferenceConfig(
+        config_path=Path(config_path),
+        checkpoint_path=Path(checkpoint_path) if checkpoint_path else None,
+        data_config_path=Path(data_config_path) if data_config_path else None,
+        features_path=Path(features_path) if features_path else None,
+        targets_path=Path(targets_path) if targets_path else None,
+        save_plots=save_plots,
+        figures_dir=Path(figures_dir) if figures_dir else None,
+        enable_mlflow=enable_mlflow,
+        output_root=Path(output_root) if output_root else None,
+        synthetic_benchmark=synthetic_benchmark,
+        solver_config_path=Path(solver_config_path) if solver_config_path else None,
     )
-    settings = experiment.settings
-    workspace = experiment.workspace
-    dataset_id = experiment.spec.data_config_path.stem
+
+    # 1. Validate configuration
+    _validate_inference_config(config)
+
+    # 2. Load experiment settings
+    settings, workspace, dataset_id = _load_experiment_settings(config)
 
     # 3. Start MLflow run (if enabled)
     mlflow_state = start_mlflow_run(
         settings,
         workspace,
         dataset_id,
-        enable_mlflow,
+        config.enable_mlflow,
     )
 
     metrics: dict[str, float] | None = None
     error: Exception | None = None
 
     try:
-        # 4. Load data (strategy pattern: standard vs synthetic)
-        data = load_inference_data(
-            workspace=workspace,
-            features_path=Path(features_path) if features_path else None,
-            targets_path=Path(targets_path) if targets_path else None,
-            synthetic_benchmark=synthetic_benchmark,
-            solver_config_path=Path(solver_config_path) if solver_config_path else None,
+        # 4. Execute inference pipeline
+        predictions, metrics, plot_paths = _execute_inference_pipeline(
+            config, settings, workspace, dataset_id
         )
 
-        # 5. Run prediction (transforms applied automatically from checkpoint)
-        # No DATASET configuration needed - InferenceWorkflowConfig handles this
-        with create_predictor(checkpoint, settings) as predictor:
-            predictions = run_prediction(predictor, data, settings)
+        # 5. Build backward-compatible result
+        return _build_result_dict(predictions, metrics, plot_paths)
 
-        # 7. Save synthetic results separately (if applicable)
-        if synthetic_benchmark and data.metadata.get("source") == "synthetic":
-            from neuralls.file_operations import sanitize_identifier
-            run_identifier = sanitize_identifier(
-                str(workspace.run_id or checkpoint.stem)
-            )
-            dataset_slug = sanitize_identifier(str(dataset_id))
-            identifier = f"{dataset_slug}-{run_identifier}"
-            save_synthetic_predictions(predictions, workspace.predictions_dir, identifier)
-
-        # 8. Save outputs (CSV + plots)
-        outputs = save_inference_outputs(
-            predictions=predictions,
-            workspace=workspace,
-            settings=settings,
-            checkpoint_path=checkpoint,
-            config_path=config,
-            dataset_id=dataset_id,
-            save_plots=save_plots,
-            figures_dir=Path(figures_dir) if figures_dir else None,
-        )
-
-        # 9. Store metrics for MLflow
-        metrics = outputs.metrics
-
-        # 10. Build backward-compatible result
-        plot_paths = outputs.plot_paths
-        return {
-            "predictions": predictions.predictions.get("y_pred"),
-            "y_true": predictions.targets.get("y_true"),
-            "y_pred": predictions.predictions.get("y_pred"),
-            "duration_seconds": metrics.get("duration_seconds", 0.0),
-            "plot_path": plot_paths[0] if len(plot_paths) > 0 else None,
-            "diagnostic_plot_path": plot_paths[1] if len(plot_paths) > 1 else None,
-        }
-
-    except Exception as exc:  # noqa: BLE001
+    except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         error = exc
         raise
     finally:
-        # 11. Finalize MLflow run
+        # 6. Finalize MLflow run
         if mlflow_state is not None and metrics is not None:
             finalize_mlflow_run(mlflow_state, metrics, workspace)
         elif mlflow_state is not None:

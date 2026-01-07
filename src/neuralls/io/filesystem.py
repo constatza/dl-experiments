@@ -14,7 +14,7 @@ from typing import Any
 
 from dlkit import GeneralSettings
 
-from .configuration import ExperimentWorkspace
+from neuralls.configuration import ExperimentWorkspace
 
 
 def sanitize_identifier(value: str, default: str = "run") -> str:
@@ -137,3 +137,126 @@ def parse_data_dir_name(dir_name: str) -> dict[str, Any]:
                 pass
 
     return result
+
+
+def ensure_dir(path: str | Path) -> Path:
+    """Ensure directory exists, creating it if necessary.
+
+    I/O action - creates directory on filesystem.
+
+    Args:
+        path: Directory path
+
+    Returns:
+        Path object for the directory
+    """
+    p = Path(path)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def copy_file(src: str | Path, dst: str | Path) -> None:
+    """Copy file from source to destination.
+
+    I/O action - copies file on filesystem.
+
+    Args:
+        src: Source path
+        dst: Destination path
+    """
+    import shutil
+
+    src = Path(src)
+    dst = Path(dst)
+    ensure_dir(dst.parent)
+    shutil.copy2(src, dst)
+
+
+def get_file_size(path: str | Path) -> int:
+    """Get file size in bytes.
+
+    I/O action - reads file metadata.
+
+    Args:
+        path: File path
+
+    Returns:
+        File size in bytes
+    """
+    return Path(path).stat().st_size
+
+
+def file_exists(path: str | Path) -> bool:
+    """Check if file exists.
+
+    I/O action - checks filesystem.
+
+    Args:
+        path: File path
+
+    Returns:
+        True if file exists
+    """
+    return Path(path).exists()
+
+
+def get_relative_path(path: str | Path, base: str | Path) -> Path:
+    """Get relative path from base directory.
+
+    Pure function - computes relative path.
+
+    Args:
+        path: Target path
+        base: Base directory
+
+    Returns:
+        Relative path
+    """
+    return Path(path).relative_to(Path(base))
+
+
+def format_file_size(size_bytes: int) -> str:
+    """Format file size in human readable format.
+
+    Pure function - formats number as string.
+
+    Args:
+        size_bytes: Size in bytes
+
+    Returns:
+        Formatted size string
+    """
+    size = float(size_bytes)
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} TB"
+
+
+def save_text_file(content: str, path: str | Path) -> None:
+    """Save text content to file.
+
+    I/O action - writes file to disk.
+
+    Args:
+        content: Text content
+        path: Output path
+    """
+    path = Path(path)
+    ensure_dir(path.parent)
+    path.write_text(content)
+
+
+def load_text_file(path: str | Path) -> str:
+    """Load text content from file.
+
+    I/O action - reads file from disk.
+
+    Args:
+        path: Input path
+
+    Returns:
+        Text content
+    """
+    return Path(path).read_text()

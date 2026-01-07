@@ -376,12 +376,6 @@ def build_dataset(
 
     # Step 8: Persist dataset
     from pathlib import Path
-    # TODO: Re-implement persistence functions
-    # from ..data_pipeline import (
-    #     DataContext,
-    #     create_normalization_result_from_scale,
-    #     persist_normalized_samples,
-    # )
 
     dataset_dir_path = Path(dataset_dir)
     dataset_dir_path.mkdir(parents=True, exist_ok=True)

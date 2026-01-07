@@ -54,7 +54,7 @@ def main(
         None,
         help="Path to solver config (used for matrix path in synthetic mode)",
     ),
-):
+) -> None:
     """Run inference using a DLKit configuration."""
     # Resolve defaults
     if config is None:

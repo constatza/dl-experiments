@@ -33,6 +33,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ...constants import REORTHOG_ZERO_NORM_TOL
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -217,7 +219,7 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
         # Check for breakdown (orthogonalized vector too small)
         result_norm = float(np.linalg.norm(result))
         vector_norm = float(np.linalg.norm(vector))
-        breakdown = result_norm < 1e-14 * max(vector_norm, 1.0)
+        breakdown = result_norm < REORTHOG_ZERO_NORM_TOL * max(vector_norm, 1.0)
 
         return result, OrthogonalizationReport(
             coefficients=coefficients,
@@ -312,7 +314,7 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
         # Check breakdown
         result_norm = float(np.linalg.norm(result))
         vector_norm = float(np.linalg.norm(vector))
-        breakdown = result_norm < 1e-14 * max(vector_norm, 1.0)
+        breakdown = result_norm < REORTHOG_ZERO_NORM_TOL * max(vector_norm, 1.0)
 
         return result, OrthogonalizationReport(
             coefficients=coefficients,

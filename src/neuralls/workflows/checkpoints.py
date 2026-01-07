@@ -6,7 +6,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from neuralls.io_utils import get_latest_checkpoint
+from neuralls.io.checkpoints import get_latest_checkpoint
 
 
 def load_checkpoint_from_toml(config_path: Path) -> Path:

@@ -41,7 +41,7 @@ def main(
         "--solve/--no-solve",
         help="Solve linear systems via CG (for collection mode)",
     ),
-):
+) -> None:
     """Process data via unified pipeline using configuration files.
 
     This script automatically detects the data processing mode based on your
@@ -66,7 +66,7 @@ def main(
         for file in sorted(output_path.glob("*")):
             print(f"    - {file.name}")
 
-    except Exception as e:
+    except (FileNotFoundError, ValueError, OSError, RuntimeError) as e:
         print(f"\n{SYMBOL_ERROR} Error: {e}")
         raise typer.Exit(code=EXIT_FAILURE)
 

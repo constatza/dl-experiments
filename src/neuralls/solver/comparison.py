@@ -8,10 +8,42 @@ from collections.abc import Callable, Sequence
 import numpy as np
 from scipy.linalg import norm
 
-from ..constants import DEFAULT_ATOL, DEFAULT_RTOL
+from ..constants import DEFAULT_ATOL, DEFAULT_BREAKDOWN_TOL, DEFAULT_RTOL
 from .factories import flexible_cg, preconditioned_cg as _preconditioned_cg
 from .models.result import CGComparisonResult, IterationContext, SolverResult
 from .strategies.reorthogonalization import ReorthogonalizationStrategy
+
+
+# Registry of constant (non-adaptive) preconditioner types
+# These use the standard preconditioned_cg path (SciPy-based)
+# Easy to extend: just add new type to this set
+_CONSTANT_PRECONDITIONER_TYPES: set[str] = {
+    "none",
+    "jacobi",
+    "ilu",
+    "identity",
+}
+
+
+def register_constant_preconditioner_type(type_name: str) -> None:
+    """Register a new constant preconditioner type.
+
+    Args:
+        type_name: The type identifier for the constant preconditioner
+    """
+    _CONSTANT_PRECONDITIONER_TYPES.add(type_name)
+
+
+def is_constant_preconditioner(type_name: str) -> bool:
+    """Check if a preconditioner type is constant (non-adaptive).
+
+    Args:
+        type_name: The preconditioner type identifier
+
+    Returns:
+        True if the type is a constant preconditioner, False otherwise
+    """
+    return type_name in _CONSTANT_PRECONDITIONER_TYPES
 
 
 # Signature detection removed: all preconditioners now have uniform signature (residual) -> result
@@ -94,7 +126,7 @@ def run_cg_comparison(
     atol: float = DEFAULT_ATOL,
     max_iter: int = 100,
     stopping_criterion: Literal["tolerance", "fixed_iterations"] = "tolerance",
-    breakdown_tol: float = 1e-12,
+    breakdown_tol: float = DEFAULT_BREAKDOWN_TOL,
     precond_iters: int | None = None,
     fallback_preconditioner: Callable[[np.ndarray], np.ndarray] | None = None,
     precond_every: int = 1,
@@ -133,8 +165,6 @@ def run_cg_comparison(
                 raise ValueError(f"Unknown preconditioner '{precond_name}' requested.")
             combos.append((warm_name, precond_name, helper_name))
 
-    constant_types = {"none", "jacobi", "ilu", "identity"}
-
     for _, precond_name, _ in combos:
         effective_type = (solver_types or {}).get(precond_name, precond_name)
         precond = preconditioners[precond_name]
@@ -161,7 +191,7 @@ def run_cg_comparison(
         )
 
         try:
-            if effective_type in constant_types:
+            if is_constant_preconditioner(effective_type):
                 # SciPy CG/PCG path for static preconditioners (None goes through the same wrapper)
                 x_sol, info = preconditioned_cg(
                     A,
@@ -186,7 +216,7 @@ def run_cg_comparison(
                     preconditioner=scheduled_precond,
                     reorthogonalize=reorthogonalize,
                 )
-        except Exception as solver_exc:  # noqa: BLE001
+        except (ValueError, RuntimeError, np.linalg.LinAlgError) as solver_exc:
             result = CGComparisonResult(
                 x=x0_base.copy(),
                 converged=False,
