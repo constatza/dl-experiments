@@ -9,7 +9,6 @@ Functions in this module perform I/O operations and are not pure.
 from __future__ import annotations
 
 import json
-import tomllib
 from pathlib import Path
 from typing import Any
 from collections.abc import Mapping
@@ -19,36 +18,6 @@ import numpy as np
 from loguru import logger
 
 from .io.base import load_npz_entry
-
-
-def extract_model_name(model_config_path: str | Path) -> str:
-    """Extract model name from config SESSION.name.
-
-    I/O action - reads model config file.
-
-    Args:
-        model_config_path: Path to model config file
-
-    Returns:
-        Model name from SESSION.name, or config filename if not set
-
-    Example:
-        >>> extract_model_name("configs/linear.toml")
-        'model'
-    """
-    model_config_path = Path(model_config_path)
-
-    with open(model_config_path, "rb") as f:
-        config = tomllib.load(f)
-
-    session = config.get("SESSION") or {}
-    name = session.get("name")
-
-    # If SESSION.name not set, derive from config filename
-    if not isinstance(name, str) or not name:
-        name = model_config_path.stem
-
-    return name
 
 
 def derive_checkpoint_path(
@@ -78,6 +47,8 @@ def derive_checkpoint_path(
         ... )
         PosixPath('/data/projects/graph-cg/data/output/test-solutions/ffnn/checkpoints/ffnn.ckpt')
     """
+    from .workflows.utils.paths import extract_model_name
+
     model_name = extract_model_name(model_template)
     data_config_name = Path(data_config).stem
     output_root_path = Path(output_root)
@@ -248,7 +219,7 @@ def save_training_data(
         features_path: Output path for features
         targets_path: Output path for targets
     """
-    from .file_operations import ensure_dir
+    from .io_utils import ensure_dir
 
     features_path = Path(features_path)
     targets_path = Path(targets_path)
@@ -259,31 +230,6 @@ def save_training_data(
     # Ensure float64 dtype for all saved data
     np.save(features_path, features.astype(np.float64, copy=False))
     np.save(targets_path, targets.astype(np.float64, copy=False))
-
-
-def get_latest_checkpoint(
-    checkpoint_dir: str | Path, pattern: str = "*.ckpt"
-) -> Path | None:
-    """Find the most recent checkpoint file.
-
-    I/O action - scans directory for checkpoint files.
-
-    Args:
-        checkpoint_dir: Directory containing checkpoints
-        pattern: File pattern to match
-
-    Returns:
-        Path to latest checkpoint or None
-    """
-    checkpoint_dir = Path(checkpoint_dir)
-    if not checkpoint_dir.exists():
-        return None
-
-    checkpoints = list(checkpoint_dir.glob(pattern))
-    if not checkpoints:
-        return None
-
-    return max(checkpoints, key=lambda p: p.stat().st_mtime)
 
 
 def load_case_data(

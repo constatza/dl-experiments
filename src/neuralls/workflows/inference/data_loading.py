@@ -8,7 +8,6 @@ This module provides pure functions for loading inference data from various sour
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 from loguru import logger

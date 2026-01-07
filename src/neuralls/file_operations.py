@@ -17,22 +17,6 @@ from dlkit import GeneralSettings
 from .configuration import ExperimentWorkspace
 
 
-def ensure_dir(path: str | Path) -> Path:
-    """Ensure directory exists, creating it if necessary.
-
-    I/O action - creates directory on disk.
-
-    Args:
-        path: Directory path to ensure exists
-
-    Returns:
-        Path object for the directory
-    """
-    p = Path(path)
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def sanitize_identifier(value: str, default: str = "run") -> str:
     """Convert arbitrary identifier text into a filesystem-friendly slug.
 

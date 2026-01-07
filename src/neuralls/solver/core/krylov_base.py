@@ -32,10 +32,9 @@ References:
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from collections.abc import Callable
 
-import numpy as np
 
 from .base import IterativeSolverBase
 from ..models.state import KrylovState, SolverState

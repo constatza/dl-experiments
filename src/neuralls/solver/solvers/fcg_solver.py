@@ -28,7 +28,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from collections.abc import Callable
-from dataclasses import replace
 
 import numpy as np
 from scipy.linalg import norm
@@ -42,9 +41,8 @@ from ...constants import (
 from .cg_base import ConjugateGradientBase
 from ..strategies.convergence import CombinedToleranceCriterion, IConvergenceCriterion
 from ..strategies.orthogonalization import OrthogonalizationStrategy, TruncatedGramSchmidt
-from ..strategies.reorthogonalization import ReorthogonalizationStrategy, apply_reorthogonalization
+from ..strategies.reorthogonalization import ReorthogonalizationStrategy
 from ..models.state import CGState, KrylovState, SolverState
-from ..models.history import DirectionHistory, ResidualHistory
 from ..models.result import SolverResult
 from ..preconditioners import IdentityPreconditioner, Preconditioner
 from ..monitoring.trace_recorder import TraceRecorder

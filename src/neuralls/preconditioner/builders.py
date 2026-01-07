@@ -36,10 +36,7 @@ from scipy.sparse.linalg import spilu
 if TYPE_CHECKING:
     from neuralls.configuration.preconditioner import (
         PreconditionerConfig,
-        StandardPreconditionerConfig,
-        NeuralPreconditionerConfig,
     )
-    from neuralls.preconditioner.predictor import PredictorFactory
 
 # Type alias for preconditioner functions
 PreconditionerFn = Callable[[NDArray], NDArray]

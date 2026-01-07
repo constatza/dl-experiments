@@ -6,7 +6,6 @@ runs once for the provided solver config and writes shared diagnostics."""
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 

@@ -16,8 +16,6 @@ from loguru import logger
 from dlkit import load_predictor
 from dlkit.core.postprocessing import stack_batches
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
-from dlkit.tools.config.data_entries import Feature, FeatureType, Target, TargetType
-from dlkit.tools.config.dataset_settings import DatasetSettings
 
 from neuralls.workflows.inference.config import InferenceData, InferencePredictions
 

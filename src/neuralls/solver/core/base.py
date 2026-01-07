@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from ..models.result import SolverResult
     from ..preconditioners import Preconditioner
     from ..models.state import SolverState
-    from .interfaces import IIterativeSolver
 
 
 class IterativeSolverBase(ABC):
@@ -446,7 +445,6 @@ class IterativeSolverBase(ABC):
             Follows the Override Pattern: kwargs override instance defaults.
             This allows per-solve customization without creating new solver instances.
         """
-        from ..monitoring.trace_recorder import TraceRecorder
 
         return kwargs.get("event_log", getattr(self, "event_logger", None))
 

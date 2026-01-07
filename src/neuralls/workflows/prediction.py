@@ -9,21 +9,11 @@ from collections.abc import Iterable, Iterator
 import numpy as np
 from loguru import logger
 
-from dlkit import load_predictor
-from dlkit.core.postprocessing import stack_batches
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
 from dlkit.tools.io import load_array
 
 from ..configuration.loader import load_experiment
-from ..diagnostics import save_prediction_samples_to_csv
-from ..diagnostics.synthetic import (
-    generate_synthetic_test_case,
-    save_synthetic_results,
-)
-from ..file_operations import derive_model_identifier, sanitize_identifier
-from ..plotting import plot_parity_and_residuals, plot_prediction_diagnostics
-from ..mlflow_utils import build_run_config, finalize_run, open_run
-from ..io.toml_loader import load_solver_config
+from ..file_operations import derive_model_identifier
+from ..mlflow_utils import build_run_config, open_run
 
 
 PREDICTION_ARTIFACTS: tuple[str, ...] = ("figures", "predictions")

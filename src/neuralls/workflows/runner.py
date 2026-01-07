@@ -28,7 +28,7 @@ from neuralls.generation import process_config
 from neuralls.workflows.utils.paths import extract_model_name
 from neuralls.workflows.training import train_model
 from neuralls.validation import validate_data_exists
-from neuralls.system_loading import get_latest_checkpoint
+from neuralls.io_utils import get_latest_checkpoint
 
 
 def run_experiment(

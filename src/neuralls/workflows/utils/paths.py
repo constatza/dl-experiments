@@ -15,31 +15,48 @@ from neuralls.constants import DEFAULT_OUTPUT_DIR
 
 
 def extract_model_name(model_config_path: Path | str) -> str:
-    """Extract model name from config SESSION.name.
-    
+    """Extract model name from config SESSION.name or MODEL.name.
+
+    Searches for name in this order:
+    1. SESSION.name (if present and non-empty)
+    2. MODEL.name (if present and non-empty)
+    3. Raises ValueError if neither is set
+    4. Falls back to filename stem if config file can't be read
+
     Args:
         model_config_path: Path to the model configuration TOML file.
-        
+
     Returns:
-        The session name defined in the config, or the filename stem as fallback.
+        The model name from config or filename stem fallback.
+
+    Raises:
+        ValueError: If config is valid but both SESSION.name and MODEL.name are missing.
     """
     model_config_path = Path(model_config_path)
+
     try:
         with open(model_config_path, "rb") as f:
             config = tomllib.load(f)
-        session = config.get("SESSION") or {}
-        name = session.get("name")
-        if isinstance(name, str) and name:
-            return name
-        model_cfg = config.get("MODEL") or {}
-        model_name = model_cfg.get("name")
-        if isinstance(model_name, str) and model_name:
-            return model_name
-        raise ValueError(
-            "Model name missing. Please set [SESSION].name or [MODEL].name in the model config."
-        )
     except (FileNotFoundError, tomllib.TOMLDecodeError):
+        # Guard: config unreadable, fallback to filename
         return model_config_path.stem
+
+    # Guard: Try SESSION.name first
+    session = config.get("SESSION") or {}
+    session_name = session.get("name")
+    if isinstance(session_name, str) and session_name:
+        return session_name
+
+    # Guard: Try MODEL.name second
+    model_cfg = config.get("MODEL") or {}
+    model_name = model_cfg.get("name")
+    if isinstance(model_name, str) and model_name:
+        return model_name
+
+    # Guard: Neither SESSION.name nor MODEL.name found - error
+    raise ValueError(
+        "Model name missing. Please set [SESSION].name or [MODEL].name in the model config."
+    )
 
 
 def resolve_output_root(paths_cfg: dict[str, str] | None) -> Path:
