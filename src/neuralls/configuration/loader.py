@@ -6,6 +6,7 @@ All path resolution is delegated to the paths module.
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
@@ -17,7 +18,7 @@ from neuralls.configuration.domain import (
 )
 from neuralls.configuration.paths import build_path_context
 from neuralls.configuration.services import WorkspaceFactory
-from neuralls.configuration.settings import build_settings
+from neuralls.configuration.settings import build_inference_settings, build_settings
 from neuralls.io.toml_loader import load_data_config, load_model_config, load_raw_toml
 
 
@@ -25,6 +26,7 @@ def load_experiment(
     model_config_path: Path,
     data_config_path: Path,
     output_root: Path | None = None,
+    mode: str = "training",
 ) -> RunnableExperiment:
     """Load a single experiment configuration.
 
@@ -34,14 +36,22 @@ def load_experiment(
         model_config_path: Path to model config TOML.
         data_config_path: Path to data config TOML.
         output_root: Override for master output directory (optional).
+        mode: Workflow mode - "training" or "inference" (default: "training").
+              Training mode loads TrainingWorkflowConfig (requires DATASET/DATAMODULE).
+              Inference mode loads InferenceWorkflowConfig (DATASET/DATAMODULE optional).
 
     Returns:
         RunnableExperiment with validated configs and workspace.
 
     Raises:
-        ValueError: If configs are invalid.
+        ValueError: If configs are invalid or mode is invalid.
         FileNotFoundError: If config files don't exist.
     """
+    # Validate mode
+    if mode not in ("training", "inference"):
+        raise ValueError(
+            f"Invalid mode: {mode!r}. Expected 'training' or 'inference'."
+        )
     # 1. Load and validate configs (using existing loaders)
     model_cfg = load_model_config(model_config_path)
     data_cfg = load_data_config(data_config_path)
@@ -57,32 +67,50 @@ def load_experiment(
     session_name = model_cfg.SESSION.name
     # Treat dlkit's default "dlkit-session" as unset, prefer MODEL.name for clarity
     if session_name and session_name != "dlkit-session":
-        run_id = session_name
+        base_name = session_name
     else:
-        run_id = model_cfg.MODEL.name
+        base_name = model_cfg.MODEL.name
 
-    if not run_id:
+    if not base_name:
         raise ValueError(
             "Model name missing. Set [SESSION].name or [MODEL].name in model config."
         )
 
-    # 4. Build experiment spec
+    # Add ISO 8601 timestamp for uniqueness
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    run_id_with_timestamp = f"{base_name}-{timestamp}"
+
+    # 4. Build experiment spec (use base_name for logical ID)
     spec = ExperimentSpec(
-        id=run_id,
+        id=base_name,
         model_config_path=model_config_path,
         data_config_path=data_config_path,
     )
 
-    # 5. Create workspace (directory structure)
+    # 5. Create workspace (with timestamped run_id for uniqueness)
     factory = WorkspaceFactory(path_ctx.output_root, path_ctx.processed_root)
-    workspace = factory.create(dataset_id, run_id)
+    workspace = factory.create(dataset_id, run_id_with_timestamp)
 
-    # 6. Build settings with injected paths (including MLflow)
-    settings = build_settings(
-        model_config_path=model_config_path,
-        workspace=workspace,
-        path_context=path_ctx,
-    )
+    # 6. Build settings (mode-specific: training or inference)
+    if mode == "inference":
+        # Inference: Use InferenceWorkflowConfig (DATASET/DATAMODULE optional)
+        # Transforms loaded from checkpoint metadata
+        settings = build_inference_settings(
+            model_config_path=model_config_path,
+            workspace=workspace,
+            path_context=path_ctx,
+            mlflow_run_name=run_id_with_timestamp,
+        )
+        logger.debug(f"Loaded inference settings (DATASET/DATAMODULE optional)")
+    else:
+        # Training: Use TrainingWorkflowConfig (DATASET/DATAMODULE required)
+        settings = build_settings(
+            model_config_path=model_config_path,
+            workspace=workspace,
+            path_context=path_ctx,
+            mlflow_run_name=run_id_with_timestamp,
+        )
+        logger.debug(f"Loaded training settings (DATASET/DATAMODULE required)")
 
     return RunnableExperiment(
         spec=spec,

@@ -14,7 +14,7 @@ from dlkit.core.postprocessing import stack_batches
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 from dlkit.tools.io import load_array
 
-from ..configuration import load_experiment
+from ..configuration.loader import load_experiment
 from ..diagnostics import save_prediction_samples_to_csv
 from ..diagnostics.synthetic import (
     generate_synthetic_test_case,
@@ -23,63 +23,15 @@ from ..diagnostics.synthetic import (
 from ..file_operations import derive_model_identifier, sanitize_identifier
 from ..plotting import plot_parity_and_residuals, plot_prediction_diagnostics
 from ..mlflow_utils import build_run_config, finalize_run, open_run
-from ..io.comparison import load_solver_config
+from ..io.toml_loader import load_solver_config
 
 
 PREDICTION_ARTIFACTS: tuple[str, ...] = ("figures", "predictions")
 
 
-def _ensure_dataset_settings(
-    settings: Any,
-    *,
-    feature_values: np.ndarray,
-    target_values: np.ndarray,
-) -> Any:
-    """Guarantee that DATASET entries exist and reflect explicit overrides.
-
-    Note: Transforms should NOT be defined here - they are loaded from the checkpoint.
-    This function loads arrays eagerly and injects Value-based entries so the dataset
-    never relies on file paths at runtime.
-    """
-    from dlkit.tools.config.data_entries import Feature, FeatureType, Target, TargetType
-    from dlkit.tools.config.dataset_settings import DatasetSettings
-
-    dataset = settings.DATASET
-    if dataset is None or not dataset.features:
-        # Minimal dataset for loading data - transforms come from checkpoint
-        dataset = DatasetSettings(name="FlexibleDataset")
-        dataset = dataset.model_copy(
-            update={
-                "features": [Feature(name="x", value=feature_values, path=None)],
-                "targets": [Target(name="y", value=target_values, path=None)],
-            }
-        )
-        return settings.model_copy(update={"DATASET": dataset})
-
-    features: list[FeatureType] = list(dataset.features)
-    targets: list[TargetType] = list(dataset.targets or ())
-
-    if features:
-        features[0] = features[0].model_copy(
-            update={"value": feature_values, "path": None}
-        )
-    else:
-        features = [Feature(name="x", value=feature_values, path=None)]
-
-    if targets:
-        targets[0] = targets[0].model_copy(
-            update={"value": target_values, "path": None}
-        )
-    else:
-        targets = [Target(name="y", value=target_values, path=None)]
-
-    updated_dataset = dataset.model_copy(
-        update={
-            "features": list(features) if features else dataset.features,
-            "targets": list(targets) if targets else dataset.targets,
-        }
-    )
-    return settings.model_copy(update={"DATASET": updated_dataset})
+# NOTE: Minimal dataset functions removed - no longer needed with InferenceWorkflowConfig
+# Transforms are loaded from checkpoint metadata (apply_transforms=True)
+# DATASET section is optional for inference mode
 
 
 def _load_feature_arrays(entries: Iterable[Any]) -> dict[str, np.ndarray]:
@@ -148,85 +100,196 @@ def _collect_predictions(
     return predictions, total_duration
 
 
+def _flatten_predictions(preds: Any) -> dict[str, Any]:
+    """Flatten predictions to keyed dict.
+
+    Args:
+        preds: Predictions (dict or array/tensor)
+
+    Returns:
+        Dict with pred/* keys
+    """
+    match preds:
+        case dict():
+            return {f"pred/{k}": v for k, v in preds.items()}
+        case _:
+            return {"pred/y_hat": preds}
+
+
+def _flatten_targets(tgts: Any) -> dict[str, Any]:
+    """Flatten targets to keyed dict.
+
+    Args:
+        tgts: Targets (dict or array/tensor)
+
+    Returns:
+        Dict with tgt/* keys
+    """
+    match tgts:
+        case dict():
+            return {f"tgt/{k}": v for k, v in tgts.items()}
+        case _:
+            return {"tgt/y": tgts}
+
+
 def _merge_pred_target_batches(
     batches: Iterable[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    merged: list[dict[str, Any]] = []
+    """Merge prediction/target batches into flat keyed dicts.
+
+    Args:
+        batches: Iterable of batch dictionaries
+
+    Returns:
+        List of flattened dictionaries with pred/* and tgt/* keys
+    """
+    merged = []
+
     for item in batches:
+        # Guard: Skip non-dict items
         if not isinstance(item, dict):
             continue
-        preds = item.get("predictions")
-        tgts = item.get("targets")
 
-        # Handle case where predictions/targets might be tensors/arrays directly
-        if preds is None or (isinstance(preds, dict) and not preds):
-            preds = {}
-        if tgts is None or (isinstance(tgts, dict) and not tgts):
-            tgts = {}
+        preds = item.get("predictions") or {}
+        tgts = item.get("targets") or {}
 
-        if isinstance(preds, dict):
-            flat = {f"pred/{k}": v for k, v in preds.items()}
-        else:
-            # If predictions is a tensor/array, use as-is with default key
-            flat = {"pred/y_hat": preds}
+        # Flatten predictions
+        flat = _flatten_predictions(preds)
 
-        if isinstance(tgts, dict):
-            flat.update({f"tgt/{k}": v for k, v in tgts.items()})
-        else:
-            # If targets is a tensor/array, use as-is with default key
-            flat.update({"tgt/y": tgts})
+        # Flatten targets
+        flat.update(_flatten_targets(tgts))
 
         merged.append(flat)
+
     return merged
 
 
-def _pick_pred_target_arrays(
-    plot_ready: Any,
-) -> tuple[np.ndarray | None, np.ndarray | None]:
-    if isinstance(plot_ready, list) and plot_ready and isinstance(plot_ready[0], dict):
-        preds, tgts = [], []
-        for d in plot_ready:
-            p = d.get("preds")
-            t = d.get("targets")
-            if p is None or t is None:
-                continue
-            preds.append(np.asarray(p).ravel())
-            tgts.append(np.asarray(t).ravel())
-        if preds and tgts:
-            return np.concatenate(preds), np.concatenate(tgts)
+# Expected keys for prediction/target extraction (fail-fast validation)
+EXPECTED_PRED_KEY = "predictions"
+EXPECTED_TARGET_KEY = "targets"
 
-    if isinstance(plot_ready, dict):
-        keys = list(plot_ready.keys())
-        pred_keys = [k for k in keys if k.startswith("pred/")]
-        tgt_keys = [k for k in keys if k.startswith("tgt/")]
-        if len(pred_keys) == 1 and len(tgt_keys) == 1:
-            return (
-                np.asarray(plot_ready[pred_keys[0]]).ravel(),
-                np.asarray(plot_ready[tgt_keys[0]]).ravel(),
+
+def _extract_from_dict(data: dict) -> tuple[np.ndarray, np.ndarray]:
+    """Extract arrays from dict with strict key validation.
+
+    Args:
+        data: Dict with 'predictions' and 'targets' keys
+
+    Returns:
+        Tuple of (predictions, targets) as flattened arrays
+
+    Raises:
+        KeyError: If required keys missing
+        ValueError: If arrays have incompatible shapes
+    """
+    # Strict validation - fail fast if keys missing
+    if EXPECTED_PRED_KEY not in data:
+        raise KeyError(
+            f"Missing required key '{EXPECTED_PRED_KEY}'. "
+            f"Available keys: {list(data.keys())}"
+        )
+
+    if EXPECTED_TARGET_KEY not in data:
+        raise KeyError(
+            f"Missing required key '{EXPECTED_TARGET_KEY}'. "
+            f"Available keys: {list(data.keys())}"
+        )
+
+    preds = np.asarray(data[EXPECTED_PRED_KEY]).ravel()
+    targets = np.asarray(data[EXPECTED_TARGET_KEY]).ravel()
+
+    # Validate shapes match
+    if preds.shape != targets.shape:
+        raise ValueError(
+            f"Shape mismatch: predictions {preds.shape} != targets {targets.shape}"
+        )
+
+    return preds, targets
+
+
+def _extract_from_list(data_list: list) -> tuple[np.ndarray, np.ndarray]:
+    """Extract and concatenate arrays from list of dicts.
+
+    Args:
+        data_list: List of dicts, each with 'preds' and 'targets' keys
+
+    Returns:
+        Tuple of concatenated (predictions, targets)
+
+    Raises:
+        ValueError: If list is empty or contains invalid data
+        KeyError: If required keys missing from any dict
+    """
+    # Guard: Validate list not empty
+    if not data_list:
+        raise ValueError("Cannot extract from empty list")
+
+    # Guard: Validate first element is dict
+    if not isinstance(data_list[0], dict):
+        raise ValueError(
+            f"Invalid list element type: {type(data_list[0]).__name__}. "
+            "Expected list of dicts."
+        )
+
+    preds_list = []
+    targets_list = []
+
+    for idx, item in enumerate(data_list):
+        # Strict validation per item
+        if not isinstance(item, dict):
+            raise ValueError(
+                f"Invalid element at index {idx}: {type(item).__name__}. "
+                "Expected dict."
             )
-        pred_suffix = {k.split("/", 1)[1]: k for k in pred_keys}
-        tgt_suffix = {k.split("/", 1)[1]: k for k in tgt_keys}
-        for suffix in pred_suffix:
-            if suffix in tgt_suffix:
-                return (
-                    np.asarray(plot_ready[pred_suffix[suffix]]).ravel(),
-                    np.asarray(plot_ready[tgt_suffix[suffix]]).ravel(),
-                )
-        fallback_pairs = [
-            ("pred/y_hat", "tgt/y"),
-            ("pred/y", "tgt/y"),
-            ("pred/preds", "tgt/y"),
-            ("pred/out", "tgt/y"),
-            ("pred/logits", "tgt/y"),
-        ]
-        for pk, tk in fallback_pairs:
-            if pk in plot_ready and tk in plot_ready:
-                return (
-                    np.asarray(plot_ready[pk]).ravel(),
-                    np.asarray(plot_ready[tk]).ravel(),
-                )
 
-    return None, None
+        if "preds" not in item:
+            raise KeyError(
+                f"Missing 'preds' key in element {idx}. "
+                f"Available keys: {list(item.keys())}"
+            )
+
+        if "targets" not in item:
+            raise KeyError(
+                f"Missing 'targets' key in element {idx}. "
+                f"Available keys: {list(item.keys())}"
+            )
+
+        preds_list.append(np.asarray(item["preds"]).ravel())
+        targets_list.append(np.asarray(item["targets"]).ravel())
+
+    return np.concatenate(preds_list), np.concatenate(targets_list)
+
+
+def _pick_pred_target_arrays(plot_ready: Any) -> tuple[np.ndarray, np.ndarray]:
+    """Extract prediction and target arrays with strict validation.
+
+    Enforces expected format and fails fast with clear errors.
+    Reduces error surface by not supporting multiple naming variations.
+
+    Expected formats:
+    1. Dict with 'predictions' and 'targets' keys
+    2. List of dicts, each with 'preds' and 'targets' keys
+
+    Args:
+        plot_ready: Data structure containing predictions and targets
+
+    Returns:
+        Tuple of (predictions, targets) as flattened numpy arrays
+
+    Raises:
+        ValueError: If data doesn't match expected format
+        KeyError: If required keys are missing
+    """
+    match plot_ready:
+        case dict():
+            return _extract_from_dict(plot_ready)
+        case list():
+            return _extract_from_list(plot_ready)
+        case _:
+            raise ValueError(
+                f"Invalid data type: {type(plot_ready).__name__}. "
+                "Expected dict or list."
+            )
 
 
 def _summarize_vector(values: np.ndarray) -> dict[str, float]:
@@ -367,260 +430,143 @@ def run_inference(
     synthetic_benchmark: bool = False,
     solver_config_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Run inference for parity plot generation using DLKit."""
+    """Run inference for parity plot generation.
+
+    This is a pure orchestration function that composes single-responsibility
+    functions from the inference module. No business logic here - only composition.
+
+    Args:
+        config_path: Path to model configuration file
+        data_config_path: Path to data configuration file (optional)
+        checkpoint_path: Path to model checkpoint (required)
+        features_path: Path to features file (for standard inference)
+        targets_path: Path to targets file (for standard inference)
+        save_plots: Whether to generate diagnostic plots
+        figures_dir: Custom figures directory (optional)
+        enable_mlflow: Whether to log to MLflow
+        output_root: Custom output root directory (optional)
+        synthetic_benchmark: Use synthetic benchmark data
+        solver_config_path: Path to solver config (for synthetic)
+
+    Returns:
+        Dictionary with prediction results for backward compatibility:
+            - predictions: Predicted values
+            - y_true: True target values
+            - y_pred: Predicted values (duplicate for compatibility)
+            - duration_seconds: Inference duration
+            - plot_path: Path to parity/residuals plot
+            - diagnostic_plot_path: Path to diagnostics plot
+
+    Raises:
+        ValueError: If no checkpoint path or no data available
+        FileNotFoundError: If required files don't exist
+    """
+    from neuralls.workflows.inference import (
+        load_inference_data,
+        create_predictor,
+        run_prediction,
+        save_inference_outputs,
+        start_mlflow_run,
+        finalize_mlflow_run,
+        save_synthetic_predictions,
+    )
+
+    # 1. Validate inputs
+    if checkpoint_path is None:
+        raise ValueError("No checkpoint path specified")
+
+    checkpoint = Path(checkpoint_path)
+    config = Path(config_path)
+
+    # 2. Load experiment configuration in INFERENCE MODE
+    # Inference mode uses InferenceWorkflowConfig (DATASET/DATAMODULE optional)
+    # Transforms are loaded from checkpoint metadata
     experiment = load_experiment(
-        config_path,
+        config,
         data_config_path,
         output_root=output_root,
+        mode="inference",  # Use InferenceWorkflowConfig
     )
     settings = experiment.settings
     workspace = experiment.workspace
     dataset_id = experiment.spec.data_config_path.stem
-    mlflow_state = _start_prediction_run(
+
+    # 3. Start MLflow run (if enabled)
+    mlflow_state = start_mlflow_run(
         settings,
         workspace,
         dataset_id,
         enable_mlflow,
     )
-    total_duration = 0.0
+
     metrics: dict[str, float] | None = None
     error: Exception | None = None
 
     try:
-        checkpoint_to_use = checkpoint_path
-        if checkpoint_to_use is None:
-            raise ValueError("No checkpoint path specified")
-
-        # --- 1. Standard Data Loading ---
-        if features_path is not None:
-            features_file = Path(features_path)
-        else:
-            features_file = workspace.data_dir / "normalized.npz"
-            # We don't raise error here if it doesn't exist yet, we check later if we actually need it.
-            # But original code raised ValueError if explicit path not provided and file missing.
-            if not features_file.exists():
-                 # Should we fail? Original code did. Let's keep it safe.
-                 pass 
-
-        # Re-implementing standard loading logic robustly
-        standard_features = None
-        standard_targets = None
-        
-        # Determine standard paths
-        feat_path = Path(features_path) if features_path else workspace.data_dir / "normalized.npz"
-        tgt_path = Path(targets_path) if targets_path else workspace.data_dir / "normalized.npz"
-        
-        if feat_path.exists() and tgt_path.exists():
-            logger.debug(f"Loading standard features from: {feat_path}")
-            feature_array_key = "rhs" if feat_path.name == "normalized.npz" else None
-            standard_features = np.asarray(
-                load_array(feat_path, array_key=feature_array_key)
-            )
-
-            logger.debug(f"Loading standard targets from: {tgt_path}")
-            target_array_key = "solutions" if tgt_path.name == "normalized.npz" else None
-            standard_targets = np.asarray(
-                load_array(tgt_path, array_key=target_array_key)
-            )
-            if standard_targets.ndim == 2 and standard_targets.shape[1] == 1:
-                standard_targets = standard_targets.ravel()
-        else:
-            logger.warning(f"Standard data files not found at {feat_path} or {tgt_path}. Skipping standard inference.")
-
-        # --- 2. Synthetic Data Generation ---
-        synthetic_features = None
-        synthetic_targets = None
-        
-        if synthetic_benchmark:
-            logger.info("Preparing SYNTHETIC benchmark data (x_true = ones).")
-            if not solver_config_path:
-                 raise ValueError("Solver config path is required for synthetic benchmark.")
-
-            solver_cfg = load_solver_config(solver_config_path)
-            if solver_cfg.general.matrix_path is None:
-                 raise ValueError(f"Solver config {solver_config_path} must specify [general] matrix_path.")
-
-            matrix_path = Path(solver_cfg.general.matrix_path)
-            if not matrix_path.exists():
-                raise FileNotFoundError(f"Matrix file not found: {matrix_path}")
-
-            _, synthetic_targets, synthetic_features_raw = generate_synthetic_test_case(matrix_path)
-            # Reshape to (1, N) for single RHS vector - inference expects (num_samples, num_features)
-            synthetic_features = synthetic_features_raw.reshape(1, -1)
-            synthetic_targets = synthetic_targets.reshape(1, -1)
-
-        # Ensure we have something to run
-        if standard_features is None and synthetic_features is None:
-             raise ValueError("No data available for inference (neither standard nor synthetic).")
-
-        # Use standard features for settings/dataset init if available, else synthetic
-        # This is for internal DLKit config consistency
-        init_features = standard_features if standard_features is not None else synthetic_features
-        init_targets = standard_targets if standard_targets is not None else synthetic_targets
-
-        settings = _ensure_dataset_settings(
-            settings,
-            feature_values=init_features,
-            target_values=init_targets,
+        # 4. Load data (strategy pattern: standard vs synthetic)
+        data = load_inference_data(
+            workspace=workspace,
+            features_path=Path(features_path) if features_path else None,
+            targets_path=Path(targets_path) if targets_path else None,
+            synthetic_benchmark=synthetic_benchmark,
+            solver_config_path=Path(solver_config_path) if solver_config_path else None,
         )
 
-        # ... (rest of path resolution for normalization/comparison files remains same) ...
-        data_dir = workspace.data_dir
-        normalized_path = data_dir / "normalized.npz"
-        comparison_path = data_dir / "comparison.npz"
-        if normalized_path.exists():
-            # ... (logging)
-            pass 
-        
-        batch_size = _resolve_batch_size(settings)
+        # 5. Run prediction (transforms applied automatically from checkpoint)
+        # No DATASET configuration needed - InferenceWorkflowConfig handles this
+        with create_predictor(checkpoint, settings) as predictor:
+            predictions = run_prediction(predictor, data, settings)
 
-        logger.debug(f"Loading checkpoint from: {checkpoint_to_use}")
-        logger.debug("Using apply_transforms=False with precision=FULL_64")
-        
-        standard_preds = None
-        synthetic_preds = None
-        total_duration = 0.0
-
-        with load_predictor(
-            str(checkpoint_to_use),
-            apply_transforms=False,
-            precision=PrecisionStrategy.FULL_64,
-        ) as predictor:
-            
-            # Run Standard Inference
-            if standard_features is not None:
-                logger.info("Running inference on STANDARD data...")
-                # We need to construct a temp dataset mapping for _collect_predictions 
-                # or just pass array dict if _collect_predictions handles it?
-                # _collect_predictions expects 'feature_arrays' dict.
-                # _ensure_dataset_settings setup 'x' as feature name.
-                
-                # Re-verify feature name from settings
-                feat_name = settings.DATASET.features[0].name # usually 'x'
-                std_feat_dict = {feat_name: standard_features}
-                
-                raw_preds, duration = _collect_predictions(predictor, std_feat_dict, batch_size)
-                total_duration += duration
-                
-                # Stack and process standard predictions
-                stacked = stack_batches(raw_preds, mode="stack")
-                if isinstance(stacked, dict):
-                    standard_preds = next(iter(stacked.values())).ravel()
-                else:
-                    standard_preds = stacked.ravel()
-
-            # Run Synthetic Inference
-            if synthetic_features is not None:
-                logger.info("Running inference on SYNTHETIC data...")
-                feat_name = settings.DATASET.features[0].name
-                syn_feat_dict = {feat_name: synthetic_features} # synthetic_features is (N,) or (N,1)? generate returns (N,) for b usually?
-                # generate_synthetic_test_case returns b = A @ x. shape (N,).
-                
-                raw_preds_syn, duration_syn = _collect_predictions(predictor, syn_feat_dict, batch_size)
-                total_duration += duration_syn
-                
-                stacked_syn = stack_batches(raw_preds_syn, mode="stack")
-                if isinstance(stacked_syn, dict):
-                    synthetic_preds = next(iter(stacked_syn.values())).ravel()
-                else:
-                    synthetic_preds = stacked_syn.ravel()
-
-        logger.debug(f"Total prediction duration: {total_duration:.3f}s")
-
-        # --- Post-Processing & Saving ---
-        
-        run_identifier = sanitize_identifier(
-            _derive_run_identifier(
-                settings, workspace, checkpoint_to_use, config_path
+        # 7. Save synthetic results separately (if applicable)
+        if synthetic_benchmark and data.metadata.get("source") == "synthetic":
+            from neuralls.file_operations import sanitize_identifier
+            run_identifier = sanitize_identifier(
+                str(workspace.run_id or checkpoint.stem)
             )
+            dataset_slug = sanitize_identifier(str(dataset_id))
+            identifier = f"{dataset_slug}-{run_identifier}"
+            save_synthetic_predictions(predictions, workspace.predictions_dir, identifier)
+
+        # 8. Save outputs (CSV + plots)
+        outputs = save_inference_outputs(
+            predictions=predictions,
+            workspace=workspace,
+            settings=settings,
+            checkpoint_path=checkpoint,
+            config_path=config,
+            dataset_id=dataset_id,
+            save_plots=save_plots,
+            figures_dir=Path(figures_dir) if figures_dir else None,
         )
-        dataset_slug = sanitize_identifier(str(dataset_id))
-        suffix = f"{dataset_slug}-{run_identifier}"
-        
-        # 1. Save Synthetic Results (if any)
-        if synthetic_benchmark and synthetic_preds is not None and synthetic_targets is not None:
-            save_synthetic_results(
-                workspace.predictions_dir,
-                y_true=synthetic_targets,
-                y_pred=synthetic_preds,
-                identifier=suffix,
-            )
 
-        # 2. Save/Plot Standard Results (if any)
-        plot_path = None
-        diagnostic_plot_path = None
-        
-        if standard_preds is not None and standard_targets is not None:
-            y_hat_arr = standard_preds
-            y_arr = standard_targets
-            y_true_diag = standard_targets # alias for diag logging
-            
-            # ... (Existing logging and plotting logic using y_hat_arr and y_arr) ...
-            
-            # Re-using existing logic block for standard outputs
-            if y_true_diag is None:
-                logger.debug("Targets unavailable; skipping target-based diagnostics.")
-            else:
-                # ... (diagnostics logging)
-                pass # logic continues below
+        # 9. Store metrics for MLflow
+        metrics = outputs.metrics
 
-            diagnostics_root = workspace.predictions_dir
-            sample_csv_paths = save_prediction_samples_to_csv(
-                y_true=y_arr,
-                y_pred=y_hat_arr,
-                output_dir=diagnostics_root,
-                filename_prefix=suffix,
-            )
-            if sample_csv_paths:
-                logger.info(
-                    f"Saved prediction samples to CSV: {[str(p) for p in sample_csv_paths]}"
-                )
-
-            if save_plots:
-                figures_root = (
-                    Path(figures_dir) if figures_dir is not None else workspace.figures_dir
-                )
-                figures_root.mkdir(parents=True, exist_ok=True)
-
-                plot_path = figures_root / f"parity_residuals_{suffix}.png"
-                plot_parity_and_residuals(
-                    y_hat_arr, y_arr, sample=0, save_path=plot_path, show=False
-                )
-
-                diagnostic_plot_path = figures_root / f"diagnostics_{suffix}.png"
-                plot_prediction_diagnostics(
-                    y_hat_arr, y_arr, sample=0, save_path=diagnostic_plot_path, show=False
-                )
-        
-        # Return standard results for compatibility (or merged dict?)
-        # Returning standard results is safest for existing consumers.
+        # 10. Build backward-compatible result
+        plot_paths = outputs.plot_paths
         return {
-            "predictions": standard_preds if standard_preds is not None else synthetic_preds, # fallback return
-            "y_true": standard_targets,
-            "y_pred": standard_preds,
-            "duration_seconds": total_duration,
-            "plot_path": plot_path,
-            "diagnostic_plot_path": diagnostic_plot_path,
+            "predictions": predictions.predictions.get("y_pred"),
+            "y_true": predictions.targets.get("y_true"),
+            "y_pred": predictions.predictions.get("y_pred"),
+            "duration_seconds": metrics.get("duration_seconds", 0.0),
+            "plot_path": plot_paths[0] if len(plot_paths) > 0 else None,
+            "diagnostic_plot_path": plot_paths[1] if len(plot_paths) > 1 else None,
         }
 
-
-        metrics = {"duration_seconds": float(total_duration)}
-        return {
-            "predictions": predictions,
-            "y_true": y_arr,
-            "y_pred": y_hat_arr,
-            "duration_seconds": total_duration,
-            "plot_path": plot_path,
-            "diagnostic_plot_path": diagnostic_plot_path,
-        }
     except Exception as exc:  # noqa: BLE001
         error = exc
         raise
     finally:
-        finalize_run(
-            mlflow_state,
-            metrics=metrics,
-            workspace_root=workspace.root_dir,
-            allowlist=PREDICTION_ARTIFACTS,
-            failed=error is not None,
-        )
+        # 11. Finalize MLflow run
+        if mlflow_state is not None and metrics is not None:
+            finalize_mlflow_run(mlflow_state, metrics, workspace)
+        elif mlflow_state is not None:
+            # Cleanup even if metrics weren't set
+            from neuralls.mlflow_utils import finalize_run
+            finalize_run(
+                mlflow_state,
+                metrics={},
+                workspace_root=workspace.root_dir,
+                allowlist=PREDICTION_ARTIFACTS,
+                failed=error is not None,
+            )

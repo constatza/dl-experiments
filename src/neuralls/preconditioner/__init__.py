@@ -1,19 +1,23 @@
-"""Preconditioner creation with builder pattern.
+"""Preconditioner creation with Ports & Adapters architecture.
 
-This package implements preconditioner creation using the Builder and Registry
-patterns, following SOLID principles for extensibility and maintainability.
+This package implements preconditioner creation using Builder and Registry
+patterns with clean Ports & Adapters (Hexagonal Architecture) for framework
+independence, following SOLID principles.
 
 Public API:
     - create_default_registry(): Get standard preconditioner registry
     - PreconditionerRegistry: Register and create preconditioners
     - PreconditionerBuilder: Protocol for custom builders
-    - PredictorFactory: Protocol for neural predictor factories
+    - PredictorAdapter: ABC for neural predictor adapters
+    - PredictorPort: ABC for neural predictors
     - PreconditionerFn: Type alias for preconditioner functions
 
 Architecture:
+    - ports.py: Framework-agnostic abstractions (ABCs)
+    - adapters.py: Framework-specific implementations (DLKit)
     - builders.py: Concrete builder implementations (Identity, Jacobi, ILU, Neural)
     - registry.py: Registry pattern for type-to-builder dispatch
-    - predictor.py: Predictor factory protocol for dependency injection
+    - tensor_utils.py: Pure tensor conversion functions
 
 Example Usage:
     >>> from neuralls.preconditioner import create_default_registry
@@ -58,12 +62,16 @@ from neuralls.preconditioner.builders import (
     PreconditionerBuilder,
     PreconditionerFn,
 )
-from neuralls.preconditioner.predictor import PredictorFactory
+from neuralls.preconditioner.ports import (
+    PredictorAdapter,
+    PredictorPort,
+)
 
 __all__ = [
     "PreconditionerRegistry",
     "create_default_registry",
     "PreconditionerBuilder",
     "PreconditionerFn",
-    "PredictorFactory",
+    "PredictorAdapter",
+    "PredictorPort",
 ]

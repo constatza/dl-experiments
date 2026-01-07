@@ -1,4 +1,25 @@
-"""Training orchestration helpers consumed by CLI scripts and workflows."""
+"""Training orchestration helpers consumed by CLI scripts and workflows.
+
+This module provides functions for orchestrating model training with DLKit:
+- Data loading and preparation (features/targets from normalized.npz)
+- Configuration transformations (dataset, paths, MLflow)
+- Training execution via DLKit execute()
+
+Architecture:
+    The training pipeline applies sequential transformations to GeneralSettings:
+    1. Resolve dataset (inject features/targets from arrays)
+    2. Configure output paths (checkpoint directory, root dir)
+    3. Configure MLflow (experiment name, run name)
+    4. Execute training via DLKit
+
+Key Functions:
+    - `train_model()`: Main entry point for training
+    - `_configure_training_pipeline()`: Apply all configuration transforms
+    - `_load_and_prepare_data()`: Load arrays and create Feature/Target configs
+    - `_resolve_dataset()`: Inject features/targets into DATASET section
+    - `_configure_output_paths()`: Set checkpoint directory and root dir
+    - `_configure_mlflow()`: Set experiment/run names for tracking
+"""
 
 from __future__ import annotations
 
@@ -26,7 +47,18 @@ from neuralls.system_loading import get_latest_checkpoint
 
 @dataclass(frozen=True)
 class TrainingArrays:
-    """Training data arrays from normalized dataset."""
+    """Training data arrays from normalized dataset.
+
+    Immutable container for the three core arrays needed for training:
+    - rhs: Right-hand side vectors (features)
+    - solutions: Solution vectors (targets)
+    - matrix: System matrices (optional feature, used by GraphDataset)
+
+    Attributes:
+        rhs: Shape (n_samples, n_dims) - Input vectors for CG solver
+        solutions: Shape (n_samples, n_dims) - Target solution vectors
+        matrix: Shape (n_dims, n_dims) or (n_samples, n_dims, n_dims) - System matrices
+    """
 
     rhs: np.ndarray
     solutions: np.ndarray
@@ -35,7 +67,12 @@ class TrainingArrays:
 
 @dataclass(frozen=True)
 class DatasetConfig:
-    """Immutable dataset configuration."""
+    """Immutable dataset configuration.
+
+    Attributes:
+        features_path: Optional path to features file (for file-based datasets)
+        targets_path: Optional path to targets file (for file-based datasets)
+    """
 
     features_path: Path | None
     targets_path: Path | None
@@ -43,14 +80,24 @@ class DatasetConfig:
 
 @dataclass(frozen=True)
 class SessionConfig:
-    """Immutable session configuration."""
+    """Immutable session configuration.
+
+    Attributes:
+        session_name: Optional session name for MLflow tracking
+    """
 
     session_name: str | None
 
 
 @dataclass(frozen=True)
 class OutputConfig:
-    """Immutable output configuration."""
+    """Immutable output configuration.
+
+    Attributes:
+        output_dir: Root directory for training outputs
+        accelerator: Hardware accelerator type (cpu/gpu/tpu)
+        checkpoint_filename: Custom checkpoint filename pattern
+    """
 
     output_dir: Path | None
     accelerator: str | None
@@ -59,7 +106,13 @@ class OutputConfig:
 
 @dataclass(frozen=True)
 class TrainingResult:
-    """Immutable training result data."""
+    """Immutable training result data.
+
+    Attributes:
+        checkpoint_path: Path to saved model checkpoint (.ckpt file)
+        experiment_dir: Root experiment directory
+        data_dir: Directory containing training data
+    """
 
     checkpoint_path: Path
     experiment_dir: Path
@@ -67,7 +120,18 @@ class TrainingResult:
 
 
 def _load_training_arrays(data_path: Path) -> TrainingArrays:
-    """Load training arrays from normalized.npz file."""
+    """Load training arrays from normalized.npz file.
+
+    Args:
+        data_path: Path to normalized.npz file (must contain rhs, solutions, matrix)
+
+    Returns:
+        TrainingArrays with rhs, solutions, and matrix arrays
+
+    Raises:
+        FileNotFoundError: If normalized.npz doesn't exist
+        KeyError: If required keys missing from .npz file
+    """
     dataset = np.load(data_path)
     return TrainingArrays(
         rhs=dataset["rhs"],
@@ -80,7 +144,23 @@ def _load_and_prepare_data(
     settings: GeneralSettings,
     workspace: ExperimentWorkspace,
 ) -> tuple[TrainingArrays, list[FeatureType], list[TargetType]]:
-    """Load training data and create Feature/Target configurations."""
+    """Load training data and create Feature/Target configurations.
+
+    This function:
+    1. Loads arrays from normalized.npz
+    2. Creates DLKit Feature configs (ValueFeature with arrays)
+    3. Creates DLKit Target configs (ValueTarget with arrays)
+
+    Args:
+        settings: DLKit general settings (used to check dataset type)
+        workspace: Experiment workspace (provides data_dir path)
+
+    Returns:
+        Tuple of (arrays, features, targets) where:
+            - arrays: Loaded numpy arrays
+            - features: List of ValueFeature configs for DLKit
+            - targets: List of ValueTarget configs for DLKit
+    """
     arrays = _load_training_arrays(workspace.data_dir / "normalized.npz")
     dataset_name = settings.DATASET.name if settings.DATASET else None
     features = _create_feature_configs(arrays, dataset_name)
@@ -91,7 +171,22 @@ def _load_and_prepare_data(
 def _create_feature_configs(
     arrays: TrainingArrays, dataset_name: str | None
 ) -> list[FeatureType]:
-    """Create Feature configs from training arrays."""
+    """Create Feature configs from training arrays.
+
+    Different datasets require different features:
+    - GraphDataset: Includes both rhs and matrix as features
+    - FlexibleDataset: Only rhs as feature
+
+    Args:
+        arrays: Training arrays (rhs, solutions, matrix)
+        dataset_name: Name from [DATASET].name in config
+
+    Returns:
+        List of ValueFeature configs to inject into DATASET section
+
+    Raises:
+        ValueError: If matrix dimensions incompatible with samples
+    """
     if dataset_name == "GraphDataset":
         sample_count = arrays.rhs.shape[0]
         matrix = arrays.matrix
@@ -122,7 +217,14 @@ def _create_feature_configs(
 
 
 def _create_target_configs(arrays: TrainingArrays) -> list[TargetType]:
-    """Create Target configs from training arrays."""
+    """Create Target configs from training arrays.
+
+    Args:
+        arrays: Training arrays containing solutions
+
+    Returns:
+        List with single ValueTarget for solutions
+    """
     return [
         ValueTarget(
             name="solutions",
@@ -132,7 +234,14 @@ def _create_target_configs(arrays: TrainingArrays) -> list[TargetType]:
 
 
 def _validate_dataset_section(settings: GeneralSettings) -> None:
-    """Validate that DATASET section exists in settings."""
+    """Validate that DATASET section exists in settings.
+
+    Args:
+        settings: DLKit general settings to validate
+
+    Raises:
+        ValueError: If [DATASET] section missing from config
+    """
     if settings.DATASET is None:
         raise ValueError("Config is missing [DATASET] section")
 
@@ -141,7 +250,15 @@ def _build_dataset_config(
     features: list[FeatureType],
     targets: list[TargetType],
 ) -> dict[str, Any]:
-    """Build dataset configuration dict from features and targets."""
+    """Build dataset configuration dict from features and targets.
+
+    Args:
+        features: Feature configurations (ValueFeature)
+        targets: Target configurations (ValueTarget)
+
+    Returns:
+        Dictionary ready for model_copy update
+    """
     return {"features": features, "targets": targets}
 
 
@@ -149,7 +266,15 @@ def _update_settings_with_dataset(
     settings: GeneralSettings,
     dataset_updates: dict[str, Any],
 ) -> GeneralSettings:
-    """Update settings with new dataset configuration."""
+    """Update settings with new dataset configuration.
+
+    Args:
+        settings: Current settings to update
+        dataset_updates: Dict with features/targets to inject
+
+    Returns:
+        New GeneralSettings with updated DATASET section
+    """
     base_dataset = settings.DATASET or DatasetSettings()
     dataset_cfg = base_dataset.model_copy(update={"features": [], "targets": []})
     dataset_cfg = dataset_cfg.model_copy(update=dataset_updates)
@@ -161,7 +286,23 @@ def _resolve_dataset(
     features: list[FeatureType],
     targets: list[TargetType],
 ) -> GeneralSettings:
-    """Resolve and apply dataset configurations to settings."""
+    """Resolve and apply dataset configurations to settings.
+
+    This is a pure transformation that injects features/targets into the
+    DATASET section. It preserves existing dataset configuration while
+    replacing features/targets with in-memory arrays.
+
+    Args:
+        settings: Current DLKit settings
+        features: Feature configs to inject (from _create_feature_configs)
+        targets: Target configs to inject (from _create_target_configs)
+
+    Returns:
+        New GeneralSettings with updated DATASET section
+
+    Raises:
+        ValueError: If DATASET section missing from config
+    """
     _validate_dataset_section(settings)
     base_dataset = settings.DATASET or DatasetSettings()
     dataset = base_dataset.model_copy(
@@ -178,7 +319,17 @@ def _configure_callbacks(
     callbacks: list[Any],
     output_dir: Path,
 ) -> list[Any]:
-    """Configure checkpoint callbacks with output directory."""
+    """Configure checkpoint callbacks with output directory.
+
+    Updates ModelCheckpoint callback to save to correct checkpoint directory.
+
+    Args:
+        callbacks: List of trainer callbacks from config
+        output_dir: Root output directory (checkpoints/ will be subdirectory)
+
+    Returns:
+        Updated callbacks list with correct dirpath
+    """
     checkpoint_dir = output_dir / "checkpoints"
     updated_callbacks = []
 
@@ -195,7 +346,19 @@ def _configure_output_paths(
     settings: GeneralSettings,
     output_dir: Path,
 ) -> GeneralSettings:
-    """Configure training output paths."""
+    """Configure training output paths.
+
+    This transformation sets:
+    - default_root_dir: Root directory for trainer outputs
+    - callback dirpaths: Checkpoint directory location
+
+    Args:
+        settings: Current DLKit settings
+        output_dir: Workspace root directory (from experiment.workspace.root_dir)
+
+    Returns:
+        New GeneralSettings with updated TRAINING section
+    """
     training_cfg = settings.TRAINING
 
     trainer_cfg = training_cfg.trainer
@@ -212,7 +375,22 @@ def _configure_mlflow(
     settings: GeneralSettings,
     dataset_id: str,
 ) -> GeneralSettings:
-    """Configure MLflow experiment tracking."""
+    """Configure MLflow experiment tracking.
+
+    This transformation sets:
+    - experiment_name: Dataset ID (groups runs by dataset)
+    - run_name: Model name (identifies specific model architecture)
+
+    Args:
+        settings: Current DLKit settings
+        dataset_id: Dataset identifier from data config filename
+
+    Returns:
+        New GeneralSettings with updated MLFLOW section
+
+    Raises:
+        ValueError: If [MODEL].name missing from config (required for run naming)
+    """
     if not settings.MLFLOW:
         return settings
 
@@ -244,13 +422,32 @@ def _configure_training_pipeline(
     targets: list[TargetType],
     dataset_id: str,
 ) -> tuple[GeneralSettings, ExperimentWorkspace]:
-    """Apply all configuration transformations to settings."""
+    """Apply all configuration transformations to settings.
+
+    This function applies three sequential transformations:
+    1. Inject features/targets into DATASET section (in-memory arrays)
+    2. Configure output paths (checkpoint dir, default root dir)
+    3. Configure MLflow tracking (experiment name, run name)
+
+    Each transformation is a pure function that returns new GeneralSettings.
+    The transformations are independent and can be tested in isolation.
+
+    Args:
+        settings: Base DLKit settings from config file
+        workspace: Experiment workspace with directory paths
+        features: Feature configs created from normalized.npz
+        targets: Target configs created from normalized.npz
+        dataset_id: Dataset identifier for MLflow experiment naming
+
+    Returns:
+        Tuple of (updated_settings, workspace) ready for DLKit execute()
+    """
+    # Apply transformations sequentially
+    # Each returns new GeneralSettings (immutable updates)
     settings = _resolve_dataset(settings, features, targets)
-    settings = _configure_output_paths(
-        settings,
-        workspace.root_dir,
-    )
+    settings = _configure_output_paths(settings, workspace.root_dir)
     settings = _configure_mlflow(settings, dataset_id)
+
     return settings, workspace
 
 
@@ -261,7 +458,40 @@ def train_model(
     session_name: str | None = None,
     output_root: Path | str | None = None,
 ) -> Path:
-    """Train a DLKit model using resolved data+config context."""
+    """Train a DLKit model using resolved data+config context.
+
+    This is the main entry point for model training. It orchestrates:
+    1. Load experiment configuration (model + data configs)
+    2. Load training data from normalized.npz
+    3. Configure DLKit settings (dataset, paths, MLflow)
+    4. Execute training via DLKit
+    5. Return path to saved checkpoint
+
+    DLKit handles all MLflow operations including server startup and tracking.
+
+    Args:
+        config_path: Path to model configuration TOML (e.g., configs/linear.toml)
+        data_config_path: Path to data configuration TOML (e.g., data-configs/collect-504.toml)
+        session_name: Optional session name for MLflow (unused, for compatibility)
+        output_root: Optional custom output root (defaults to constants.DEFAULT_OUTPUT_ROOT)
+
+    Returns:
+        Path to saved model checkpoint (.ckpt file)
+
+    Raises:
+        RuntimeError: If no checkpoint found after training
+        ValueError: If config missing required sections
+
+    Example:
+        >>> checkpoint = train_model(
+        ...     config_path="configs/linear.toml",
+        ...     data_config_path="data-configs/collect-504.toml",
+        ... )
+        >>> print(checkpoint)
+        Path('output/collect-504/linear/2025-12-30T15-24-30/checkpoints/epoch=9-step=1000.ckpt')
+    """
+    # Step 1: Load experiment configuration
+    # Creates workspace directories and loads both model + data configs
     experiment = load_experiment(
         config_path,
         data_config_path,
@@ -271,8 +501,12 @@ def train_model(
     workspace = experiment.workspace
     dataset_id = experiment.spec.data_config_path.stem
 
+    # Step 2: Load training data from normalized.npz
+    # Creates Feature/Target configs with in-memory arrays
     _, features, targets = _load_and_prepare_data(settings, workspace)
 
+    # Step 3: Configure DLKit settings
+    # Applies three transformations: dataset, paths, MLflow
     settings, workspace = _configure_training_pipeline(
         settings,
         workspace,
@@ -281,9 +515,11 @@ def train_model(
         dataset_id,
     )
 
-    # dlkit handles all MLflow operations including server startup and tracking
+    # Step 4: Execute training via DLKit
+    # DLKit handles all MLflow operations including server startup and tracking
     execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
 
+    # Step 5: Retrieve saved checkpoint
     checkpoint_dir = workspace.checkpoint_dir
     checkpoint_path = get_latest_checkpoint(checkpoint_dir)
     if checkpoint_path is None:

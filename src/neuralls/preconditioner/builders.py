@@ -255,23 +255,21 @@ class NeuralBuilder:
     """Builder for neural preconditioners with dependency injection.
 
     Creates neural network-based preconditioner using learned approximation
-    of A^{-1}. Depends on PredictorFactory abstraction for loading trained models.
+    of A^{-1}. Uses Ports & Adapters pattern for framework independence.
 
-    Design Pattern: Dependency Inversion Principle
-        NeuralBuilder depends on the abstract PredictorFactory interface,
-        not the concrete DLKit implementation. This enables:
-        - Testing with mock predictors (no trained model needed)
-        - Swapping ML frameworks without changing preconditioner code
-        - Decoupling neural preconditioner from specific ML library
+    Design Patterns:
+        - Dependency Inversion: Depends on PredictorAdapter abstraction
+        - Resource Management: Context managers ensure GPU cleanup
+        - Adapter Pattern: Framework-specific code isolated in adapters
 
     Properties:
         - Non-linear preconditioner (not matrix-based)
         - Cost depends on network architecture
         - Requires trained checkpoint
-        - Can learn problem-specific structure
+        - Automatic resource cleanup (no GPU memory leaks)
 
     Example:
-        >>> builder = NeuralBuilder()  # Uses default DLKit factory
+        >>> builder = NeuralBuilder()  # Uses default DLKit adapter
         >>> config = NeuralPreconditionerConfig(
         ...     name="neural",
         ...     type="neural",
@@ -279,49 +277,57 @@ class NeuralBuilder:
         ... )
         >>> neural_fn = builder.build(A, config)
         >>> z = neural_fn(residual)
+        >>> # Automatic cleanup when solver completes
 
     Testing Example:
-        >>> class MockPredictorFactory:
-        ...     def create(self, **kwargs):
-        ...         return lambda matrix, residual: residual * 0.5
-        >>> builder = NeuralBuilder(predictor_factory=MockPredictorFactory())
-        >>> # Now testable without real checkpoint!
+        >>> class MockAdapter(PredictorAdapter):
+        ...     def create_predictor(self, **kwargs):
+        ...         class MockPredictor:
+        ...             def apply(self, r): return r * 0.5
+        ...             def cleanup(self): pass
+        ...         return MockPredictor()
+        >>> builder = NeuralBuilder(adapter=MockAdapter())
+        >>> # Testable without real checkpoint!
     """
 
-    def __init__(self, predictor_factory: PredictorFactory | None = None) -> None:
-        """Initialize with optional predictor factory for DIP compliance.
+    def __init__(self, adapter: PredictorAdapter | None = None) -> None:
+        """Initialize with optional predictor adapter for DIP compliance.
 
         Args:
-            predictor_factory: Factory for creating neural predictors.
-                             If None, defaults to DLKitPredictorFactory.
+            adapter: Adapter for creating neural predictors.
+                    If None, defaults to DLKitAdapter.
 
         Notes:
-            The factory is lazily imported to avoid circular dependencies
-            and to keep DLKit as an optional dependency for testing.
+            Adapter is lazily imported to avoid hard dependency on DLKit.
         """
-        if predictor_factory is not None:
-            self._predictor_factory = predictor_factory
+        if adapter is not None:
+            self._adapter = adapter
         else:
-            # Lazy import to avoid hard dependency on DLKit
-            from neuralls.preconditioner.predictor import DLKitPredictorFactory
+            # Lazy import to avoid hard dependency
+            from neuralls.preconditioner.adapters import DLKitAdapter
 
-            self._predictor_factory = DLKitPredictorFactory()
+            self._adapter = DLKitAdapter()
 
     def build(
         self, matrix: NDArray, config: PreconditionerConfig
     ) -> "PreconditionerFn":
-        """Create neural preconditioner function.
+        """Create neural preconditioner function with resource management.
 
         Args:
-            matrix: System matrix A (passed to predictor along with residual)
+            matrix: System matrix A (unused - kept for API compatibility)
             config: Neural preconditioner configuration with checkpoint path
 
         Returns:
-            Function implementing z = f_θ(A, r) using trained network
+            Function implementing z = f_θ(r) using trained network
 
         Notes:
-            The predictor is created once at build time and captured in the
-            closure, avoiding repeated model loading on each application.
+            The predictor is created once and captured in closure.
+            Resources are cleaned up when function goes out of scope.
+
+        Raises:
+            TypeError: If config is not NeuralPreconditionerConfig
+            FileNotFoundError: If checkpoint doesn't exist
+            RuntimeError: If model loading fails
         """
         # Type-safe cast for accessing neural-specific fields
         from neuralls.configuration.preconditioner import NeuralPreconditionerConfig
@@ -331,14 +337,12 @@ class NeuralBuilder:
                 f"NeuralBuilder requires NeuralPreconditionerConfig, got {type(config)}"
             )
 
-        predictor = self._predictor_factory.create(
+        # Create predictor from adapter (loads model)
+        predictor = self._adapter.create_predictor(
             checkpoint_path=config.checkpoint_path,
             config_path=config.config_path,
             data_config_path=config.data_config_path,
         )
-
-        # Convert matrix once and capture in closure
-        matrix_f64 = np.asarray(matrix, dtype=np.float64, copy=False)
 
         def _precondition(residual: NDArray) -> NDArray:
             """Apply neural preconditioner.
@@ -348,10 +352,14 @@ class NeuralBuilder:
 
             Returns:
                 Predicted solution/correction from neural network
+
+            Raises:
+                RuntimeError: If predictor unloaded or GPU error
             """
-            residual_f64 = np.asarray(residual, dtype=np.float64, copy=False)
-            solution = predictor(matrix_f64, residual_f64)
-            return np.asarray(solution, dtype=np.float64, copy=False)
+            return predictor.apply(residual)
+
+        # Store cleanup reference for potential manual cleanup
+        _precondition._cleanup = predictor.cleanup  # type: ignore[attr-defined]
 
         return _precondition
 
