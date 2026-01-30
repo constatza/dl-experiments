@@ -61,14 +61,12 @@ import numpy as np
 
 from neuralls.configuration.preconditioner import PreconditionerConfig
 from neuralls.configuration.comparison import GeneralSolverConfig
-from ..constants import REORTHOG_STRICT_THRESHOLD
 from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from neuralls.io.filesystem import ensure_dir
 from ..io.comparison import load_system_arrays
 from ..plotting import plot_convergence_comparison
 from ..preconditioner import create_default_registry
 from ..solver import (
-    create_reorthogonalization_strategy,
     format_results_summary,
     run_cg_comparison,
     summarize_best_combinations,
@@ -525,12 +523,6 @@ def compare_preconditioners(
 
     # Step 8: Configure solver parameters
     stopping_criterion = _map_stopping_criterion(general_params.stopping_criterion)
-    reorthogonalize = create_reorthogonalization_strategy(
-        "full",
-        A=system.matrix,
-        window_size=10,
-        threshold=REORTHOG_STRICT_THRESHOLD,
-    )
 
     # Step 9: Run CG comparison
     results = run_cg_comparison(
@@ -539,14 +531,14 @@ def compare_preconditioners(
         preconditioners=preconditioners,
         rtol=general_params.rtol,
         atol=general_params.atol,
-        max_iter=general_params.max_iterations,
+        maxiter=general_params.max_iterations,
         stopping_criterion=stopping_criterion,
         breakdown_tol=0.0,
+        m_max=general_params.m_max,
         precond_iters=None,
         fallback_preconditioner=fallback_precond,
         precond_every=1,
         precond_first_n=None,
-        reorthogonalize=reorthogonalize,
         combination_plan=None,
         limited_preconditioner=None,
         solver_types=solver_types,

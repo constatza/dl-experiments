@@ -29,6 +29,7 @@ from neuralls.workflows.utils.paths import extract_model_name
 from neuralls.workflows.training import train_model
 from neuralls.validation import validate_data_exists
 from neuralls.io.checkpoints import get_latest_checkpoint
+from neuralls.constants import NORMALIZED_DATASET_FILENAME
 
 
 def run_experiment(
@@ -79,7 +80,7 @@ def run_experiment(
         # Step 1: Load data configuration and generate/cache dataset
         data_cfg = load_data_config(data_config_path)
         data_dir = process_config(data_cfg, config_path=data_config_path)
-        validate_data_exists(data_dir, ["normalized.npz"])
+        validate_data_exists(data_dir, [NORMALIZED_DATASET_FILENAME])
 
         # Step 2: Check for existing checkpoint to avoid redundant training
         # Workspace structure: output_root/{dataset_id}/{model_name}/checkpoints/

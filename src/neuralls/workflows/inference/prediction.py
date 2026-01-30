@@ -13,7 +13,7 @@ from collections.abc import Iterator
 import numpy as np
 from loguru import logger
 
-from dlkit import load_predictor
+from dlkit import load_model
 from dlkit.core.postprocessing import stack_batches
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
@@ -127,8 +127,9 @@ def create_predictor(
     logger.debug(f"Loading checkpoint from: {checkpoint_path}")
     logger.debug("Using apply_transforms=True with precision=FULL_64")
 
-    predictor = load_predictor(
-        str(checkpoint_path),
+    predictor = load_model(
+        checkpoint_path,
+        device="auto",
         apply_transforms=True,  # Enable checkpoint-based transforms
         precision=PrecisionStrategy.FULL_64,
     )

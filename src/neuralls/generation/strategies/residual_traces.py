@@ -7,7 +7,6 @@ import numpy as np
 from ..interfaces import GeneratedSamples, IDataGenerationStrategy, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import ResidualTraceConfig
-from ...solver import SolverResult, flexible_cg
 from ..helpers import (
     _load_or_generate_solutions,
     _load_or_compute_rhs,
@@ -49,67 +48,64 @@ class ResidualTraceStrategy(IDataGenerationStrategy):
         # Validate and convert to typed config
         config = ResidualTraceConfig(**cfg)
 
-        count = config.samples
-        cg_iters = config.residual_iters
+        # config.samples represents number of base systems to generate
+        # (orchestration layer handles counts_represent_final_pairs conversion)
+        num_base_systems = config.samples
+        cg_iters = config.cg_iters
         rng = np.random.default_rng(config.seed)
-        
+
         n = matrix.shape[0]
-        sols = _load_or_generate_solutions(count, n, rng, 1.0, archive)
+        # Generate base systems
+        sols = _load_or_generate_solutions(num_base_systems, n, rng, 1.0, archive)
         rhs_samples = _load_or_compute_rhs(matrix, sols, archive)
 
         residual_blocks: list[np.ndarray] = []
         solution_blocks: list[np.ndarray] = []
-        search_direction_blocks: list[np.ndarray] = []
-        search_direction_product_blocks: list[np.ndarray] = []
         sample_indices: list[np.ndarray] = []
         iteration_indices: list[np.ndarray] = []
 
+        # Import scipy CG solver
+        from ...solver.solvers.scipy_cg_solver import SciPyCGSolver
+        from ...solver.monitoring.trace_recorder import TraceRecorder
+        from ...solver.monitoring.events import EventType
+
         for sample_idx, rhs_vec in enumerate(rhs_samples):
-            # Run CG for fixed number of iterations to collect residual traces
-            # Set very tight tolerances to avoid early convergence
-            # Use "full" trace mode to capture all vectors
-            _, info_result = flexible_cg(
-                matrix,
-                rhs_vec,
+            # Run classical CG (scipy) for fixed number of iterations
+            event_log = TraceRecorder()
+            solver = SciPyCGSolver(event_logger=event_log)
+
+            _, info = solver.solve(
+                A=matrix,
+                b=rhs_vec,
                 x0=np.zeros(n, dtype=np.float64),
-                max_iterations=cg_iters,
-                preconditioner=None,
-                rtol=1e-20,  # Very tight to run full iterations
-                atol=1e-20,  # Very tight to avoid early convergence
-                trace_mode="full",  # Need full tracing for residual vectors
-            )
-            info = (
-                SolverResult(**info_result)
-                if isinstance(info_result, dict)
-                else info_result
+                maxiter=cg_iters,
+                rtol=1e-20,  # Very tight to prevent early convergence
+                atol=1e-20,  # Very tight to run full iterations
+                trace_mode="full",  # Collect all intermediate vectors
             )
 
-            # Extract vectors from event log (get_history already returns NDArray for vectors)
+            # Extract vectors from scipy CG event log
             assert info.event_log is not None
-            residual_seq = info.event_log.get_history("residual")
-            solution_seq = info.event_log.get_history("solution")
-            search_direction_seq = info.event_log.get_history("direction")
-            search_direction_products_seq = np.array(
-                [matrix @ search_direction for search_direction in search_direction_seq]
-            )
+            residual_seq = info.event_log.get_vectors(EventType.RESIDUAL)
+            solution_seq = info.event_log.get_vectors(EventType.SOLUTION)
 
             num_pairs = residual_seq.shape[0]
 
             residual_blocks.append(residual_seq)
             solution_blocks.append(solution_seq)
-            search_direction_blocks.append(search_direction_seq)
-            search_direction_product_blocks.append(search_direction_products_seq)
             sidx, iidx = _build_trace_indices(num_pairs, sample_idx)
             sample_indices.append(sidx)
             iteration_indices.append(iidx)
 
+        # Note: scipy CG doesn't provide search directions
+        # Search directions are optional and not needed for preconditioner training
         residual_traces = ResidualTraceSamples(
             residuals=np.vstack(residual_blocks),
             solutions=np.vstack(solution_blocks),
             sample_indices=np.concatenate(sample_indices),
             iteration_indices=np.concatenate(iteration_indices),
-            search_directions=np.vstack(search_direction_blocks),
-            search_direction_products=np.vstack(search_direction_product_blocks),
+            search_directions=None,
+            search_direction_products=None,
         )
 
         return GeneratedSamples(

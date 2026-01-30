@@ -931,7 +931,7 @@ def _execute_strategy(
     match_rhs_norm: bool,
     target_rhs_scale: float,
     krylov_iters: int,
-    residual_iters: int,
+    cg_iters: int,
     counts_represent_final_pairs: bool,
     strategy_options: dict[str, Any],
     archive_solutions: np.ndarray | None,
@@ -981,7 +981,7 @@ def generate_mixture(
     total: int | None = None,
     counts_represent_final_pairs: bool = False,
     krylov_iters: int = 15,
-    residual_iters: int = 8,
+    cg_iters: int = 8,
     seed: int = 42,
     shuffle: bool = True,
     strategy_overrides: Mapping[str, Mapping[str, Any]] | None = None,
@@ -1020,7 +1020,7 @@ def generate_mixture(
         cfg.setdefault("samples", count)
         cfg.setdefault("seed", seed)
         cfg.setdefault("krylov_iters", krylov_iters)
-        cfg.setdefault("residual_iters", residual_iters)
+        cfg.setdefault("cg_iters", cg_iters)
         cfg.setdefault("archive_solutions", archive_solutions)
         cfg.setdefault("archive_rhs", archive_rhs)
 
@@ -1030,8 +1030,9 @@ def generate_mixture(
             "residual",
             "cg_residual_error",
             "residual_error",
+            "search_directions",
         }:
-            adjusted_count = max(1, (count + residual_iters - 1) // residual_iters)
+            adjusted_count = max(1, (count + cg_iters - 1) // cg_iters)
             cfg["samples"] = adjusted_count
 
         # Only pass b if strategy requires it

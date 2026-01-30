@@ -5,7 +5,8 @@ using Pydantic models, providing clear error messages on validation failures.
 """
 
 from __future__ import annotations
-from dlkit.tools.config import TrainingWorkflowSettings, load_training_settings
+from dlkit.tools.config import TrainingWorkflowSettings
+from dlkit.tools.io import load_settings
 
 
 import tomllib
@@ -28,7 +29,7 @@ def load_model_config(path: Path) -> TrainingWorkflowSettings:
     Raises:
         ConfigLoadError: If file cannot be read or validation fails.
     """
-    return load_training_settings(path)
+    return load_settings(path)
 
 
 def load_data_config(path: Path) -> DataConfigFile:

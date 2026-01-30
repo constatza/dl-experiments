@@ -18,6 +18,7 @@ class GeneratedSamples:
     solutions: np.ndarray | None
     residual_traces: Any | None = None
     error_traces: Any | None = None
+    search_directions_traces: Any | None = None
     scale: Any | None = None
 
 

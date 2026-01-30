@@ -18,6 +18,7 @@ import numpy as np
 from loguru import logger
 
 from neuralls.io.base import load_npz_entry
+from neuralls.constants import NORMALIZED_DATASET_FILENAME
 
 
 def derive_checkpoint_path(
@@ -87,7 +88,7 @@ def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
         return np.asarray(mat, dtype=np.float64, copy=False)
 
     # If it's a file path like .../normalized.npz, load from parent dir
-    if matrix_path.name == "normalized.npz":
+    if matrix_path.name == NORMALIZED_DATASET_FILENAME:
         data = load_dataset(matrix_path.parent, variant="normalized")
         return data["matrix"]
 
@@ -140,7 +141,7 @@ def _load_rhs_file(rhs_path: str | Path) -> np.ndarray:
         return _validate_and_flatten(b)
 
     # If it's a file path like .../normalized.npz, load from parent dir
-    if rhs_path.name == "normalized.npz":
+    if rhs_path.name == NORMALIZED_DATASET_FILENAME:
         data = load_dataset(rhs_path.parent, variant="normalized")
         b = data["rhs"][0]
         return _validate_and_flatten(b)

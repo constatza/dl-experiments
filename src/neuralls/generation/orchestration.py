@@ -92,7 +92,7 @@ def generate_mixture(
         seed: Random seed for reproducibility
         shuffle: Whether to shuffle final samples
         strategy_overrides: Per-strategy configuration overrides. Use this to configure
-            strategy-specific parameters like krylov_iters and residual_iters.
+            strategy-specific parameters like krylov_iters and cg_iters.
         archive_solutions: Pre-computed solutions for archive-based generation
         archive_rhs: Pre-computed RHS vectors for archive-based generation
 
@@ -126,7 +126,7 @@ def generate_mixture(
         ...     counts={"normal": 50, "krylov": 30, "cg_residual": 20},
         ...     seed=42,
         ...     strategy_overrides={
-        ...         "cg_residual": {"residual_iters": 10},
+        ...         "cg_residual": {"cg_iters": 10},
         ...     }
         ... )
     """
@@ -159,18 +159,19 @@ def generate_mixture(
         if archive_solutions is not None:
             archive_data = ArchiveData(solutions=archive_solutions, rhs_vectors=archive_rhs)
 
-        # For counts_represent_final_pairs mode, we need to read residual_iters from config
+        # For counts_represent_final_pairs mode, we need to read cg_iters from config
         adjusted_count = count
         if counts_represent_final_pairs and strategy_name in {
             "cg_residual",
             "residual",
             "cg_residual_error",
             "residual_error",
+            "search_directions",
         }:
-            # Get residual_iters from strategy override or use default
-            strategy_residual_iters = cfg.get("residual_iters", 8)
+            # Get cg_iters from strategy override or use default
+            strategy_cg_iters = cfg.get("cg_iters", 8)
             adjusted_count = max(
-                1, (count + strategy_residual_iters - 1) // strategy_residual_iters
+                1, (count + strategy_cg_iters - 1) // strategy_cg_iters
             )
             cfg["samples"] = adjusted_count
 
@@ -237,6 +238,7 @@ def build_dataset(
     total: int | None = None,
     rhs_path: str | None = None,
     normalize: NormalizeType = "matrix",
+    matrix_norm_type: str = "spectral",
     shuffle: bool = True,
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
@@ -255,6 +257,8 @@ def build_dataset(
         total: Total samples (required if mix provided)
         rhs_path: Path to mother RHS file (optional, needed for some strategies)
         normalize: Normalization type ("none", "matrix", "rhs", "spectral", "diagonal")
+        matrix_norm_type: Type of matrix norm to compute and save (default: "spectral").
+            Options: "spectral", "frobenius", "nuclear", "one", "inf"
         shuffle: Whether to shuffle final samples
         seed: Random seed for reproducibility
         strategy_overrides: Per-strategy configuration overrides
@@ -343,7 +347,7 @@ def build_dataset(
         mother_rhs_norm = mother_rhs
 
     # Step 5: Call generate_mixture() with ALL strategies (archives + synthetic)
-    # Note: krylov_iters and residual_iters are now passed via strategy_overrides
+    # Note: krylov_iters and cg_iters are now passed via strategy_overrides
     logger.info("Generating/loading samples...")
     X, Y, residual_traces, error_traces = generate_mixture(
         matrix_norm,
@@ -358,38 +362,51 @@ def build_dataset(
 
     logger.info(f"  Generated {X.shape[0]} samples")
 
-    # Step 6: Data is already normalized by strategies
-    # Strategies receive normalized matrix and produce normalized data:
-    # - For solution_archive: computes b' = A' @ x (already normalized)
-    # - For synthetic strategies: generate data in normalized space
-    # - For rhs_archive: loads and solves in normalized space
-    # No additional normalization needed here
-    X_normalized = X
-    Y_normalized = Y
+    # Step 6: Use error trace pairs if available, otherwise use base pairs
+    # Error trace pairs (r_k, e_k) include the original (A@x, x) pairs at iteration 0
+    # since r_0 = b when x_0 = 0
+    if error_traces is not None:
+        logger.info("Using error trace pairs (r_k, e_k) for training")
+        X_final = error_traces.residuals
+        Y_final = error_traces.errors
+    else:
+        logger.info("Using base pairs (A@x, x) for training")
+        X_final = X
+        Y_final = Y
 
     # Step 7: Package into RawSamples (only essential data - no strategy internals)
     raw_samples = RawSamples(
         matrix=matrix_norm,
-        rhs=X_normalized,
-        solutions=Y_normalized,
+        rhs=X_final,
+        solutions=Y_final,
     )
 
     # Step 8: Persist dataset
     from pathlib import Path
+    from ..math_utils import calculate_matrix_norm
+    from ..constants import NORMALIZED_DATASET_FILENAME
 
     dataset_dir_path = Path(dataset_dir)
     dataset_dir_path.mkdir(parents=True, exist_ok=True)
 
     # Persist normalized samples WITH scale metadata for denormalization
     logger.info(f"Saving to: {dataset_dir}")
-    normalized_file = dataset_dir_path / "normalized.npz"
+    normalized_file = dataset_dir_path / NORMALIZED_DATASET_FILENAME
+
+    # Compute matrix norm of normalized matrix using specified norm type
+    # StrEnum handles validation internally - users just pass strings
+    matrix_norm_value = calculate_matrix_norm(raw_samples.matrix, norm_type=matrix_norm_type)
+    logger.info(f"  Normalized matrix {matrix_norm_type} norm: {matrix_norm_value:.6f}")
 
     # Build save dict with normalized data
+    # Note: Structure is identical for both trace and base pairs
     save_dict = {
         "matrix": raw_samples.matrix,
-        "rhs": raw_samples.rhs,
-        "solutions": raw_samples.solutions,
+        "rhs": raw_samples.rhs,          # Either residuals (r_k) or RHS (A@x)
+        "solutions": raw_samples.solutions,  # Either errors (e_k) or solutions (x)
         "normalize_type": normalize,  # Save normalization type for reconstruction
+        "matrix_norm": matrix_norm_value,  # Matrix norm of normalized matrix
+        "matrix_norm_type": matrix_norm_type,  # Which norm was computed
     }
 
     # Add scale parameters using IScale.to_dict() (for denormalization)

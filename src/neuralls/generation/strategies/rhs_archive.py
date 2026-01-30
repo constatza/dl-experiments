@@ -103,16 +103,17 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
         - samples (int): Number of files to load (-1 for all)
         - shuffle (bool): Whether to shuffle file selection (default: False)
         - seed (int | None): Random seed for shuffling (required if shuffle=True)
-        - solve_systems (bool): Whether to solve systems (default: True)
         - cg_tolerance (float): CG relative tolerance (default: 1e-12)
         - cg_max_iters (int): CG max iterations (default: 500)
+
+    Note:
+        This strategy ALWAYS solves systems to produce valid (b, A^-1@b) training pairs.
 
     Examples:
         >>> # Load first 100 RHS files and solve
         >>> cfg = {
         ...     "rhs_glob": "/data/rhs_*.txt",
         ...     "samples": 100,
-        ...     "solve_systems": True,
         ...     "cg_tolerance": 1e-12,
         ... }
         >>> samples = strategy.generate(matrix, None, cfg=cfg)
@@ -123,7 +124,6 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
         ...     "samples": -1,
         ...     "shuffle": True,
         ...     "seed": 42,
-        ...     "solve_systems": False,
         ... }
         >>> samples = strategy.generate(matrix, None, cfg=cfg)
     """
@@ -153,7 +153,6 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
                 - samples: Number of files to load
                 - shuffle: Whether to shuffle file selection
                 - seed: Random seed for shuffling
-                - solve_systems: Whether to solve systems
                 - cg_tolerance: CG relative tolerance
                 - cg_max_iters: CG max iterations
             archive: Optional pre-loaded archive data (ignored by this strategy as it loads from disk)
@@ -173,7 +172,6 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
         samples = config.samples
         shuffle = config.shuffle
         seed = config.seed
-        solve_systems = config.solve_systems
         cg_tolerance = config.cg_tolerance
         cg_max_iters = config.cg_max_iters
 
@@ -190,13 +188,9 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
         # Load RHS vectors
         rhs_vectors = _load_rhs_vectors(rhs_files, matrix)
 
-        # Optionally solve systems
-        if solve_systems:
-            print(f"Solving {len(rhs_files)} linear systems...")
-            solutions = _solve_systems(matrix, rhs_vectors, cg_tolerance, cg_max_iters)
-        else:
-            # Return zero solutions if not solving
-            solutions = np.zeros_like(rhs_vectors)
+        # Always solve systems to produce valid (b, A^-1@b) training pairs
+        print(f"Solving {len(rhs_files)} linear systems...")
+        solutions = _solve_systems(matrix, rhs_vectors, cg_tolerance, cg_max_iters)
 
         return GeneratedSamples(
             matrix=matrix,

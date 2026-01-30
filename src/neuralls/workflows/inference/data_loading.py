@@ -18,6 +18,7 @@ from neuralls.configuration.domain import ExperimentWorkspace
 from neuralls.diagnostics.synthetic import generate_synthetic_test_case
 from neuralls.io.toml_loader import load_solver_config
 from neuralls.workflows.inference.config import InferenceData
+from neuralls.constants import NORMALIZED_DATASET_FILENAME
 
 
 def validate_data_availability(
@@ -58,12 +59,12 @@ def resolve_standard_data_paths(
     feat_path = (
         Path(features_path)
         if features_path
-        else workspace.data_dir / "normalized.npz"
+        else workspace.data_dir / NORMALIZED_DATASET_FILENAME
     )
     tgt_path = (
         Path(targets_path)
         if targets_path
-        else workspace.data_dir / "normalized.npz"
+        else workspace.data_dir / NORMALIZED_DATASET_FILENAME
     )
     return feat_path, tgt_path
 
@@ -100,11 +101,11 @@ def load_standard_data(
         return None
 
     logger.debug(f"Loading standard features from: {feat_path}")
-    feature_array_key = "rhs" if feat_path.name == "normalized.npz" else None
+    feature_array_key = "rhs" if feat_path.name == NORMALIZED_DATASET_FILENAME else None
     features = np.asarray(load_array(feat_path, array_key=feature_array_key))
 
     logger.debug(f"Loading standard targets from: {tgt_path}")
-    target_array_key = "solutions" if tgt_path.name == "normalized.npz" else None
+    target_array_key = "solutions" if tgt_path.name == NORMALIZED_DATASET_FILENAME else None
     targets = np.asarray(load_array(tgt_path, array_key=target_array_key))
 
     # Ensure targets are 1D if shape is (N, 1)

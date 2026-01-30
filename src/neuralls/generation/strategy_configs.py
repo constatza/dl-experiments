@@ -72,10 +72,10 @@ class RandomNormalConfig(BaseStrategyConfig):
 
 
 class ResidualErrorConfig(BaseStrategyConfig):
-    residual_iters: int = Field(
+    cg_iters: int = Field(
         DEFAULT_RESIDUAL_TRACE_ITERS,
-        description="Number of residual iterations to trace.",
-        ge=0,
+        description="Number of CG iterations to trace.",
+        ge=1,
     )
     archive_solutions: bool = Field(
         False,
@@ -88,10 +88,10 @@ class ResidualErrorConfig(BaseStrategyConfig):
 
 
 class ResidualTraceConfig(BaseStrategyConfig):
-    residual_iters: int = Field(
+    cg_iters: int = Field(
         DEFAULT_RESIDUAL_TRACE_ITERS,
-        description="Number of residual iterations to trace.",
-        ge=0,
+        description="Number of CG iterations to trace.",
+        ge=1,
     )
     archive_solutions: bool = Field(
         False,
@@ -103,12 +103,22 @@ class ResidualTraceConfig(BaseStrategyConfig):
     )
 
 
+class SearchDirectionsConfig(BaseStrategyConfig):
+    """Configuration for SearchDirectionsStrategy.
+
+    Collects (A @ p_k, p_k) pairs from CG iterations for training neural preconditioners.
+    Training mapping: NN(A @ p_k) ≈ p_k, so NN ≈ A^{-1}
+    """
+    cg_iters: int = Field(
+        DEFAULT_RESIDUAL_TRACE_ITERS,
+        description="Number of CG iterations to collect search direction pairs.",
+        ge=1,
+    )
+
+
 class RhsArchiveConfig(BaseStrategyConfig):
     rhs_glob: str = Field(
         ..., description="Glob pattern for RHS files to load. Overrides source.rhs_path."
-    )
-    solve_systems: bool = Field(
-        True, description="Whether to solve the systems (A x = b) to get solutions."
     )
     cg_tolerance: float = Field(
         MIN_TOLERANCE, description="CG convergence tolerance.", ge=MIN_TOLERANCE

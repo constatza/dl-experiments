@@ -49,15 +49,23 @@ from neuralls.io.checkpoints import get_latest_checkpoint
 class TrainingArrays:
     """Training data arrays from normalized dataset.
 
-    Immutable container for the three core arrays needed for training:
-    - rhs: Right-hand side vectors (features)
-    - solutions: Solution vectors (targets)
-    - matrix: System matrices (optional feature, used by GraphDataset)
+    Immutable container for the three core arrays needed for training.
+    Supports two types of training pairs with identical structure:
+
+    1. **Base pairs** (A@x, x): Direct solution training
+       - rhs: A @ x (RHS vectors)
+       - solutions: x (solution vectors)
+
+    2. **Trace pairs** (r_k, e_k): Residual-error training from CG iterations
+       - rhs: r_k (residual vectors from CG, where r_k = A @ e_k)
+       - solutions: e_k (error corrections, where e_k = x* - x_k)
+
+    Mathematical relationship holds for both: rhs = matrix @ solutions
 
     Attributes:
-        rhs: Shape (n_samples, n_dims) - Input vectors for CG solver
-        solutions: Shape (n_samples, n_dims) - Target solution vectors
-        matrix: Shape (n_dims, n_dims) or (n_samples, n_dims, n_dims) - System matrices
+        rhs: Shape (n_samples, n_dims) - Features (RHS or residuals)
+        solutions: Shape (n_samples, n_dims) - Targets (solutions or errors)
+        matrix: Shape (n_dims, n_dims) or (n_samples, n_dims, n_dims) - System matrix A
     """
 
     rhs: np.ndarray
@@ -122,15 +130,24 @@ class TrainingResult:
 def _load_training_arrays(data_path: Path) -> TrainingArrays:
     """Load training arrays from normalized.npz file.
 
+    Loads either base pairs (A@x, x) or trace pairs (r_k, e_k) depending on
+    what the data generation strategy produced. Both use identical file structure.
+
     Args:
         data_path: Path to normalized.npz file (must contain rhs, solutions, matrix)
 
     Returns:
-        TrainingArrays with rhs, solutions, and matrix arrays
+        TrainingArrays with:
+        - rhs: Either RHS vectors (A@x) or residuals (r_k)
+        - solutions: Either solutions (x) or error corrections (e_k)
+        - matrix: System matrix A
 
     Raises:
         FileNotFoundError: If normalized.npz doesn't exist
         KeyError: If required keys missing from .npz file
+
+    Note:
+        No conditional logic needed - file structure is identical for both pair types.
     """
     dataset = np.load(data_path)
     return TrainingArrays(
@@ -161,7 +178,9 @@ def _load_and_prepare_data(
             - features: List of ValueFeature configs for DLKit
             - targets: List of ValueTarget configs for DLKit
     """
-    arrays = _load_training_arrays(workspace.data_dir / "normalized.npz")
+    from ..constants import NORMALIZED_DATASET_FILENAME
+
+    arrays = _load_training_arrays(workspace.data_dir / NORMALIZED_DATASET_FILENAME)
     dataset_name = settings.DATASET.name if settings.DATASET else None
     features = _create_feature_configs(arrays, dataset_name)
     targets = _create_target_configs(arrays)

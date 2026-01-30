@@ -196,14 +196,15 @@ class DLKitAdapter(PredictorAdapter):
 
         try:
             # Lazy import to avoid hard dependency
-            from dlkit import load_predictor
+            from dlkit import load_model
             from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
             logger.debug(f"Loading checkpoint from: {checkpoint_path}")
 
             # Load predictor from DLKit
-            dlkit_predictor = load_predictor(
-                str(checkpoint_path),
+            dlkit_predictor = load_model(
+                checkpoint_path,
+                device="auto",
                 apply_transforms=False,  # Data pre-normalized
                 precision=PrecisionStrategy.FULL_64,
             )

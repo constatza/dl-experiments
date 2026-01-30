@@ -606,6 +606,26 @@ class ErrorTraceSamples(ITraceSamples):
     # ITraceSamples interface is automatically satisfied by dataclass fields
 
 
+@dataclass(frozen=True)
+class SearchDirectionsSamples(ITraceSamples):
+    """Search direction traces: (A @ p_k) → p_k for neural preconditioner training.
+
+    Training mapping: NN(A @ p_k) ≈ p_k, meaning NN ≈ A^{-1}
+    This learns the inverse operator without requiring exact solutions.
+
+    Collected from CG iterations where:
+    - p_k: search direction at iteration k
+    - A @ p_k: search direction product (computed in CG anyway)
+    """
+
+    search_direction_products: np.ndarray  # A @ p_k (inputs)
+    search_directions: np.ndarray  # p_k (targets)
+    sample_indices: np.ndarray
+    iteration_indices: np.ndarray
+
+    # ITraceSamples interface is automatically satisfied by dataclass fields
+
+
 # =============================================================================
 # Frozen Dataclasses: Normalization Results
 # =============================================================================

@@ -1,4 +1,17 @@
 # Solution archive config conjugate to spectral 93×31 data: uses displacement (x) vectors to synthesize RHS.
+# Uses cg_residual_error strategy to generate residual-error trace pairs for preconditioner training
+#
+# Data generation process:
+# 1. Loads true solutions x* from archive
+# 2. Computes RHS as b = A @ x*
+# 3. Runs scipy classical CG for 10 iterations starting from x_0 = 0
+# 4. Collects (r_k, e_k) pairs at each iteration where:
+#    - r_k = residual vector at iteration k
+#    - e_k = error correction = x* - x_k
+#    - Mathematical relationship: r_k = A @ e_k (valid (A@x, x) format!)
+#
+# Training pairs: (r_k, e_k) where r_k is input, e_k is target
+# Network learns: e_k ≈ A^-1 @ r_k (preconditioner application)
 
 [flow]
 
@@ -13,8 +26,10 @@ seed = 42
 
 [[generation.strategy]]
 name = "cg_residual_error"
-samples = 6000  # Final training pairs: 600 base solutions × 10 iters each
-residual_iters = 10
+samples = 6000           # TOTAL pairs (NOT base systems!)
+                         # num_base_systems = ceil(6000/10) = 600
+residual_iters = 10      # CG iterations per base system
+                         # Total pairs ≈ 600 × 10 = 6000
 solutions_glob = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]

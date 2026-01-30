@@ -2,8 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from enum import StrEnum
+
 import numpy as np
 from scipy.linalg import norm
+
+
+class MatrixNormType(StrEnum):
+    """Matrix norm types for dataset metadata.
+
+    Single source of truth for all supported matrix norms.
+    To add a new norm:
+    1. Add enum member here
+    2. Add calculate_<name>_norm() function below
+    3. Add entry to _NORM_STRATEGIES mapping
+    """
+    SPECTRAL = "spectral"      # Spectral norm (2-norm): largest singular value
+    FROBENIUS = "frobenius"    # Frobenius norm: sqrt(sum of squared entries)
+    NUCLEAR = "nuclear"        # Nuclear norm: sum of singular values
+    ONE = "one"                # 1-norm: max column sum
+    INF = "inf"                # Infinity norm: max row sum
 
 
 def calculate_normalization_scale(A: np.ndarray) -> tuple[float, float]:
@@ -73,6 +92,126 @@ def calculate_spectral_norm(A: np.ndarray) -> float:
         Spectral norm (largest singular value)
     """
     return float(np.linalg.norm(A, ord=2))
+
+
+def calculate_frobenius_norm(A: np.ndarray) -> float:
+    """Calculate Frobenius norm of matrix A.
+
+    The Frobenius norm is defined as the square root of the sum of
+    squared entries: ||A||_F = sqrt(sum(A_ij^2)).
+
+    Args:
+        A: System matrix
+
+    Returns:
+        Frobenius norm
+    """
+    return float(np.linalg.norm(A, ord="fro"))
+
+
+def calculate_nuclear_norm(A: np.ndarray) -> float:
+    """Calculate nuclear norm (trace norm) of matrix A.
+
+    The nuclear norm is the sum of singular values of A.
+    It's the dual norm of the spectral norm.
+
+    Args:
+        A: System matrix
+
+    Returns:
+        Nuclear norm (sum of singular values)
+    """
+    return float(np.linalg.norm(A, ord="nuc"))
+
+
+def calculate_one_norm(A: np.ndarray) -> float:
+    """Calculate 1-norm of matrix A.
+
+    The 1-norm is the maximum absolute column sum:
+    ||A||_1 = max_j sum_i |A_ij|
+
+    Args:
+        A: System matrix
+
+    Returns:
+        1-norm (max column sum)
+    """
+    return float(np.linalg.norm(A, ord=1))
+
+
+def calculate_inf_norm(A: np.ndarray) -> float:
+    """Calculate infinity norm of matrix A.
+
+    The infinity norm is the maximum absolute row sum:
+    ||A||_inf = max_i sum_j |A_ij|
+
+    Args:
+        A: System matrix
+
+    Returns:
+        Infinity norm (max row sum)
+    """
+    return float(np.linalg.norm(A, ord=np.inf))
+
+
+# Norm strategy mapping - uses StrEnum as single source of truth
+_NORM_STRATEGIES: dict[str, Callable[[np.ndarray], float]] = {
+    MatrixNormType.SPECTRAL: calculate_spectral_norm,
+    MatrixNormType.FROBENIUS: calculate_frobenius_norm,
+    MatrixNormType.NUCLEAR: calculate_nuclear_norm,
+    MatrixNormType.ONE: calculate_one_norm,
+    MatrixNormType.INF: calculate_inf_norm,
+}
+
+
+def calculate_matrix_norm(
+    A: np.ndarray,
+    norm_type: str = "spectral",
+) -> float:
+    """Calculate matrix norm using specified norm type.
+
+    Extensible dispatch function using StrEnum for type safety.
+    Users pass strings - StrEnum provides validation internally.
+
+    To add a new norm type:
+    1. Add member to MatrixNormType enum above
+    2. Add calculate_<name>_norm() function above
+    3. Add entry to _NORM_STRATEGIES mapping
+
+    Args:
+        A: System matrix
+        norm_type: Type of norm to compute (default: "spectral").
+            Supported values:
+            - "spectral": Spectral norm (2-norm, largest singular value)
+            - "frobenius": Frobenius norm (sqrt of sum of squared entries)
+            - "nuclear": Nuclear norm (sum of singular values)
+            - "one": 1-norm (max column sum)
+            - "inf": Infinity norm (max row sum)
+
+    Returns:
+        Matrix norm value
+
+    Raises:
+        ValueError: If norm_type is not recognized
+
+    Examples:
+        >>> A = np.array([[3, 0], [0, 4]])
+        >>> calculate_matrix_norm(A, "spectral")  # Max singular value
+        4.0
+        >>> calculate_matrix_norm(A, "frobenius")  # sqrt(3^2 + 4^2)
+        5.0
+        >>> calculate_matrix_norm(A, "one")  # max(3, 4)
+        4.0
+    """
+    if norm_type not in _NORM_STRATEGIES:
+        supported = ", ".join(norm.value for norm in MatrixNormType)
+        raise ValueError(
+            f"Unknown matrix norm type: {norm_type!r}. "
+            f"Supported types: {supported}"
+        )
+
+    norm_fn = _NORM_STRATEGIES[norm_type]
+    return norm_fn(A)
 
 
 def compute_dim_scale(dimension: int) -> float:
