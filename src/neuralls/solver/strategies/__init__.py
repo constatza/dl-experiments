@@ -2,8 +2,8 @@
 
 This package contains all strategy implementations:
 - orthogonalization: OrthogonalizationStrategy hierarchy
-- reorthogonalization: ReorthogonalizationStrategy hierarchy  
 - convergence: ConvergenceCriterion implementations
+- norms: Norm type and factory functions for convergence criteria
 - direction: DirectionStrategy implementations (will be moved here)
 
 Design Principles:
@@ -13,32 +13,28 @@ Design Principles:
 """
 
 from .convergence import CombinedToleranceCriterion, IConvergenceCriterion
+from .norms import Norm, energy_norm, euclidean_norm
 from .orthogonalization import (
     FullOrthogonalization,
     ModifiedGramSchmidt,
     OrthogonalizationReport,
     OrthogonalizationStrategy,
+    PeriodicRestartOrthogonalization,
     TruncatedGramSchmidt,
-)
-from .reorthogonalization import (
-    FullReorthogonalization,
-    PartialReorthogonalization,
-    ReorthogonalizationStrategy,
-    SelectiveReorthogonalization,
 )
 
 __all__ = [
+    # Norms
+    "Norm",
+    "euclidean_norm",
+    "energy_norm",
     # Orthogonalization
     "OrthogonalizationStrategy",
     "OrthogonalizationReport",
+    "PeriodicRestartOrthogonalization",
     "TruncatedGramSchmidt",
     "ModifiedGramSchmidt",
     "FullOrthogonalization",
-    # Reorthogonalization
-    "ReorthogonalizationStrategy",
-    "FullReorthogonalization",
-    "PartialReorthogonalization",
-    "SelectiveReorthogonalization",
     # Convergence
     "IConvergenceCriterion",
     "CombinedToleranceCriterion",

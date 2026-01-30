@@ -83,13 +83,13 @@ The master `configs/experiments.toml` file orchestrates multiple experiment bund
 - **`solvers/`** - Concrete implementations (`FlexibleCGSolver`, `PreconditionedCGSolver`)
 - **`models/`** - Immutable state hierarchy (`SolverState`, `KrylovState`, `CGState`, `SolverResult`)
 - **`monitoring/`** - Diagnostics (`TraceRecorder`, `HistoryTracker`)
-- **`strategies/`** - Strategy patterns (`OrthogonalizationStrategy`, `ReorthogonalizationStrategy`, `IConvergenceCriterion`)
+- **`strategies/`** - Strategy patterns (`OrthogonalizationStrategy`, `IConvergenceCriterion`)
 
 **Removed monolithic files:**
 - `fcg_solver.py`, `pcg_solver.py` → `solvers/` directory with focused implementations
 - `state.py`, `info.py` → `models/` directory with type-safe state containers
 - `trace_recorder.py`, `convergence.py` → `monitoring/` directory
-- `helpers.py`, `reorthogonalization.py` → `utils/` and `strategies/`
+- `helpers.py` → `utils/` and `strategies/orthogonalization.py`
 
 **Factory function updates:**
 - `flexible_cg()` - Now uses `FlexibleCGSolver` class internally

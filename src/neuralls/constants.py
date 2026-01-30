@@ -189,6 +189,9 @@ def get_overflow_threshold(dtype: type[np.floating] = np.float64) -> float:  # t
 # =============================================================================
 DEFAULT_NUM_SAMPLES = 6000
 
+# Dataset filenames (no magic strings!)
+NORMALIZED_DATASET_FILENAME = "normalized.npz"
+
 # Strategy-specific iteration parameters
 # These are now configured at the strategy level (not generation level):
 # - DEFAULT_KRYLOV_ITERATIONS: Used by krylov strategy for Krylov subspace dimension
@@ -215,6 +218,24 @@ EIGENVECTOR_SELECT_SMALLEST = "smallest"
 EIGENVECTOR_SELECT_LARGEST = "largest"
 EIGENVECTOR_SELECT_RANDOM = "random"
 EigenvectorSelectionMode = Literal["smallest", "largest", "random"]
+
+
+# =============================================================================
+# Matrix Norm Types (for dataset metadata)
+# =============================================================================
+# NOTE: MatrixNormType enum is defined in math_utils.py as single source of truth
+# Re-exported here for backward compatibility and convenient access
+from .math_utils import MatrixNormType
+
+# Convenience aliases for backward compatibility
+MATRIX_NORM_SPECTRAL = MatrixNormType.SPECTRAL.value
+MATRIX_NORM_FROBENIUS = MatrixNormType.FROBENIUS.value
+MATRIX_NORM_NUCLEAR = MatrixNormType.NUCLEAR.value
+MATRIX_NORM_ONE = MatrixNormType.ONE.value
+MATRIX_NORM_INF = MatrixNormType.INF.value
+
+# Default matrix norm for dataset metadata
+DEFAULT_MATRIX_NORM_TYPE = MatrixNormType.SPECTRAL
 
 
 # =============================================================================

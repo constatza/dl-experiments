@@ -10,12 +10,17 @@ Design:
     - ModifiedGramSchmidt: More stable variant (full orthogonalization)
     - FullOrthogonalization: Orthogonalize against all previous directions
 
-Theory:
+Theory (Notay 2000):
     Flexible CG maintains approximate A-conjugacy via Gram-Schmidt orthogonalization:
-        p_i = z_i - Σ_{k=i-m}^{i-1} [(z_i, q_k) / (p_k, q_k)] p_k
+        d_i = w_i - Σ_{j=i-m}^{i-1} [(w_i, A d_j) / (d_j, A d_j)] d_j
 
-    The coefficient (z_i, q_k) / (p_k, q_k) enforces A-conjugacy:
-        p_i^T A p_k ≈ 0
+    where:
+        - w_i = M^{-1}(r_i) is the preconditioned residual
+        - d_i is the search direction
+        - A d_j is the matrix-vector product (q_j in code)
+
+    The coefficient (w_i, A d_j) / (d_j, A d_j) enforces A-conjugacy:
+        d_i^T A d_j ≈ 0
 
     This is NOT Euclidean orthogonality! A-conjugacy accelerates convergence
     for linear systems, while Euclidean orthogonality does not.
@@ -33,7 +38,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ...constants import REORTHOG_ZERO_NORM_TOL
+from ...constants import DEFAULT_M_MAX, REORTHOG_ZERO_NORM_TOL
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -44,7 +49,7 @@ class OrthogonalizationReport:
     """Report from orthogonalization operation.
 
     Attributes:
-        coefficients: Orthogonalization coefficients [(z, q_k) / (p_k, q_k)].
+        coefficients: Orthogonalization coefficients [(w_i, q_j) / (d_j, q_j)] (Notay 2000).
         breakdown: Whether breakdown detected (near-linear dependence).
         num_skipped: Number of terms skipped (small denominators).
 
@@ -84,52 +89,182 @@ class OrthogonalizationStrategy(ABC):
     def orthogonalize(
         self,
         vector: NDArray,
-        p_vectors: list[NDArray],
+        d_vectors: list[NDArray],
         q_vectors: list[NDArray],
     ) -> tuple[NDArray, OrthogonalizationReport]:
         """Orthogonalize vector against basis vectors.
 
         Args:
-            vector: Vector to orthogonalize (typically z_i = M^{-1} r_i).
-            p_vectors: Previous search directions [p_{i-m}, ..., p_{i-1}].
-            q_vectors: Previous matrix-vector products [q_{i-m}, ..., q_{i-1}].
+            vector: Vector to orthogonalize w_i = M^{-1} r_i (Notay 2000).
+            d_vectors: Previous search directions [d_{i-m}, ..., d_{i-1}] (Notay 2000).
+            q_vectors: Previous matrix-vector products [A d_{i-m}, ..., A d_{i-1}].
 
         Returns:
             Tuple (orthogonalized_vector, report):
-            - orthogonalized_vector: Result of orthogonalization
+            - orthogonalized_vector: Result of orthogonalization d_i (Notay 2000)
             - report: OrthogonalizationReport with diagnostics
 
-        Theory:
+        Theory (Notay 2000):
             For FCG, we compute:
-                p_i = z_i - Σ_k [(z_i, q_k) / (p_k, q_k)] p_k
+                d_i = w_i - Σ_j [(w_i, A d_j) / (d_j, A d_j)] d_j
 
-            This enforces approximate A-conjugacy: p_i^T A p_k ≈ 0
+            This enforces approximate A-conjugacy: d_i^T A d_j ≈ 0
         """
         ...
 
 
+class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
+    """FCG(m_max) orthogonalization with periodic restart per Notay (2000).
+
+    Implements the paper's recommended truncation strategy with cyclic restart:
+        m_i = max(1, mod(i, m_max + 1))
+
+    This creates a periodic pattern where the orthogonalization window
+    resets to size 1 every (m_max + 1) iterations.
+
+    Attributes:
+        m_max: Maximum window size before reset.
+        epsilon: Threshold for small denominators.
+
+    Theory (Notay 2000, Algorithm 2.1):
+        The periodic restart formula m_i = max(1, i mod (m_max + 1)) produces:
+        - For i < m_max: m_i = i (accumulate history)
+        - For i = m_max: m_i = m_max (full window)
+        - For i = m_max + 1: m_i = 1 (RESTART - discard old directions)
+        - Repeats with period m_max + 1
+
+        This periodic reset:
+        1. Prevents accumulation of rounding errors
+        2. Bounds memory at O(m_max * n)
+        3. Is "generally more cost efficient" than pure truncation (Notay 2000, Table 1)
+
+    Example:
+        >>> orthog = PeriodicRestartOrthogonalization(m_max=10)
+        >>> # At iteration 11, will only use 1 direction (restart)
+        >>> p, report = orthog.orthogonalize(z, p_vectors, q_vectors)
+    """
+
+    def __init__(self, m_max: int, epsilon: float = 1e-14):
+        """Initialize FCG orthogonalization with periodic restart.
+
+        Args:
+            m_max: Maximum window size (m_max). At iteration m_max+1, resets to 1.
+            epsilon: Threshold for skipping small denominators.
+
+        Raises:
+            ValueError: If m_max < 1 or epsilon <= 0.
+        """
+        if m_max < 1:
+            raise ValueError(f"m_max must be >= 1, got {m_max}")
+        if epsilon <= 0:
+            raise ValueError(f"epsilon must be > 0, got {epsilon}")
+
+        self.m_max = m_max
+        self.epsilon = epsilon
+        self._iteration_count = 0  # Track calls to compute m_i
+
+    def orthogonalize(
+        self,
+        vector: NDArray,
+        d_vectors: list[NDArray],
+        q_vectors: list[NDArray],
+    ) -> tuple[NDArray, OrthogonalizationReport]:
+        """Orthogonalize via FCG with periodic restart (Notay 2000, Algorithm 2.1).
+
+        Args:
+            vector: Vector to orthogonalize w_i (Notay 2000).
+            d_vectors: Previous search directions d_j (Notay 2000).
+            q_vectors: Previous matrix-vector products A d_j.
+
+        Returns:
+            Tuple (orthogonalized_vector, report).
+
+        Theory:
+            Computes m_i = max(1, i mod (m_max + 1)) and orthogonalizes
+            against the last m_i directions only.
+        """
+        result = np.asarray(vector, copy=True)
+
+        n_history = len(d_vectors)
+
+        if n_history == 0:
+            self._iteration_count += 1
+            return result, OrthogonalizationReport(coefficients=[], breakdown=False)
+
+        # Compute m_i using FCG periodic restart formula
+        # m_i = max(1, i mod (m_max + 1))
+        i = self._iteration_count
+        m_i = max(1, i % (self.m_max + 1))
+        # Clamp to available history
+        m_i = min(m_i, n_history)
+
+        # Orthogonalize against last m_i directions
+        coefficients: list[float] = []
+        num_skipped = 0
+
+        start_idx = n_history - m_i
+        for j in range(start_idx, n_history):
+            d_j = d_vectors[j]
+            q_j = q_vectors[j]
+
+            # Notay (2000) Algorithm 2.1: d_i = w_i - Σ[(w_i, A d_j)/(d_j, A d_j)] d_j
+            numerator = float(np.dot(vector, q_j))     # (w_i, A d_j)
+            denominator = float(np.dot(d_j, q_j))      # (d_j, A d_j)
+
+            if not np.isfinite(numerator) or not np.isfinite(denominator):
+                num_skipped += 1
+                continue
+
+            if abs(denominator) < self.epsilon:
+                num_skipped += 1
+                continue
+
+            coeff = numerator / denominator
+            coefficients.append(coeff)
+
+            if not np.isfinite(coeff):
+                num_skipped += 1
+                continue
+
+            result -= coeff * d_j
+
+        self._iteration_count += 1
+
+        # Check for breakdown
+        result_norm = float(np.linalg.norm(result))
+        vector_norm = float(np.linalg.norm(vector))
+        breakdown = result_norm < REORTHOG_ZERO_NORM_TOL * max(vector_norm, 1.0)
+
+        return result, OrthogonalizationReport(
+            coefficients=coefficients,
+            breakdown=breakdown,
+            num_skipped=num_skipped,
+        )
+
+
 class TruncatedGramSchmidt(OrthogonalizationStrategy):
-    """Truncated Gram-Schmidt orthogonalization for FCG.
+    """Tr-FCG: Truncated Gram-Schmidt with sliding window (no restart).
 
     Orthogonalizes against a sliding window of previous directions to
     maintain approximate A-conjugacy while bounding memory and cost.
+
+    Note: This implements Tr-FCG (pure truncation), NOT FCG.
+    For FCG with periodic restart, use PeriodicRestartOrthogonalization.
 
     Attributes:
         window_size: Maximum number of directions to orthogonalize against.
         epsilon: Threshold for small denominators (default: 1e-14).
 
-    Theory:
-        FCG formula:
-            p_i = z_i - Σ_{k=i-m}^{i-1} [(z_i, q_k) / (p_k, q_k)] p_k
+    Theory (Notay 2000):
+        Tr-FCG formula:
+            d_i = w_i - Σ_{j=i-m}^{i-1} [(w_i, A d_j) / (d_j, A d_j)] d_j
 
         where m = min(i, window_size) is the active window.
-
-        The coefficient (z_i, q_k) / (p_k, q_k) = (z_i, A p_k) / (p_k^T A p_k)
-        is designed to enforce A-conjugacy: p_i^T A p_k ≈ 0
+        Unlike FCG, this uses a sliding window without periodic resets.
 
     Example:
         >>> orthog = TruncatedGramSchmidt(window_size=10)
-        >>> p, report = orthog.orthogonalize(z, p_vectors, q_vectors)
+        >>> d, report = orthog.orthogonalize(w, d_vectors, q_vectors)
         >>> report.breakdown
         False
     """
@@ -155,28 +290,28 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
     def orthogonalize(
         self,
         vector: NDArray,
-        p_vectors: list[NDArray],
+        d_vectors: list[NDArray],
         q_vectors: list[NDArray],
     ) -> tuple[NDArray, OrthogonalizationReport]:
         """Orthogonalize via truncated Gram-Schmidt.
 
         Args:
-            vector: Vector to orthogonalize (z_i).
-            p_vectors: Previous search directions.
-            q_vectors: Previous matrix-vector products.
+            vector: Vector to orthogonalize w_i (Notay 2000).
+            d_vectors: Previous search directions d_j (Notay 2000).
+            q_vectors: Previous matrix-vector products A d_j.
 
         Returns:
             Tuple (orthogonalized_vector, report).
 
-        Theory:
-            Orthogonalizes z_i against last min(m_max, len(p_vectors)) directions.
+        Theory (Notay 2000):
+            Orthogonalizes w_i against last min(m_max, len(d_vectors)) directions.
             Skips terms with small denominators to avoid numerical instability.
         """
         # Copy vector to avoid mutation
         result = np.asarray(vector, copy=True)
 
         # Determine orthogonalization window
-        n_history = len(p_vectors)
+        n_history = len(d_vectors)
         m = min(n_history, self.window_size)
 
         if m == 0:
@@ -188,12 +323,12 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
         num_skipped = 0
 
         for j in range(n_history - m, n_history):
-            p_j = p_vectors[j]
+            d_j = d_vectors[j]
             q_j = q_vectors[j]
 
-            # Compute orthogonalization coefficient
-            numerator = float(np.dot(vector, q_j))  # (z_i, q_k)
-            denominator = float(np.dot(p_j, q_j))   # (p_k, q_k)
+            # Compute orthogonalization coefficient (Notay 2000)
+            numerator = float(np.dot(vector, q_j))  # (w_i, A d_j)
+            denominator = float(np.dot(d_j, q_j))   # (d_j, A d_j)
 
             # Check for NaN/Inf
             if not np.isfinite(numerator) or not np.isfinite(denominator):
@@ -213,8 +348,8 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
                 num_skipped += 1
                 continue
 
-            # Orthogonalize: p -= coeff * p_j
-            result -= coeff * p_j
+            # Orthogonalize: d_i -= coeff * d_j
+            result -= coeff * d_j
 
         # Check for breakdown (orthogonalized vector too small)
         result_norm = float(np.linalg.norm(result))
@@ -237,20 +372,20 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
     Attributes:
         epsilon: Threshold for small denominators.
 
-    Theory:
+    Theory (Notay 2000):
         Modified GS updates the vector after each orthogonalization step:
-            p_i^{(0)} = z_i
-            For k = i-m, ..., i-1:
-                coeff_k = (p_i^{(k)}, q_k) / (p_k, q_k)
-                p_i^{(k+1)} = p_i^{(k)} - coeff_k * p_k
-            p_i = p_i^{(m)}
+            d_i^{(0)} = w_i
+            For j = i-m, ..., i-1:
+                coeff_j = (d_i^{(j)}, A d_j) / (d_j, A d_j)
+                d_i^{(j+1)} = d_i^{(j)} - coeff_j * d_j
+            d_i = d_i^{(m)}
 
         This differs from classical GS which computes all coefficients
         before updating, leading to better numerical stability.
 
     Example:
         >>> orthog = ModifiedGramSchmidt()
-        >>> p, report = orthog.orthogonalize(z, p_vectors, q_vectors)
+        >>> d, report = orthog.orthogonalize(w, d_vectors, q_vectors)
     """
 
     def __init__(self, epsilon: float = 1e-14):
@@ -266,15 +401,15 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
     def orthogonalize(
         self,
         vector: NDArray,
-        p_vectors: list[NDArray],
+        d_vectors: list[NDArray],
         q_vectors: list[NDArray],
     ) -> tuple[NDArray, OrthogonalizationReport]:
         """Orthogonalize via modified Gram-Schmidt.
 
         Args:
-            vector: Vector to orthogonalize.
-            p_vectors: Previous search directions.
-            q_vectors: Previous matrix-vector products.
+            vector: Vector to orthogonalize w_i (Notay 2000).
+            d_vectors: Previous search directions d_j (Notay 2000).
+            q_vectors: Previous matrix-vector products A d_j.
 
         Returns:
             Tuple (orthogonalized_vector, report).
@@ -282,17 +417,17 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
         # Copy vector
         result = np.asarray(vector, copy=True)
 
-        if len(p_vectors) == 0:
+        if len(d_vectors) == 0:
             return result, OrthogonalizationReport(coefficients=[], breakdown=False)
 
         coefficients: list[float] = []
         num_skipped = 0
 
         # Modified GS: update result after each step
-        for p_j, q_j in zip(p_vectors, q_vectors):
+        for d_j, q_j in zip(d_vectors, q_vectors):
             # Use updated result for numerator (key difference from classical GS)
             numerator = float(np.dot(result, q_j))
-            denominator = float(np.dot(p_j, q_j))
+            denominator = float(np.dot(d_j, q_j))
 
             if not np.isfinite(numerator) or not np.isfinite(denominator):
                 num_skipped += 1
@@ -309,7 +444,7 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
                 num_skipped += 1
                 continue
 
-            result -= coeff * p_j
+            result -= coeff * d_j
 
         # Check breakdown
         result_norm = float(np.linalg.norm(result))
@@ -324,12 +459,21 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
 
 
 class FullOrthogonalization(OrthogonalizationStrategy):
-    """Full orthogonalization against all previous directions (no truncation).
+    """Full orthogonalization against all previous directions (FCG(∞) from Notay 2000).
 
-    Orthogonalizes against all available history vectors. More accurate
-    but higher memory (O(n * iterations)) and cost (O(n * iterations)).
+    This implements FCG with infinite orthogonalization window (m_max = ∞).
+    In the paper's notation, this is FCG(∞), which is theoretically equivalent
+    to full reorthogonalization - orthogonalizing against all previous search
+    directions to maintain exact A-conjugacy (within numerical precision).
+
+    From Notay (2000) Section 5.1: FCG(∞) is used for ill-conditioned problems
+    where truncation would degrade convergence (e.g., Case 3: κ=1100).
+
+    Memory and cost: O(n * iterations) - use for short runs or when maximum
+    accuracy is required.
 
     Use this for:
+    - Ill-conditioned problems requiring exact A-conjugacy
     - Short runs where memory is not a concern
     - Maximum accuracy requirements
     - Debugging truncated methods
@@ -338,8 +482,11 @@ class FullOrthogonalization(OrthogonalizationStrategy):
         epsilon: Threshold for small denominators.
 
     Example:
-        >>> orthog = FullOrthogonalization()
-        >>> p, report = orthog.orthogonalize(z, p_vectors, q_vectors)
+        >>> orthog = FullOrthogonalization()  # FCG(∞)
+        >>> d, report = orthog.orthogonalize(w, d_vectors, q_vectors)
+
+    References:
+        Notay (2000) Table 1, Case 3 uses FCG(∞) for κ=1100.
     """
 
     def __init__(self, epsilon: float = 1e-14):
@@ -355,19 +502,73 @@ class FullOrthogonalization(OrthogonalizationStrategy):
     def orthogonalize(
         self,
         vector: NDArray,
-        p_vectors: list[NDArray],
+        d_vectors: list[NDArray],
         q_vectors: list[NDArray],
     ) -> tuple[NDArray, OrthogonalizationReport]:
         """Orthogonalize against all directions.
 
         Args:
-            vector: Vector to orthogonalize.
-            p_vectors: All previous search directions.
-            q_vectors: All previous matrix-vector products.
+            vector: Vector to orthogonalize w_i (Notay 2000).
+            d_vectors: All previous search directions d_j (Notay 2000).
+            q_vectors: All previous matrix-vector products A d_j.
 
         Returns:
             Tuple (orthogonalized_vector, report).
+
+        Note:
+            This implements FCG(∞) by orthogonalizing against all history.
+            In Notay (2000) formula m_i = max(1, i mod (m_max + 1)), setting
+            m_max → ∞ gives m_i = i, meaning "use all i previous vectors".
+            This direct implementation avoids iteration counting overhead while
+            being mathematically equivalent.
         """
         # Delegate to ModifiedGramSchmidt (no truncation)
         mgs = ModifiedGramSchmidt(epsilon=self.epsilon)
-        return mgs.orthogonalize(vector, p_vectors, q_vectors)
+        return mgs.orthogonalize(vector, d_vectors, q_vectors)
+
+
+def create_fcg_orthogonalization(
+    m_max: int = DEFAULT_M_MAX,
+) -> OrthogonalizationStrategy:
+    """Create FCG(m) orthogonalization strategy following Notay (2000).
+
+    Factory function that creates the appropriate orthogonalization strategy
+    based on the m_max parameter. This simplifies configuration by mapping
+    a single parameter to the correct strategy class.
+
+    Args:
+        m_max: Window size for orthogonalization (FCG(m) from Notay 2000).
+            - m_max > 0: PeriodicRestartOrthogonalization (FCG(m) with periodic restart)
+            - m_max = -1: FullOrthogonalization (FCG(∞) - full reorthogonalization)
+
+        Note: FCG(∞) means "infinite" orthogonalization window. This is implemented
+        via the sentinel value m_max=-1 and returns FullOrthogonalization, which
+        orthogonalizes against ALL previous directions. This is theoretically
+        equivalent to "full reorthogonalization" mentioned in the literature.
+
+    Returns:
+        OrthogonalizationStrategy: Configured strategy instance.
+
+    Raises:
+        ValueError: If m_max < -1 or m_max == 0.
+
+    Examples:
+        >>> orthog = create_fcg_orthogonalization(m_max=10)  # FCG(10)
+        >>> isinstance(orthog, PeriodicRestartOrthogonalization)
+        True
+
+        >>> orthog = create_fcg_orthogonalization(m_max=-1)  # Full
+        >>> isinstance(orthog, FullOrthogonalization)
+        True
+
+    References:
+        Notay, Y. (2000). Flexible Conjugate Gradients. SIAM J. Sci. Comput.
+    """
+    if m_max == 0:
+        raise ValueError("m_max cannot be 0. Use m_max=1 for minimal orthogonalization.")
+    if m_max < -1:
+        raise ValueError(f"m_max must be >= -1, got {m_max}")
+
+    if m_max == -1:
+        return FullOrthogonalization()
+    return PeriodicRestartOrthogonalization(m_max=m_max)
