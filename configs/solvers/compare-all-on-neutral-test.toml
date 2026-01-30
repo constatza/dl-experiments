@@ -18,7 +18,7 @@ rtol = 1.0e-9
 atol = 1.0e-14
 max_iterations = 200
 stopping_criterion = "residual_norm"
-reorthogonalize = "partial"
+m_max = 10  # FCG(m) orthogonalization window size. Use -1 for full orthogonalization.
 output_root = "/data/projects/graph-cg/data/output"
 
 # ============================================================================

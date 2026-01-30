@@ -52,7 +52,6 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 import numpy as np
-from dataclasses import replace
 from scipy.linalg import norm
 
 from ..constants import DEFAULT_BETA_MAX, DEFAULT_M_MAX, FCG_ORTHOG_EPSILON
@@ -534,15 +533,13 @@ class TruncatedOrthogonalDirection(DirectionStrategy):
             2. Check np.isfinite(denominator): Detect NaN/Inf in (p_k, q_k)
             3. Check denominator >= eps_orthog: Prevent division by near-zero
             4. Check np.isfinite(coeff): Detect overflow in division
-            5. After loop: Check ||p_i|| vs ||z_i||: Detect breakdown
 
-            Any failure skips the term (checks 1-4) or triggers restart (check 5).
+            Any failure skips the problematic term (checks 1-4).
 
         Implementation Notes:
             - We use np.dot() for inner products (faster than linalg.norm)
             - We check NaN/Inf before division to prevent propagation
             - We copy z to initialize p_i to avoid modifying input
-            - We use dataclasses.replace() to update state immutably
         """
         # First iteration: no history available, use steepest descent
         if not history.p_vectors or not history.q_vectors:
@@ -601,28 +598,4 @@ class TruncatedOrthogonalDirection(DirectionStrategy):
             # Orthogonalize: p_i = p_i - coeff * p_k
             p_i = p_i - coeff * p_k
 
-        # Check for breakdown: ||p_i|| too small compared to ||z_i||
-        # This indicates near-linear dependence or numerical error accumulation
-        p_i_norm = norm(p_i)
-        z_norm = norm(z)
-
-        # Avoid division by zero in ratio check
-        if z_norm < self.eps_orthog:
-            # z is nearly zero; this shouldn't happen (would trigger convergence)
-            # but handle it safely: return z as direction
-            return z.copy(), state
-
-        # Check if orthogonalized direction is too small
-        # Threshold: ||p_i|| / ||z_i|| < eps_orthog
-        if p_i_norm / z_norm < self.eps_orthog:
-            # Breakdown detected: restart to steepest descent
-            p_restart = z.copy()
-            state_restart = replace(
-                state,
-                restart=True,
-                num_restarts=state.num_restarts + 1,
-            )
-            return p_restart, state_restart
-
-        # Normal case: return orthogonalized direction
         return p_i, state

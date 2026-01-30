@@ -8,7 +8,7 @@ rhs_path = "/data/projects/graph-cg/data/processed/test-solutions/normalized.npz
 output_root = "/data/projects/graph-cg/data/output"
 
 # CG algorithm control parameters
-reorthogonalize = "full"  # "none", "full", "partial", "selective"
+m_max = 10  # FCG(m) orthogonalization window size. Use -1 for full orthogonalization.
 
 # Solver entries (names are display labels; type must map to a known solver/preconditioner key)
 [[solvers]]

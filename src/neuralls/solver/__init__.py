@@ -18,7 +18,6 @@ Architecture Overview:
 
 3. **Strategies** (strategies/):
    - OrthogonalizationStrategy: Direction orthogonalization
-   - ReorthogonalizationStrategy: Secondary orthogonalization
    - IConvergenceCriterion: Convergence testing
 
 4. **State Management** (models/):
@@ -80,17 +79,11 @@ from .models.result import CGComparisonResult, IterationContext, SolverResult
 from .strategies.convergence import CombinedToleranceCriterion, IConvergenceCriterion
 from .strategies.orthogonalization import (
     OrthogonalizationStrategy,
+    OrthogonalizationReport,
+    PeriodicRestartOrthogonalization,
     TruncatedGramSchmidt,
     ModifiedGramSchmidt,
     FullOrthogonalization,
-)
-from .strategies.reorthogonalization import (
-    FullReorthogonalization,
-    PartialReorthogonalization,
-    ReorthogonalizationReport,
-    ReorthogonalizationStrategy,
-    SelectiveReorthogonalization,
-    create_reorthogonalization_strategy,
 )
 
 # Preconditioners
@@ -148,15 +141,11 @@ __all__ = [
     "IConvergenceCriterion",
     "CombinedToleranceCriterion",
     "OrthogonalizationStrategy",
+    "OrthogonalizationReport",
+    "PeriodicRestartOrthogonalization",
     "TruncatedGramSchmidt",
     "ModifiedGramSchmidt",
     "FullOrthogonalization",
-    "ReorthogonalizationStrategy",
-    "FullReorthogonalization",
-    "PartialReorthogonalization",
-    "SelectiveReorthogonalization",
-    "ReorthogonalizationReport",
-    "create_reorthogonalization_strategy",
     # Preconditioners
     "Preconditioner",
     "IdentityPreconditioner",

@@ -60,13 +60,13 @@ class HasVectors(Protocol):
         - KrylovState
         - CGState (inherits from KrylovState)
 
-    Mathematical Context:
-        Krylov methods maintain these vectors at each iteration k:
-        - x_k: Current solution estimate
-        - r_k: Residual r_k = b - A x_k
-        - z_k: Preconditioned residual z_k = M^{-1} r_k
-        - p_k: Search direction (A-conjugate to previous directions)
-        - q_k: Matrix-vector product q_k = A p_k
+    Mathematical Context (Notay 2000):
+        Krylov methods maintain these vectors at each iteration i:
+        - u_i: Current solution estimate (Notay 2000)
+        - r_i: Residual r_i = b - A u_i
+        - w_i: Preconditioned residual w_i = M^{-1} r_i (Notay 2000)
+        - d_i: Search direction (A-conjugate to previous directions) (Notay 2000)
+        - q_i: Matrix-vector product q_i = A d_i
 
     Usage:
         >>> def extract_residual(state: SolverState) -> NDArray | None:
@@ -75,29 +75,30 @@ class HasVectors(Protocol):
         >>>     return None
 
     Theory:
-        The Krylov subspace K_k(A, r_0) = span{r_0, A*r_0, ..., A^(k-1)*r_0}
-        is implicitly represented by these vectors. The search direction p_k
+        The Krylov subspace K_i(A, r_0) = span{r_0, A*r_0, ..., A^(i-1)*r_0}
+        is implicitly represented by these vectors. The search direction d_i
         is constructed to be A-conjugate to all previous directions.
 
     References:
+        - Notay, Y. (2000). Flexible Conjugate Gradients.
         - Saad, Y. (2003). Iterative Methods for Sparse Linear Systems.
         - Greenbaum, A. (1997). Iterative Methods for Solving Linear Systems.
     """
 
-    x: NDArray
-    """Solution vector x_k at current iteration."""
+    u: NDArray
+    """Solution vector u_i at current iteration (Notay 2000)."""
 
     r: NDArray
-    """Residual vector r_k = b - A x_k."""
+    """Residual vector r_i = b - A u_i."""
 
-    z: NDArray
-    """Preconditioned residual z_k = M^{-1} r_k."""
+    w: NDArray
+    """Preconditioned residual w_i = M^{-1} r_i (Notay 2000)."""
 
-    p: NDArray
-    """Search direction p_k (A-conjugate to previous directions)."""
+    d: NDArray
+    """Search direction d_i (A-conjugate to previous directions) (Notay 2000)."""
 
     q: NDArray
-    """Matrix-vector product q_k = A p_k."""
+    """Matrix-vector product q_i = A d_i."""
 
 
 @runtime_checkable
@@ -110,30 +111,30 @@ class HasDirectionHistory(Protocol):
     Satisfied By:
         - CGState
 
-    Mathematical Context:
+    Mathematical Context (Notay 2000):
         Flexible CG uses explicit orthogonalization of search directions:
-            p_k ⊥_A p_j for j in sliding window [k-m, k-1]
+            d_i ⊥_A d_j for j in sliding window [i-m, i-1]
 
-        This requires storing recent direction vectors (p_j) and their
-        matrix products (q_j = A p_j) for computing orthogonalization
-        coefficients: α_j = (z_k, q_j) / (p_j, q_j)
+        This requires storing recent direction vectors (d_j) and their
+        matrix products (q_j = A d_j) for computing orthogonalization
+        coefficients: β_j = (w_i, q_j) / (d_j, q_j)
 
     Usage:
-        >>> def orthogonalize(state: SolverState, z: NDArray) -> NDArray:
+        >>> def orthogonalize(state: SolverState, w: NDArray) -> NDArray:
         >>>     if isinstance(state, HasDirectionHistory):
         >>>         history = state.direction_history
-        >>>         p_vectors = history.p_vectors
+        >>>         d_vectors = history.d_vectors
         >>>         q_vectors = history.q_vectors
         >>>         # Compute orthogonalization...
-        >>>     return z  # No orthogonalization if no history
+        >>>     return w  # No orthogonalization if no history
 
-    Theory:
+    Theory (Notay 2000):
         Truncated orthogonalization maintains approximate A-conjugacy:
-            (p_k, A p_j) ≈ 0 for j in window [k-m, k-1]
+            (d_i, A d_j) ≈ 0 for j in window [i-m, i-1]
 
-        This prevents numerical breakdown when the preconditioner M_k is
+        This prevents numerical breakdown when the preconditioner M_i is
         not symmetric positive definite (SPD). Full orthogonalization
-        would require O(k) storage; truncation reduces to O(m).
+        would require O(i) storage; truncation reduces to O(m).
 
     References:
         - Notay, Y. (2000). Flexible Conjugate Gradients.
@@ -141,7 +142,7 @@ class HasDirectionHistory(Protocol):
     """
 
     direction_history: DirectionHistory
-    """Sliding window history of search directions (p_k, q_k) for orthogonalization."""
+    """Sliding window history of search directions (d_i, q_i) for orthogonalization."""
 
     residual_history: ResidualHistory
     """History of residual norms (absolute and relative) for diagnostics."""

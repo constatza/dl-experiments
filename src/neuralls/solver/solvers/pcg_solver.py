@@ -3,16 +3,16 @@
 This module implements the standard Preconditioned Conjugate Gradient (PCG)
 algorithm using two-term recurrence without explicit orthogonalization.
 
-Algorithm (PCG):
-    Initialize: x_0 = 0, r_0 = b
-    For k = 0, 1, ..., until convergence:
-      1. z_k = M^{-1}(r_k)                           # Apply preconditioner
-      2. β_k = (r_k, z_k) / (r_{k-1}, z_{k-1})       # Compute beta
-      3. p_k = z_k + β_k * p_{k-1}                   # Two-term recurrence
-      4. q_k = A @ p_k                               # Matrix-vector product
-      5. α_k = (r_k, z_k) / (p_k, q_k)               # Step length
-      6. x_{k+1} = x_k + α_k * p_k                   # Update solution
-      7. r_{k+1} = r_k - α_k * q_k                   # Update residual
+Algorithm (PCG, using Notay 2000 notation):
+    Initialize: u_0 = 0, r_0 = b
+    For i = 0, 1, ..., until convergence:
+      1. w_i = M^{-1}(r_i)                           # Apply preconditioner
+      2. β_i = (r_i, w_i) / (r_{i-1}, w_{i-1})       # Compute beta
+      3. d_i = w_i + β_i * d_{i-1}                   # Two-term recurrence
+      4. q_i = A @ d_i                               # Matrix-vector product
+      5. α_i = (r_i, w_i) / (d_i, q_i)               # Step length
+      6. u_{i+1} = u_i + α_i * d_i                   # Update solution
+      7. r_{i+1} = r_i - α_i * q_i                   # Update residual
 
 Design Principles:
     - Template Method: Inherit from ConjugateGradientBase
@@ -67,7 +67,7 @@ class PreconditionedCGSolver(ConjugateGradientBase):
 
     Example:
         >>> solver = PreconditionedCGSolver(preconditioner=jacobi_precond)
-        >>> x, result = solver.solve(A, b, rtol=1e-6)
+        >>> u, result = solver.solve(A, b, rtol=1e-6)
     """
 
     def __init__(
@@ -92,74 +92,74 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         self.beta_formula = beta_formula
         self.event_logger = event_logger
 
-        # Store previous z for beta computation
-        self._z_prev: NDArray | None = None
+        # Store previous w for beta computation
+        self._w_prev: NDArray | None = None
         self._r_prev: NDArray | None = None
-        self._rz_prev: float = 0.0
+        self._rw_prev: float = 0.0
 
     # Implement KrylovSolverBase abstract method
 
     def _update_direction(
         self,
-        z: NDArray,
+        w: NDArray,
         state: KrylovState,
         **kwargs,
     ) -> NDArray:
         """Compute PCG search direction using two-term recurrence.
 
-        Formula:
-            p_0 = z_0                           # First iteration
-            p_k = z_k + β_k * p_{k-1}           # Subsequent iterations
+        Formula (Notay 2000):
+            d_0 = w_0                           # First iteration
+            d_i = w_i + β_i * d_{i-1}           # Subsequent iterations
 
-        where β_k = (r_k, z_k) / (r_{k-1}, z_{k-1}) (Fletcher-Reeves)
+        where β_i = (r_i, w_i) / (r_{i-1}, w_{i-1}) (Fletcher-Reeves)
 
         Args:
-            z: Preconditioned residual z_k = M^{-1}(r_k)
-            state: Current KrylovState with p_{k-1}
+            w: Preconditioned residual w_i = M^{-1}(r_i) (Notay 2000)
+            state: Current KrylovState with d_{i-1}
             **kwargs: Additional parameters
 
         Returns:
-            Search direction p_k
+            Search direction d_i (Notay 2000)
 
         Theory:
             The two-term recurrence automatically maintains A-conjugacy:
-                (p_i, A*p_j) = 0 for i ≠ j
+                (d_i, A*d_j) = 0 for i ≠ j
 
             This is guaranteed for SPD A and M, eliminating the need for
             explicit orthogonalization.
         """
         # First iteration: steepest descent
         if state.iteration == 0:
-            self._z_prev = z.copy()
+            self._w_prev = w.copy()
             self._r_prev = state.r.copy()
-            self._rz_prev = stable_dot_product(state.r, z, dtype=np.float64)
-            return z.copy()
+            self._rw_prev = stable_dot_product(state.r, w, dtype=np.float64)
+            return w.copy()
 
         # Compute beta coefficient
-        rz_curr = stable_dot_product(state.r, z, dtype=np.float64)
+        rw_curr = stable_dot_product(state.r, w, dtype=np.float64)
 
         if self.beta_formula == "fletcher_reeves":
-            beta = rz_curr / self._rz_prev if self._rz_prev != 0 else 0.0
-        elif self.beta_formula == "polak_ribiere" and self._z_prev is not None:
-            # Polak-Ribiere: β = (r_k, z_k - z_{k-1}) / (r_{k-1}, z_{k-1})
-            z_diff = z - self._z_prev
-            numerator = stable_dot_product(state.r, z_diff, dtype=np.float64)
-            beta = numerator / self._rz_prev if self._rz_prev != 0 else 0.0
+            beta = rw_curr / self._rw_prev if self._rw_prev != 0 else 0.0
+        elif self.beta_formula == "polak_ribiere" and self._w_prev is not None:
+            # Polak-Ribiere: β = (r_i, w_i - w_{i-1}) / (r_{i-1}, w_{i-1})
+            w_diff = w - self._w_prev
+            numerator = stable_dot_product(state.r, w_diff, dtype=np.float64)
+            beta = numerator / self._rw_prev if self._rw_prev != 0 else 0.0
             # Polak-Ribiere-Plus: reset negative beta to 0
             beta = max(0.0, beta)
         else:
             # Default to Fletcher-Reeves
-            beta = rz_curr / self._rz_prev if self._rz_prev != 0 else 0.0
+            beta = rw_curr / self._rw_prev if self._rw_prev != 0 else 0.0
 
         # Update stored values for next iteration
-        self._z_prev = z.copy()
+        self._w_prev = w.copy()
         self._r_prev = state.r.copy()
-        self._rz_prev = rz_curr
+        self._rw_prev = rw_curr
 
-        # Two-term recurrence
-        p_new = z + beta * state.p
+        # Two-term recurrence (Notay 2000)
+        d_new = w + beta * state.d
 
-        return p_new
+        return d_new
 
     # Implement IterativeSolverBase abstract methods
 
@@ -215,26 +215,26 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         b_arr = np.asarray(b, dtype=np.float64)
         n = b_arr.shape[0]
 
-        # Initial guess
-        x = np.asarray(x0, dtype=np.float64) if x0 is not None else np.zeros(n)
+        # Initial guess u_0 (Notay 2000)
+        u = np.asarray(x0, dtype=np.float64) if x0 is not None else np.zeros(n)
 
-        # Initial residual
-        r = b_arr - linear_op(x)
+        # Initial residual r_0
+        r = b_arr - linear_op(u)
         r_norm = float(norm(r))
 
-        # Apply preconditioner
-        z = self._apply_preconditioner(self.preconditioner, r)
+        # Apply preconditioner w_0 = M^{-1}(r_0) (Notay 2000)
+        w = self._apply_preconditioner(self.preconditioner, r)
 
-        # Initial direction (steepest descent)
-        p = z.copy()
+        # Initial direction (steepest descent) d_0 (Notay 2000)
+        d = w.copy()
 
-        # Matrix-vector product
-        q = linear_op(p)
+        # Matrix-vector product q_0 = A d_0
+        q = linear_op(d)
 
         # Reset previous values
-        self._z_prev = None
+        self._w_prev = None
         self._r_prev = None
-        self._rz_prev = 0.0
+        self._rw_prev = 0.0
 
         # Create initial state
         return KrylovState(
@@ -243,11 +243,11 @@ class PreconditionedCGSolver(ConjugateGradientBase):
             breakdown=False,
             divergence=False,
             residual_norm=r_norm,
-            rhs_norm=float(norm(b_arr)),
-            x=x,
+            rhs_norm=float(self.convergence_criterion.norm(b_arr)),
+            u=u,
             r=r,
-            z=z,
-            p=p,
+            w=w,
+            d=d,
             q=q,
         )
 
@@ -256,6 +256,7 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         state: SolverState,
         rtol: float,
         atol: float,
+        maxiter: int,
         **kwargs,
     ) -> bool:
         """Check if solver should stop."""
@@ -268,8 +269,7 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         if state.divergence:
             return True
 
-        max_iter = kwargs.get("max_iterations", 100)
-        if state.iteration >= max_iter:
+        if maxiter is not None and state.iteration >= maxiter:
             return True
 
         # Dependency injection: create criterion once, delegate to base class helper

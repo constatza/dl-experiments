@@ -1,17 +1,22 @@
 """Flexible Conjugate Gradient solver.
 
 This module implements the Flexible Conjugate Gradient (FCG) algorithm
-using the new architecture with ConjugateGradientBase and strategy pattern.
+from Notay (2000) using ConjugateGradientBase and strategy pattern.
 
-Algorithm (FCG):
-    Initialize: x_0 = 0, r_0 = b
-    For k = 0, 1, ..., until convergence:
-      1. z_k = M^{-1}(r_k)                           # Apply preconditioner
-      2. p_k = orthogonalize(z_k, P, Q)              # Orthogonalization strategy
-      3. q_k = A @ p_k                               # Matrix-vector product
-      4. α_k = (p_k, r_k) / (p_k, q_k)               # Step length (from CG base)
-      5. x_{k+1} = x_k + α_k * p_k                   # Update solution
-      6. r_{k+1} = r_k - α_k * q_k                   # Update residual
+Algorithm (FCG from Notay 2000, Algorithm 2.1):
+    Initialize: u_0 = 0, r_0 = b, m_0 = 0
+    For i = 0, 1, ..., until convergence:
+      1. w_i = M^{-1}(r_i)                           # Apply (variable) preconditioner
+      2. Compute m_i = max(1, i mod (m_max + 1))     # Periodic restart formula
+      3. d_i = orthogonalize(w_i, D, AD)             # Orthogonalize against last m_i directions
+      4. α_i = (d_i, r_i) / (d_i, A d_i)             # Step length
+      5. u_{i+1} = u_i + α_i * d_i                   # Update solution
+      6. r_{i+1} = r_i - α_i * A d_i                 # Update residual
+
+Orthogonalization (from Notay 2000, Algorithm 2.1):
+    d_i = w_i - Σ_{j=i-m_i}^{i-1} [(w_i, A d_j) / (d_j, A d_j)] d_j
+
+This enforces approximate A-conjugacy: d_i^T A d_j ≈ 0 for i ≠ j.
 
 Design Principles:
     - Strategy Pattern: Inject OrthogonalizationStrategy for flexibility
@@ -20,8 +25,13 @@ Design Principles:
     - Composition over Inheritance: Strategies injected, not inherited
 
 References:
-    - Notay, Y. (2000). Flexible Conjugate Gradients. SIAM J. Sci. Comput.
-    - Saad, Y. (2003). Iterative Methods for Sparse Linear Systems.
+    - Notay, Y. (2000). Flexible Conjugate Gradients. SIAM Journal on Scientific Computing,
+      22(4), 1444-1460. doi:10.1137/S1064827599362314
+      * Section 2, Algorithm 2.1 - FCG with periodic restart
+      * Section 5.1 - FCG(∞) for ill-conditioned problems
+      * Table 1 - Benchmark comparisons of truncation strategies
+    - Saad, Y. (2003). Iterative Methods for Sparse Linear Systems (2nd ed.). SIAM.
+      * Chapter 9, Section 9.5 - Flexible variants of CG
 """
 
 from __future__ import annotations
@@ -40,8 +50,10 @@ from ...constants import (
 )
 from .cg_base import ConjugateGradientBase
 from ..strategies.convergence import CombinedToleranceCriterion, IConvergenceCriterion
-from ..strategies.orthogonalization import OrthogonalizationStrategy, TruncatedGramSchmidt
-from ..strategies.reorthogonalization import ReorthogonalizationStrategy
+from ..strategies.orthogonalization import (
+    OrthogonalizationStrategy,
+    PeriodicRestartOrthogonalization,
+)
 from ..models.state import CGState, KrylovState, SolverState
 from ..models.result import SolverResult
 from ..preconditioners import IdentityPreconditioner, Preconditioner
@@ -52,58 +64,71 @@ if TYPE_CHECKING:
 
 
 class FlexibleCGSolver(ConjugateGradientBase):
-    """Flexible Conjugate Gradient solver.
+    """Flexible Conjugate Gradient solver (Notay 2000).
 
-    FCG extends standard PCG to handle variable and non-SPD preconditioners
-    through orthogonalization. This implementation uses strategy pattern to
-    inject orthogonalization and reorthogonalization strategies.
+    Implements the FCG algorithm from Notay (2000) Algorithm 2.1 with periodic restart.
+    FCG extends standard PCG to handle variable and non-SPD preconditioners through
+    explicit orthogonalization of search directions.
+
+    The key innovation is maintaining approximate A-conjugacy via truncated Gram-Schmidt
+    orthogonalization with periodic restart, enabling convergence even when the
+    preconditioner changes between iterations or is non-symmetric.
 
     Key Features:
         - Handles variable preconditioners (neural networks, adaptive methods)
-        - Truncated Gram-Schmidt orthogonalization for numerical stability
-        - Optional reorthogonalization for improved accuracy
+        - Truncated orthogonalization with periodic restart (Notay 2000)
         - Compatible with non-SPD preconditioners
+        - Configurable orthogonalization strategies (FCG(m), FCG(∞), Tr-FCG)
 
     Attributes:
-        preconditioner: Preconditioner to apply (default: Identity)
-        orthogonalization: Strategy for orthogonalizing directions
-        reorthogonalization: Optional secondary orthogonalization
+        preconditioner: Preconditioner M to apply (can be variable, default: Identity)
+        orthogonalization: Strategy for orthogonalizing directions (default: PeriodicRestartOrthogonalization with m_max=10)
         convergence_criterion: Convergence test strategy
         event_logger: Optional event recorder for diagnostics
 
     Example:
-        >>> from neuralls.solver.strategies.orthogonalization import TruncatedGramSchmidt
-        >>> orthog = TruncatedGramSchmidt(window_size=10)
+        >>> from neuralls.solver.strategies.orthogonalization import PeriodicRestartOrthogonalization
+        >>> # FCG(10) with periodic restart (Notay 2000)
+        >>> orthog = PeriodicRestartOrthogonalization(m_max=10)
         >>> solver = FlexibleCGSolver(
-        ...     preconditioner=my_preconditioner,
+        ...     preconditioner=my_neural_preconditioner,
         ...     orthogonalization=orthog,
         ... )
-        >>> x, result = solver.solve(A, b, rtol=1e-6)
+        >>> u, result = solver.solve(A, b, rtol=1e-6)
+
+    References:
+        Notay, Y. (2000). Flexible Conjugate Gradients. SIAM Journal on Scientific Computing,
+        22(4), 1444-1460. doi:10.1137/S1064827599362314
     """
 
     def __init__(
         self,
         preconditioner: Preconditioner | None = None,
         orthogonalization: OrthogonalizationStrategy | None = None,
-        reorthogonalization: ReorthogonalizationStrategy | None = None,
         convergence_criterion: IConvergenceCriterion | None = None,
         event_logger: TraceRecorder | None = None,
     ) -> None:
         """Initialize Flexible CG solver.
 
         Args:
-            preconditioner: Preconditioner M (default: Identity)
-            orthogonalization: Orthogonalization strategy (default: TruncatedGramSchmidt with m_max=10)
-            reorthogonalization: Optional reorthogonalization strategy
+            preconditioner: Preconditioner M (can be variable, default: Identity)
+            orthogonalization: Orthogonalization strategy (default: PeriodicRestartOrthogonalization
+                with m_max=10, implementing FCG(10) from Notay 2000)
             convergence_criterion: Convergence test (default: Combined rtol/atol)
             event_logger: Optional TraceRecorder for diagnostics
+
+        Note:
+            The default orthogonalization implements Notay (2000) Algorithm 2.1 with
+            m_max=10, using the periodic restart formula m_i = max(1, i mod (m_max + 1)).
         """
         # Set defaults
         self.preconditioner = preconditioner or IdentityPreconditioner()
-        self.orthogonalization = orthogonalization or TruncatedGramSchmidt(window_size=DEFAULT_M_MAX)
-        self.reorthogonalization = reorthogonalization
-        self.convergence_criterion = convergence_criterion or CombinedToleranceCriterion(
-            rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
+        self.orthogonalization = orthogonalization or PeriodicRestartOrthogonalization(
+            m_max=DEFAULT_M_MAX
+        )
+        self.convergence_criterion = (
+            convergence_criterion
+            or CombinedToleranceCriterion(rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL)
         )
         self.event_logger = event_logger
 
@@ -111,34 +136,42 @@ class FlexibleCGSolver(ConjugateGradientBase):
 
     def _update_direction(
         self,
-        z: NDArray,
+        w: NDArray,
         state: KrylovState,
         **kwargs,
     ) -> NDArray:
         """Compute FCG search direction using orthogonalization strategy.
 
-        This is the core FCG operation: orthogonalize the preconditioned
-        residual against previous directions to maintain approximate A-conjugacy.
+        This is the core FCG operation from Notay (2000) Algorithm 2.1:
+        orthogonalize the preconditioned residual against previous directions
+        to maintain approximate A-conjugacy.
 
-        Formula:
-            p_k = z_k - Σ_{j} [(z_k, q_j) / (p_j, q_j)] * p_j
+        Formula (Notay 2000, Algorithm 2.1):
+            d_i = w_i - Σ_{j=i-m_i}^{i-1} [(w_i, A d_j) / (d_j, A d_j)] * d_j
 
-        where the sum is over a window of recent directions (truncated GS).
+        where:
+            - w_i = M^{-1}(r_i) is the preconditioned residual
+            - m_i = max(1, i mod (m_max + 1)) is the orthogonalization window
+            - The sum is over the last m_i directions (truncated Gram-Schmidt)
 
         Args:
-            z: Preconditioned residual z_k = M^{-1}(r_k)
-            state: Current CGState with direction_history containing (p, q) vectors
+            w: Preconditioned residual w_i (Notay 2000)
+            state: Current CGState with direction_history containing (d_j, A d_j) vectors
             **kwargs: Additional parameters
 
         Returns:
-            Orthogonalized search direction p_k
+            Orthogonalized search direction d_i (Notay 2000)
 
         Theory:
             Orthogonalization maintains approximate A-conjugacy:
-                (p_i, A*p_j) ≈ 0 for i ≠ j
+                d_i^T A d_j ≈ 0 for i ≠ j
 
-            This ensures the iterates span the Krylov subspace without
-            numerical linear dependence.
+            This ensures the search directions span the Krylov subspace without
+            numerical linear dependence, enabling convergence even with variable
+            or non-SPD preconditioners.
+
+        References:
+            Notay (2000) Section 2, Algorithm 2.1
         """
         # Access direction_history from CGState via Protocol
         from ..models.protocols import HasDirectionHistory
@@ -148,31 +181,19 @@ class FlexibleCGSolver(ConjugateGradientBase):
         else:
             # For base KrylovState, use empty history
             from ..models.history import DirectionHistory
+
             history = DirectionHistory.empty(max_size=0)
-        p_vectors = list(history.p_vectors)  # Convert tuple to list
+        d_vectors = list(history.d_vectors)  # Convert tuple to list
         q_vectors = list(history.q_vectors)  # Convert tuple to list
 
         # Apply primary orthogonalization
-        p_orthog, orthog_report = self.orthogonalization.orthogonalize(
-            vector=z,
-            p_vectors=p_vectors,
+        d_orthog, _ = self.orthogonalization.orthogonalize(
+            vector=w,
+            d_vectors=d_vectors,
             q_vectors=q_vectors,
         )
 
-        # Apply optional reorthogonalization
-        if self.reorthogonalization is not None:
-            # Use the old interface for reorthogonalization (will be updated later)
-            # For now, just use the primary orthogonalized result
-            p_final = p_orthog
-        else:
-            p_final = p_orthog
-
-        # Check for breakdown (from orthogonalization)
-        if orthog_report.breakdown:
-            # Fallback to steepest descent
-            return self._restart_direction(z, state)
-
-        return p_final
+        return d_orthog
 
     # Implement IterativeSolverBase abstract methods
 
@@ -261,39 +282,39 @@ class FlexibleCGSolver(ConjugateGradientBase):
             **kwargs: Solver parameters (may contain max_history)
 
         Returns:
-            Initial CGState with x_0, r_0, and empty histories
+            Initial CGState with u_0, r_0, and empty histories
         """
         b_arr = np.asarray(b, dtype=np.float64)
         n = b_arr.shape[0]
 
-        # Initial guess
-        x = np.asarray(x0, dtype=np.float64) if x0 is not None else np.zeros(n)
+        # Initial guess u_0 (Notay 2000)
+        u = np.asarray(x0, dtype=np.float64) if x0 is not None else np.zeros(n)
 
-        # Initial residual
-        r = b_arr - linear_op(x)
+        # Initial residual r_0
+        r = b_arr - linear_op(u)
         r_norm = float(norm(r))
 
-        # Apply preconditioner
-        z = self._apply_preconditioner(self.preconditioner, r)
+        # Apply preconditioner w_0 = M^{-1}(r_0) (Notay 2000)
+        w = self._apply_preconditioner(self.preconditioner, r)
 
-        # Initial direction (steepest descent)
-        p = z.copy()
+        # Initial direction (steepest descent) d_0 (Notay 2000)
+        d = w.copy()
 
-        # Matrix-vector product
-        q = linear_op(p)
+        # Matrix-vector product q_0 = A d_0
+        q = linear_op(d)
 
         # Get window size from orthogonalization strategy
         max_history = getattr(self.orthogonalization, "window_size", DEFAULT_M_MAX)
 
         # Create initial state using factory method
         return CGState.create_initial(
-            x=x,
+            u=u,
             r=r,
-            z=z,
-            p=p,
+            w=w,
+            d=d,
             q=q,
             residual_norm=r_norm,
-            rhs_norm=float(norm(b_arr)),
+            rhs_norm=float(self.convergence_criterion.norm(b_arr)),
             max_history=max_history,
         )
 
@@ -302,6 +323,7 @@ class FlexibleCGSolver(ConjugateGradientBase):
         state: SolverState,
         rtol: float,
         atol: float,
+        maxiter: int,
         **kwargs,
     ) -> bool:
         """Check if solver should stop.
@@ -310,7 +332,7 @@ class FlexibleCGSolver(ConjugateGradientBase):
             state: Current CGState
             rtol: Relative tolerance
             atol: Absolute tolerance
-            **kwargs: May contain 'max_iterations'
+            maxiter: Maximum iterations
 
         Returns:
             True if should stop, False otherwise
@@ -328,8 +350,7 @@ class FlexibleCGSolver(ConjugateGradientBase):
             return True
 
         # Check max iterations
-        max_iter = kwargs.get("max_iterations", 100)
-        if state.iteration >= max_iter:
+        if maxiter is not None and state.iteration >= maxiter:
             return True
 
         # Dependency injection: create criterion once, delegate to base class helper
@@ -377,14 +398,18 @@ class FlexibleCGSolver(ConjugateGradientBase):
             residual_history_abs = list(state.residual_history.norms_abs)
             # Compute relative residuals
             if state.rhs_norm > 0:
-                residual_history_rel = [r / state.rhs_norm for r in residual_history_abs]
+                residual_history_rel = [
+                    r / state.rhs_norm for r in residual_history_abs
+                ]
             else:
                 residual_history_rel = residual_history_abs
 
         return SolverResult(
             converged=converged,
             iterations=state.iteration,
-            residual=state.residual_norm / state.rhs_norm if state.rhs_norm > 0 else 0.0,
+            residual=state.residual_norm / state.rhs_norm
+            if state.rhs_norm > 0
+            else 0.0,
             residual_abs=state.residual_norm,
             rhs_norm=state.rhs_norm,
             breakdown=state.breakdown,

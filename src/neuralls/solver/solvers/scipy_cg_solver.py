@@ -21,7 +21,8 @@ References:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 import numpy as np
 from scipy.linalg import norm
@@ -88,7 +89,7 @@ class SciPyCGSolver:
         x0: NDArray | None = None,
         rtol: float = 1e-6,
         atol: float = 1e-14,
-        max_iterations: int = 100,
+        maxiter: int = 100,
         trace_mode: TraceMode | str = TraceMode.MINIMAL,
         **kwargs,
     ) -> tuple[NDArray, SolverResult]:
@@ -100,7 +101,7 @@ class SciPyCGSolver:
             x0: Initial guess (n,). If None, uses zero vector.
             rtol: Relative tolerance for convergence.
             atol: Absolute tolerance for convergence.
-            max_iterations: Maximum number of iterations.
+            maxiter: Maximum number of iterations.
             trace_mode: Logging granularity (MINIMAL or FULL).
             **kwargs: Additional parameters (event_log override).
 
@@ -110,7 +111,7 @@ class SciPyCGSolver:
                 - result: SolverResult with convergence info and diagnostics.
 
         Example:
-            >>> x, result = solver.solve(A, b, rtol=1e-6, max_iterations=100)
+            >>> x, result = solver.solve(A, b, rtol=1e-6, maxiter=100)
             >>> print(f"Residual: {result.residual}, Iterations: {result.iterations}")
         """
         # Convert trace_mode string to enum
@@ -175,7 +176,7 @@ class SciPyCGSolver:
             x0=x_init,
             rtol=rtol,  # Relative tolerance
             atol=atol,  # Absolute tolerance
-            maxiter=max_iterations,
+            maxiter=maxiter,
             M=M_op,
             callback=callback,
         )
@@ -193,9 +194,7 @@ class SciPyCGSolver:
 
         return x_sol, result
 
-    def _prepare_preconditioner(
-        self, shape: tuple[int, int]
-    ) -> LinearOperator | None:
+    def _prepare_preconditioner(self, shape: tuple[int, int]) -> LinearOperator | None:
         """Convert preconditioner to scipy LinearOperator.
 
         Args:

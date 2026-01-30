@@ -37,7 +37,9 @@ from .monitoring.trace_mode import TraceMode
 from .solvers.fcg_solver import FlexibleCGSolver
 from .solvers.pcg_solver import PreconditionedCGSolver
 from .models.result import SolverResult
-from .strategies.orthogonalization import TruncatedGramSchmidt
+from .strategies.orthogonalization import create_fcg_orthogonalization
+from .strategies.convergence import CombinedToleranceCriterion
+from .strategies.norms import Norm, euclidean_norm
 from .preconditioners import (
     FunctionPreconditioner,
     IdentityPreconditioner,
@@ -51,7 +53,6 @@ from ..constants import (
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-    from .strategies.reorthogonalization import ReorthogonalizationStrategy
 
 
 def flexible_cg(
@@ -61,12 +62,10 @@ def flexible_cg(
     *,
     preconditioner: Callable[..., NDArray] | LinearOperator | None = None,
     m_max: int = DEFAULT_M_MAX,
+    norm: Norm = euclidean_norm,
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
-    tol: float | None = None,
-    max_iterations: int | None = None,
-    max_iter: int | None = None,
-    reorthogonalize: ReorthogonalizationStrategy | None = None,
+    maxiter: int | None = None,
     trace_mode: TraceMode = TraceMode.MINIMAL,
 ) -> tuple[NDArray, SolverResult]:
     """Solve linear system using Flexible CG with truncated orthogonalization.
@@ -89,12 +88,12 @@ def flexible_cg(
         preconditioner: Callable implementing M^{-1} operation.
             If None, uses identity (no preconditioning).
         m_max: Maximum history length for orthogonalization. Default: 10.
+        norm: Norm function for convergence checking. Default: euclidean_norm.
+            Use energy_norm(A) for A-norm convergence criterion.
         rtol: Relative tolerance for convergence. Default: 1e-6.
         atol: Absolute tolerance for convergence. Default: 1e-14.
         tol: Alternative name for rtol (overrides rtol if provided).
-        max_iterations: Maximum number of iterations. Default: 100.
-        max_iter: Alternative name for max_iterations.
-        reorthogonalize: Optional reorthogonalization strategy.
+        maxiter: Maximum number of iterations. Default: 100.
         trace_mode: Tracing granularity level. Default: MINIMAL.
             MINIMAL: Log scalars only (iteration, residual_norm, flags)
             FULL: Log scalars + vectors (residual, solution, direction)
@@ -111,6 +110,10 @@ def flexible_cg(
 
         >>> # High-accuracy solve
         >>> x, result = flexible_cg(A, b, rtol=1e-10, m_max=20)
+
+        >>> # A-norm convergence criterion
+        >>> from neuralls.solver.strategies.norms import energy_norm
+        >>> x, result = flexible_cg(A, b, norm=energy_norm(A), rtol=1e-6)
     """
     # Create preconditioner strategy
     if preconditioner is None:
@@ -120,29 +123,32 @@ def flexible_cg(
     else:
         precond_strategy = FunctionPreconditioner(preconditioner)
 
-    # Create orthogonalization strategy
-    orthog_strategy = TruncatedGramSchmidt(window_size=m_max)
+    # Create orthogonalization strategy via factory
+    orthog_strategy = create_fcg_orthogonalization(m_max=m_max)
 
     # Create event logger based on trace mode
     # Convert string to TraceMode if needed
-    trace_mode_enum = TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
+    trace_mode_enum = (
+        TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
+    )
     logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
+
+    # Resolve rtol before constructing criterion
+
+    # Create convergence criterion with injected norm
+    convergence_criterion = CombinedToleranceCriterion(
+        rtol=rtol,
+        atol=atol,
+        norm=norm,
+    )
 
     # Construct solver
     solver = FlexibleCGSolver(
         preconditioner=precond_strategy,
         orthogonalization=orthog_strategy,
-        reorthogonalization=reorthogonalize,
+        convergence_criterion=convergence_criterion,
         event_logger=logger,
     )
-
-    # Resolve parameter aliases
-    max_iters = (
-        max_iterations
-        if max_iterations is not None
-        else (max_iter if max_iter is not None else 100)
-    )
-    rtol_value = tol if tol is not None else rtol
 
     # Solve system
     # Type ignore needed because solve() accepts both NDArray and Callable
@@ -150,9 +156,9 @@ def flexible_cg(
         A,
         b,
         x0,
-        rtol=rtol_value,
+        rtol=rtol,
         atol=atol,
-        max_iterations=max_iters,
+        maxiter=maxiter,
         trace_mode=trace_mode_enum,
         event_log=logger,
     )
@@ -169,8 +175,7 @@ def preconditioned_cg(
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
     tol: float | None = None,
-    max_iterations: int | None = None,
-    max_iter: int | None = None,
+    maxiter: int | None = None,
     beta_formula: str = "fletcher_reeves",
     trace_mode: TraceMode = TraceMode.MINIMAL,
 ) -> tuple[NDArray, SolverResult]:
@@ -196,8 +201,7 @@ def preconditioned_cg(
         rtol: Relative tolerance for convergence. Default: 1e-6.
         atol: Absolute tolerance for convergence. Default: 1e-14.
         tol: Alternative name for rtol (overrides rtol if provided).
-        max_iterations: Maximum number of iterations. Default: 100.
-        max_iter: Alternative name for max_iterations.
+        maxiter: Maximum number of iterations. Default: 100.
         beta_formula: Beta formula ("fletcher_reeves", "polak_ribiere"). Default: "fletcher_reeves".
         trace_mode: Tracing granularity level. Default: MINIMAL.
             MINIMAL: Log scalars only (iteration, residual_norm, flags)
@@ -226,7 +230,9 @@ def preconditioned_cg(
 
     # Create event logger based on trace mode
     # Convert string to TraceMode if needed
-    trace_mode_enum = TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
+    trace_mode_enum = (
+        TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
+    )
     logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
 
     # Construct solver
@@ -236,28 +242,21 @@ def preconditioned_cg(
         event_logger=logger,
     )
 
-    # Resolve parameter aliases
-    max_iters = (
-        max_iterations
-        if max_iterations is not None
-        else (max_iter if max_iter is not None else 100)
-    )
-    rtol_value = tol if tol is not None else rtol
-
     # Solve system
     # Type ignore needed because solve() accepts both NDArray and Callable
     x, result = solver.solve(  # type: ignore[arg-type]
         A,
         b,
         x0,
-        rtol=rtol_value,
+        rtol=rtol,
         atol=atol,
-        max_iterations=max_iters,
+        maxiter=maxiter,
         trace_mode=trace_mode_enum,
         event_log=logger,
     )
 
     return x, result
+
 
 def scipy_cg(
     A: NDArray,
@@ -268,8 +267,7 @@ def scipy_cg(
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
     tol: float | None = None,
-    max_iterations: int | None = None,
-    max_iter: int | None = None,
+    maxiter: int | None = None,
     trace_mode: TraceMode = TraceMode.MINIMAL,
 ) -> tuple[NDArray, SolverResult]:
     """Solve linear system using scipy.sparse.linalg.cg with callback monitoring.
@@ -289,8 +287,7 @@ def scipy_cg(
         rtol: Relative tolerance for convergence. Default: 1e-6.
         atol: Absolute tolerance for convergence. Default: 1e-14.
         tol: Alternative name for rtol (overrides rtol if provided).
-        max_iterations: Maximum number of iterations. Default: 100.
-        max_iter: Alternative name for max_iterations.
+        maxiter: Maximum number of iterations. Default: 100.
         trace_mode: Tracing granularity level. Default: MINIMAL.
             MINIMAL: Log scalars only (iteration, residual_norm, flags)
             FULL: Log scalars + vectors (residual, solution)
@@ -323,7 +320,9 @@ def scipy_cg(
         precond_strategy = FunctionPreconditioner(preconditioner)
 
     # Create event logger based on trace mode
-    trace_mode_enum = TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
+    trace_mode_enum = (
+        TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
+    )
     logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
 
     # Construct solver
@@ -332,12 +331,7 @@ def scipy_cg(
         event_logger=logger,
     )
 
-    # Resolve parameter aliases
-    max_iters = (
-        max_iterations
-        if max_iterations is not None
-        else (max_iter if max_iter is not None else 100)
-    )
+    # Resolve rtol alias
     rtol_value = tol if tol is not None else rtol
 
     # Solve system
@@ -347,7 +341,7 @@ def scipy_cg(
         x0,
         rtol=rtol_value,
         atol=atol,
-        max_iterations=max_iters,
+        maxiter=maxiter,
         trace_mode=trace_mode_enum,
     )
 

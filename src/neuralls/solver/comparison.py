@@ -8,10 +8,9 @@ from collections.abc import Callable, Sequence
 import numpy as np
 from scipy.linalg import norm
 
-from ..constants import DEFAULT_ATOL, DEFAULT_BREAKDOWN_TOL, DEFAULT_RTOL
+from ..constants import DEFAULT_ATOL, DEFAULT_BREAKDOWN_TOL, DEFAULT_M_MAX, DEFAULT_RTOL
 from .factories import flexible_cg, preconditioned_cg as _preconditioned_cg
 from .models.result import CGComparisonResult, IterationContext, SolverResult
-from .strategies.reorthogonalization import ReorthogonalizationStrategy
 
 
 # Registry of constant (non-adaptive) preconditioner types
@@ -96,7 +95,7 @@ def preconditioned_cg(
     *,
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
-    max_iter: int = 100,
+    maxiter: int = 100,
     preconditioner: Callable[[np.ndarray], np.ndarray] | None = None,
     stopping_criterion: Literal["tolerance", "fixed_iterations"] = "tolerance",
     breakdown_tol: float = 0.0,
@@ -111,7 +110,7 @@ def preconditioned_cg(
         x0,
         rtol=rtol,
         atol=atol,
-        max_iter=max_iter,
+        maxiter=maxiter,
         preconditioner=preconditioner,
     )
 
@@ -124,14 +123,14 @@ def run_cg_comparison(
     x0: np.ndarray | None = None,
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
-    max_iter: int = 100,
+    maxiter: int = 100,
     stopping_criterion: Literal["tolerance", "fixed_iterations"] = "tolerance",
     breakdown_tol: float = DEFAULT_BREAKDOWN_TOL,
+    m_max: int = DEFAULT_M_MAX,
     precond_iters: int | None = None,
     fallback_preconditioner: Callable[[np.ndarray], np.ndarray] | None = None,
     precond_every: int = 1,
     precond_first_n: int | None = None,
-    reorthogonalize: ReorthogonalizationStrategy | None = None,
     combination_plan: Sequence[tuple[str, str, str]] | None = None,
     limited_preconditioner: str | None = None,
     solver_types: dict[str, str] | None = None,
@@ -199,7 +198,7 @@ def run_cg_comparison(
                     x0,
                     rtol=rtol,
                     atol=atol,
-                    max_iter=max_iter,
+                    maxiter=maxiter,
                     preconditioner=precond_fn,  # None for baseline CG
                     stopping_criterion=stopping_criterion,
                     breakdown_tol=breakdown_tol,
@@ -212,9 +211,9 @@ def run_cg_comparison(
                     x0,
                     rtol=rtol,
                     atol=atol,
-                    max_iter=max_iter,
+                    maxiter=maxiter,
                     preconditioner=scheduled_precond,
-                    reorthogonalize=reorthogonalize,
+                    m_max=m_max,
                 )
         except (ValueError, RuntimeError, np.linalg.LinAlgError) as solver_exc:
             result = CGComparisonResult(

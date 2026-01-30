@@ -31,23 +31,23 @@ if TYPE_CHECKING:
 class DirectionHistory:
     """Immutable history of search directions and matrix-vector products.
 
-    Maintains a sliding window of search directions (p_k) and their corresponding
-    matrix-vector products (q_k = A p_k) for algorithms like Flexible Conjugate
+    Maintains a sliding window of search directions (d_i) and their corresponding
+    matrix-vector products (q_i = A d_i) for algorithms like Flexible Conjugate
     Gradient that require orthogonalization against previous directions.
 
-    Theory:
+    Theory (Notay 2000):
         FCG orthogonalization formula:
-            p_i = z_i - Σ_{k=i-m}^{i-1} [(z_i, q_k) / (p_k, q_k)] p_k
+            d_i = w_i - Σ_{j=i-m}^{i-1} [(w_i, q_j) / (d_j, q_j)] d_j
 
         This requires storing the last m directions and products, where m is
         the orthogonalization window size.
 
     Attributes:
-        p_vectors: Tuple of previous search directions [p_{i-m}, ..., p_{i-1}].
+        d_vectors: Tuple of previous search directions [d_{i-m}, ..., d_{i-1}] (Notay 2000).
             Immutable tuple ensures no accidental modification.
 
         q_vectors: Tuple of previous matrix-vector products [q_{i-m}, ..., q_{i-1}].
-            Each q_k = A @ p_k. Used in orthogonalization coefficients.
+            Each q_j = A @ d_j. Used in orthogonalization coefficients.
 
         max_size: Maximum window size. Vectors are truncated to keep only last max_size.
 
@@ -56,16 +56,16 @@ class DirectionHistory:
 
     Example:
         >>> history = DirectionHistory.empty(max_size=10)
-        >>> history = history.add(p, q)
-        >>> history = history.add(p2, q2)
-        >>> len(history.p_vectors)  # 2
+        >>> history = history.add(d, q)
+        >>> history = history.add(d2, q2)
+        >>> len(history.d_vectors)  # 2
     """
 
-    p_vectors: tuple[NDArray, ...] = ()
-    """Previous search directions (immutable tuple)."""
+    d_vectors: tuple[NDArray, ...] = ()
+    """Previous search directions (immutable tuple) (Notay 2000)."""
 
     q_vectors: tuple[NDArray, ...] = ()
-    """Previous matrix-vector products q_k = A @ p_k (immutable tuple)."""
+    """Previous matrix-vector products q_j = A @ d_j (immutable tuple)."""
 
     max_size: int = 10
     """Maximum window size for truncation."""
@@ -85,17 +85,17 @@ class DirectionHistory:
 
         Example:
             >>> history = DirectionHistory.empty(max_size=20)
-            >>> history.p_vectors
+            >>> history.d_vectors
             ()
         """
-        return cls(p_vectors=(), q_vectors=(), max_size=max_size, total_updates=0)
+        return cls(d_vectors=(), q_vectors=(), max_size=max_size, total_updates=0)
 
-    def add(self, p: NDArray, q: NDArray) -> DirectionHistory:
+    def add(self, d: NDArray, q: NDArray) -> DirectionHistory:
         """Return new history with vectors added (immutable update).
 
         Args:
-            p: New search direction to add.
-            q: New matrix-vector product (A @ p) to add.
+            d: New search direction to add (Notay 2000).
+            q: New matrix-vector product (A @ d) to add.
 
         Returns:
             New DirectionHistory with vector added and old vectors possibly truncated.
@@ -108,25 +108,25 @@ class DirectionHistory:
 
         Example:
             >>> history = DirectionHistory.empty(max_size=2)
-            >>> history = history.add(p1, q1)
-            >>> history = history.add(p2, q2)
-            >>> history = history.add(p3, q3)  # Drops p1, q1
-            >>> len(history.p_vectors)  # 2
+            >>> history = history.add(d1, q1)
+            >>> history = history.add(d2, q2)
+            >>> history = history.add(d3, q3)  # Drops d1, q1
+            >>> len(history.d_vectors)  # 2
         """
         import numpy as np
 
         # Append new vectors (create new tuples)
-        new_p = self.p_vectors + (np.asarray(p, copy=True),)
+        new_d = self.d_vectors + (np.asarray(d, copy=True),)
         new_q = self.q_vectors + (np.asarray(q, copy=True),)
 
         # Truncate to max_size (keep last max_size)
-        if len(new_p) > self.max_size:
-            new_p = new_p[-self.max_size :]
+        if len(new_d) > self.max_size:
+            new_d = new_d[-self.max_size :]
         if len(new_q) > self.max_size:
             new_q = new_q[-self.max_size :]
 
         return DirectionHistory(
-            p_vectors=new_p,
+            d_vectors=new_d,
             q_vectors=new_q,
             max_size=self.max_size,
             total_updates=self.total_updates + 1,
@@ -136,9 +136,9 @@ class DirectionHistory:
         """Return number of directions stored (not total_updates).
 
         Returns:
-            Current window size (len(p_vectors)).
+            Current window size (len(d_vectors)).
         """
-        return len(self.p_vectors)
+        return len(self.d_vectors)
 
 
 @dataclass(frozen=True)

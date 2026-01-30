@@ -35,6 +35,13 @@ if TYPE_CHECKING:
 class IterativeSolverBase(ABC):
     """Abstract base class for iterative solvers using template method pattern.
 
+    All subclasses MUST define a convergence_criterion attribute in their __init__ method.
+
+    Attributes:
+        convergence_criterion: Required convergence criterion for checking solution convergence.
+            This must be set in the subclass __init__ method. The criterion defines
+            the norm and tolerance logic for determining when the solver has converged.
+
     This class implements the common lifecycle for iterative linear system solvers:
     1. Validate inputs
     2. Prepare operator
@@ -73,6 +80,7 @@ class IterativeSolverBase(ABC):
         A: Callable[[NDArray], NDArray],
         b: NDArray,
         x0: NDArray | None = None,
+        maxiter: int | None = None,
         **kwargs,
     ) -> tuple[NDArray, SolverResult]:
         """Solve linear system Ax = b using iterative method.
@@ -120,18 +128,19 @@ class IterativeSolverBase(ABC):
         self._log_state(state, iteration=0, **kwargs)
 
         # Step 6: Iterate until stopping criterion met
-        kwargs_no_tol = {k: v for k, v in kwargs.items() if k not in ('rtol', 'atol')}
+        kwargs_no_tol = {k: v for k, v in kwargs.items() if k not in ("rtol", "atol")}
+        maxiter_eff = maxiter if maxiter is not None else 100
 
-        while not self._check_stopping(state, rtol_eff, atol_eff, **kwargs_no_tol):
+        while not self._check_stopping(state, rtol_eff, atol_eff, maxiter_eff, **kwargs_no_tol):
             state = self._iterate_step(linear_op, state, **kwargs_no_tol)
             self._log_state(state, iteration=state.iteration, **kwargs_no_tol)
 
         # Step 7: Build final result
-        x_final = getattr(state, 'x', None)
-        if x_final is None:
+        u_final = getattr(state, "u", None)
+        if u_final is None:
             raise RuntimeError("Final solution not found in state")
 
-        return x_final, self._build_result(state, rtol_eff, atol_eff, **kwargs_no_tol)
+        return u_final, self._build_result(state, rtol_eff, atol_eff, **kwargs_no_tol)
 
     def _create_convergence_criterion(
         self, rtol: float, atol: float
@@ -146,6 +155,7 @@ class IterativeSolverBase(ABC):
             Convergence criterion instance
         """
         from ..strategies.convergence import CombinedToleranceCriterion
+
         return CombinedToleranceCriterion(rtol=rtol, atol=atol)
 
     def _check_convergence_with_criterion(
@@ -303,6 +313,7 @@ class IterativeSolverBase(ABC):
         state: SolverState,
         rtol: float,
         atol: float,
+        maxiter: int,
         **kwargs,
     ) -> bool:
         """Check if solver should stop.
@@ -316,7 +327,7 @@ class IterativeSolverBase(ABC):
             state: Current iteration state
             rtol: Relative tolerance
             atol: Absolute tolerance
-            **kwargs: May contain 'max_iterations'
+            maxiter: Maximum iterations
 
         Returns:
             True if should stop, False if should continue
@@ -385,14 +396,14 @@ class IterativeSolverBase(ABC):
         # Log vectors if FULL trace mode
         if self._should_log_vectors(**kwargs) and isinstance(state, HasVectors):
             event_log.log(EventType.RESIDUAL, state.r)
-            event_log.log(EventType.SOLUTION, state.x)
+            event_log.log(EventType.SOLUTION, state.u)
 
             # Log Krylov vectors if available
-            if hasattr(state, 'p'):
+            if hasattr(state, "p"):
                 event_log.log(EventType.DIRECTION, state.p)
-            if hasattr(state, 'q'):
+            if hasattr(state, "q"):
                 event_log.log(EventType.MATRIX_PRODUCT, state.q)
-            if hasattr(state, 'z'):
+            if hasattr(state, "z"):
                 event_log.log(EventType.PRECOND_RESIDUAL, state.z)
 
     # Protected concrete helpers
@@ -445,7 +456,6 @@ class IterativeSolverBase(ABC):
             Follows the Override Pattern: kwargs override instance defaults.
             This allows per-solve customization without creating new solver instances.
         """
-
         return kwargs.get("event_log", getattr(self, "event_logger", None))
 
     def _get_trace_mode(self, **kwargs):
@@ -535,4 +545,10 @@ class IterativeSolverBase(ABC):
         if event_log.has_event(EventType.SOLUTION):
             solution_vectors = event_log.get_vectors(EventType.SOLUTION)
 
-        return residual_history_abs, residual_history_rel, residual_vectors, solution_vectors
+        return (
+            residual_history_abs,
+            residual_history_rel,
+            residual_vectors,
+            solution_vectors,
+        )
+

@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from dlkit.tools.config import load_training_settings
+from dlkit.tools.io import load_settings
 from dlkit.tools.config.core.updater import update_settings
 from dlkit.tools.io.config import load_inference_config_eager
 
@@ -40,7 +40,7 @@ def build_settings(
         dlkit GeneralSettings with all paths configured.
     """
     # Load base settings from dlkit
-    settings = load_training_settings(str(model_config_path))
+    settings = load_settings(str(model_config_path))
 
     # Use provided MLflow run name or default to workspace.run_id
     run_name = mlflow_run_name if mlflow_run_name is not None else workspace.run_id

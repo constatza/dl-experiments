@@ -14,8 +14,8 @@ Design Principles:
     - Typed: All fields properly typed, no dynamic attributes
     - Open/Closed: Easy to extend for new solver types
 
-Theory:
-    Krylov methods maintain working vectors (x, r, z, p, q) that are updated
+Theory (Notay 2000):
+    Krylov methods maintain working vectors (u, r, w, d, q) that are updated
     each iteration. Previously these were added dynamically to IterationState,
     causing type safety issues. Now all fields are explicit and typed.
 """
@@ -45,8 +45,6 @@ class SolverState:
         divergence: Whether divergence detected (||r|| > threshold).
         residual_norm: Current residual norm ||r_k||_2.
         rhs_norm: Right-hand side norm ||b||_2 (constant).
-        num_restarts: Count of restart events.
-        num_residual_replacements: Count of true residual recomputations.
 
     Example:
         >>> state = SolverState(
@@ -80,12 +78,6 @@ class SolverState:
     rhs_norm: float
     """Right-hand side norm ||b||_2 (constant throughout solve)."""
 
-    # Optional fields (with defaults) - must come after required fields
-    num_restarts: int = 0
-    """Count of restart events (for non-SPD preconditioner recovery)."""
-
-    num_residual_replacements: int = 0
-    """Count of true residual recomputation events (r = b - A*x)."""
 
     def __post_init__(self) -> None:
         """Validate state invariants.
@@ -105,27 +97,27 @@ class SolverState:
 class KrylovState(SolverState):
     """Krylov solver state with working vectors.
 
-    Extends SolverState with the working vectors (x, r, z, p, q) that
+    Extends SolverState with the working vectors (u, r, w, d, q) that
     Krylov methods maintain. All vectors are properly typed, no dynamic attributes.
 
     Note: kw_only=True ensures all fields must be passed as keyword arguments,
     preventing positional argument confusion with parent class fields.
 
     Attributes:
-        x: Current solution vector x_k.
-        r: Current residual vector r_k = b - A*x_k.
-        z: Preconditioned residual z_k = M^{-1} r_k.
-        p: Search direction p_k.
-        q: Matrix-vector product q_k = A p_k.
+        u: Current solution vector u_i (Notay 2000).
+        r: Current residual vector r_i = b - A*u_i.
+        w: Preconditioned residual w_i = M^{-1} r_i (Notay 2000).
+        d: Search direction d_i (Notay 2000).
+        q: Matrix-vector product q_i = A d_i.
 
-    Theory:
+    Theory (Notay 2000):
         Krylov methods iteratively update these vectors:
-        1. Preconditioning: z_k = M^{-1} r_k
-        2. Direction: p_k = f(z_k, history)
-        3. Matrix-vector: q_k = A p_k
-        4. Step length: α_k = (p_k, r_k) / (p_k, q_k)
-        5. Solution: x_{k+1} = x_k + α_k p_k
-        6. Residual: r_{k+1} = r_k - α_k q_k
+        1. Preconditioning: w_i = M^{-1} r_i
+        2. Direction: d_i = f(w_i, history)
+        3. Matrix-vector: q_i = A d_i
+        4. Step length: α_i = (d_i, r_i) / (d_i, q_i)
+        5. Solution: u_{i+1} = u_i + α_i d_i
+        6. Residual: r_{i+1} = r_i - α_i q_i
 
     Example:
         >>> import numpy as np
@@ -136,30 +128,30 @@ class KrylovState(SolverState):
         ...     divergence=False,
         ...     residual_norm=1.0,
         ...     rhs_norm=1.0,
-        ...     x=np.zeros(10),
+        ...     u=np.zeros(10),
         ...     r=np.ones(10),
-        ...     z=np.ones(10),
-        ...     p=np.ones(10),
+        ...     w=np.ones(10),
+        ...     d=np.ones(10),
         ...     q=np.ones(10),
         ... )
-        >>> state.x.shape
+        >>> state.u.shape
         (10,)
     """
 
-    x: NDArray
-    """Current solution vector x_k."""
+    u: NDArray
+    """Current solution vector u_i (Notay 2000)."""
 
     r: NDArray
-    """Current residual vector r_k = b - A*x_k."""
+    """Current residual vector r_i = b - A*u_i."""
 
-    z: NDArray
-    """Preconditioned residual z_k = M^{-1} r_k."""
+    w: NDArray
+    """Preconditioned residual w_i = M^{-1} r_i (Notay 2000)."""
 
-    p: NDArray
-    """Search direction p_k."""
+    d: NDArray
+    """Search direction d_i (Notay 2000)."""
 
     q: NDArray
-    """Matrix-vector product q_k = A p_k."""
+    """Matrix-vector product q_i = A d_i."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -176,12 +168,12 @@ class CGState(KrylovState):
         residual_history: Residual norms (absolute and relative).
             Used for convergence monitoring and post-analysis.
 
-    Theory:
+    Theory (Notay 2000):
         FCG maintains a window of previous search directions to orthogonalize
         the new direction against:
-            p_i = z_i - Σ_{k=i-m}^{i-1} [(z_i, q_k) / (p_k, q_k)] p_k
+            d_i = w_i - Σ_{k=i-m}^{i-1} [(w_i, q_k) / (d_k, q_k)] d_k
 
-        The direction_history stores the last m (p_k, q_k) pairs.
+        The direction_history stores the last m (d_k, q_k) pairs.
 
     Example:
         >>> import numpy as np
@@ -193,10 +185,10 @@ class CGState(KrylovState):
         ...     divergence=False,
         ...     residual_norm=1.0,
         ...     rhs_norm=1.0,
-        ...     x=np.zeros(10),
+        ...     u=np.zeros(10),
         ...     r=np.ones(10),
-        ...     z=np.ones(10),
-        ...     p=np.ones(10),
+        ...     w=np.ones(10),
+        ...     d=np.ones(10),
         ...     q=np.ones(10),
         ...     direction_history=DirectionHistory.empty(max_size=10),
         ...     residual_history=ResidualHistory.empty(),
@@ -214,10 +206,10 @@ class CGState(KrylovState):
     @classmethod
     def create_initial(
         cls,
-        x: NDArray,
+        u: NDArray,
         r: NDArray,
-        z: NDArray,
-        p: NDArray,
+        w: NDArray,
+        d: NDArray,
         q: NDArray,
         residual_norm: float,
         rhs_norm: float,
@@ -226,11 +218,11 @@ class CGState(KrylovState):
         """Create initial CG state with empty histories.
 
         Args:
-            x: Initial solution x_0.
-            r: Initial residual r_0 = b - A*x_0.
-            z: Initial preconditioned residual z_0 = M^{-1} r_0.
-            p: Initial search direction p_0 = z_0.
-            q: Initial matrix-vector product q_0 = A p_0.
+            u: Initial solution u_0 (Notay 2000).
+            r: Initial residual r_0 = b - A*u_0.
+            w: Initial preconditioned residual w_0 = M^{-1} r_0 (Notay 2000).
+            d: Initial search direction d_0 = w_0 (Notay 2000).
+            q: Initial matrix-vector product q_0 = A d_0.
             residual_norm: Initial residual norm ||r_0||_2.
             rhs_norm: RHS norm ||b||_2.
             max_history: Maximum direction history size.
@@ -243,10 +235,10 @@ class CGState(KrylovState):
             >>> n = 10
             >>> b = np.ones(n)
             >>> state = CGState.create_initial(
-            ...     x=np.zeros(n),
+            ...     u=np.zeros(n),
             ...     r=b.copy(),
-            ...     z=b.copy(),
-            ...     p=b.copy(),
+            ...     w=b.copy(),
+            ...     d=b.copy(),
             ...     q=np.ones(n),
             ...     residual_norm=float(np.linalg.norm(b)),
             ...     rhs_norm=float(np.linalg.norm(b)),
@@ -264,12 +256,10 @@ class CGState(KrylovState):
             divergence=False,
             residual_norm=residual_norm,
             rhs_norm=rhs_norm,
-            num_restarts=0,
-            num_residual_replacements=0,
-            x=x,
+            u=u,
             r=r,
-            z=z,
-            p=p,
+            w=w,
+            d=d,
             q=q,
             direction_history=DirectionHistory.empty(max_size=max_history),
             residual_history=ResidualHistory.empty().add(

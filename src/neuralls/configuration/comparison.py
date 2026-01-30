@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from neuralls.constants import (
     DEFAULT_RTOL,
     DEFAULT_ATOL,
-    REORTHOG_STRICT_THRESHOLD,
+    DEFAULT_M_MAX,
 )
 from neuralls.configuration.preconditioner import PreconditionerConfig
 
@@ -58,20 +58,10 @@ class GeneralSolverConfig(BaseModel):
         description="Breakdown tolerance for CG denominator checks",
         ge=0.0,
     )
-    reorthogonalize: Literal["none", "full", "partial", "selective"] = Field(
-        default="full",
-        description="Reorthogonalization strategy",
-    )
-    reorthog_window: int = Field(
-        default=10,
-        description="Window size for partial reorthogonalization",
-        ge=1,
-    )
-    reorthog_threshold: float = Field(
-        default=REORTHOG_STRICT_THRESHOLD,
-        description="Threshold for selective reorthogonalization",
-        ge=0.0,
-        le=1.0,
+    m_max: int = Field(
+        default=DEFAULT_M_MAX,
+        description="FCG(m) orthogonalization window size. Use -1 for full orthogonalization.",
+        ge=-1,
     )
     output_root: Path = Field(
         ...,
