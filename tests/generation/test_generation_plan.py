@@ -313,14 +313,14 @@ class TestParsing:
                 {
                     "name": "cg_residual_error",
                     "samples": 10000,
-                    "residual_iters": 50,
+                    "cg_iters": 50,
                     "solutions_glob": "/path/*.txt",
                 }
             ]
         }
         plan = parse_generation_plan(config)
         spec = plan.strategies["cg_residual_error"]
-        assert spec.options["residual_iters"] == 50
+        assert spec.options["cg_iters"] == 50
         assert spec.options["solutions_glob"] == "/path/*.txt"
         assert "samples" not in spec.options
         assert "name" not in spec.options
@@ -374,7 +374,7 @@ class TestIntegration:
                 {
                     "name": "cg_residual_error",
                     "samples": 10000,
-                    "residual_iters": 50,
+                    "cg_iters": 50,
                     "solutions_glob": "/data/solutions/*.txt",
                 },
                 {
@@ -480,13 +480,13 @@ class TestPydanticValidation:
             SolutionArchiveConfig(samples=10)
 
     def test_pydantic_validates_type_residual_iters(self) -> None:
-        """Test that residual_iters must be int."""
+        """Test that cg_iters must be int."""
         from neuralls.generation.strategy_configs import ResidualErrorConfig
         from pydantic import ValidationError
 
-        # Try to pass a string for residual_iters
+        # Try to pass a string for cg_iters
         with pytest.raises(ValidationError, match="Input should be a valid integer"):
-            ResidualErrorConfig(samples=10, residual_iters="many")
+            ResidualErrorConfig(samples=10, cg_iters="many")
 
     def test_pydantic_validates_type_krylov_iters(self) -> None:
         """Test that krylov_iters must be int."""
@@ -522,9 +522,9 @@ class TestPydanticValidation:
         assert krylov.samples == 100
         assert krylov.krylov_iters == 20
 
-        residual = ResidualErrorConfig(samples=50, residual_iters=10)
+        residual = ResidualErrorConfig(samples=50, cg_iters=10)
         assert residual.samples == 50
-        assert residual.residual_iters == 10
+        assert residual.cg_iters == 10
 
         eigenvector = EigenvectorForwardConfig(
             samples=30, which="largest", include_eigenvectors=True

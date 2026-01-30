@@ -155,7 +155,7 @@ def test_flexible_pcg_tridiagonal_converges(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Converged
@@ -202,7 +202,7 @@ def test_flexible_pcg_tridiagonal_with_jacobi_preconditioner(
         preconditioner=jacobi_preconditioner_tridiagonal,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Converged
@@ -236,7 +236,7 @@ def test_flexible_pcg_tridiagonal_double_precision_accuracy(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=500,
+        maxiter=500,
     )
 
     assert info.converged
@@ -287,7 +287,7 @@ def test_flexible_pcg_diagonal_converges_fast(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,  # Increased for FCG with truncated orthogonalization
+        maxiter=100,  # Increased for FCG with truncated orthogonalization
     )
 
     # Converged
@@ -327,7 +327,7 @@ def test_flexible_pcg_convergence_relative_tolerance(
         x0=zero_initial_guess_small,
         rtol=1e-3,
         atol=DEFAULT_ATOL,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Tight tolerance
@@ -337,7 +337,7 @@ def test_flexible_pcg_convergence_relative_tolerance(
         x0=zero_initial_guess_small,
         rtol=1e-12,
         atol=DEFAULT_ATOL,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Both converged
@@ -378,7 +378,7 @@ def test_flexible_pcg_convergence_absolute_tolerance(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=50,
+        maxiter=50,
     )
 
     # Should converge (via atol since ||b|| small)
@@ -397,7 +397,7 @@ def test_flexible_pcg_convergence_absolute_tolerance(
 # =============================================================================
 
 
-def test_flexible_pcg_max_iterations_reached(
+def test_flexible_pcg_maxiter_reached(
     tridiagonal_system_known_solution: tuple[NDArray, NDArray, NDArray],
     zero_initial_guess_small: NDArray,
 ) -> None:
@@ -408,9 +408,9 @@ def test_flexible_pcg_max_iterations_reached(
         zero_initial_guess_small: Zero initial guess.
 
     Theory:
-        If max_iterations reached before convergence:
+        If maxiter reached before convergence:
         - converged=False
-        - iterations=max_iterations
+        - iterations=maxiter
         - Returns best solution found
     """
     a, b, _ = tridiagonal_system_known_solution
@@ -422,7 +422,7 @@ def test_flexible_pcg_max_iterations_reached(
         x0=zero_initial_guess_small,
         rtol=1e-10,
         atol=DEFAULT_ATOL,
-        max_iterations=max_iter,
+        maxiter=max_iter,
     )
 
     # Not converged (insufficient iterations)
@@ -466,7 +466,7 @@ def test_flexible_pcg_random_spd_converges(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Converged
@@ -509,7 +509,7 @@ def test_flexible_pcg_ill_conditioned_converges_slowly(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=500,  # Increased for ill-conditioned system with FCG
+        maxiter=500,  # Increased for ill-conditioned system with FCG
     )
 
     # Converged (may take many iterations)
@@ -552,7 +552,7 @@ def test_flexible_pcg_nonzero_initial_guess(
         x0=x0,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Converged faster than with x0=0
@@ -601,7 +601,7 @@ def test_flexible_pcg_residual_history_decreasing(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Check residual history exists and has values
@@ -650,7 +650,7 @@ def test_flexible_pcg_custom_parameters(
         x0=zero_initial_guess_small,
         rtol=default_rtol,
         atol=default_atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Still converges
@@ -725,7 +725,7 @@ def test_flexible_pcg_already_converged_initial_guess(
         x0=x_exact,  # Already exact solution
         rtol=rtol,
         atol=atol,
-        max_iterations=10,
+        maxiter=10,
     )
 
     # Converged immediately

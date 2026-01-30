@@ -69,7 +69,7 @@ def test_solver_converges_on_spd_matrices(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     # Verify convergence
@@ -143,7 +143,7 @@ def test_solver_with_preconditioners(
         preconditioner=precond_wrapped,
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     # Verify convergence
@@ -189,7 +189,7 @@ def test_solver_with_nonzero_initial_guess(
     rng = np.random.default_rng(test_seed)
     x0 = rng.standard_normal(len(b))
 
-    x, result = solver(A, b, x0=x0, rtol=rtol, atol=atol, max_iterations=200)
+    x, result = solver(A, b, x0=x0, rtol=rtol, atol=atol, maxiter=200)
 
     # Verify convergence
     assert result.converged
@@ -230,7 +230,7 @@ def test_solver_with_zero_rhs(
         x0=zero_initial_guess_small,
         rtol=rtol,
         atol=atol,
-        max_iterations=10,
+        maxiter=10,
     )
 
     # Should converge immediately
@@ -247,19 +247,19 @@ def test_solver_with_zero_rhs(
 
 
 @pytest.mark.parametrize("solver_name", ["fcg", "pcg", "scipy_cg"])
-def test_solver_respects_max_iterations(
+def test_solver_respects_maxiter(
     solver_name: str,
     solver_factories: dict[str, Callable],
     ill_conditioned_spd_small: NDArray,
     rhs_ones_small: NDArray,
     zero_initial_guess_small: NDArray,
 ) -> None:
-    """Test all solvers respect max_iterations limit.
+    """Test all solvers respect maxiter limit.
 
     Theory:
         For ill-conditioned systems with tight tolerances, CG may not
         converge within a small iteration limit. The solver should
-        stop at max_iterations and report non-convergence.
+        stop at maxiter and report non-convergence.
 
     Coverage:
         3 solvers × 1 test each = 3 test runs
@@ -273,7 +273,7 @@ def test_solver_respects_max_iterations(
         x0=zero_initial_guess_small,
         rtol=1e-14,  # Very tight tolerance
         atol=1e-14,
-        max_iterations=5,  # Too few iterations to converge
+        maxiter=5,  # Too few iterations to converge
     )
 
     # Should hit max iterations
@@ -309,7 +309,7 @@ def test_solver_satisfies_rtol_criterion(
     A, b, _ = tridiagonal_system_known_solution
     rtol, atol = integration_tolerances
 
-    x, result = solver(A, b, rtol=rtol, atol=atol, max_iterations=200)
+    x, result = solver(A, b, rtol=rtol, atol=atol, maxiter=200)
 
     assert result.converged
 
@@ -343,7 +343,7 @@ def test_solver_satisfies_atol_criterion_for_small_rhs(
     x0 = np.zeros(10)
 
     x, result = solver(
-        tridiagonal_spd_small, b_small, x0=x0, rtol=rtol, atol=atol, max_iterations=200
+        tridiagonal_spd_small, b_small, x0=x0, rtol=rtol, atol=atol, maxiter=200
     )
 
     assert result.converged
@@ -385,7 +385,7 @@ def test_solver_matches_direct_solve(
     A, b, x_exact = request.getfixturevalue(system_fixture)
     rtol, atol = integration_tolerances
 
-    x, result = solver(A, b, rtol=rtol, atol=atol, max_iterations=200)
+    x, result = solver(A, b, rtol=rtol, atol=atol, maxiter=200)
 
     assert result.converged
 
@@ -435,7 +435,7 @@ def test_solver_handles_ill_conditioned_with_preconditioner(
         preconditioner=precond,
         rtol=rtol,
         atol=atol,
-        max_iterations=500,  # Extended iterations for ill-conditioned
+        maxiter=500,  # Extended iterations for ill-conditioned
     )
 
     # Should converge with enough iterations + preconditioner

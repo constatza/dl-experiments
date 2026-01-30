@@ -101,7 +101,7 @@ def test_pcg_jacobi_double_precision_accuracy(
         preconditioner=jacobi_M,
         atol=DOUBLE_PRECISION_ATOL,
         rtol=DOUBLE_PRECISION_RTOL,
-        max_iterations=200,  # Sufficiently high max_iterations
+        maxiter=200,  # Sufficiently high maxiter
         trace_mode="full",  # Replaced capture_traces=True
     )
 
@@ -155,7 +155,7 @@ def test_flexible_pcg_jacobi_double_precision_accuracy(
         preconditioner=jacobi_M,
         atol=DOUBLE_PRECISION_ATOL,
         rtol=DOUBLE_PRECISION_RTOL,
-        max_iterations=200,  # Sufficiently high max_iterations
+        maxiter=200,  # Sufficiently high maxiter
         m_max=20,  # Use a larger m_max for better orthogonalization
         trace_mode="full",  # Replaced capture_traces=True
     )

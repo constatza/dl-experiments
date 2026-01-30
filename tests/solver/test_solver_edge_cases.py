@@ -97,17 +97,17 @@ class TestTrivialConvergence:
 
 
 class TestIterationLimits:
-    """Test max_iterations enforcement and early stopping."""
+    """Test maxiter enforcement and early stopping."""
 
     @pytest.mark.parametrize("solver_name", ["fcg", "pcg", "scipy_cg"])
-    def test_respects_max_iterations_limit(
+    def test_respects_maxiter_limit(
         self,
         solver_name: str,
         solver_factories: dict[str, Callable],
         tridiagonal_spd_small: NDArray,
         rhs_ones_small: NDArray,
     ) -> None:
-        """Solver must stop at max_iterations even if not converged."""
+        """Solver must stop at maxiter even if not converged."""
         solver = solver_factories[solver_name]
         A = tridiagonal_spd_small
         b = rhs_ones_small
@@ -115,7 +115,7 @@ class TestIterationLimits:
 
         # Use very tight tolerance to prevent convergence
         x, result = solver(
-            A, b, rtol=1e-15, atol=1e-20, max_iterations=max_iters, trace_mode=TraceMode.MINIMAL
+            A, b, rtol=1e-15, atol=1e-20, maxiter=max_iters, trace_mode=TraceMode.MINIMAL
         )
 
         # Should stop at max iterations
@@ -135,18 +135,18 @@ class TestIterationLimits:
         diagonal_spd_small: NDArray,
         rhs_ones_small: NDArray,
     ) -> None:
-        """Test different max_iterations values."""
+        """Test different maxiter values."""
         solver = solver_factories[solver_name]
         A = diagonal_spd_small
         b = rhs_ones_small
 
         x, result = solver(
-            A, b, rtol=1e-6, atol=1e-14, max_iterations=max_iters, trace_mode=TraceMode.MINIMAL
+            A, b, rtol=1e-6, atol=1e-14, maxiter=max_iters, trace_mode=TraceMode.MINIMAL
         )
 
         # Iterations should not exceed limit
         assert result.iterations <= max_iters, (
-            f"Exceeded max_iterations: {result.iterations} > {max_iters}"
+            f"Exceeded maxiter: {result.iterations} > {max_iters}"
         )
 
 
@@ -325,13 +325,13 @@ class TestNumericalEdgeCases:
         A_well = np.diag(np.linspace(1.0, 2.0, n))
         x_well = rng.randn(n)
         b_well = A_well @ x_well  # Generate RHS from exact solution
-        _, result_well = solver(A_well, b_well, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL, max_iterations=500)
+        _, result_well = solver(A_well, b_well, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL, maxiter=500)
 
         # Ill-conditioned: diagonal with widely spread eigenvalues (κ ≈ 1e4)
         A_ill = np.diag(np.logspace(-2, 2, n))
         x_ill = rng.randn(n)
         b_ill = A_ill @ x_ill  # Generate RHS from exact solution
-        _, result_ill = solver(A_ill, b_ill, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL, max_iterations=500)
+        _, result_ill = solver(A_ill, b_ill, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL, maxiter=500)
 
         # SRP: Only check iteration count comparison (not solution accuracy)
         assert result_ill.iterations >= result_well.iterations, (

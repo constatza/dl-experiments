@@ -39,7 +39,7 @@ def test_scipy_cg_initial_residual_zero_guess():
         b,
         x0=None,  # Zero guess
         rtol=1e-6,
-        max_iterations=20,
+        maxiter=20,
         trace_mode="minimal",
     )
 
@@ -67,7 +67,7 @@ def test_scipy_cg_initial_residual_nonzero_guess():
         b,
         x0=x0,
         rtol=1e-6,
-        max_iterations=20,
+        maxiter=20,
         trace_mode="minimal",
     )
 
@@ -98,10 +98,10 @@ def test_scipy_cg_vs_fcg_consistency():
     x0 = np.zeros(n)
 
     # Solve with scipy CG
-    x_scipy, result_scipy = preconditioned_cg(A, b, x0=x0, rtol=1e-6, max_iter=20)
+    x_scipy, result_scipy = preconditioned_cg(A, b, x0=x0, rtol=1e-6, maxiter=20)
 
     # Solve with FCG
-    x_fcg, result_fcg = flexible_cg(A, b, x0=x0, rtol=1e-6, max_iterations=20)
+    x_fcg, result_fcg = flexible_cg(A, b, x0=x0, rtol=1e-6, maxiter=20)
 
     # Both should have iteration 0 in history
     assert result_scipy.residual_history is not None

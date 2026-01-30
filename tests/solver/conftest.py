@@ -744,7 +744,7 @@ def tight_tolerances() -> tuple[float, float]:
 
 
 @pytest.fixture
-def default_max_iterations() -> int:
+def default_maxiter() -> int:
     """Default maximum iterations for solver.
 
     Returns:

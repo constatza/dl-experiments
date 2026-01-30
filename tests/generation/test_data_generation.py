@@ -193,7 +193,7 @@ def test_error_strategy_with_random(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
-        strategy_overrides={"residual_error": {"residual_iters": 3}},
+        strategy_overrides={"residual_error": {"cg_iters": 3}},
         seed=test_seed,
         shuffle=False,
     )
@@ -225,7 +225,7 @@ def test_error_strategy_with_random(
 
     # Verify iteration indices are valid
     assert np.all(error_traces.iteration_indices >= 0)
-    assert error_traces.iteration_indices.max() <= 3  # residual_iters
+    assert error_traces.iteration_indices.max() <= 3  # cg_iters
 
 
 def test_error_strategy_with_archive(
@@ -254,7 +254,7 @@ def test_error_strategy_with_archive(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
-        strategy_overrides={"residual_error": {"residual_iters": 3}},
+        strategy_overrides={"residual_error": {"cg_iters": 3}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -299,7 +299,7 @@ def test_error_vectors_satisfy_equation(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=3,
-        strategy_overrides={"residual_error": {"residual_iters": 5}},
+        strategy_overrides={"residual_error": {"cg_iters": 5}},
         seed=test_seed,
         shuffle=False,
     )
@@ -344,7 +344,7 @@ def test_residuals_match_current_solutions(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
-        strategy_overrides={"residual_error": {"residual_iters": 4}},
+        strategy_overrides={"residual_error": {"cg_iters": 4}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -391,7 +391,7 @@ def test_error_strategy_validation(
             b=small_rhs,
             mix={"residual_error": 1.0},
             total=3,  # Request more than archive has
-            strategy_overrides={"residual_error": {"residual_iters": 3}},
+            strategy_overrides={"residual_error": {"cg_iters": 3}},
             seed=test_seed,
             shuffle=False,
             archive_solutions=insufficient_archive,
@@ -423,7 +423,7 @@ def test_error_strategy_in_generate_mixture(
         b=small_rhs,
         mix={"normal": 0.5, "residual_error": 0.5},
         total=10,
-        strategy_overrides={"residual_error": {"residual_iters": 3}},
+        strategy_overrides={"residual_error": {"cg_iters": 3}},
         seed=test_seed,
         shuffle=False,
     )
@@ -470,7 +470,7 @@ def test_error_strategy_traces_structure(
         b=small_rhs,
         mix={"residual_error": 1.0},
         total=3,
-        strategy_overrides={"residual_error": {"residual_iters": 4}},
+        strategy_overrides={"residual_error": {"cg_iters": 4}},
         seed=test_seed,
         shuffle=False,
     )
@@ -500,35 +500,25 @@ def test_error_strategy_with_zero_iterations(
     small_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Test error strategy behavior with zero CG iterations.
+    """Test error strategy rejects zero CG iterations.
 
-    Verifies that the strategy handles edge case of no CG iterations gracefully.
+    Verifies that Pydantic validation rejects cg_iters=0.
 
     Args:
         small_spd_matrix: Test SPD matrix fixture
         small_rhs: Test RHS vector fixture
         test_seed: Random seed fixture
     """
-    rhs, solutions, residuals, error_traces = generate_mixture(
-        A=small_spd_matrix,
-        b=small_rhs,
-        mix={"residual_error": 1.0},
-        total=2,
-        strategy_overrides={"residual_error": {"residual_iters": 0}},  # Zero iterations
-        seed=test_seed,
-        shuffle=False,
-    )
-
-    # Verify basic outputs are still valid
-    assert rhs.shape == (2, 2)
-    assert solutions.shape == (2, 2)
-
-    # With zero iterations, we should still get error traces
-    # (at least the initial state with x_0 = 0 and error = x*)
-    assert error_traces is not None, "Error traces should exist even with 0 iterations"
-    assert error_traces.residuals.shape[0] >= 2, (
-        "Should have at least one trace per sample (initial state)"
-    )
+    with pytest.raises(ValueError, match="(greater than or equal to 1|cg_iters)"):
+        rhs, solutions, residuals, error_traces = generate_mixture(
+            A=small_spd_matrix,
+            b=small_rhs,
+            mix={"residual_error": 1.0},
+            total=2,
+            strategy_overrides={"residual_error": {"cg_iters": 0}},  # Zero iterations
+            seed=test_seed,
+            shuffle=False,
+        )
 
 
 # =============================================================================
@@ -965,18 +955,18 @@ def test_pydantic_requires_solutions_glob_for_solution_archive() -> None:
 
 
 def test_pydantic_validates_residual_iters_type() -> None:
-    """Test that Pydantic validates parameter types (residual_iters must be int)."""
+    """Test that Pydantic validates parameter types (cg_iters must be int)."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
     b = np.array([1.0, 0.0], dtype=np.float64)
 
-    # Try to pass a string for residual_iters (should be int)
+    # Try to pass a string for cg_iters (should be int)
     with pytest.raises(ValueError, match="Input should be a valid integer"):
         generate_mixture(
             A=A,
             b=b,
             mix={"residual_error": 1.0},
             total=2,
-            strategy_overrides={"residual_error": {"residual_iters": "many"}},
+            strategy_overrides={"residual_error": {"cg_iters": "many"}},
         )
 
 

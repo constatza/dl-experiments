@@ -75,7 +75,6 @@ def test_rhs_archive_load_files(spd_matrix, rhs_archive_files):
     cfg = {
         "rhs_glob": str(glob_pattern),
         "samples": 3,
-        "solve_systems": False,
     }
 
     samples = run_generation("rhs_archive", spd_matrix, None, cfg=cfg)
@@ -95,7 +94,6 @@ def test_rhs_archive_solve_systems(spd_matrix, rhs_archive_files):
     cfg = {
         "rhs_glob": str(glob_pattern),
         "samples": 2,
-        "solve_systems": True,
         "cg_tolerance": 1e-10,
         "cg_max_iters": 100,
     }
@@ -119,7 +117,6 @@ def test_rhs_archive_all_files(spd_matrix, rhs_archive_files):
     cfg = {
         "rhs_glob": str(glob_pattern),
         "samples": -1,  # All files
-        "solve_systems": False,
     }
 
     samples = run_generation("rhs_archive", spd_matrix, None, cfg=cfg)
@@ -137,7 +134,6 @@ def test_rhs_archive_shuffle(spd_matrix, rhs_archive_files):
         "samples": 3,
         "shuffle": True,
         "seed": 42,
-        "solve_systems": False,
     }
 
     samples1 = run_generation("rhs_archive", spd_matrix, None, cfg=cfg)
@@ -251,7 +247,6 @@ def test_rhs_archive_insufficient_files(spd_matrix, rhs_archive_files):
     cfg = {
         "rhs_glob": str(glob_pattern),
         "samples": 100,  # More than available
-        "solve_systems": False,
     }
 
     with pytest.raises(ValueError, match="only.*available"):
@@ -292,7 +287,6 @@ def test_mixed_archive_and_synthetic(spd_matrix, rhs_archive_files):
         strategy_overrides={
             "rhs_archive": {
                 "rhs_glob": str(glob_pattern),
-                "solve_systems": False,
             }
         },
     )

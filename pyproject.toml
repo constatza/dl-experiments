@@ -5,10 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13.1"
 dependencies = [
-    "bokeh>=3.8.0",
+#    "bokeh>=3.8.0",
     "dlkit",
     "loguru>=0.7.3",
-    "prefect>=3.4.23",
     "prefect-dask>=0.3.6",
     "pydantic>=2.12.5",
     "scipy-stubs==1.16.2.0",

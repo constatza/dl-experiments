@@ -65,7 +65,7 @@ def test_solver_achieves_double_precision(
         preconditioner=precond,
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     assert result.converged, (
@@ -109,7 +109,7 @@ def test_solver_residual_equation(
     A, b, _ = request.getfixturevalue(system_fixture)
     rtol, atol = convergence_tolerances
 
-    x, result = solver(A, b, rtol=rtol, atol=atol, max_iterations=200)
+    x, result = solver(A, b, rtol=rtol, atol=atol, maxiter=200)
 
     assert result.converged
 
@@ -154,7 +154,7 @@ def test_solver_matches_direct_solver_high_precision(
     A, b, x_exact = request.getfixturevalue(system_fixture)
     rtol, atol = convergence_tolerances
 
-    x, result = solver(A, b, rtol=rtol, atol=atol, max_iterations=200)
+    x, result = solver(A, b, rtol=rtol, atol=atol, maxiter=200)
 
     assert result.converged
 
@@ -196,7 +196,7 @@ def test_solver_iteration_count_reasonable(
         preconditioner=jacobi_preconditioner_tridiagonal,
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     assert result.converged

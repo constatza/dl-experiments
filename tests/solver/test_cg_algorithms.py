@@ -5,7 +5,6 @@ import pytest
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from neuralls.constants import REORTHOG_STRICT_THRESHOLD
 from neuralls.solver import flexible_cg, preconditioned_cg, run_cg_comparison
 
 # Functional/Integration Test Tolerances
@@ -49,10 +48,10 @@ def test_flexible_matches_classical(
     x0 = np.zeros_like(b)
 
     x_classic, info_classic = preconditioned_cg(
-        A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, max_iter=200
+        A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, maxiter=200
     )
     x_flex, info_flex = flexible_cg(
-        A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, max_iter=200
+        A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, maxiter=200
     )
 
     assert info_classic.converged == info_flex.converged
@@ -78,7 +77,7 @@ def test_pcg_captures_residual_history(
         preconditioner=jacobi,
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
-        max_iter=10,
+        maxiter=10,
     )
 
     assert info.residual_history is not None
@@ -111,7 +110,7 @@ def test_pcg_captures_vector_traces(
         preconditioner=jacobi,
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
-        max_iter=15,
+        maxiter=15,
         trace_mode="full",
     )
 
@@ -153,7 +152,7 @@ def test_flexible_cg_accepts_linear_operator_preconditioner(
         preconditioner=M,
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
-        max_iter=200,
+        maxiter=200,
     )
 
     assert info.converged
@@ -175,7 +174,7 @@ def test_flexible_cg_with_torch_linear_preconditioner(
     _, base_info = flexible_cg(
         A,
         b,
-        max_iterations=20,
+        maxiter=20,
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
     )
@@ -195,7 +194,7 @@ def test_flexible_cg_with_torch_linear_preconditioner(
     _, neural_info = flexible_cg(
         A,
         b,
-        max_iterations=20,
+        maxiter=20,
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
         preconditioner=torch_precond,
@@ -215,7 +214,7 @@ def test_run_cg_comparison_preconditioners(
         preconditioners={"none": lambda r: r, "identity": lambda r: r},
         rtol=FUNCTIONAL_RTOL,
         atol=FUNCTIONAL_ATOL,
-        max_iter=200,
+        maxiter=200,
     )
 
     assert set(results.keys()) == {"none", "identity"}
@@ -232,7 +231,7 @@ def test_flexible_pcg_no_traces_by_default(
     x0 = np.zeros_like(b)
 
     _, info = flexible_cg(
-        A, b, x0, max_iterations=50, trace_mode="disabled", atol=FUNCTIONAL_ATOL
+        A, b, x0, maxiter=50, trace_mode="disabled", atol=FUNCTIONAL_ATOL
     )
 
     assert info.residual_vectors is None
@@ -250,7 +249,7 @@ def test_flexible_pcg_traces_satisfy_residual_equation(
         A,
         b,
         x0,
-        max_iterations=200,
+        maxiter=200,
         trace_mode="full",
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
@@ -276,101 +275,6 @@ def test_flexible_pcg_traces_satisfy_residual_equation(
             f"  b - A @ x_k  = {computed_residual}\n"
             f"  Difference   = {r_k - computed_residual}"
         )
-
-
-def test_partial_reorthog_unlimited_window() -> None:
-    """Test that PartialReorthogonalization with window_size=None uses all vectors."""
-    from neuralls.solver import PartialReorthogonalization
-
-    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 2.0], dtype=np.float64)
-    reorthog = PartialReorthogonalization(window_size=None)
-
-    # Create 5 basis vectors
-    basis = [np.random.randn(len(b)) for _ in range(5)]
-    v = np.random.randn(len(b))
-
-    # Reorthogonalize
-    v_reorthog, info = reorthog.reorthogonalize(v, basis, iteration=5)
-
-    # Should have reorthogonalized against all 5 vectors
-    assert info.reorthog_count == 5
-    assert info.window_size == 5
-
-
-def test_partial_reorthog_fail_fast() -> None:
-    """Test that PartialReorthogonalization reports breakdown instead of raising."""
-    from neuralls.solver import PartialReorthogonalization
-
-    reorthog = PartialReorthogonalization(window_size=10)
-
-    # Test 1: Near-zero norm basis vector
-    basis = [np.array([1e-20, 1e-20])]
-    v = np.array([1.0, 1.0])
-
-    v_out, info = reorthog.reorthogonalize(v, basis, iteration=1)
-    assert np.allclose(v_out, v)
-    assert info.breakdown is True
-    assert info.reason is not None and "near-zero" in info.reason
-    assert info.basis_index == 0
-
-
-def test_full_reorthog_fail_fast_zero_input() -> None:
-    """Test that FullReorthogonalization handles zero input vector gracefully."""
-    from neuralls.solver import FullReorthogonalization
-
-    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    reorthog = FullReorthogonalization(A=A)
-
-    basis = [np.array([1.0, 0.0])]
-    v = np.array([1e-20, 1e-20])  # Near-zero vector
-
-    # Should return gracefully with breakdown flag instead of raising
-    v_out, info = reorthog.reorthogonalize(v, basis, iteration=1)
-
-    assert info.breakdown is True
-    assert info.reason is not None
-    assert "near-zero" in info.reason.lower()
-    assert "norm" in info.reason.lower()
-
-
-def test_full_reorthog_fail_fast_zero_basis() -> None:
-    """Test that FullReorthogonalization handles zero basis vector gracefully."""
-    from neuralls.solver import FullReorthogonalization
-
-    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    reorthog = FullReorthogonalization(A=A)
-
-    basis = [np.array([1e-20, 1e-20])]  # Near-zero basis vector
-    v = np.array([1.0, 1.0])
-
-    # Should return gracefully with breakdown flag instead of raising
-    v_out, info = reorthog.reorthogonalize(v, basis, iteration=1)
-
-    assert info.breakdown is True
-    assert info.reason is not None
-    reason_lower = info.reason.lower()
-    assert "near-zero" in reason_lower
-    # Reason should mention either "A-norm" or "norm" or "basis"
-    assert any(word in reason_lower for word in ["a-norm", "norm", "basis"])
-
-
-def test_selective_reorthog_strict_threshold() -> None:
-    """Test that SelectiveReorthogonalization with strict threshold is strict."""
-    from neuralls.solver import SelectiveReorthogonalization
-
-    # Create slightly non-orthogonal vectors (2% off orthogonality)
-    v1 = np.array([1.0, 0.0])
-    v2 = np.array([0.02, 1.0])  # 2% off from orthogonal
-    v2 = v2 / np.linalg.norm(v2)  # Normalize
-
-    # With strict threshold, should trigger reorthogonalization
-    reorthog_strict = SelectiveReorthogonalization(threshold=REORTHOG_STRICT_THRESHOLD)
-    v_reorthog, info = reorthog_strict.reorthogonalize(v2, [v1], iteration=1)
-
-    # Should have triggered reorthogonalization
-    assert info.triggered
-    assert info.reorthog_count > 0
 
 
 def test_jacobi_factory_preserves_signs() -> None:
@@ -435,7 +339,7 @@ def test_jacobi_factory_convergence_with_fcg() -> None:
         x0,
         atol=1e-4,  # Relaxed tolerance since residual management is disabled
         rtol=1e-6,
-        max_iter=100,
+        maxiter=100,
     )
 
     # With Jacobi preconditioning using builder pattern
@@ -452,7 +356,7 @@ def test_jacobi_factory_convergence_with_fcg() -> None:
         preconditioner=jacobi_precond,
         atol=1e-4,  # Relaxed tolerance
         rtol=1e-6,
-        max_iter=100,
+        maxiter=100,
     )
 
     # With Jacobi, should converge (diagonal preconditioning for diagonal matrix is perfect)

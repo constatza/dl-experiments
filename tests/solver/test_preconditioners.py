@@ -97,7 +97,7 @@ def test_jacobi_improves_convergence(
         preconditioner=lambda r: identity_preconditioner(r, None),
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     # Solve with Jacobi
@@ -107,7 +107,7 @@ def test_jacobi_improves_convergence(
         preconditioner=jacobi_preconditioner_tridiagonal,
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     # Both should converge
@@ -188,7 +188,7 @@ def test_ilu_improves_over_jacobi(
         preconditioner=jacobi_preconditioner_tridiagonal,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Solve with ILU
@@ -198,7 +198,7 @@ def test_ilu_improves_over_jacobi(
         preconditioner=ilu_preconditioner_tridiagonal,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Both should converge
@@ -238,7 +238,7 @@ def test_preconditioner_ordering(
         preconditioner=lambda r: identity_preconditioner(r, None),
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     # Solve with Jacobi
@@ -248,7 +248,7 @@ def test_preconditioner_ordering(
         preconditioner=jacobi_preconditioner_tridiagonal,
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     # Solve with ILU
@@ -258,7 +258,7 @@ def test_preconditioner_ordering(
         preconditioner=ilu_preconditioner_tridiagonal,
         rtol=rtol,
         atol=atol,
-        max_iterations=200,
+        maxiter=200,
     )
 
     # All should converge
@@ -300,7 +300,7 @@ def test_ilu_on_diagonal_matrix_matches_jacobi(
         preconditioner=jacobi_precond,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Solve with ILU
@@ -310,7 +310,7 @@ def test_ilu_on_diagonal_matrix_matches_jacobi(
         preconditioner=ilu_preconditioner_diagonal,
         rtol=rtol,
         atol=atol,
-        max_iterations=100,
+        maxiter=100,
     )
 
     # Both should converge
