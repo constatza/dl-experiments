@@ -1,7 +1,8 @@
-"""Preconditioned Conjugate Gradient solver.
+"""Preconditioned Conjugate Gradient solver with optional reorthogonalization.
 
 This module implements the standard Preconditioned Conjugate Gradient (PCG)
-algorithm using two-term recurrence without explicit orthogonalization.
+algorithm using two-term recurrence. Optional reorthogonalization can be enabled
+to correct accumulated rounding errors in finite precision arithmetic.
 
 Algorithm (PCG, using Notay 2000 notation):
     Initialize: u_0 = 0, r_0 = b
@@ -9,19 +10,31 @@ Algorithm (PCG, using Notay 2000 notation):
       1. w_i = M^{-1}(r_i)                           # Apply preconditioner
       2. β_i = (r_i, w_i) / (r_{i-1}, w_{i-1})       # Compute beta
       3. d_i = w_i + β_i * d_{i-1}                   # Two-term recurrence
+      3b. (Optional) d_i := d_i - Σ[(d_i, A d_j)/(d_j, A d_j)] d_j  # Reorthogonalization
       4. q_i = A @ d_i                               # Matrix-vector product
       5. α_i = (r_i, w_i) / (d_i, q_i)               # Step length
       6. u_{i+1} = u_i + α_i * d_i                   # Update solution
       7. r_{i+1} = r_i - α_i * q_i                   # Update residual
 
+Reorthogonalization (Optional):
+    The two-term recurrence maintains A-conjugacy in exact arithmetic, but
+    accumulated rounding errors can degrade conjugacy in finite precision.
+    Optional reorthogonalization restores conjugacy by explicitly correcting
+    the direction vector against previous directions.
+
+    This is ADDITIVE: reorthogonalization happens AFTER the standard PCG
+    two-term recurrence, preserving PCG's structure while correcting errors.
+
 Design Principles:
     - Template Method: Inherit from ConjugateGradientBase
     - Single Responsibility: Only implements two-term recurrence direction
-    - Dependency Inversion: Depends on Preconditioner abstraction
+    - Dependency Inversion: Depends on Preconditioner and OrthogonalizationStrategy abstractions
+    - Open/Closed: Reorthogonalization is optional via strategy pattern
 
 References:
     - Hestenes & Stiefel (1952). Methods of Conjugate Gradients.
     - Saad, Y. (2003). Iterative Methods for Sparse Linear Systems, Chapter 9.
+    - Notay, Y. (2000). Flexible Conjugate Gradients. SIAM J. Sci. Comput.
 """
 
 from __future__ import annotations
@@ -33,10 +46,11 @@ import numpy as np
 from scipy.linalg import norm
 from scipy.sparse.linalg import aslinearoperator
 
-from ...constants import DEFAULT_ATOL, DEFAULT_RTOL
+from ...constants import DEFAULT_ATOL, DEFAULT_RTOL, DEFAULT_FCG_HISTORY_LIMIT
 from .cg_base import ConjugateGradientBase
 from ..strategies.convergence import CombinedToleranceCriterion, IConvergenceCriterion
-from ..models.state import KrylovState, SolverState
+from ..strategies.orthogonalization import OrthogonalizationStrategy
+from ..models.state import KrylovState, CGState, SolverState
 from ..models.result import SolverResult
 from ..preconditioners import IdentityPreconditioner, Preconditioner
 from ..monitoring.trace_recorder import TraceRecorder
@@ -47,26 +61,68 @@ if TYPE_CHECKING:
 
 
 class PreconditionedCGSolver(ConjugateGradientBase):
-    """Preconditioned Conjugate Gradient solver.
+    """Preconditioned Conjugate Gradient solver with optional reorthogonalization.
 
     Standard PCG using two-term recurrence formula. This is the classic
     CG algorithm extended with preconditioning. Requires symmetric positive
     definite (SPD) matrix and SPD preconditioner.
 
+    Optional reorthogonalization can be enabled to correct accumulated rounding
+    errors, at the cost of increased memory (O(m*n) for m directions).
+
+    Algorithm (without reorthogonalization):
+        At each iteration k:
+        1. Apply preconditioner: z_k = M^{-1} r_k
+        2. Compute beta: β_k = (r_k, z_k) / (r_{k-1}, z_{k-1})
+        3. Update direction: d_k = z_k + β_k * d_{k-1}
+        4. Compute step length: α_k = (r_k, z_k) / (d_k, A d_k)
+        5. Update solution: x_{k+1} = x_k + α_k * d_k
+        6. Update residual: r_{k+1} = r_k - α_k * A d_k
+
+    Algorithm (with reorthogonalization):
+        Steps 1-3 as above, then:
+        3b. Reorthogonalize: d_k := d_k - Σ[(d_k, A d_j)/(d_j, A d_j)] * d_j
+        Steps 4-6 as above.
+
+    Use reorthogonalization when:
+        - Problem is ill-conditioned (large condition number)
+        - Long iteration sequences expected
+        - Numerical accuracy is critical
+        - Standard PCG shows loss of conjugacy
+
     Key Features:
         - Two-term recurrence (memory efficient)
-        - O(1) memory for direction storage
+        - O(1) memory when reorthogonalization disabled (default)
+        - O(m*n) memory when reorthogonalization enabled
         - Optimal for SPD systems with fixed SPD preconditioners
-        - A-conjugacy maintained implicitly (no explicit orthogonalization)
+        - A-conjugacy maintained implicitly (or explicitly with reorthogonalization)
 
     Attributes:
         preconditioner: SPD preconditioner M (default: Identity)
         convergence_criterion: Convergence test strategy
         beta_formula: Formula for beta coefficient (default: fletcher_reeves)
+        orthogonalization: Optional orthogonalization strategy (default: None)
         event_logger: Optional event recorder for diagnostics
 
-    Example:
+    Examples:
+        >>> # Standard PCG (most efficient)
         >>> solver = PreconditionedCGSolver(preconditioner=jacobi_precond)
+        >>> u, result = solver.solve(A, b, rtol=1e-6)
+
+        >>> # PCG with full reorthogonalization (ill-conditioned problems)
+        >>> from neuralls.solver.strategies.orthogonalization import FullOrthogonalization
+        >>> solver = PreconditionedCGSolver(
+        ...     preconditioner=jacobi_precond,
+        ...     orthogonalization=FullOrthogonalization()
+        ... )
+        >>> u, result = solver.solve(A, b, rtol=1e-6)
+
+        >>> # PCG with truncated reorthogonalization (window size 20)
+        >>> from neuralls.solver.strategies.orthogonalization import TruncatedGramSchmidt
+        >>> solver = PreconditionedCGSolver(
+        ...     preconditioner=jacobi_precond,
+        ...     orthogonalization=TruncatedGramSchmidt(window_size=20)
+        ... )
         >>> u, result = solver.solve(A, b, rtol=1e-6)
     """
 
@@ -75,7 +131,9 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         preconditioner: Preconditioner | None = None,
         convergence_criterion: IConvergenceCriterion | None = None,
         beta_formula: str = "fletcher_reeves",
-        event_logger: TraceRecorder | None = None,
+        orthogonalization: OrthogonalizationStrategy | None = None,
+        event_log: TraceRecorder | None = None,
+        trace_mode = None,
     ) -> None:
         """Initialize PCG solver.
 
@@ -83,50 +141,61 @@ class PreconditionedCGSolver(ConjugateGradientBase):
             preconditioner: SPD preconditioner M (default: Identity)
             convergence_criterion: Convergence test (default: Combined rtol/atol)
             beta_formula: Beta formula ("fletcher_reeves", "polak_ribiere", "hestenes_stiefel")
-            event_logger: Optional TraceRecorder for diagnostics
+            orthogonalization: Optional orthogonalization strategy for correcting
+                rounding errors (default: None, disabled). When enabled, applies
+                reorthogonalization AFTER the standard two-term recurrence to
+                restore A-conjugacy degraded by finite precision arithmetic.
+            event_log: Optional TraceRecorder for diagnostics
+            trace_mode: Logging granularity (DISABLED, MINIMAL, FULL)
         """
+        from ..monitoring.trace_mode import TraceMode
+
         self.preconditioner = preconditioner or IdentityPreconditioner()
         self.convergence_criterion = convergence_criterion or CombinedToleranceCriterion(
             rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
         )
         self.beta_formula = beta_formula
-        self.event_logger = event_logger
+        self.orthogonalization = orthogonalization
 
         # Store previous w for beta computation
         self._w_prev: NDArray | None = None
         self._r_prev: NDArray | None = None
         self._rw_prev: float = 0.0
 
+        # Initialize base class with logging configuration
+        trace_mode_enum = trace_mode if trace_mode is not None else TraceMode.MINIMAL
+        super().__init__(event_log=event_log, trace_mode=trace_mode_enum)
+
     # Implement KrylovSolverBase abstract method
 
     def _update_direction(
         self,
         w: NDArray,
-        state: KrylovState,
-        **kwargs,
+        state: KrylovState | CGState,
     ) -> NDArray:
-        """Compute PCG search direction using two-term recurrence.
+        """Compute PCG search direction with optional reorthogonalization.
 
-        Formula (Notay 2000):
+        Formula (without reorthogonalization):
             d_0 = w_0                           # First iteration
             d_i = w_i + β_i * d_{i-1}           # Subsequent iterations
+
+        Formula (with reorthogonalization):
+            d_i = w_i + β_i * d_{i-1}                                    # Two-term recurrence
+            d_i := d_i - Σ_j [(d_i, A d_j) / (d_j, A d_j)] * d_j        # Reorthogonalization
 
         where β_i = (r_i, w_i) / (r_{i-1}, w_{i-1}) (Fletcher-Reeves)
 
         Args:
             w: Preconditioned residual w_i = M^{-1}(r_i) (Notay 2000)
-            state: Current KrylovState with d_{i-1}
-            **kwargs: Additional parameters
+            state: Current KrylovState or CGState
 
         Returns:
-            Search direction d_i (Notay 2000)
+            Search direction d_i (with optional reorthogonalization)
 
         Theory:
-            The two-term recurrence automatically maintains A-conjugacy:
-                (d_i, A*d_j) = 0 for i ≠ j
-
-            This is guaranteed for SPD A and M, eliminating the need for
-            explicit orthogonalization.
+            The two-term recurrence automatically maintains A-conjugacy in exact arithmetic.
+            Reorthogonalization corrects accumulated rounding errors that degrade conjugacy
+            in finite precision arithmetic.
         """
         # First iteration: steepest descent
         if state.iteration == 0:
@@ -135,7 +204,7 @@ class PreconditionedCGSolver(ConjugateGradientBase):
             self._rw_prev = stable_dot_product(state.r, w, dtype=np.float64)
             return w.copy()
 
-        # Compute beta coefficient
+        # Phase 1: Standard two-term recurrence (UNCHANGED)
         rw_curr = stable_dot_product(state.r, w, dtype=np.float64)
 
         if self.beta_formula == "fletcher_reeves":
@@ -159,59 +228,51 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         # Two-term recurrence (Notay 2000)
         d_new = w + beta * state.d
 
+        # Phase 2: Optional reorthogonalization (NEW)
+        if self.orthogonalization is not None:
+            from ..models.protocols import HasDirectionHistory
+
+            # Extract direction history from CGState
+            if isinstance(state, HasDirectionHistory):
+                history = state.direction_history
+                d_vectors = list(history.d_vectors)
+                q_vectors = list(history.q_vectors)
+
+                # Reorthogonalize against previous directions
+                # Formula: d_i := d_i - Σ[(d_i, A d_j)/(d_j, A d_j)] * d_j
+                d_reorthog, _report = self.orthogonalization.orthogonalize(
+                    vector=d_new,
+                    d_vectors=d_vectors,
+                    q_vectors=q_vectors,
+                )
+
+                return d_reorthog
+
+            # Fallback: state doesn't have history (shouldn't happen if _initialize_state is correct)
+            import warnings
+            warnings.warn(
+                "Orthogonalization enabled but state does not have direction history. "
+                "Skipping reorthogonalization for this iteration.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
         return d_new
 
     # Implement IterativeSolverBase abstract methods
-
-    def _validate_system(
-        self,
-        A: Callable[[NDArray], NDArray] | NDArray,
-        b: NDArray,
-        x0: NDArray | None,
-        **kwargs,
-    ) -> None:
-        """Validate system inputs."""
-        b_arr = np.asarray(b, dtype=np.float64)
-        if b_arr.ndim != 1:
-            raise ValueError(f"b must be 1D vector, got shape {b_arr.shape}")
-
-        if x0 is not None:
-            x0_arr = np.asarray(x0, dtype=np.float64)
-            if x0_arr.shape != b_arr.shape:
-                raise ValueError(f"x0 shape {x0_arr.shape} != b shape {b_arr.shape}")
-
-    def _prepare_operator(
-        self,
-        A: Callable[[NDArray], NDArray] | NDArray,
-        b: NDArray,
-        **kwargs,
-    ) -> Callable[[NDArray], NDArray]:
-        """Prepare linear operator."""
-        # If already callable, return as is
-        if callable(A) and not isinstance(A, np.ndarray):
-            return A  # type: ignore[return-value]
-
-        linear_op = aslinearoperator(A)
-        return linear_op.matvec
-
-    def _normalize_tolerances(
-        self,
-        b: NDArray,
-        **kwargs,
-    ) -> tuple[float, float]:
-        """Normalize tolerances."""
-        rtol = kwargs.get("rtol", DEFAULT_RTOL)
-        atol = kwargs.get("atol", DEFAULT_ATOL)
-        return float(rtol), float(atol)
 
     def _initialize_state(
         self,
         linear_op: Callable[[NDArray], NDArray],
         b: NDArray,
         x0: NDArray | None,
-        **kwargs,
-    ) -> KrylovState:
-        """Initialize PCG state."""
+        maxiter: int | None = None,
+    ) -> CGState:
+        """Initialize PCG state.
+
+        Returns:
+            CGState: Always returns CGState (CGState wraps KrylovState and adds history)
+        """
         b_arr = np.asarray(b, dtype=np.float64)
         n = b_arr.shape[0]
 
@@ -236,19 +297,21 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         self._r_prev = None
         self._rw_prev = 0.0
 
-        # Create initial state
-        return KrylovState(
-            iteration=0,
-            converged=False,
-            breakdown=False,
-            divergence=False,
-            residual_norm=r_norm,
-            rhs_norm=float(self.convergence_criterion.norm(b_arr)),
+        # Compute history size (0 if no orthogonalization, or computed size)
+        max_history = 0
+        if self.orthogonalization is not None:
+            max_history = self._compute_max_history(n, maxiter)
+
+        # Always return CGState (even when max_history=0 for consistency)
+        return CGState.create_initial(
             u=u,
             r=r,
             w=w,
             d=d,
             q=q,
+            residual_norm=r_norm,
+            rhs_norm=float(self.convergence_criterion.norm(b_arr)),
+            max_history=max_history,
         )
 
     def _check_stopping(
@@ -257,7 +320,7 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         rtol: float,
         atol: float,
         maxiter: int,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> bool:
         """Check if solver should stop."""
         if state.converged:
@@ -281,7 +344,7 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         state: SolverState,
         rtol: float,
         atol: float,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> SolverResult:
         """Build final SolverResult."""
         # Dependency injection: create criterion once, delegate to base class helper
@@ -289,13 +352,12 @@ class PreconditionedCGSolver(ConjugateGradientBase):
         converged = self._check_convergence_with_criterion(state, criterion)
 
         # Extract histories from event log using base class helper
-        event_log = self._get_event_logger(**kwargs)
         (
             residual_history_abs,
             residual_history_rel,
             residual_vectors,
             solution_vectors,
-        ) = self._extract_histories_from_event_log(event_log, state.rhs_norm)
+        ) = self._extract_histories_from_event_log(self.event_log, state.rhs_norm)
 
         return SolverResult(
             converged=converged,
@@ -308,7 +370,7 @@ class PreconditionedCGSolver(ConjugateGradientBase):
             residual_history_abs=residual_history_abs,
             tol=rtol,
             atol=atol,
-            event_log=event_log,  # CRITICAL: Attach event_log to result
+            event_log=self.event_log,  # CRITICAL: Attach event_log to result
             residual_vectors=residual_vectors,
             solution_vectors=solution_vectors,
         )

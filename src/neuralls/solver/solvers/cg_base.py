@@ -64,6 +64,7 @@ class ConjugateGradientBase(KrylovSolverBase):
         _compute_curvature_cg: Compute curvature with breakdown detection
         _compute_step_length_cg: Compute step length using FCG formula
         _update_solution_residual: Update x and r vectors
+        _compute_max_history: Compute history size for orthogonalization strategies
 
     Theory Note (Notay 2000):
         The A-norm minimization property of CG:
@@ -72,6 +73,52 @@ class ConjugateGradientBase(KrylovSolverBase):
         where ||e||_A = sqrt(e^T A e) and u_* is the true solution.
     """
 
+    def _compute_max_history(
+        self,
+        matrix_size: int,
+        maxiter: int | None,
+    ) -> int:
+        """Compute maximum history size for orthogonalization.
+
+        Eliminates duplicated logic in FCG and PCG _initialize_state methods.
+
+        Args:
+            matrix_size: Size of the linear system (n)
+            maxiter: Maximum number of iterations (None if not set)
+
+        Returns:
+            Maximum history size to use for DirectionHistory
+
+        Theory:
+            History size determines how many previous directions to retain:
+            - If orthogonalization.window_size is None (unlimited): use maxiter
+            - If orthogonalization.window_size is int: use that directly
+            - Fallback: max(matrix_size, DEFAULT_FCG_HISTORY_LIMIT)
+
+        Note: This method should only be called when orthogonalization
+              exists on the solver instance.
+        """
+        from ...constants import DEFAULT_FCG_HISTORY_LIMIT
+
+        orthog = getattr(self, "orthogonalization", None)
+        if orthog is None:
+            # No orthogonalization - return minimal size
+            return 0
+
+        window = orthog.window_size
+
+        # Handle unlimited case (None = full orthogonalization)
+        if window is None:
+            # For unlimited orthogonalization, use maxiter or fallback
+            if maxiter is not None and maxiter > 0:
+                return maxiter
+            else:
+                # Fallback to constant limit
+                return max(matrix_size, DEFAULT_FCG_HISTORY_LIMIT)
+        else:
+            # Truncated orthogonalization with fixed window
+            return window
+
     # Implement KrylovSolverBase abstract methods
 
     def _compute_coefficients(
@@ -79,7 +126,7 @@ class ConjugateGradientBase(KrylovSolverBase):
         d: NDArray,
         q: NDArray,
         state: KrylovState,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> tuple[float, dict[str, float]]:
         """Compute CG step length and coefficients.
 
@@ -91,7 +138,7 @@ class ConjugateGradientBase(KrylovSolverBase):
             d: Search direction d_i (Notay 2000)
             q: Matrix-vector product q_i = A d_i
             state: Current CG state
-            **kwargs: May contain 'breakdown_tol' for curvature check
+            breakdown_tol: Breakdown detection tolerance
 
         Returns:
             Tuple (step_length, coefficients):
@@ -102,11 +149,13 @@ class ConjugateGradientBase(KrylovSolverBase):
             The step length minimizes the A-norm of error along d_i:
                 α_i = argmin_α ||u_i + α*d_i - u_*||_A
         """
-        # Extract parameters
-        breakdown_tol = kwargs.get("breakdown_tol", 1e-14)
+        from ...constants import DEFAULT_BREAKDOWN_TOL
+
+        # Resolve breakdown tolerance
+        breakdown_tol_eff = breakdown_tol if breakdown_tol is not None else DEFAULT_BREAKDOWN_TOL
 
         # Compute curvature with breakdown detection
-        curvature, breakdown = compute_curvature(d, q, breakdown_tol=breakdown_tol)
+        curvature, breakdown = compute_curvature(d, q, breakdown_tol=breakdown_tol_eff)
 
         if breakdown:
             # Breakdown detected - curvature too small or negative
@@ -127,7 +176,6 @@ class ConjugateGradientBase(KrylovSolverBase):
         w: NDArray,
         step_length: float,
         coefficients: dict[str, float],
-        **kwargs,
     ) -> KrylovState:
         """Update solution, residual, and CG state.
 
@@ -144,7 +192,6 @@ class ConjugateGradientBase(KrylovSolverBase):
             w: Preconditioned residual w_i = M^{-1}(r_i) (Notay 2000)
             step_length: Step length α_i
             coefficients: Contains curvature and breakdown flag
-            **kwargs: Solver parameters
 
         Returns:
             New CGState with updated vectors
@@ -198,13 +245,11 @@ class ConjugateGradientBase(KrylovSolverBase):
     def _check_breakdown(
         self,
         state: KrylovState,
-        **kwargs,
     ) -> bool:
         """Check for CG breakdown (NaN/Inf in solution or residual).
 
         Args:
             state: Current CG state
-            **kwargs: Unused
 
         Returns:
             True if breakdown detected (NaN/Inf), False otherwise
