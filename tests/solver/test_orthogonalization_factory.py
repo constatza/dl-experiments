@@ -17,7 +17,9 @@ import pytest
 
 from neuralls.solver.strategies.orthogonalization import (
     FullOrthogonalization,
+    ModifiedGramSchmidt,
     PeriodicRestartOrthogonalization,
+    TruncatedGramSchmidt,
     create_fcg_orthogonalization,
 )
 
@@ -181,3 +183,48 @@ class TestFactoryIntegration:
         np.testing.assert_allclose(result, sample_vector)
         assert len(report.coefficients) == 0
         assert not report.breakdown
+
+
+# =============================================================================
+# Window Size Property Tests
+# =============================================================================
+
+
+class TestWindowSizeProperty:
+    """Test that all strategies expose window_size property correctly."""
+
+    def test_periodic_restart_window_size(self) -> None:
+        """PeriodicRestartOrthogonalization should return m_max as window_size."""
+        strategy = PeriodicRestartOrthogonalization(m_max=15)
+        assert strategy.window_size == 15
+
+    def test_truncated_gram_schmidt_window_size(self) -> None:
+        """TruncatedGramSchmidt should return configured window_size."""
+        strategy = TruncatedGramSchmidt(window_size=20)
+        assert strategy.window_size == 20
+
+    def test_modified_gram_schmidt_window_size(self) -> None:
+        """ModifiedGramSchmidt should return None for unlimited."""
+        strategy = ModifiedGramSchmidt()
+        assert strategy.window_size is None
+
+    def test_full_orthogonalization_window_size(self) -> None:
+        """FullOrthogonalization should return None for unlimited."""
+        strategy = FullOrthogonalization()
+        assert strategy.window_size is None
+
+    def test_factory_bounded_window_size(self) -> None:
+        """Factory-created bounded strategy should have correct window_size."""
+        strategy = create_fcg_orthogonalization(m_max=10)
+        assert strategy.window_size == 10
+
+    def test_factory_unlimited_window_size(self) -> None:
+        """Factory-created unlimited strategy should have None window_size."""
+        strategy = create_fcg_orthogonalization(m_max=-1)
+        assert strategy.window_size is None
+
+    def test_various_window_sizes(self) -> None:
+        """Test various window_size values through factory."""
+        for m in [1, 5, 10, 50, 100]:
+            strategy = create_fcg_orthogonalization(m_max=m)
+            assert strategy.window_size == m
