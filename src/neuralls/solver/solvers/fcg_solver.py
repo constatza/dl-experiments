@@ -45,6 +45,7 @@ from scipy.sparse.linalg import aslinearoperator
 
 from ...constants import (
     DEFAULT_ATOL,
+    DEFAULT_FCG_HISTORY_LIMIT,
     DEFAULT_M_MAX,
     DEFAULT_RTOL,
 )
@@ -106,7 +107,8 @@ class FlexibleCGSolver(ConjugateGradientBase):
         preconditioner: Preconditioner | None = None,
         orthogonalization: OrthogonalizationStrategy | None = None,
         convergence_criterion: IConvergenceCriterion | None = None,
-        event_logger: TraceRecorder | None = None,
+        event_log: TraceRecorder | None = None,
+        trace_mode = None,
     ) -> None:
         """Initialize Flexible CG solver.
 
@@ -115,12 +117,15 @@ class FlexibleCGSolver(ConjugateGradientBase):
             orthogonalization: Orthogonalization strategy (default: PeriodicRestartOrthogonalization
                 with m_max=10, implementing FCG(10) from Notay 2000)
             convergence_criterion: Convergence test (default: Combined rtol/atol)
-            event_logger: Optional TraceRecorder for diagnostics
+            event_log: Optional TraceRecorder for diagnostics
+            trace_mode: Logging granularity (DISABLED, MINIMAL, FULL)
 
         Note:
             The default orthogonalization implements Notay (2000) Algorithm 2.1 with
             m_max=10, using the periodic restart formula m_i = max(1, i mod (m_max + 1)).
         """
+        from ..monitoring.trace_mode import TraceMode
+
         # Set defaults
         self.preconditioner = preconditioner or IdentityPreconditioner()
         self.orthogonalization = orthogonalization or PeriodicRestartOrthogonalization(
@@ -130,7 +135,10 @@ class FlexibleCGSolver(ConjugateGradientBase):
             convergence_criterion
             or CombinedToleranceCriterion(rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL)
         )
-        self.event_logger = event_logger
+
+        # Initialize base class with logging configuration
+        trace_mode_enum = trace_mode if trace_mode is not None else TraceMode.MINIMAL
+        super().__init__(event_log=event_log, trace_mode=trace_mode_enum)
 
     # Implement KrylovSolverBase abstract method
 
@@ -138,7 +146,6 @@ class FlexibleCGSolver(ConjugateGradientBase):
         self,
         w: NDArray,
         state: KrylovState,
-        **kwargs,
     ) -> NDArray:
         """Compute FCG search direction using orthogonalization strategy.
 
@@ -157,7 +164,6 @@ class FlexibleCGSolver(ConjugateGradientBase):
         Args:
             w: Preconditioned residual w_i (Notay 2000)
             state: Current CGState with direction_history containing (d_j, A d_j) vectors
-            **kwargs: Additional parameters
 
         Returns:
             Orthogonalized search direction d_i (Notay 2000)
@@ -197,81 +203,12 @@ class FlexibleCGSolver(ConjugateGradientBase):
 
     # Implement IterativeSolverBase abstract methods
 
-    def _validate_system(
-        self,
-        A: Callable[[NDArray], NDArray] | NDArray,
-        b: NDArray,
-        x0: NDArray | None,
-        **kwargs,
-    ) -> None:
-        """Validate system inputs.
-
-        Args:
-            A: Linear operator
-            b: Right-hand side
-            x0: Initial guess
-            **kwargs: Solver parameters
-
-        Raises:
-            ValueError: If inputs invalid
-        """
-        b_arr = np.asarray(b, dtype=np.float64)
-        if b_arr.ndim != 1:
-            raise ValueError(f"b must be 1D vector, got shape {b_arr.shape}")
-
-        if x0 is not None:
-            x0_arr = np.asarray(x0, dtype=np.float64)
-            if x0_arr.shape != b_arr.shape:
-                raise ValueError(f"x0 shape {x0_arr.shape} != b shape {b_arr.shape}")
-
-    def _prepare_operator(
-        self,
-        A: Callable[[NDArray], NDArray] | NDArray,
-        b: NDArray,
-        **kwargs,
-    ) -> Callable[[NDArray], NDArray]:
-        """Prepare linear operator.
-
-        Args:
-            A: Linear operator (matrix or callable)
-            b: Right-hand side
-            **kwargs: Solver parameters
-
-        Returns:
-            Callable linear operator
-        """
-        # If already callable, return as is
-        if callable(A) and not isinstance(A, np.ndarray):
-            return A  # type: ignore[return-value]
-
-        # Convert to LinearOperator for consistency
-        linear_op = aslinearoperator(A)
-        return linear_op.matvec
-
-    def _normalize_tolerances(
-        self,
-        b: NDArray,
-        **kwargs,
-    ) -> tuple[float, float]:
-        """Normalize tolerances.
-
-        Args:
-            b: Right-hand side
-            **kwargs: Must contain 'rtol' and 'atol'
-
-        Returns:
-            Tuple (rtol, atol)
-        """
-        rtol = kwargs.get("rtol", DEFAULT_RTOL)
-        atol = kwargs.get("atol", DEFAULT_ATOL)
-        return float(rtol), float(atol)
-
     def _initialize_state(
         self,
         linear_op: Callable[[NDArray], NDArray],
         b: NDArray,
         x0: NDArray | None,
-        **kwargs,
+        maxiter: int | None = None,
     ) -> CGState:
         """Initialize FCG state.
 
@@ -279,7 +216,7 @@ class FlexibleCGSolver(ConjugateGradientBase):
             linear_op: Prepared linear operator
             b: Right-hand side
             x0: Initial guess
-            **kwargs: Solver parameters (may contain max_history)
+            maxiter: Maximum iterations (used for history sizing)
 
         Returns:
             Initial CGState with u_0, r_0, and empty histories
@@ -303,8 +240,8 @@ class FlexibleCGSolver(ConjugateGradientBase):
         # Matrix-vector product q_0 = A d_0
         q = linear_op(d)
 
-        # Get window size from orthogonalization strategy
-        max_history = getattr(self.orthogonalization, "window_size", DEFAULT_M_MAX)
+        # Compute history size using shared helper
+        max_history = self._compute_max_history(n, maxiter)
 
         # Create initial state using factory method
         return CGState.create_initial(
@@ -324,7 +261,7 @@ class FlexibleCGSolver(ConjugateGradientBase):
         rtol: float,
         atol: float,
         maxiter: int,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> bool:
         """Check if solver should stop.
 
@@ -365,7 +302,7 @@ class FlexibleCGSolver(ConjugateGradientBase):
         state: SolverState,
         rtol: float,
         atol: float,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> SolverResult:
         """Build final SolverResult.
 
@@ -373,7 +310,7 @@ class FlexibleCGSolver(ConjugateGradientBase):
             state: Final SolverState
             rtol: Relative tolerance
             atol: Absolute tolerance
-            **kwargs: Solver parameters
+            breakdown_tol: Breakdown detection tolerance
 
         Returns:
             SolverResult with convergence info and diagnostics
@@ -385,13 +322,12 @@ class FlexibleCGSolver(ConjugateGradientBase):
         converged = self._check_convergence_with_criterion(state, criterion)
 
         # Extract histories from event log using base class helper
-        event_log = self._get_event_logger(**kwargs)
         (
             residual_history_abs,
             residual_history_rel,
             residual_vectors,
             solution_vectors,
-        ) = self._extract_histories_from_event_log(event_log, state.rhs_norm)
+        ) = self._extract_histories_from_event_log(self.event_log, state.rhs_norm)
 
         # Fallback to CGState.residual_history if event_log unavailable (backward compatibility)
         if residual_history_abs is None and isinstance(state, HasDirectionHistory):
@@ -417,7 +353,7 @@ class FlexibleCGSolver(ConjugateGradientBase):
             residual_history_abs=residual_history_abs,  # Also provide absolute
             tol=rtol,
             atol=atol,
-            event_log=event_log,  # Attach the event log
+            event_log=self.event_log,  # Attach the event log
             residual_vectors=residual_vectors,  # Vector traces if FULL mode
             solution_vectors=solution_vectors,  # Vector traces if FULL mode
         )

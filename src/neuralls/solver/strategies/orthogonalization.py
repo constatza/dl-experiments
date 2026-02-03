@@ -79,11 +79,31 @@ class OrthogonalizationStrategy(ABC):
     Defines the interface for all orthogonalization methods used in
     Krylov solvers. Subclasses implement specific algorithms.
 
+    All strategies must implement:
+    - orthogonalize(): Core orthogonalization algorithm
+    - window_size property: Window size for direction history
+
+    The window_size property enables uniform configuration across
+    different orthogonalization strategies. It returns:
+    - int: Maximum directions to retain (bounded window)
+    - None: Unlimited orthogonalization (full Gram-Schmidt)
+
     Theory:
         Orthogonalization maintains conjugacy or orthogonality of search
         directions, preventing loss of linear independence and numerical
         breakdown.
     """
+
+    @property
+    @abstractmethod
+    def window_size(self) -> int | None:
+        """Return window size for direction history.
+
+        Returns:
+            int: Maximum number of directions to retain
+            None: Unlimited (full orthogonalization)
+        """
+        ...
 
     @abstractmethod
     def orthogonalize(
@@ -163,6 +183,15 @@ class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
         self.epsilon = epsilon
         self._iteration_count = 0  # Track calls to compute m_i
 
+    @property
+    def window_size(self) -> int:
+        """Return m_max as window size for direction history.
+
+        Returns:
+            Maximum number of directions (m_max from Notay 2000)
+        """
+        return self.m_max
+
     def orthogonalize(
         self,
         vector: NDArray,
@@ -208,8 +237,8 @@ class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
             q_j = q_vectors[j]
 
             # Notay (2000) Algorithm 2.1: d_i = w_i - Σ[(w_i, A d_j)/(d_j, A d_j)] d_j
-            numerator = float(np.dot(vector, q_j))     # (w_i, A d_j)
-            denominator = float(np.dot(d_j, q_j))      # (d_j, A d_j)
+            numerator = float(np.dot(vector, q_j))  # (w_i, A d_j)
+            denominator = float(np.dot(d_j, q_j))  # (d_j, A d_j)
 
             if not np.isfinite(numerator) or not np.isfinite(denominator):
                 num_skipped += 1
@@ -284,8 +313,17 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
         if epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {epsilon}")
 
-        self.window_size = window_size
+        self._window_size = window_size
         self.epsilon = epsilon
+
+    @property
+    def window_size(self) -> int:
+        """Return configured window size for direction history.
+
+        Returns:
+            Maximum number of directions to retain
+        """
+        return self._window_size
 
     def orthogonalize(
         self,
@@ -312,7 +350,7 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
 
         # Determine orthogonalization window
         n_history = len(d_vectors)
-        m = min(n_history, self.window_size)
+        m = min(n_history, self._window_size)
 
         if m == 0:
             # No history to orthogonalize against
@@ -328,7 +366,7 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
 
             # Compute orthogonalization coefficient (Notay 2000)
             numerator = float(np.dot(vector, q_j))  # (w_i, A d_j)
-            denominator = float(np.dot(d_j, q_j))   # (d_j, A d_j)
+            denominator = float(np.dot(d_j, q_j))  # (d_j, A d_j)
 
             # Check for NaN/Inf
             if not np.isfinite(numerator) or not np.isfinite(denominator):
@@ -397,6 +435,15 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
         if epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {epsilon}")
         self.epsilon = epsilon
+
+    @property
+    def window_size(self) -> None:
+        """Return None for unlimited orthogonalization.
+
+        Returns:
+            None: Indicates full orthogonalization (no truncation)
+        """
+        return None
 
     def orthogonalize(
         self,
@@ -499,6 +546,15 @@ class FullOrthogonalization(OrthogonalizationStrategy):
             raise ValueError(f"epsilon must be > 0, got {epsilon}")
         self.epsilon = epsilon
 
+    @property
+    def window_size(self) -> None:
+        """Return None for unlimited orthogonalization.
+
+        Returns:
+            None: Indicates full orthogonalization (FCG(∞))
+        """
+        return None
+
     def orthogonalize(
         self,
         vector: NDArray,
@@ -565,7 +621,9 @@ def create_fcg_orthogonalization(
         Notay, Y. (2000). Flexible Conjugate Gradients. SIAM J. Sci. Comput.
     """
     if m_max == 0:
-        raise ValueError("m_max cannot be 0. Use m_max=1 for minimal orthogonalization.")
+        raise ValueError(
+            "m_max cannot be 0. Use m_max=1 for minimal orthogonalization."
+        )
     if m_max < -1:
         raise ValueError(f"m_max must be >= -1, got {m_max}")
 

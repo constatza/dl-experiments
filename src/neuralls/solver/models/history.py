@@ -35,6 +35,13 @@ class DirectionHistory:
     matrix-vector products (q_i = A d_i) for algorithms like Flexible Conjugate
     Gradient that require orthogonalization against previous directions.
 
+    When max_size is reached, older directions are dropped to maintain
+    the window size.
+
+    For full orthogonalization (FCG(∞)), set max_size to a large value
+    (e.g., DEFAULT_FCG_HISTORY_LIMIT=200) or the expected maximum
+    iteration count.
+
     Theory (Notay 2000):
         FCG orthogonalization formula:
             d_i = w_i - Σ_{j=i-m}^{i-1} [(w_i, q_j) / (d_j, q_j)] d_j
@@ -49,7 +56,8 @@ class DirectionHistory:
         q_vectors: Tuple of previous matrix-vector products [q_{i-m}, ..., q_{i-1}].
             Each q_j = A @ d_j. Used in orthogonalization coefficients.
 
-        max_size: Maximum window size. Vectors are truncated to keep only last max_size.
+        max_size: Maximum window size (effectively unlimited if large).
+            Vectors are truncated to keep only last max_size.
 
         total_updates: Total number of directions added (monotonic, not truncated).
             Used for debugging and statistics.

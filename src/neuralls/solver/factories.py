@@ -133,8 +133,6 @@ def flexible_cg(
     )
     logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
 
-    # Resolve rtol before constructing criterion
-
     # Create convergence criterion with injected norm
     convergence_criterion = CombinedToleranceCriterion(
         rtol=rtol,
@@ -142,15 +140,16 @@ def flexible_cg(
         norm=norm,
     )
 
-    # Construct solver
+    # Construct solver with logging configuration
     solver = FlexibleCGSolver(
         preconditioner=precond_strategy,
         orthogonalization=orthog_strategy,
         convergence_criterion=convergence_criterion,
-        event_logger=logger,
+        event_log=logger,
+        trace_mode=trace_mode_enum,
     )
 
-    # Solve system
+    # Solve system with explicit parameters
     # Type ignore needed because solve() accepts both NDArray and Callable
     x, result = solver.solve(  # type: ignore[arg-type]
         A,
@@ -159,8 +158,6 @@ def flexible_cg(
         rtol=rtol,
         atol=atol,
         maxiter=maxiter,
-        trace_mode=trace_mode_enum,
-        event_log=logger,
     )
 
     return x, result
@@ -172,6 +169,7 @@ def preconditioned_cg(
     x0: NDArray | None = None,
     *,
     preconditioner: Callable[..., NDArray] | LinearOperator | None = None,
+    m_max: int | None = None,
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
     tol: float | None = None,
@@ -184,13 +182,17 @@ def preconditioned_cg(
     Standard PCG using two-term recurrence formula. Memory-efficient with
     O(1) storage for directions. Best for classical SPD preconditioners.
 
+    Optional reorthogonalization can be enabled to correct accumulated
+    rounding errors, at the cost of O(m*n) memory for m directions.
+
     Mathematical Method:
         At each iteration k:
         1. Apply preconditioner: z_k = M^{-1} r_k
         2. Compute beta: β_k = (r_k, z_k) / (r_{k-1}, z_{k-1})
         3. Update direction: p_k = z_k + β_k p_{k-1}
-        4. Update solution: x_{k+1} = x_k + α_k p_k
-        5. Update residual: r_{k+1} = r_k - α_k q_k
+        4. Optional reorthogonalization: p_k := p_k - Σ_j [(p_k, A p_j)/(p_j, A p_j)] p_j
+        5. Update solution: x_{k+1} = x_k + α_k p_k
+        6. Update residual: r_{k+1} = r_k - α_k q_k
 
     Args:
         A: System matrix, shape (n, n). Must be square and SPD.
@@ -198,6 +200,10 @@ def preconditioned_cg(
         x0: Initial guess, shape (n,). If None, uses zero vector.
         preconditioner: Callable implementing M^{-1} operation.
             If None, uses identity (standard CG).
+        m_max: Orthogonalization window size (default: None, disabled).
+            - None: Disabled (O(1) memory, standard PCG)
+            - -1: Full reorthogonalization (unlimited)
+            - >0: Truncated reorthogonalization (window size m_max)
         rtol: Relative tolerance for convergence. Default: 1e-6.
         atol: Absolute tolerance for convergence. Default: 1e-14.
         tol: Alternative name for rtol (overrides rtol if provided).
@@ -214,11 +220,17 @@ def preconditioned_cg(
         - result (SolverResult): Convergence information
 
     Examples:
+        >>> # Standard PCG (no reorthogonalization)
+        >>> x, result = preconditioned_cg(A, b)
+
+        >>> # PCG with full reorthogonalization
+        >>> x, result = preconditioned_cg(A, b, m_max=-1)
+
+        >>> # PCG with truncated reorthogonalization (window size 10)
+        >>> x, result = preconditioned_cg(A, b, m_max=10)
+
         >>> # Jacobi preconditioner
         >>> x, result = preconditioned_cg(A, b, preconditioner=jacobi_precond)
-
-        >>> # Standard CG (no preconditioning)
-        >>> x, result = preconditioned_cg(A, b)
     """
     # Create preconditioner strategy
     if preconditioner is None:
@@ -228,6 +240,12 @@ def preconditioned_cg(
     else:
         precond_strategy = FunctionPreconditioner(preconditioner)
 
+    # Create orthogonalization strategy
+    orthog_strategy = None
+    if m_max is not None:
+        from .strategies.orthogonalization import create_fcg_orthogonalization
+        orthog_strategy = create_fcg_orthogonalization(m_max=m_max)
+
     # Create event logger based on trace mode
     # Convert string to TraceMode if needed
     trace_mode_enum = (
@@ -235,24 +253,27 @@ def preconditioned_cg(
     )
     logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
 
-    # Construct solver
+    # Resolve rtol alias before using it
+    rtol_value = tol if tol is not None else rtol
+
+    # Construct solver with logging configuration
     solver = PreconditionedCGSolver(
         preconditioner=precond_strategy,
         beta_formula=beta_formula,
-        event_logger=logger,
+        orthogonalization=orthog_strategy,
+        event_log=logger,
+        trace_mode=trace_mode_enum,
     )
 
-    # Solve system
+    # Solve system with explicit parameters
     # Type ignore needed because solve() accepts both NDArray and Callable
     x, result = solver.solve(  # type: ignore[arg-type]
         A,
         b,
         x0,
-        rtol=rtol,
+        rtol=rtol_value,
         atol=atol,
         maxiter=maxiter,
-        trace_mode=trace_mode_enum,
-        event_log=logger,
     )
 
     return x, result
@@ -325,16 +346,16 @@ def scipy_cg(
     )
     logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
 
-    # Construct solver
+    # Resolve rtol alias
+    rtol_value = tol if tol is not None else rtol
+
+    # Construct solver (SciPyCGSolver has different API, not based on IterativeSolverBase)
     solver = SciPyCGSolver(
         preconditioner=precond_strategy,
         event_logger=logger,
     )
 
-    # Resolve rtol alias
-    rtol_value = tol if tol is not None else rtol
-
-    # Solve system
+    # Solve system (SciPyCGSolver.solve() still accepts trace_mode as parameter)
     x, result = solver.solve(
         A,
         b,
