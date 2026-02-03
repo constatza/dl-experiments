@@ -23,6 +23,8 @@ from collections.abc import Callable
 
 import numpy as np
 
+from ..monitoring.trace_mode import TraceMode
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -30,6 +32,7 @@ if TYPE_CHECKING:
     from ..models.result import SolverResult
     from ..preconditioners import Preconditioner
     from ..models.state import SolverState
+    from ..monitoring.trace_recorder import TraceRecorder
 
 
 class IterativeSolverBase(ABC):
@@ -41,14 +44,15 @@ class IterativeSolverBase(ABC):
         convergence_criterion: Required convergence criterion for checking solution convergence.
             This must be set in the subclass __init__ method. The criterion defines
             the norm and tolerance logic for determining when the solver has converged.
+        event_log: Optional TraceRecorder for logging iteration events
+        trace_mode: Controls logging granularity (DISABLED, MINIMAL, FULL)
 
     This class implements the common lifecycle for iterative linear system solvers:
     1. Validate inputs
     2. Prepare operator
-    3. Normalize tolerances
-    4. Initialize state
-    5. Iterate until convergence/breakdown/max iterations
-    6. Build result
+    3. Initialize state
+    4. Iterate until convergence/breakdown/max iterations
+    5. Build result
 
     Subclasses implement protected hooks to customize each step while the public
     solve() method orchestrates the overall flow.
@@ -58,14 +62,15 @@ class IterativeSolverBase(ABC):
         check_convergence: Check if convergence criterion satisfied
 
     Protected Hooks (Abstract - must implement):
-        _validate_system: Validate inputs (dimensions, types)
-        _prepare_operator: Wrap A in consistent callable interface
-        _normalize_tolerances: Compute effective rtol/atol
         _initialize_state: Setup initial IterationState
         _iterate_step: Execute single solver iteration
         _check_stopping: Check convergence/breakdown/divergence
         _build_result: Assemble final SolverResult
         _log_state: Log iteration state via TraceRecorder
+
+    Protected Hooks (Concrete - available to all):
+        _validate_system: Validate inputs (dimensions, types)
+        _prepare_operator: Wrap A in consistent callable interface
 
     Protected Helpers (Concrete - available to all):
         _apply_preconditioner: Apply preconditioner to residual
@@ -75,18 +80,39 @@ class IterativeSolverBase(ABC):
         Convergence when ||r_k|| = ||b - Ax_k|| <= max(rtol * ||b||, atol).
     """
 
+    def __init__(
+        self,
+        *,
+        event_log: TraceRecorder | None = None,
+        trace_mode: TraceMode = TraceMode.MINIMAL,
+    ) -> None:
+        """Initialize base solver with logging configuration.
+
+        Args:
+            event_log: Optional TraceRecorder for logging iteration events
+            trace_mode: Controls logging granularity (default: MINIMAL)
+        """
+        self.event_log = event_log
+        self.trace_mode = trace_mode
+
     def solve(
         self,
-        A: Callable[[NDArray], NDArray],
+        A: Callable[[NDArray], NDArray] | NDArray,
         b: NDArray,
         x0: NDArray | None = None,
+        *,
+        rtol: float | None = None,
+        atol: float | None = None,
         maxiter: int | None = None,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> tuple[NDArray, SolverResult]:
         """Solve linear system Ax = b using iterative method.
 
         Template method that orchestrates the solver lifecycle. Subclasses
         customize behavior by implementing protected hook methods.
+
+        Logging configuration (event_log, trace_mode) is set via constructor,
+        not as parameters to solve().
 
         Args:
             A: Linear operator mapping vectors to vectors. Can be:
@@ -95,7 +121,10 @@ class IterativeSolverBase(ABC):
                 - SciPy LinearOperator
             b: Right-hand side vector, shape (n,)
             x0: Initial guess, shape (n,). If None, uses zero vector.
-            **kwargs: Solver-specific parameters (rtol, atol, maxiter, etc.)
+            rtol: Relative tolerance (default: DEFAULT_RTOL from constants)
+            atol: Absolute tolerance (default: DEFAULT_ATOL from constants)
+            maxiter: Maximum iterations (default: 100)
+            breakdown_tol: Breakdown detection tolerance (default: DEFAULT_BREAKDOWN_TOL)
 
         Returns:
             Tuple of (solution, result):
@@ -112,35 +141,37 @@ class IterativeSolverBase(ABC):
                     x_{k+1} = update(x_k, A, b)
                 Return x_k, diagnostics
         """
-        # Step 1: Validate inputs
-        self._validate_system(A, b, x0, **kwargs)
+        from ...constants import DEFAULT_RTOL, DEFAULT_ATOL, DEFAULT_BREAKDOWN_TOL
 
-        # Step 2: Prepare operator (ensure consistent callable interface)
-        linear_op = self._prepare_operator(A, b, **kwargs)
+        # Step 1: Resolve defaults
+        rtol_eff = rtol if rtol is not None else DEFAULT_RTOL
+        atol_eff = atol if atol is not None else DEFAULT_ATOL
+        maxiter_eff = maxiter if maxiter is not None else 100
+        breakdown_tol_eff = breakdown_tol if breakdown_tol is not None else DEFAULT_BREAKDOWN_TOL
 
-        # Step 3: Compute effective tolerances
-        rtol_eff, atol_eff = self._normalize_tolerances(b, **kwargs)
+        # Step 2: Validate inputs
+        self._validate_system(A, b, x0)
+
+        # Step 3: Prepare operator (ensure consistent callable interface)
+        linear_op = self._prepare_operator(A, b)
 
         # Step 4: Initialize iteration state
-        state = self._initialize_state(linear_op, b, x0, **kwargs)
+        state = self._initialize_state(linear_op, b, x0, maxiter=maxiter_eff)
 
         # Step 5: Log initial state (iteration 0)
-        self._log_state(state, iteration=0, **kwargs)
+        self._log_state(state, iteration=0)
 
         # Step 6: Iterate until stopping criterion met
-        kwargs_no_tol = {k: v for k, v in kwargs.items() if k not in ("rtol", "atol")}
-        maxiter_eff = maxiter if maxiter is not None else 100
-
-        while not self._check_stopping(state, rtol_eff, atol_eff, maxiter_eff, **kwargs_no_tol):
-            state = self._iterate_step(linear_op, state, **kwargs_no_tol)
-            self._log_state(state, iteration=state.iteration, **kwargs_no_tol)
+        while not self._check_stopping(state, rtol_eff, atol_eff, maxiter_eff, breakdown_tol=breakdown_tol_eff):
+            state = self._iterate_step(linear_op, state, breakdown_tol=breakdown_tol_eff)
+            self._log_state(state, iteration=state.iteration)
 
         # Step 7: Build final result
         u_final = getattr(state, "u", None)
         if u_final is None:
             raise RuntimeError("Final solution not found in state")
 
-        return u_final, self._build_result(state, rtol_eff, atol_eff, **kwargs_no_tol)
+        return u_final, self._build_result(state, rtol_eff, atol_eff, breakdown_tol=breakdown_tol_eff)
 
     def _create_convergence_criterion(
         self, rtol: float, atol: float
@@ -198,13 +229,11 @@ class IterativeSolverBase(ABC):
 
     # Protected abstract hooks
 
-    @abstractmethod
     def _validate_system(
         self,
         A: Callable[[NDArray], NDArray] | NDArray,
         b: NDArray,
         x0: NDArray | None,
-        **kwargs,
     ) -> None:
         """Validate system inputs.
 
@@ -212,19 +241,23 @@ class IterativeSolverBase(ABC):
             A: Linear operator
             b: Right-hand side
             x0: Initial guess
-            **kwargs: Solver parameters
 
         Raises:
             ValueError: If validation fails
         """
-        ...
+        b_arr = np.asarray(b, dtype=np.float64)
+        if b_arr.ndim != 1:
+            raise ValueError(f"b must be 1D vector, got shape {b_arr.shape}")
 
-    @abstractmethod
+        if x0 is not None:
+            x0_arr = np.asarray(x0, dtype=np.float64)
+            if x0_arr.shape != b_arr.shape:
+                raise ValueError(f"x0 shape {x0_arr.shape} != b shape {b_arr.shape}")
+
     def _prepare_operator(
         self,
         A: Callable[[NDArray], NDArray] | NDArray,
         b: NDArray,
-        **kwargs,
     ) -> Callable[[NDArray], NDArray]:
         """Prepare linear operator A.
 
@@ -236,32 +269,19 @@ class IterativeSolverBase(ABC):
         Args:
             A: Linear operator (various forms)
             b: Right-hand side (for shape inference)
-            **kwargs: Solver parameters
 
         Returns:
             Callable taking vector, returning Ax
         """
-        ...
+        from scipy.sparse.linalg import aslinearoperator
 
-    @abstractmethod
-    def _normalize_tolerances(
-        self,
-        b: NDArray,
-        **kwargs,
-    ) -> tuple[float, float]:
-        """Normalize tolerances to effective values.
+        # If already callable, return as is
+        if callable(A) and not isinstance(A, np.ndarray):
+            return A  # type: ignore[return-value]
 
-        Computes effective rtol and atol from user inputs.
-        Standard: threshold = max(rtol * ||b||, atol)
-
-        Args:
-            b: Right-hand side
-            **kwargs: Must contain 'rtol' and 'atol' keys
-
-        Returns:
-            Tuple (rtol_effective, atol_effective)
-        """
-        ...
+        # Convert to LinearOperator for consistency
+        linear_op = aslinearoperator(A)
+        return linear_op.matvec
 
     @abstractmethod
     def _initialize_state(
@@ -269,7 +289,7 @@ class IterativeSolverBase(ABC):
         linear_op: Callable[[NDArray], NDArray],
         b: NDArray,
         x0: NDArray | None,
-        **kwargs,
+        maxiter: int | None = None,
     ) -> SolverState:
         """Initialize solver state for iteration 0.
 
@@ -277,7 +297,7 @@ class IterativeSolverBase(ABC):
             linear_op: Prepared linear operator
             b: Right-hand side
             x0: Initial guess (None means zero)
-            **kwargs: Solver parameters
+            maxiter: Maximum iterations (used for history sizing)
 
         Returns:
             Initial SolverState with:
@@ -293,14 +313,14 @@ class IterativeSolverBase(ABC):
         self,
         linear_op: Callable[[NDArray], NDArray],
         state: SolverState,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> SolverState:
         """Execute single solver iteration.
 
         Args:
             linear_op: Linear operator
             state: Current iteration state
-            **kwargs: Solver parameters
+            breakdown_tol: Breakdown detection tolerance
 
         Returns:
             Updated SolverState for next iteration
@@ -314,7 +334,7 @@ class IterativeSolverBase(ABC):
         rtol: float,
         atol: float,
         maxiter: int,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> bool:
         """Check if solver should stop.
 
@@ -328,6 +348,7 @@ class IterativeSolverBase(ABC):
             rtol: Relative tolerance
             atol: Absolute tolerance
             maxiter: Maximum iterations
+            breakdown_tol: Breakdown detection tolerance
 
         Returns:
             True if should stop, False if should continue
@@ -340,7 +361,7 @@ class IterativeSolverBase(ABC):
         state: SolverState,
         rtol: float,
         atol: float,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> SolverResult:
         """Build final SolverResult.
 
@@ -348,7 +369,7 @@ class IterativeSolverBase(ABC):
             state: Final iteration state
             rtol: Relative tolerance used
             atol: Absolute tolerance used
-            **kwargs: Solver parameters
+            breakdown_tol: Breakdown tolerance used
 
         Returns:
             SolverResult with convergence info, histories, diagnostics
@@ -359,7 +380,6 @@ class IterativeSolverBase(ABC):
         self,
         state: SolverState,
         iteration: int,
-        **kwargs,
     ) -> None:
         """Log iteration state via TraceRecorder (default implementation).
 
@@ -373,7 +393,6 @@ class IterativeSolverBase(ABC):
         Args:
             state: Current iteration state
             iteration: Iteration number (0-indexed)
-            **kwargs: May contain 'event_log' and 'trace_mode'
 
         Theory:
             Separates logging concerns from solver algorithm. Event sourcing
@@ -381,30 +400,30 @@ class IterativeSolverBase(ABC):
             to algorithm logic.
         """
         from ..monitoring.events import EventType
+        from ..monitoring.trace_mode import TraceMode
         from ..models.protocols import HasVectors
 
-        event_log = self._get_event_logger(**kwargs)
-        if event_log is None:
+        if self.event_log is None:
             return
 
         # Always log scalars (MINIMAL mode)
-        event_log.log(EventType.ITERATION, iteration)
-        event_log.log(EventType.RESIDUAL_NORM, state.residual_norm)
-        event_log.log(EventType.CONVERGED, state.converged)
-        event_log.log(EventType.BREAKDOWN, state.breakdown)
+        self.event_log.log(EventType.ITERATION, iteration)
+        self.event_log.log(EventType.RESIDUAL_NORM, state.residual_norm)
+        self.event_log.log(EventType.CONVERGED, state.converged)
+        self.event_log.log(EventType.BREAKDOWN, state.breakdown)
 
         # Log vectors if FULL trace mode
-        if self._should_log_vectors(**kwargs) and isinstance(state, HasVectors):
-            event_log.log(EventType.RESIDUAL, state.r)
-            event_log.log(EventType.SOLUTION, state.u)
+        if self.trace_mode == TraceMode.FULL and isinstance(state, HasVectors):
+            self.event_log.log(EventType.RESIDUAL, state.r)
+            self.event_log.log(EventType.SOLUTION, state.u)
 
             # Log Krylov vectors if available
             if hasattr(state, "p"):
-                event_log.log(EventType.DIRECTION, state.p)
+                self.event_log.log(EventType.DIRECTION, state.p)
             if hasattr(state, "q"):
-                event_log.log(EventType.MATRIX_PRODUCT, state.q)
+                self.event_log.log(EventType.MATRIX_PRODUCT, state.q)
             if hasattr(state, "z"):
-                event_log.log(EventType.PRECOND_RESIDUAL, state.z)
+                self.event_log.log(EventType.PRECOND_RESIDUAL, state.z)
 
     # Protected concrete helpers
 
@@ -443,58 +462,6 @@ class IterativeSolverBase(ABC):
         # Ensure float64 dtype
         return np.asarray(z, dtype=np.float64)
 
-    def _get_event_logger(self, **kwargs):
-        """Get event logger from kwargs or instance attribute.
-
-        Args:
-            **kwargs: May contain 'event_log' TraceRecorder
-
-        Returns:
-            TraceRecorder if available, None otherwise
-
-        Theory:
-            Follows the Override Pattern: kwargs override instance defaults.
-            This allows per-solve customization without creating new solver instances.
-        """
-        return kwargs.get("event_log", getattr(self, "event_logger", None))
-
-    def _get_trace_mode(self, **kwargs):
-        """Get and normalize trace mode from kwargs.
-
-        Args:
-            **kwargs: May contain 'trace_mode' (TraceMode or str)
-
-        Returns:
-            TraceMode enum value (default: MINIMAL)
-
-        Theory:
-            Coerces string representations to TraceMode enum for type safety.
-            Defaults to MINIMAL for lightweight diagnostics.
-        """
-        from ..monitoring.trace_mode import TraceMode
-
-        trace_mode = kwargs.get("trace_mode", TraceMode.MINIMAL)
-        if isinstance(trace_mode, str):
-            trace_mode = TraceMode(trace_mode)
-        return trace_mode
-
-    def _should_log_vectors(self, **kwargs) -> bool:
-        """Check if vectors should be logged based on trace mode.
-
-        Args:
-            **kwargs: May contain 'trace_mode'
-
-        Returns:
-            True if trace mode is FULL, False otherwise
-
-        Theory:
-            Separates logging decision from logging action for clarity.
-            FULL mode enables vector logging at cost of O(kn) memory.
-        """
-        from ..monitoring.trace_mode import TraceMode
-
-        trace_mode = self._get_trace_mode(**kwargs)
-        return trace_mode == TraceMode.FULL
 
     def _extract_histories_from_event_log(
         self,

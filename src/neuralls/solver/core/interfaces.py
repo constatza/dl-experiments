@@ -79,6 +79,10 @@ class ISolver(ABC):
         This is the core method that all solvers must implement. The exact
         algorithm is left to the implementation.
 
+        For iterative solvers, logging configuration (event_log, trace_mode)
+        should be set via the solver's constructor, not as parameters to solve().
+        The solve() method accepts only algorithm parameters (rtol, atol, maxiter).
+
         Args:
             matrix: System matrix, shape (n, n). Must be square.
             b: Right-hand side vector, shape (n,).
@@ -88,8 +92,8 @@ class ISolver(ABC):
             **kwargs: Solver-specific parameters. Examples:
                 - rtol: Relative tolerance
                 - atol: Absolute tolerance
-                - max_iterations: Maximum iteration count
-                - preconditioner: Preconditioning strategy
+                - maxiter: Maximum iteration count
+                - breakdown_tol: Breakdown detection tolerance
 
         Returns:
             Tuple of (solution, solver_result):
@@ -110,8 +114,10 @@ class ISolver(ABC):
             4. Swapping solvers without changing client code
 
         Examples:
-            >>> solver = MySolver()
-            >>> x, result = solver.solve(matrix, b, rtol=1e-6)
+            >>> # Iterative solver with logging configured in constructor
+            >>> logger = TraceRecorder()
+            >>> solver = MySolver(event_log=logger, trace_mode=TraceMode.FULL)
+            >>> x, result = solver.solve(matrix, b, rtol=1e-6, maxiter=100)
             >>> print(f"Converged: {result.converged}")
         """
         pass

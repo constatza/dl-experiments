@@ -88,7 +88,6 @@ class KrylovSolverBase(IterativeSolverBase):
         self,
         w: NDArray,
         state: KrylovState,
-        **kwargs,
     ) -> NDArray:
         """Compute search direction from preconditioned residual.
 
@@ -103,7 +102,6 @@ class KrylovSolverBase(IterativeSolverBase):
                 - Previous directions d_{i-1}, d_{i-2}, ... (for recurrence)
                 - Previous q vectors q_{i-1}, q_{i-2}, ... (for orthogonalization)
                 - Other method-specific history
-            **kwargs: Method-specific parameters (window size, tolerances, etc.)
 
         Returns:
             Search direction d_i (Notay 2000)
@@ -122,7 +120,7 @@ class KrylovSolverBase(IterativeSolverBase):
         d: NDArray,
         q: NDArray,
         state: KrylovState,
-        **kwargs,
+        breakdown_tol: float | None = None,
     ) -> tuple[float, dict[str, float]]:
         """Compute step length and update coefficients.
 
@@ -134,7 +132,7 @@ class KrylovSolverBase(IterativeSolverBase):
             d: Search direction d_i (Notay 2000)
             q: Matrix-vector product q_i = A @ d_i
             state: Current Krylov state
-            **kwargs: Method-specific parameters
+            breakdown_tol: Breakdown detection tolerance
 
         Returns:
             Tuple (step_length, coefficients):
@@ -158,7 +156,6 @@ class KrylovSolverBase(IterativeSolverBase):
         w: NDArray,
         step_length: float,
         coefficients: dict[str, float],
-        **kwargs,
     ) -> KrylovState:
         """Update solution, residual, and auxiliary vectors.
 
@@ -174,7 +171,6 @@ class KrylovSolverBase(IterativeSolverBase):
             w: Preconditioned residual w_i = M^{-1}(r_i) (Notay 2000)
             step_length: Step length α_i
             coefficients: Additional update coefficients
-            **kwargs: Method-specific parameters
 
         Returns:
             New KrylovState with updated vectors and iteration count
@@ -189,7 +185,6 @@ class KrylovSolverBase(IterativeSolverBase):
     def _check_breakdown(
         self,
         state: KrylovState,
-        **kwargs,
     ) -> bool:
         """Check for numerical breakdown.
 
@@ -200,7 +195,6 @@ class KrylovSolverBase(IterativeSolverBase):
 
         Args:
             state: Current Krylov state
-            **kwargs: Method-specific breakdown tolerances
 
         Returns:
             True if breakdown detected, False otherwise
@@ -218,8 +212,8 @@ class KrylovSolverBase(IterativeSolverBase):
     def _iterate_step(
         self,
         linear_op: Callable[[NDArray], NDArray],
-        state: SolverState,  # TODO: why isn't this krylov state?
-        **kwargs,
+        state: SolverState,
+        breakdown_tol: float | None = None,
     ) -> SolverState:
         """Execute single Krylov iteration.
 
@@ -237,7 +231,7 @@ class KrylovSolverBase(IterativeSolverBase):
         Args:
             linear_op: Linear operator A
             state: Current Krylov state (contains x, r, and method-specific vectors)
-            **kwargs: Solver parameters (preconditioner, tolerances, etc.)
+            breakdown_tol: Breakdown detection tolerance
 
         Returns:
             Updated KrylovState for next iteration
@@ -258,31 +252,29 @@ class KrylovSolverBase(IterativeSolverBase):
         r_i = state.r
 
         # Step 1: Apply preconditioner (Notay 2000: w_i = M^{-1} r_i)
-        # Prefer solver's own preconditioner, fall back to kwargs
-        preconditioner = getattr(self, "preconditioner", None) or kwargs.get(
-            "preconditioner"
-        )
+        # Prefer solver's own preconditioner
+        preconditioner = getattr(self, "preconditioner", None)
         if preconditioner is not None:
             w_i = self._apply_preconditioner(preconditioner, r_i)
         else:
             w_i = r_i.copy()
 
         # Step 2: Compute search direction (method-specific, Notay 2000: d_i)
-        d_i = self._update_direction(w_i, state, **kwargs)
+        d_i = self._update_direction(w_i, state)
 
         # Step 3: Apply matrix-vector product (Notay 2000: q_i = A d_i)
         q_i = linear_op(d_i)
 
         # Step 4: Compute coefficients (method-specific)
-        alpha_i, coeffs = self._compute_coefficients(d_i, q_i, state, **kwargs)
+        alpha_i, coeffs = self._compute_coefficients(d_i, q_i, state, breakdown_tol=breakdown_tol)
 
         # Step 5: Update vectors (method-specific)
         new_state = self._update_vectors(
-            state, d_i, q_i, w_i, alpha_i, coeffs, **kwargs
+            state, d_i, q_i, w_i, alpha_i, coeffs
         )
 
         # Step 6: Check for breakdown
-        if self._check_breakdown(new_state, **kwargs):
+        if self._check_breakdown(new_state):
             # Create new state with breakdown flag
             from dataclasses import replace
 
