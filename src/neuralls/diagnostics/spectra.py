@@ -14,6 +14,19 @@ def precondition_matrix(
     preconditioner: Callable[[np.ndarray], np.ndarray],
     matrix: np.ndarray,
 ) -> np.ndarray:
+    """Precondition a matrix by applying preconditioner to each column.
+
+    Args:
+        preconditioner: Callable that applies preconditioning (function or Preconditioner)
+        matrix: Matrix to precondition
+
+    Returns:
+        Preconditioned matrix
+
+    Note:
+        All Preconditioner objects are callable via __call__, so this function
+        works with both bare functions and Preconditioner objects uniformly.
+    """
     columns = [
         np.asarray(preconditioner(matrix[:, idx]), dtype=np.float64, copy=False)
         for idx in range(matrix.shape[1])

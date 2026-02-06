@@ -16,11 +16,12 @@ def load_npz_entry(npz_path: str | Path, key: str) -> np.ndarray:
     return np.asarray(data[key], dtype=np.float64, copy=False)
 
 
-def load_matrix(matrix_path: str | Path) -> np.ndarray:
+def load_matrix(matrix_path: str | Path, delimiter: str | None = None) -> np.ndarray:
     """Load matrix from file (txt, npy, or npz format).
 
     Args:
         matrix_path: Path to matrix file
+        delimiter: String used to separate values in text files.
 
     Returns:
         Matrix as numpy float64 array
@@ -43,4 +44,4 @@ def load_matrix(matrix_path: str | Path) -> np.ndarray:
         return np.load(matrix_path).astype(np.float64, copy=False)
 
     # Text format (default)
-    return np.loadtxt(matrix_path, dtype=np.float64)
+    return np.loadtxt(matrix_path, dtype=np.float64, delimiter=delimiter)

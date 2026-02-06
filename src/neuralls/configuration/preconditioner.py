@@ -20,6 +20,7 @@ class PreconditionerType(StrEnum):
     IDENTITY = "identity"
     JACOBI = "jacobi"
     ILU = "ilu"
+    ICHOLESKY = "icholesky"
     NEURAL = "neural"
 
 
@@ -63,6 +64,7 @@ class StandardPreconditionerConfig(BasePreconditionerConfig):
         PreconditionerType.IDENTITY,
         PreconditionerType.JACOBI,
         PreconditionerType.ILU,
+        PreconditionerType.ICHOLESKY,
     ]
 
 
