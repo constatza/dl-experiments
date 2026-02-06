@@ -46,6 +46,14 @@ minversion = "8.0"
 testpaths = [
     "tests",
 ]
+addopts = [
+    "-m", "not benchmark",
+]
+markers = [
+    "slow: tests that take >5 seconds (deselect with '-m \"not slow\"')",
+    "benchmark: numerical algorithm benchmarks and exactness tests",
+    "integration: integration tests that test full workflows",
+]
 
 [tool.uv.sources]
 dlkit = { path = "../dlkit", editable = true }

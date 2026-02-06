@@ -82,13 +82,13 @@ The master `configs/experiments.toml` file orchestrates multiple experiment bund
 - **`core/`** - Abstract base classes (`ISolver`, `IterativeSolverBase`, `KrylovSolverBase`)
 - **`solvers/`** - Concrete implementations (`FlexibleCGSolver`, `PreconditionedCGSolver`)
 - **`models/`** - Immutable state hierarchy (`SolverState`, `KrylovState`, `CGState`, `SolverResult`)
-- **`monitoring/`** - Diagnostics (`TraceRecorder`, `HistoryTracker`)
+- **`monitoring/`** - Diagnostics (`IterationHistory`, `EventLog`, `ResidualHistoryTracker`)
 - **`strategies/`** - Strategy patterns (`OrthogonalizationStrategy`, `IConvergenceCriterion`)
 
 **Removed monolithic files:**
 - `fcg_solver.py`, `pcg_solver.py` → `solvers/` directory with focused implementations
 - `state.py`, `info.py` → `models/` directory with type-safe state containers
-- `trace_recorder.py`, `convergence.py` → `monitoring/` directory
+- Monitoring refactored to `IterationHistory` (continuous) + `EventLog` (discrete events)
 - `helpers.py` → `utils/` and `strategies/orthogonalization.py`
 
 **Factory function updates:**
@@ -96,15 +96,30 @@ The master `configs/experiments.toml` file orchestrates multiple experiment bund
 - `preconditioned_cg()` - Now uses `PreconditionedCGSolver` class internally
 - Import from: `from neuralls.solver.factories import flexible_cg, preconditioned_cg`
 
-### Preconditioner Module (New)
+### Preconditioner Module
 
-**New dedicated package: `neuralls.preconditioner/`**
-- **`builders.py`** - Factory functions for preconditioner construction
-- **`registry.py`** - Type-safe preconditioner registry and lookup
-- **`predictor.py`** - Neural preconditioner prediction interface
+**Location:** `neuralls.solver.preconditioners/`
 
-**Removed from solver package:**
-- `preconditioner_factory.py` → Consolidated into `preconditioner/builders.py`
+**Rationale:** Preconditioners are tightly coupled to solvers and used exclusively by solver algorithms.
+
+**Package structure:**
+- **`base.py`** - Abstract base classes (Preconditioner, LinearPreconditioner, ContextualPreconditioner)
+- **`implementations.py`** - Concrete preconditioners (Identity, Jacobi, ILU, ICholesky, Neural, etc.)
+- **`builders.py`** - Factory function for TOML-based preconditioner creation
+- **`adapters.py`** - Framework integration (DLKit/PyTorch adapter for neural preconditioners)
+- **`ports.py`** - Framework-agnostic predictor interface
+- **`tensor_utils.py`** - Pure tensor conversion utilities
+
+**Usage:**
+```python
+from neuralls.solver.preconditioners import create_preconditioner
+```
+
+**Key features:**
+- LSP-compliant: Optional context parameter enables substitutability
+- Type-safe: Modern Python 3.12+ generics for LinearPreconditioner[T]
+- Unified interface: All preconditioners callable via `__call__` or `.apply()`
+- Clean separation: Configuration models in `configuration/preconditioner.py`
 
 ### IO and Comparison
 
