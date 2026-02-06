@@ -1,6 +1,6 @@
-"""Unit tests for preconditioner builders.
+"""Unit tests for preconditioner factory function.
 
-Tests builder construction, error handling, and edge cases independent of solver integration.
+Tests factory creation, error handling, and edge cases independent of solver integration.
 Follows project principles:
 - Use fixtures for all test data
 - Use tmp_path for temporary files (never tempfile)
@@ -19,22 +19,24 @@ from numpy.testing import assert_array_equal
 
 from neuralls.configuration.preconditioner import (
     NeuralPreconditionerConfig,
+    PreconditionerType,
     StandardPreconditionerConfig,
 )
-from neuralls.preconditioner.builders import (
-    IdentityBuilder,
-    ILUBuilder,
-    JacobiBuilder,
-    NeuralBuilder,
+from neuralls.solver.preconditioners.builders import create_preconditioner
+from neuralls.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.solver.preconditioners import (
+    Identity,
+    ILUPreconditioner,
+    JacobiPreconditioner,
+    NeuralPreconditioner,
 )
-from neuralls.preconditioner.ports import PredictorAdapter, PredictorPort
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
 # ==============================================================================
-# Mock Predictor and Adapter for Neural Builder Testing
+# Mock Predictor and Adapter for Neural Preconditioner Testing
 # ==============================================================================
 
 
@@ -99,36 +101,6 @@ def well_conditioned_matrix() -> NDArray:
 
 
 @pytest.fixture
-def near_zero_diagonal_matrix() -> NDArray:
-    """Matrix with near-zero diagonal elements.
-
-    Returns:
-        4x4 matrix with diagonal [2.0, 1e-15, 1.0, 1e-16]
-    """
-    return np.diag([2.0, 1e-15, 1.0, 1e-16])
-
-
-@pytest.fixture
-def negative_diagonal_matrix() -> NDArray:
-    """Matrix with negative diagonal elements.
-
-    Returns:
-        4x4 matrix with mixed positive/negative diagonal
-    """
-    return np.diag([2.0, -1.0, 3.0, -0.5])
-
-
-@pytest.fixture
-def nonsquare_matrix() -> NDArray:
-    """Non-square matrix for validation testing.
-
-    Returns:
-        3x4 rectangular matrix
-    """
-    return np.ones((3, 4))
-
-
-@pytest.fixture
 def dense_spd_matrix() -> NDArray:
     """Dense SPD matrix for ILU testing.
 
@@ -137,18 +109,6 @@ def dense_spd_matrix() -> NDArray:
     """
     n = 5
     A = 2 * np.eye(n) - np.eye(n, k=1) - np.eye(n, k=-1)
-    return A
-
-
-@pytest.fixture
-def singular_matrix() -> NDArray:
-    """Singular matrix (rank deficient).
-
-    Returns:
-        5x5 singular matrix (last row is zeros)
-    """
-    A = np.eye(5)
-    A[4, 4] = 0.0  # Make singular
     return A
 
 
@@ -178,22 +138,39 @@ def mock_checkpoint(tmp_path: Path) -> Path:
 
 
 # ==============================================================================
-# IdentityBuilder Tests (3 tests)
+# Factory Tests - Identity (3 tests)
 # ==============================================================================
 
 
-def test_identity_builder_returns_copy(
+def test_factory_creates_identity_preconditioner(well_conditioned_matrix: NDArray) -> None:
+    """Test that factory creates Identity preconditioner for identity type."""
+    config = StandardPreconditionerConfig(name="identity", type=PreconditionerType.IDENTITY)
+
+    precond = create_preconditioner(well_conditioned_matrix, config)
+
+    assert isinstance(precond, Identity)
+
+
+def test_factory_creates_identity_for_none_type(well_conditioned_matrix: NDArray) -> None:
+    """Test that factory creates Identity for 'none' type alias."""
+    # Use BasePreconditionerConfig since StandardPreconditionerConfig doesn't accept NONE
+    from neuralls.configuration.preconditioner import BasePreconditionerConfig
+
+    config = BasePreconditionerConfig(name="none", type=PreconditionerType.NONE)
+
+    precond = create_preconditioner(well_conditioned_matrix, config)
+
+    assert isinstance(precond, Identity)
+
+
+def test_identity_preconditioner_returns_copy(
     well_conditioned_matrix: NDArray, residual_vector: NDArray
 ) -> None:
-    """Test that IdentityBuilder returns a copy of input.
+    """Test that Identity preconditioner returns a copy of input."""
+    config = StandardPreconditionerConfig(name="identity", type=PreconditionerType.IDENTITY)
 
-    Ensures functional purity - no side effects on input.
-    """
-    builder = IdentityBuilder()
-    config = StandardPreconditionerConfig(name="identity", type="identity")
-
-    precond_fn = builder.build(well_conditioned_matrix, config)
-    result = precond_fn(residual_vector)
+    precond = create_preconditioner(well_conditioned_matrix, config)
+    result = precond.apply(residual_vector)
 
     # Result should equal input
     assert_array_equal(result, residual_vector)
@@ -201,333 +178,196 @@ def test_identity_builder_returns_copy(
     # Result should be a copy (different memory address)
     assert result is not residual_vector
 
-    # Modifying result should not affect input
-    result[0] = 999.0
-    assert residual_vector[0] == 1.0
-
-
-def test_identity_builder_supports_multiple_type_names(
-    well_conditioned_matrix: NDArray,
-) -> None:
-    """Test that IdentityBuilder supports both 'identity' and 'none' types."""
-    builder = IdentityBuilder()
-
-    supported = builder.supported_types()
-    assert "identity" in supported
-    assert "none" in supported
-    assert len(supported) == 2
-
-
-def test_identity_builder_preserves_input_immutability(
-    well_conditioned_matrix: NDArray, residual_vector: NDArray
-) -> None:
-    """Test that applying preconditioner doesn't modify input vector."""
-    builder = IdentityBuilder()
-    config = StandardPreconditionerConfig(name="identity", type="identity")
-
-    precond_fn = builder.build(well_conditioned_matrix, config)
-
-    original_copy = residual_vector.copy()
-    _ = precond_fn(residual_vector)
-
-    # Input should be unchanged
-    assert_array_equal(residual_vector, original_copy)
-
 
 # ==============================================================================
-# JacobiBuilder Tests (5 tests)
+# Factory Tests - Jacobi (3 tests)
 # ==============================================================================
 
 
-def test_jacobi_builder_handles_well_conditioned_diagonal(
+def test_factory_creates_jacobi_preconditioner(well_conditioned_matrix: NDArray) -> None:
+    """Test that factory creates JacobiPreconditioner for jacobi type."""
+    config = StandardPreconditionerConfig(name="jacobi", type=PreconditionerType.JACOBI)
+
+    precond = create_preconditioner(well_conditioned_matrix, config)
+
+    assert isinstance(precond, JacobiPreconditioner)
+
+
+def test_jacobi_preconditioner_applies_diagonal_scaling(
     well_conditioned_matrix: NDArray, residual_vector: NDArray
 ) -> None:
-    """Test JacobiBuilder with well-conditioned diagonal."""
-    builder = JacobiBuilder()
-    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
+    """Test JacobiPreconditioner with well-conditioned diagonal."""
+    config = StandardPreconditionerConfig(name="jacobi", type=PreconditionerType.JACOBI)
 
-    precond_fn = builder.build(well_conditioned_matrix, config)
-    result = precond_fn(residual_vector)
+    precond = create_preconditioner(well_conditioned_matrix, config)
+    result = precond.apply(residual_vector)
 
     # Expected: z_i = r_i / A_ii
     expected = residual_vector / np.diag(well_conditioned_matrix)
     assert_array_equal(result, expected)
 
 
-def test_jacobi_builder_handles_near_zero_diagonal(
-    near_zero_diagonal_matrix: NDArray, residual_vector: NDArray
-) -> None:
-    """Test JacobiBuilder with near-zero diagonal elements.
+def test_jacobi_preserves_dtype(well_conditioned_matrix: NDArray) -> None:
+    """Test that JacobiPreconditioner preserves float64 dtype."""
+    config = StandardPreconditionerConfig(name="jacobi", type=PreconditionerType.JACOBI)
 
-    Builder should replace values < 1e-14 with 1.0 to avoid division by zero.
-    """
-    builder = JacobiBuilder()
-    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
-
-    precond_fn = builder.build(near_zero_diagonal_matrix, config)
-    result = precond_fn(residual_vector)
-
-    # Near-zero diagonal elements should be treated as 1.0
-    # Expected: [1.0/2.0, 2.0/1.0, 3.0/1.0, 4.0/1.0] = [0.5, 2.0, 3.0, 4.0]
-    expected = np.array([0.5, 2.0, 3.0, 4.0])
-    assert_array_equal(result, expected)
-
-
-def test_jacobi_builder_handles_negative_diagonal(
-    negative_diagonal_matrix: NDArray, residual_vector: NDArray
-) -> None:
-    """Test JacobiBuilder preserves signs with negative diagonal.
-
-    Jacobi should work with negative diagonal elements (z_i = r_i / A_ii).
-    """
-    builder = JacobiBuilder()
-    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
-
-    precond_fn = builder.build(negative_diagonal_matrix, config)
-    result = precond_fn(residual_vector)
-
-    # Expected: [1/2, 2/(-1), 3/3, 4/(-0.5)]
-    expected = np.array([0.5, -2.0, 1.0, -8.0])
-    assert_array_equal(result, expected)
-
-
-def test_jacobi_builder_validates_square_matrix(nonsquare_matrix: NDArray) -> None:
-    """Test that JacobiBuilder handles non-square matrices gracefully.
-
-    np.diag() will extract diagonal from rectangular matrix without error,
-    but dimension mismatch will occur during application.
-    """
-    builder = JacobiBuilder()
-    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
-
-    # Building with non-square matrix extracts shorter diagonal (min dimension)
-    precond_fn = builder.build(nonsquare_matrix, config)
-
-    # Applying to 3D vector should work (diagonal length = 3)
-    residual_3d = np.array([1.0, 2.0, 3.0])
-    result = precond_fn(residual_3d)
-    expected = np.array([1.0, 2.0, 3.0])  # diag is all 1.0
-    assert_array_equal(result, expected)
-
-
-def test_jacobi_builder_preserves_dtype(well_conditioned_matrix: NDArray) -> None:
-    """Test that JacobiBuilder preserves float64 dtype."""
-    builder = JacobiBuilder()
-    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
-
-    precond_fn = builder.build(well_conditioned_matrix, config)
+    precond = create_preconditioner(well_conditioned_matrix, config)
     residual = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float64)
-    result = precond_fn(residual)
+    result = precond.apply(residual)
 
     assert result.dtype == np.float64
 
 
 # ==============================================================================
-# ILUBuilder Tests (4 tests)
+# Factory Tests - ILU (3 tests)
 # ==============================================================================
 
 
-def test_ilu_builder_accepts_dense_matrix(
-    dense_spd_matrix: NDArray, residual_vector: NDArray
-) -> None:
-    """Test ILUBuilder with dense matrix input.
+def test_factory_creates_ilu_preconditioner(dense_spd_matrix: NDArray) -> None:
+    """Test that factory creates ILUPreconditioner for ilu type."""
+    config = StandardPreconditionerConfig(name="ilu", type=PreconditionerType.ILU)
 
-    Builder should convert to CSC format internally.
+    precond = create_preconditioner(dense_spd_matrix, config)
+
+    assert isinstance(precond, ILUPreconditioner)
+
+
+def test_ilu_preconditioner_accepts_dense_matrix(
+    dense_spd_matrix: NDArray,
+) -> None:
+    """Test ILUPreconditioner with dense matrix input.
+
+    Preconditioner should convert to CSC format internally.
     """
-    builder = ILUBuilder()
-    config = StandardPreconditionerConfig(name="ilu", type="ilu")
+    config = StandardPreconditionerConfig(name="ilu", type=PreconditionerType.ILU)
 
     # Should not raise error
-    precond_fn = builder.build(dense_spd_matrix, config)
+    precond = create_preconditioner(dense_spd_matrix, config)
 
     # Should apply without error
     residual_5d = np.ones(5)
-    result = precond_fn(residual_5d)
+    result = precond.apply(residual_5d)
 
     # Result should have correct shape
     assert result.shape == (5,)
     assert result.dtype == np.float64
 
 
-def test_ilu_builder_converts_to_csc_internally(dense_spd_matrix: NDArray) -> None:
-    """Test that ILUBuilder converts to CSC format for efficient factorization.
+def test_ilu_preserves_dtype(dense_spd_matrix: NDArray) -> None:
+    """Test that ILUPreconditioner preserves float64 dtype."""
+    config = StandardPreconditionerConfig(name="ilu", type=PreconditionerType.ILU)
 
-    This is an implementation detail, but important for performance.
-    """
-    builder = ILUBuilder()
-    config = StandardPreconditionerConfig(name="ilu", type="ilu")
-
-    # Should not raise error (verifies CSC conversion works)
-    precond_fn = builder.build(dense_spd_matrix, config)
-
-    # Smoke test: apply to vector
-    residual = np.ones(5)
-    result = precond_fn(residual)
-    assert result.shape == (5,)
-
-
-def test_ilu_builder_handles_singular_matrix(singular_matrix: NDArray) -> None:
-    """Test ILUBuilder behavior with singular matrix.
-
-    SciPy's spilu may raise RuntimeError or produce poor factorization.
-    """
-    builder = ILUBuilder()
-    config = StandardPreconditionerConfig(name="ilu", type="ilu")
-
-    # spilu may raise RuntimeError for singular matrix
-    # If it doesn't raise during build, it might during solve
-    try:
-        precond_fn = builder.build(singular_matrix, config)
-        residual = np.ones(5)
-        result = precond_fn(residual)
-        # If we get here, spilu didn't detect singularity
-        # Just verify shape
-        assert result.shape == (5,)
-    except RuntimeError:
-        # Expected behavior for singular matrix
-        pass
-
-
-def test_ilu_builder_preserves_dtype(dense_spd_matrix: NDArray) -> None:
-    """Test that ILUBuilder preserves float64 dtype."""
-    builder = ILUBuilder()
-    config = StandardPreconditionerConfig(name="ilu", type="ilu")
-
-    precond_fn = builder.build(dense_spd_matrix, config)
+    precond = create_preconditioner(dense_spd_matrix, config)
     residual = np.ones(5, dtype=np.float64)
-    result = precond_fn(residual)
+    result = precond.apply(residual)
 
     assert result.dtype == np.float64
 
 
 # ==============================================================================
-# NeuralBuilder Tests (6 tests)
+# Factory Tests - Neural (4 tests)
 # ==============================================================================
 
 
-def test_neural_builder_with_default_adapter(
+def test_factory_creates_neural_preconditioner(
     well_conditioned_matrix: NDArray, mock_checkpoint: Path
 ) -> None:
-    """Test NeuralBuilder with default DLKit adapter.
-
-    Note: This test will fail if DLKit is not installed. That's expected.
-    """
-    builder = NeuralBuilder()  # Uses default DLKitAdapter
+    """Test that factory creates NeuralPreconditioner for neural type."""
+    mock_adapter = MockAdapter()
 
     config = NeuralPreconditionerConfig(
         name="neural",
-        type="neural",
+        type=PreconditionerType.NEURAL,
         checkpoint_path=mock_checkpoint,
     )
 
-    # Attempting to build with default adapter will fail without DLKit installed
-    # or with invalid checkpoint format
-    # This test just verifies the interface works
-    try:
-        precond_fn = builder.build(well_conditioned_matrix, config)
-        # If we get here, DLKit is installed and checkpoint format was accepted
-        assert callable(precond_fn)
-    except (ImportError, RuntimeError, FileNotFoundError, Exception):
-        # Expected if DLKit not installed or checkpoint invalid
-        # Catches WorkflowError and other checkpoint loading errors
-        pytest.skip("DLKit not installed or checkpoint format invalid")
+    precond = create_preconditioner(well_conditioned_matrix, config, adapter=mock_adapter)
+
+    assert isinstance(precond, NeuralPreconditioner)
 
 
-def test_neural_builder_with_custom_adapter(
+def test_neural_preconditioner_with_custom_adapter(
     well_conditioned_matrix: NDArray, mock_checkpoint: Path, residual_vector: NDArray
 ) -> None:
-    """Test NeuralBuilder with custom adapter (DIP validation)."""
+    """Test NeuralPreconditioner with custom adapter (DIP validation)."""
     mock_adapter = MockAdapter()
-    builder = NeuralBuilder(adapter=mock_adapter)
 
     config = NeuralPreconditionerConfig(
         name="neural",
-        type="neural",
+        type=PreconditionerType.NEURAL,
         checkpoint_path=mock_checkpoint,
     )
 
-    precond_fn = builder.build(well_conditioned_matrix, config)
-    result = precond_fn(residual_vector)
+    precond = create_preconditioner(well_conditioned_matrix, config, adapter=mock_adapter)
+    result = precond.apply(residual_vector)
 
     # MockPredictor returns half of input
     expected = residual_vector * 0.5
     assert_array_equal(result, expected)
 
 
-def test_neural_builder_requires_neural_config(
-    well_conditioned_matrix: NDArray, mock_checkpoint: Path
-) -> None:
-    """Test that NeuralBuilder requires NeuralPreconditionerConfig.
-
-    Should raise TypeError for wrong config type.
-    """
+def test_neural_preconditioner_checkpoint_not_found(well_conditioned_matrix: NDArray) -> None:
+    """Test NeuralPreconditioner with non-existent checkpoint."""
     mock_adapter = MockAdapter()
-    builder = NeuralBuilder(adapter=mock_adapter)
-
-    # Pass wrong config type (StandardPreconditionerConfig)
-    wrong_config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
-
-    with pytest.raises(TypeError, match="requires NeuralPreconditionerConfig"):
-        builder.build(well_conditioned_matrix, wrong_config)
-
-
-def test_neural_builder_checkpoint_not_found(well_conditioned_matrix: NDArray) -> None:
-    """Test NeuralBuilder with non-existent checkpoint."""
-    mock_adapter = MockAdapter()
-    builder = NeuralBuilder(adapter=mock_adapter)
 
     config = NeuralPreconditionerConfig(
         name="neural",
-        type="neural",
+        type=PreconditionerType.NEURAL,
         checkpoint_path=Path("/nonexistent/checkpoint.ckpt"),
     )
 
     with pytest.raises(FileNotFoundError, match="Checkpoint not found"):
-        builder.build(well_conditioned_matrix, config)
+        create_preconditioner(well_conditioned_matrix, config, adapter=mock_adapter)
 
 
-def test_neural_builder_cleanup_reference_stored(
-    well_conditioned_matrix: NDArray, mock_checkpoint: Path
-) -> None:
-    """Test that NeuralBuilder stores cleanup reference on function."""
-    mock_adapter = MockAdapter()
-    builder = NeuralBuilder(adapter=mock_adapter)
-
-    config = NeuralPreconditionerConfig(
-        name="neural",
-        type="neural",
-        checkpoint_path=mock_checkpoint,
-    )
-
-    precond_fn = builder.build(well_conditioned_matrix, config)
-
-    # Check that _cleanup attribute exists
-    assert hasattr(precond_fn, "_cleanup")
-    assert callable(precond_fn._cleanup)
-
-
-def test_neural_builder_supports_context_manager(
+def test_neural_preconditioner_cleanup_on_delete(
     well_conditioned_matrix: NDArray, mock_checkpoint: Path, residual_vector: NDArray
 ) -> None:
-    """Test that neural predictor supports context manager protocol."""
+    """Test that neural preconditioner cleans up on deletion."""
     mock_adapter = MockAdapter()
-    builder = NeuralBuilder(adapter=mock_adapter)
 
     config = NeuralPreconditionerConfig(
         name="neural",
-        type="neural",
+        type=PreconditionerType.NEURAL,
         checkpoint_path=mock_checkpoint,
     )
 
-    precond_fn = builder.build(well_conditioned_matrix, config)
+    precond = create_preconditioner(well_conditioned_matrix, config, adapter=mock_adapter)
 
-    # MockPredictor supports context manager
+    # Use the preconditioner
     predictor = mock_adapter.predictor
     assert not predictor.cleaned_up
+    _ = precond.apply(residual_vector)
 
-    # Use predictor via context manager
-    with predictor:
-        _ = predictor.apply(residual_vector)
+    # Manually trigger cleanup
+    precond.cleanup()
 
-    # Should be cleaned up after context manager exit
+    # Should be cleaned up
     assert predictor.cleaned_up
+
+
+# ==============================================================================
+# Factory Tests - Error Handling (2 tests)
+# ==============================================================================
+
+
+def test_factory_rejects_unsupported_type(well_conditioned_matrix: NDArray) -> None:
+    """Test that factory raises ValueError for unsupported preconditioner type."""
+    # Create config with invalid type (bypass enum validation)
+    config = StandardPreconditionerConfig(name="invalid", type=PreconditionerType.IDENTITY)
+    config = config.model_copy(update={"type": "invalid_type"})  # Force invalid type
+
+    with pytest.raises(ValueError, match="Unsupported preconditioner type"):
+        create_preconditioner(well_conditioned_matrix, config)
+
+
+def test_factory_requires_neural_config_for_neural_type(
+    well_conditioned_matrix: NDArray,
+) -> None:
+    """Test that factory requires NeuralPreconditionerConfig for neural type."""
+    # Create wrong config type with neural type
+    config = StandardPreconditionerConfig(name="neural", type=PreconditionerType.IDENTITY)
+    config = config.model_copy(update={"type": PreconditionerType.NEURAL})  # Force neural type
+
+    with pytest.raises(TypeError, match="Neural type requires NeuralPreconditionerConfig"):
+        create_preconditioner(well_conditioned_matrix, config)

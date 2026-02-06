@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from neuralls.preconditioner.ports import PredictorAdapter, PredictorPort
+from neuralls.solver.preconditioners.ports import PredictorAdapter, PredictorPort
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -214,19 +214,16 @@ def test_adapter_handles_missing_checkpoint_file(mock_adapter: MockAdapter) -> N
         mock_adapter.create_predictor(nonexistent_path)
 
 
-def test_adapter_can_be_injected_into_neural_builder(
+def test_adapter_can_be_injected_into_factory(
     mock_adapter: MockAdapter, mock_checkpoint: Path, residual_vector: NDArray
 ) -> None:
-    """Test DIP: adapter can be injected into NeuralBuilder.
+    """Test DIP: adapter can be injected into factory function.
 
-    Validates Dependency Inversion Principle - NeuralBuilder depends on
+    Validates Dependency Inversion Principle - factory depends on
     PredictorAdapter abstraction, not concrete implementation.
     """
     from neuralls.configuration.preconditioner import NeuralPreconditionerConfig
-    from neuralls.preconditioner.builders import NeuralBuilder
-
-    # Inject mock adapter into NeuralBuilder
-    builder = NeuralBuilder(adapter=mock_adapter)
+    from neuralls.solver.preconditioners.builders import create_preconditioner
 
     config = NeuralPreconditionerConfig(
         name="neural",
@@ -234,12 +231,12 @@ def test_adapter_can_be_injected_into_neural_builder(
         checkpoint_path=mock_checkpoint,
     )
 
-    # Build preconditioner
-    matrix = np.eye(4)  # Unused by neural builder, but required by interface
-    precond_fn = builder.build(matrix, config)
+    # Create preconditioner with injected adapter
+    matrix = np.eye(4)  # Unused by neural preconditioner
+    precond = create_preconditioner(matrix, config, adapter=mock_adapter)
 
     # Apply preconditioner
-    result = precond_fn(residual_vector)
+    result = precond.apply(residual_vector)
 
     # Verify mock was used (scales by 0.5)
     expected = residual_vector * 0.5
