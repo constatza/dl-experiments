@@ -24,9 +24,8 @@ if TYPE_CHECKING:
 
 
 def stable_dot_product(
-    a: NDArray,
-    b: NDArray,
-    dtype: type[np.floating] = np.float64,  # type: ignore[type-arg]
+    a: NDArray[np.floating],
+    b: NDArray[np.floating],
 ) -> float:
     """Compute dot product with overflow prevention via balanced scaling.
 
@@ -65,7 +64,7 @@ def stable_dot_product(
     # Get dtype-specific overflow threshold
     from ...constants import get_overflow_threshold
 
-    overflow_threshold = get_overflow_threshold(dtype)
+    overflow_threshold = get_overflow_threshold(np.float64)
 
     # Check for overflow risk
     sqrt_threshold = np.sqrt(overflow_threshold)  # ~1.3e154 for float64
