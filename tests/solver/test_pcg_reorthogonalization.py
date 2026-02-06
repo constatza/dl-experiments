@@ -12,9 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.solver.factories import preconditioned_cg
+from neuralls.solver.factories import pcg
 from neuralls.solver.strategies.orthogonalization import (
-    FullOrthogonalization,
     PeriodicRestartOrthogonalization,
     TruncatedGramSchmidt,
 )
@@ -52,7 +51,7 @@ class TestPCGReorthogonalizationDisabled:
         rhs: np.ndarray,
     ) -> None:
         """PCG should work without reorthogonalization by default."""
-        x, result = preconditioned_cg(spd_matrix, rhs, maxiter=100)
+        x, result = pcg(spd_matrix, rhs, maxiter=100)
 
         assert result.converged
         assert result.iterations > 0
@@ -67,7 +66,7 @@ class TestPCGReorthogonalizationDisabled:
         rhs: np.ndarray,
     ) -> None:
         """PCG with m_max=None should disable reorthogonalization."""
-        x, result = preconditioned_cg(
+        x, result = pcg(
             spd_matrix,
             rhs,
             m_max=None,
@@ -86,7 +85,7 @@ class TestPCGReorthogonalizationEnabled:
         rhs: np.ndarray,
     ) -> None:
         """PCG with m_max=-1 should enable full reorthogonalization."""
-        x, result = preconditioned_cg(
+        x, result = pcg(
             spd_matrix,
             rhs,
             m_max=-1,
@@ -106,7 +105,7 @@ class TestPCGReorthogonalizationEnabled:
         rhs: np.ndarray,
     ) -> None:
         """PCG with m_max>0 should enable truncated reorthogonalization."""
-        x, result = preconditioned_cg(
+        x, result = pcg(
             spd_matrix,
             rhs,
             m_max=10,
@@ -123,7 +122,7 @@ class TestPCGReorthogonalizationEnabled:
     ) -> None:
         """Test various reorthogonalization window sizes."""
         for m_max in [1, 5, 10, 20, -1]:
-            x, result = preconditioned_cg(
+            x, result = pcg(
                 spd_matrix,
                 rhs,
                 m_max=m_max,
@@ -146,7 +145,7 @@ class TestPCGReorthogonalizationBenefit:
         b = ill_conditioned_matrix @ x_exact
 
         # Run without reorthogonalization
-        x_no_reorthog, result_no = preconditioned_cg(
+        x_no_reorthog, result_no = pcg(
             ill_conditioned_matrix,
             b,
             m_max=None,
@@ -155,7 +154,7 @@ class TestPCGReorthogonalizationBenefit:
         )
 
         # Run with full reorthogonalization
-        x_reorthog, result_reorthog = preconditioned_cg(
+        x_reorthog, result_reorthog = pcg(
             ill_conditioned_matrix,
             b,
             m_max=-1,
@@ -185,7 +184,7 @@ class TestPCGReorthogonalizationBenefit:
         b = ill_conditioned_matrix @ x_exact
 
         # Run without reorthogonalization
-        x_no, result_no = preconditioned_cg(
+        x_no, result_no = pcg(
             ill_conditioned_matrix,
             b,
             m_max=None,
@@ -194,7 +193,7 @@ class TestPCGReorthogonalizationBenefit:
         )
 
         # Run with full reorthogonalization
-        x_reorthog, result_reorthog = preconditioned_cg(
+        x_reorthog, result_reorthog = pcg(
             ill_conditioned_matrix,
             b,
             m_max=-1,
@@ -220,11 +219,13 @@ class TestPCGReorthogonalizationInterface:
         spd_matrix: np.ndarray,
         rhs: np.ndarray,
     ) -> None:
-        """PCG should accept FullOrthogonalization strategy."""
-        from neuralls.solver.solvers.pcg_solver import PreconditionedCGSolver
+        """PCG should accept FCG(∞) orthogonalization strategy."""
+        from neuralls.solver import PCGSolver
 
-        solver = PreconditionedCGSolver(
-            orthogonalization=FullOrthogonalization()
+        # PCG with reorthogonalization using reorthogonalization parameter
+        # PCGSolver creates CompositeDirectionStrategy internally when reorthogonalization is provided
+        solver = PCGSolver(
+            reorthogonalization=PeriodicRestartOrthogonalization(m_max=np.inf)
         )
 
         x, result = solver.solve(spd_matrix, rhs, maxiter=100)
@@ -236,11 +237,10 @@ class TestPCGReorthogonalizationInterface:
         rhs: np.ndarray,
     ) -> None:
         """PCG should accept TruncatedGramSchmidt strategy."""
-        from neuralls.solver.solvers.pcg_solver import PreconditionedCGSolver
+        from neuralls.solver import PCGSolver
 
-        solver = PreconditionedCGSolver(
-            orthogonalization=TruncatedGramSchmidt(window_size=15)
-        )
+        # PCG with reorthogonalization using reorthogonalization parameter
+        solver = PCGSolver(reorthogonalization=TruncatedGramSchmidt(window_size=15))
 
         x, result = solver.solve(spd_matrix, rhs, maxiter=100)
         assert result.converged
@@ -251,10 +251,11 @@ class TestPCGReorthogonalizationInterface:
         rhs: np.ndarray,
     ) -> None:
         """PCG should accept PeriodicRestartOrthogonalization strategy."""
-        from neuralls.solver.solvers.pcg_solver import PreconditionedCGSolver
+        from neuralls.solver import PCGSolver
 
-        solver = PreconditionedCGSolver(
-            orthogonalization=PeriodicRestartOrthogonalization(m_max=10)
+        # PCG with reorthogonalization using reorthogonalization parameter
+        solver = PCGSolver(
+            reorthogonalization=PeriodicRestartOrthogonalization(m_max=10)
         )
 
         x, result = solver.solve(spd_matrix, rhs, maxiter=100)

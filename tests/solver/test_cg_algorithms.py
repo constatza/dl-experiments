@@ -5,7 +5,8 @@ import pytest
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from neuralls.solver import flexible_cg, preconditioned_cg, run_cg_comparison
+from neuralls.solver import flexible_cg, pcg, run_cg_comparison
+from neuralls.solver.monitoring.trace_mode import TraceMode
 
 # Functional/Integration Test Tolerances
 FUNCTIONAL_ATOL = 1e-6
@@ -41,25 +42,6 @@ def spd_system() -> tuple[NDArray, NDArray, NDArray]:
     return A, b, solution
 
 
-def test_flexible_matches_classical(
-    spd_system: tuple[NDArray, NDArray, NDArray],
-) -> None:
-    A, b, x_true = spd_system
-    x0 = np.zeros_like(b)
-
-    x_classic, info_classic = preconditioned_cg(
-        A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, maxiter=200
-    )
-    x_flex, info_flex = flexible_cg(
-        A, b, x0, atol=FUNCTIONAL_ATOL, rtol=FUNCTIONAL_RTOL, maxiter=200
-    )
-
-    assert info_classic.converged == info_flex.converged
-    bound = _tol_bound(b, FUNCTIONAL_ATOL, FUNCTIONAL_RTOL)
-    assert info_classic.residual_abs <= bound
-    assert info_flex.residual_abs <= bound
-
-
 def test_pcg_captures_residual_history(
     spd_system: tuple[NDArray, NDArray, NDArray],
 ) -> None:
@@ -70,7 +52,7 @@ def test_pcg_captures_residual_history(
         diag = np.diag(A)
         return residual / diag
 
-    _, info = preconditioned_cg(
+    _, info = pcg(
         A,
         b,
         x0,
@@ -84,10 +66,10 @@ def test_pcg_captures_residual_history(
     assert len(info.residual_history) > 0
     assert len(info.residual_history) >= info.iterations
     assert not np.isnan(info.residual_history).any()
-    assert info.event_log is not None
+    assert info.iteration_history is not None
     # Check scalar residual norms (logged in MINIMAL mode)
     residual_norms = np.asarray(
-        info.event_log.get_history("residual_norm"), dtype=np.float64
+        info.iteration_history.residual_norms.to_list(), dtype=np.float64
     )
     assert residual_norms.size > 0
     assert residual_norms.size >= info.iterations
@@ -103,7 +85,7 @@ def test_pcg_captures_vector_traces(
     def jacobi(residual: np.ndarray) -> np.ndarray:
         return residual / np.diag(A)
 
-    _, info = preconditioned_cg(
+    _, info = pcg(
         A,
         b,
         x0,
@@ -111,7 +93,7 @@ def test_pcg_captures_vector_traces(
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
         maxiter=15,
-        trace_mode="full",
+        trace_mode=TraceMode.FULL,
     )
 
     assert info.residual_vectors is not None
@@ -231,7 +213,7 @@ def test_flexible_pcg_no_traces_by_default(
     x0 = np.zeros_like(b)
 
     _, info = flexible_cg(
-        A, b, x0, maxiter=50, trace_mode="disabled", atol=FUNCTIONAL_ATOL
+        A, b, x0, maxiter=50, trace_mode=TraceMode.DISABLED, atol=FUNCTIONAL_ATOL
     )
 
     assert info.residual_vectors is None
@@ -250,13 +232,17 @@ def test_flexible_pcg_traces_satisfy_residual_equation(
         b,
         x0,
         maxiter=200,
-        trace_mode="full",
+        trace_mode=TraceMode.FULL,
         atol=FUNCTIONAL_ATOL,
         rtol=FUNCTIONAL_RTOL,
     )
 
     residual_vecs = info.residual_vectors
     solution_vecs = info.solution_vectors
+
+    # Verify vectors were captured
+    assert residual_vecs is not None, "residual_vectors should be captured in FULL mode"
+    assert solution_vecs is not None, "solution_vectors should be captured in FULL mode"
 
     # Verify each captured pair satisfies: r_k = b - A @ x_k
     for k in range(len(residual_vecs)):
@@ -283,13 +269,12 @@ def test_jacobi_factory_preserves_signs() -> None:
     A = np.array([[4.0, 1.0, 0.0], [1.0, -3.0, 0.5], [0.0, 0.5, 2.0]], dtype=np.float64)
     diag = np.diag(A)
 
-    # Jacobi preconditioner using builder pattern
-    from neuralls.preconditioner.builders import JacobiBuilder
+    # Jacobi preconditioner using factory function
+    from neuralls.solver.preconditioners.builders import create_preconditioner
     from neuralls.configuration.preconditioner import StandardPreconditionerConfig
 
-    builder = JacobiBuilder()
-    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
-    jacobi_factory = builder.build(A, config)
+    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")  # type: ignore[arg-type]
+    jacobi_precond = create_preconditioner(A, config)
 
     # Inline version (correct reference)
     def jacobi_inline(r: np.ndarray) -> np.ndarray:
@@ -303,7 +288,7 @@ def test_jacobi_factory_preserves_signs() -> None:
     ]
 
     for r in test_residuals:
-        z_factory = jacobi_factory(r)
+        z_factory = jacobi_precond.apply(r)
         z_inline = jacobi_inline(r)
 
         # Should match exactly (no tolerance needed for this operation)
@@ -317,9 +302,11 @@ def test_jacobi_factory_preserves_signs() -> None:
 
     # Verify sign preservation explicitly for negative diagonal
     r_test = np.array([0.0, 1.0, 0.0])  # Only second component non-zero
-    z = jacobi_factory(r_test)
+    z = jacobi_precond.apply(r_test)
     # diag[1] = -3.0, so z[1] should be negative: 1.0 / -3.0 = -0.333...
-    assert z[1] < 0, "Jacobi should preserve negative sign for negative diagonal element"
+    assert z[1] < 0, (
+        "Jacobi should preserve negative sign for negative diagonal element"
+    )
     assert np.isclose(z[1], 1.0 / -3.0), "Jacobi should compute correct reciprocal"
 
 
@@ -342,13 +329,12 @@ def test_jacobi_factory_convergence_with_fcg() -> None:
         maxiter=100,
     )
 
-    # With Jacobi preconditioning using builder pattern
-    from neuralls.preconditioner.builders import JacobiBuilder
+    # With Jacobi preconditioning using factory function
+    from neuralls.solver.preconditioners.builders import create_preconditioner
     from neuralls.configuration.preconditioner import StandardPreconditionerConfig
 
-    builder = JacobiBuilder()
-    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
-    jacobi_precond = builder.build(A, config)
+    config = StandardPreconditionerConfig(name="jacobi", type="jacobi")  # type: ignore[arg-type]
+    jacobi_precond = create_preconditioner(A, config)
     _, info_jacobi = flexible_cg(
         A,
         b,

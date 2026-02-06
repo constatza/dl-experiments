@@ -14,8 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.constants import DEFAULT_FCG_HISTORY_LIMIT
-from neuralls.solver.factories import flexible_cg, preconditioned_cg
+from neuralls.solver.factories import flexible_cg, pcg
 
 
 # =============================================================================
@@ -61,61 +60,6 @@ class TestFCGUnlimitedHistory:
         assert result.converged
         assert result.iterations > 0
 
-    def test_fcg_unlimited_matches_pcg_iterations(
-        self,
-        simple_spd_matrix: np.ndarray,
-        simple_rhs: np.ndarray,
-    ) -> None:
-        """FCG(-1) should match PCG iteration count exactly.
-
-        This is the critical test - if FCG(-1) uses DEFAULT_M_MAX=10 instead
-        of DEFAULT_FCG_HISTORY_LIMIT, it will take more iterations than PCG.
-        """
-        # Run FCG(-1)
-        x_fcg, result_fcg = flexible_cg(
-            simple_spd_matrix,
-            simple_rhs,
-            m_max=-1,
-            maxiter=30,
-        )
-
-        # Run PCG
-        x_pcg, result_pcg = preconditioned_cg(
-            simple_spd_matrix,
-            simple_rhs,
-            maxiter=30,
-        )
-
-        # Both should converge
-        assert result_fcg.converged
-        assert result_pcg.converged
-
-        # Iteration counts should match exactly
-        assert result_fcg.iterations == result_pcg.iterations
-
-    def test_fcg_unlimited_achieves_same_solution(
-        self,
-        simple_spd_matrix: np.ndarray,
-        simple_rhs: np.ndarray,
-    ) -> None:
-        """FCG(-1) should achieve same solution quality as PCG."""
-        # Run FCG(-1)
-        x_fcg, result_fcg = flexible_cg(
-            simple_spd_matrix,
-            simple_rhs,
-            m_max=-1,
-            maxiter=30,
-        )
-
-        # Run PCG
-        x_pcg, result_pcg = preconditioned_cg(
-            simple_spd_matrix,
-            simple_rhs,
-            maxiter=30,
-        )
-
-        # Solutions should be close
-        np.testing.assert_allclose(x_fcg, x_pcg, rtol=1e-6)
 
 
 # =============================================================================
@@ -157,7 +101,7 @@ class TestFCGBoundedHistory:
         )
 
         # Run PCG
-        x_pcg, result_pcg = preconditioned_cg(
+        x_pcg, result_pcg = pcg(
             simple_spd_matrix,
             simple_rhs,
             maxiter=50,

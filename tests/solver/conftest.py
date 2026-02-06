@@ -33,10 +33,10 @@ TRIDIAGONAL_OFFDIAG_VALUE = -1.0
 TEST_SEED = 42
 
 # Tolerance constants for two test levels
-INTEGRATION_RTOL = 1e-6      # Integration test relative tolerance
-INTEGRATION_ATOL = 1e-14     # Integration test absolute tolerance
-CONVERGENCE_RTOL = 1e-12     # Convergence test relative tolerance
-CONVERGENCE_ATOL = 1e-14     # Convergence test absolute tolerance
+INTEGRATION_RTOL = 1e-6  # Integration test relative tolerance
+INTEGRATION_ATOL = 1e-14  # Integration test absolute tolerance
+CONVERGENCE_RTOL = 1e-12  # Convergence test relative tolerance
+CONVERGENCE_ATOL = 1e-14  # Convergence test absolute tolerance
 
 # Legacy constants (kept for backward compatibility during migration)
 DEFAULT_RTOL = INTEGRATION_RTOL
@@ -464,9 +464,7 @@ def jacobi_preconditioner_factory() -> Callable[
 @pytest.fixture
 def jacobi_preconditioner_tridiagonal(
     tridiagonal_spd_small: NDArray,
-    jacobi_preconditioner_factory: Callable[
-        [NDArray], Callable[[NDArray], NDArray]
-    ],
+    jacobi_preconditioner_factory: Callable[[NDArray], Callable[[NDArray], NDArray]],
 ) -> Callable[[NDArray], NDArray]:
     """Jacobi preconditioner for tridiagonal test matrix.
 
@@ -481,9 +479,7 @@ def jacobi_preconditioner_tridiagonal(
 
 
 @pytest.fixture
-def ilu_preconditioner_factory() -> Callable[
-    [NDArray], Callable[[NDArray], NDArray]
-]:
+def ilu_preconditioner_factory() -> Callable[[NDArray], Callable[[NDArray], NDArray]]:
     """Factory for ILU preconditioner using scipy.sparse.linalg.spilu.
 
     Returns:
@@ -531,9 +527,7 @@ def ilu_preconditioner_factory() -> Callable[
 @pytest.fixture
 def ilu_preconditioner_tridiagonal(
     tridiagonal_spd_small: NDArray,
-    ilu_preconditioner_factory: Callable[
-        [NDArray], Callable[[NDArray], NDArray]
-    ],
+    ilu_preconditioner_factory: Callable[[NDArray], Callable[[NDArray], NDArray]],
 ) -> Callable[[NDArray], NDArray]:
     """ILU preconditioner for tridiagonal test matrix.
 
@@ -550,9 +544,7 @@ def ilu_preconditioner_tridiagonal(
 @pytest.fixture
 def ilu_preconditioner_diagonal(
     diagonal_spd_small: NDArray,
-    ilu_preconditioner_factory: Callable[
-        [NDArray], Callable[[NDArray], NDArray]
-    ],
+    ilu_preconditioner_factory: Callable[[NDArray], Callable[[NDArray], NDArray]],
 ) -> Callable[[NDArray], NDArray]:
     """ILU preconditioner for diagonal test matrix.
 
@@ -572,9 +564,7 @@ def ilu_preconditioner_diagonal(
 
 @pytest.fixture
 def jacobi_preconditioner_medium(
-    jacobi_preconditioner_factory: Callable[
-        [NDArray], Callable[[NDArray], NDArray]
-    ],
+    jacobi_preconditioner_factory: Callable[[NDArray], Callable[[NDArray], NDArray]],
     tridiagonal_spd_medium: NDArray,
 ) -> Callable[[NDArray], NDArray]:
     """Jacobi preconditioner for medium tridiagonal matrix - for convergence tests."""
@@ -583,9 +573,7 @@ def jacobi_preconditioner_medium(
 
 @pytest.fixture
 def ilu_preconditioner_medium(
-    ilu_preconditioner_factory: Callable[
-        [NDArray], Callable[[NDArray], NDArray]
-    ],
+    ilu_preconditioner_factory: Callable[[NDArray], Callable[[NDArray], NDArray]],
     tridiagonal_spd_medium: NDArray,
 ) -> Callable[[NDArray], NDArray]:
     """ILU preconditioner for medium tridiagonal matrix - for convergence tests."""
@@ -781,11 +769,11 @@ def solver_factories() -> dict[str, Callable]:
             solver = solver_factories[solver_name]
             x, result = solver(A, b, ...)
     """
-    from neuralls.solver import flexible_cg, preconditioned_cg, scipy_cg
+    from neuralls.solver import flexible_cg, pcg, scipy_cg
 
     return {
         "fcg": flexible_cg,
-        "pcg": preconditioned_cg,
+        "pcg": pcg,
         "scipy_cg": scipy_cg,
     }
 
@@ -817,6 +805,7 @@ def save_convergence_plot(solver_plots_dir: Path) -> Callable:
     Returns:
         Function that saves convergence plot: save_plot(name, history, out_dir=None)
     """
+
     def _save_plot(
         name: str,
         history: list[float] | np.ndarray,

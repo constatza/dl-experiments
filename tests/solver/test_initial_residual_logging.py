@@ -1,40 +1,41 @@
 """Test initial residual logging in CG solvers."""
 
+import pytest
 import numpy as np
-from neuralls.solver.factories import preconditioned_cg
-from neuralls.solver.monitoring.trace_recorder import TraceRecorder
+from neuralls.solver.factories import pcg, scipy_cg
+from neuralls.solver.monitoring.storage import ScalarHistory, VectorHistory
 
 
-def test_vector_logger_prepend_scalar():
-    """Test TraceRecorder.prepend() with scalar values."""
-    logger = TraceRecorder()
-    logger.log("residual_norm", 0.5)
-    logger.log("residual_norm", 0.25)
-    logger.prepend("residual_norm", 1.0)
+def test_scalar_history_prepend():
+    """Test ScalarHistory.prepend() with scalar values."""
+    history = ScalarHistory.empty()
+    history = history.add(0.5)
+    history = history.add(0.25)
+    history = history.prepend(1.0)
 
-    history = logger.get_history("residual_norm")
-    assert history == [1.0, 0.5, 0.25]
-
-
-def test_vector_logger_prepend_vector():
-    """Test TraceRecorder.prepend() with vector values."""
-    logger = TraceRecorder()
-    logger.log("residual", np.array([0.5, 0.3]))
-    logger.prepend("residual", np.array([1.0, 0.8]))
-
-    residuals = logger.get_history("residual")
-    assert len(residuals) == 2
-    assert np.allclose(residuals[0], [1.0, 0.8])
-    assert np.allclose(residuals[1], [0.5, 0.3])
+    assert history.to_list() == [1.0, 0.5, 0.25]
 
 
-def test_scipy_cg_initial_residual_zero_guess():
+def test_vector_history_prepend():
+    """Test VectorHistory.prepend() with vector values."""
+    history = VectorHistory.empty()
+    history = history.add(np.array([0.5, 0.3]))
+    history = history.prepend(np.array([1.0, 0.8]))
+
+    vectors = history.to_array()
+    assert len(history) == 2
+    assert np.allclose(vectors[0], [1.0, 0.8])
+    assert np.allclose(vectors[1], [0.5, 0.3])
+
+
+@pytest.mark.parametrize("solver_factory", [pcg, scipy_cg])
+def test_initial_residual_zero_guess(solver_factory):
     """Test initial residual logging with zero initial guess."""
     n = 10
     A = np.eye(n) * 2.0 + np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
     b = np.ones(n)
 
-    x, result = preconditioned_cg(
+    x, result = solver_factory(
         A,
         b,
         x0=None,  # Zero guess
@@ -44,25 +45,24 @@ def test_scipy_cg_initial_residual_zero_guess():
     )
 
     # Check history includes iteration 0
-    assert result.event_log is not None
-    history = result.event_log.get_history("residual_norm")
-    assert history is not None
+    assert result.iteration_history is not None
+    history = result.iteration_history.residual_norms.to_list()
     assert len(history) > 0
 
     # Initial residual should equal ||b|| when x0 = 0
     expected_r0 = np.linalg.norm(b)
-    b_norm = np.linalg.norm(b)
     assert np.isclose(history[0], expected_r0)
 
 
-def test_scipy_cg_initial_residual_nonzero_guess():
+@pytest.mark.parametrize("solver_factory", [pcg, scipy_cg])
+def test_initial_residual_nonzero_guess(solver_factory):
     """Test initial residual logging with non-zero initial guess."""
     n = 10
     A = np.eye(n) * 2.0 + np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
     b = np.ones(n)
     x0 = np.random.rand(n) * 0.1
 
-    x, result = preconditioned_cg(
+    x, result = solver_factory(
         A,
         b,
         x0=x0,
@@ -72,9 +72,8 @@ def test_scipy_cg_initial_residual_nonzero_guess():
     )
 
     # Check history includes iteration 0
-    assert result.event_log is not None
-    history = result.event_log.get_history("residual_norm")
-    assert history is not None
+    assert result.iteration_history is not None
+    history = result.iteration_history.residual_norms.to_list()
     assert len(history) > 0
 
     # Initial residual should equal ||b - A @ x0||
@@ -90,7 +89,7 @@ def test_scipy_cg_vs_fcg_consistency():
     - residual_history: RELATIVE residuals (||r|| / ||b||)
     - residual_history_abs: ABSOLUTE residuals (||r||)
     """
-    from neuralls.solver.factories import flexible_cg, preconditioned_cg
+    from neuralls.solver.factories import flexible_cg, pcg
 
     n = 10
     A = np.eye(n) * 2.0 + np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
@@ -98,7 +97,7 @@ def test_scipy_cg_vs_fcg_consistency():
     x0 = np.zeros(n)
 
     # Solve with scipy CG
-    x_scipy, result_scipy = preconditioned_cg(A, b, x0=x0, rtol=1e-6, maxiter=20)
+    x_scipy, result_scipy = pcg(A, b, x0=x0, rtol=1e-6, maxiter=20)
 
     # Solve with FCG
     x_fcg, result_fcg = flexible_cg(A, b, x0=x0, rtol=1e-6, maxiter=20)

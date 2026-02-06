@@ -18,7 +18,7 @@ import pytest
 from numpy.typing import NDArray
 
 from neuralls.solver.monitoring.trace_mode import TraceMode
-from neuralls.solver.preconditioners import FunctionPreconditioner
+from neuralls.solver.preconditioners import CallablePreconditioner
 
 
 class TestTrivialConvergence:

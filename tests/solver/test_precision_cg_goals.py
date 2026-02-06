@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from collections.abc import Sequence
 
 import matplotlib
 
@@ -12,11 +12,11 @@ import pytest
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from neuralls.solver import flexible_cg, preconditioned_cg
+from neuralls.solver import flexible_cg, pcg
 
 # Define very strict tolerances for double precision accuracy goals
 DOUBLE_PRECISION_ATOL = 1e-14
-DOUBLE_PRECISION_RTOL = 1e-15 # Closer to machine epsilon for float64
+DOUBLE_PRECISION_RTOL = 1e-15  # Closer to machine epsilon for float64
 MAX_SAMPLES = 30
 
 
@@ -24,7 +24,9 @@ def _tol_bound(b: NDArray, atol: float, rtol: float) -> float:
     return max(atol, rtol * float(np.linalg.norm(b)))
 
 
-def _plot_history(name: str, history: Sequence[float] | np.ndarray, out_dir: Path) -> None:
+def _plot_history(
+    name: str, history: Sequence[float] | np.ndarray, out_dir: Path
+) -> None:
     if len(history) == 0:
         return
     values = np.asarray(history, dtype=np.float64)
@@ -85,8 +87,7 @@ def diagnostics_dir() -> Path:
 def test_pcg_jacobi_double_precision_accuracy(
     spd_system: tuple[NDArray, NDArray, NDArray], diagnostics_dir: Path
 ) -> None:
-    """
-    Tests that preconditioned_cg (SciPy wrapper) with Jacobi preconditioner
+    """Tests that preconditioned_cg (SciPy wrapper) with Jacobi preconditioner
     can reach double precision accuracy for the spd_system.
     """
     A, b, x_true = spd_system
@@ -94,7 +95,7 @@ def test_pcg_jacobi_double_precision_accuracy(
 
     jacobi_M = jacobi_preconditioner_callable(A)
 
-    x_sol, info = preconditioned_cg(
+    x_sol, info = pcg(
         A,
         b,
         x0,
@@ -106,10 +107,16 @@ def test_pcg_jacobi_double_precision_accuracy(
     )
 
     assert info.converged
-    assert info.residual_abs <= _tol_bound(b, DOUBLE_PRECISION_ATOL, DOUBLE_PRECISION_RTOL)
-    assert np.allclose(x_sol, x_true, atol=DOUBLE_PRECISION_ATOL, rtol=DOUBLE_PRECISION_RTOL)
+    assert info.residual_abs <= _tol_bound(
+        b, DOUBLE_PRECISION_ATOL, DOUBLE_PRECISION_RTOL
+    )
+    assert np.allclose(
+        x_sol, x_true, atol=DOUBLE_PRECISION_ATOL, rtol=DOUBLE_PRECISION_RTOL
+    )
     if info.residual_history is not None and info.residual_history_abs is not None:
-        count = min(len(info.residual_history), len(info.residual_history_abs), MAX_SAMPLES)
+        count = min(
+            len(info.residual_history), len(info.residual_history_abs), MAX_SAMPLES
+        )
         data = np.column_stack(
             [
                 np.asarray(info.residual_history_abs[:count], dtype=np.float64),
@@ -125,7 +132,9 @@ def test_pcg_jacobi_double_precision_accuracy(
             comments="",
         )
     if info.residual_history is not None:
-        _plot_history("pcg_double_precision_history", info.residual_history, diagnostics_dir)
+        _plot_history(
+            "pcg_double_precision_history", info.residual_history, diagnostics_dir
+        )
     # Uncomment to persist residual vectors for inspection (requires trace_mode="full" above).
     # if info.residual_vectors is not None:
     #     np.savetxt(
@@ -139,8 +148,7 @@ def test_pcg_jacobi_double_precision_accuracy(
 def test_flexible_pcg_jacobi_double_precision_accuracy(
     spd_system: tuple[NDArray, NDArray, NDArray], diagnostics_dir: Path
 ) -> None:
-    """
-    Tests that flexible_cg with Jacobi preconditioner can reach double precision accuracy
+    """Tests that flexible_cg with Jacobi preconditioner can reach double precision accuracy
     for the spd_system. This is a challenging goal for flexible PCG.
     """
     A, b, x_true = spd_system
@@ -161,10 +169,16 @@ def test_flexible_pcg_jacobi_double_precision_accuracy(
     )
 
     assert info.converged
-    assert info.residual_abs <= _tol_bound(b, DOUBLE_PRECISION_ATOL, DOUBLE_PRECISION_RTOL)
-    assert np.allclose(x_sol, x_true, atol=DOUBLE_PRECISION_ATOL, rtol=DOUBLE_PRECISION_RTOL)
+    assert info.residual_abs <= _tol_bound(
+        b, DOUBLE_PRECISION_ATOL, DOUBLE_PRECISION_RTOL
+    )
+    assert np.allclose(
+        x_sol, x_true, atol=DOUBLE_PRECISION_ATOL, rtol=DOUBLE_PRECISION_RTOL
+    )
     if info.residual_history is not None and info.residual_history_abs is not None:
-        count = min(len(info.residual_history), len(info.residual_history_abs), MAX_SAMPLES)
+        count = min(
+            len(info.residual_history), len(info.residual_history_abs), MAX_SAMPLES
+        )
         data = np.column_stack(
             [
                 np.asarray(info.residual_history_abs[:count], dtype=np.float64),
@@ -180,7 +194,11 @@ def test_flexible_pcg_jacobi_double_precision_accuracy(
             comments="",
         )
     if info.residual_history is not None:
-        _plot_history("flexible_pcg_jacobi_double_precision", info.residual_history, diagnostics_dir)
+        _plot_history(
+            "flexible_pcg_jacobi_double_precision",
+            info.residual_history,
+            diagnostics_dir,
+        )
     # Uncomment to persist residual vectors for inspection (requires trace_mode="full" above).
     # if info.residual_vectors is not None:
     #     np.savetxt(

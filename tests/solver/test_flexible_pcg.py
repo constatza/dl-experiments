@@ -249,8 +249,8 @@ def test_flexible_pcg_tridiagonal_double_precision_accuracy(
     assert rel_residual < 1e-13
 
     # Save convergence plot for high-precision test
-    if info.event_log is not None:
-        residual_history = info.event_log.get_history("residual_norm")
+    if info.iteration_history is not None:
+        residual_history = info.iteration_history.residual_norms.to_list()
         save_convergence_plot("flexible_pcg_tridiagonal_double_precision", residual_history)
 
 
@@ -605,9 +605,8 @@ def test_flexible_pcg_residual_history_decreasing(
     )
 
     # Check residual history exists and has values
-    # Note: Strings work fine, auto-converted to EventType internally
-    assert info.event_log is not None
-    residual_history = info.event_log.get_history("residual_norm")
+    assert info.iteration_history is not None
+    residual_history = info.iteration_history.residual_norms.to_list()
     assert len(residual_history) > 0
 
     # First residual larger than last (generally decreasing)

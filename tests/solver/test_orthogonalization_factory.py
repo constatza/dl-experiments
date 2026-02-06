@@ -4,8 +4,8 @@ This module tests the create_fcg_orthogonalization() factory that maps
 m_max parameter values to appropriate OrthogonalizationStrategy instances.
 
 Coverage:
-- m_max > 0: Returns PeriodicRestartOrthogonalization
-- m_max = -1: Returns FullOrthogonalization
+- m_max > 0: Returns PeriodicRestartOrthogonalization with finite window
+- m_max = -1 or np.inf: Returns PeriodicRestartOrthogonalization with infinite window
 - m_max = 0: Raises ValueError
 - m_max < -1: Raises ValueError
 """
@@ -16,7 +16,6 @@ import numpy as np
 import pytest
 
 from neuralls.solver.strategies.orthogonalization import (
-    FullOrthogonalization,
     ModifiedGramSchmidt,
     PeriodicRestartOrthogonalization,
     TruncatedGramSchmidt,
@@ -73,10 +72,19 @@ class TestFactoryReturnTypes:
         strategy = create_fcg_orthogonalization(m_max=1)
         assert isinstance(strategy, PeriodicRestartOrthogonalization)
 
-    def test_m_max_negative_one_returns_full(self) -> None:
-        """m_max = -1 should return FullOrthogonalization."""
+    def test_m_max_negative_one_returns_periodic_with_inf(self) -> None:
+        """m_max = -1 should return PeriodicRestartOrthogonalization with np.inf."""
         strategy = create_fcg_orthogonalization(m_max=-1)
-        assert isinstance(strategy, FullOrthogonalization)
+        assert isinstance(strategy, PeriodicRestartOrthogonalization)
+        assert np.isinf(strategy.m_max)
+        assert strategy.window_size is None
+
+    def test_m_max_inf_returns_periodic_with_inf(self) -> None:
+        """m_max = np.inf should return PeriodicRestartOrthogonalization."""
+        strategy = create_fcg_orthogonalization(m_max=np.inf)
+        assert isinstance(strategy, PeriodicRestartOrthogonalization)
+        assert np.isinf(strategy.m_max)
+        assert strategy.window_size is None
 
     def test_default_m_max_returns_periodic_restart(self) -> None:
         """Default m_max should return PeriodicRestartOrthogonalization."""
@@ -154,13 +162,13 @@ class TestFactoryIntegration:
         assert not report.breakdown
         assert len(report.coefficients) > 0
 
-    def test_full_orthogonalization_strategy_orthogonalizes(
+    def test_infinite_orthogonalization_strategy_orthogonalizes(
         self,
         sample_vector: np.ndarray,
         p_vectors_history: list[np.ndarray],
         q_vectors_history: list[np.ndarray],
     ) -> None:
-        """Factory-created FullOrthogonalization should orthogonalize."""
+        """Factory-created FCG(∞) should orthogonalize against all history."""
         strategy = create_fcg_orthogonalization(m_max=-1)
 
         result, report = strategy.orthogonalize(
@@ -170,6 +178,8 @@ class TestFactoryIntegration:
         # Result should differ from input (orthogonalization applied)
         assert not np.allclose(result, sample_vector)
         assert not report.breakdown
+        # Should orthogonalize against all history
+        assert len(report.coefficients) == len(p_vectors_history)
 
     def test_empty_history_returns_unchanged_vector(
         self,
@@ -208,9 +218,9 @@ class TestWindowSizeProperty:
         strategy = ModifiedGramSchmidt()
         assert strategy.window_size is None
 
-    def test_full_orthogonalization_window_size(self) -> None:
-        """FullOrthogonalization should return None for unlimited."""
-        strategy = FullOrthogonalization()
+    def test_periodic_restart_inf_window_size(self) -> None:
+        """PeriodicRestartOrthogonalization with m_max=np.inf should return None."""
+        strategy = PeriodicRestartOrthogonalization(m_max=np.inf)
         assert strategy.window_size is None
 
     def test_factory_bounded_window_size(self) -> None:

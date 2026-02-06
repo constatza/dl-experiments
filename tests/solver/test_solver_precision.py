@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from neuralls.solver import flexible_cg, preconditioned_cg, scipy_cg
+from neuralls.solver import flexible_cg, pcg, scipy_cg
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     "solver_func,solver_name",
     [
         (flexible_cg, "FCG"),
-        (preconditioned_cg, "PCG"),
+        (pcg, "PCG"),
         (scipy_cg, "SciPy"),
     ],
 )
@@ -81,7 +81,7 @@ def test_solver_convergence_precision_medium_tridiagonal(
     "solver_func,solver_name",
     [
         (flexible_cg, "FCG"),
-        (preconditioned_cg, "PCG"),
+        (pcg, "PCG"),
         (scipy_cg, "SciPy"),
     ],
 )
@@ -117,7 +117,7 @@ def test_solver_convergence_precision_medium_diagonal(
     "solver_func,solver_name",
     [
         (flexible_cg, "FCG"),
-        (preconditioned_cg, "PCG"),
+        (pcg, "PCG"),
         (scipy_cg, "SciPy"),
     ],
 )
@@ -153,7 +153,7 @@ def test_solver_iteration_consistency_medium(
     "solver_func,solver_name",
     [
         (flexible_cg, "FCG"),
-        (preconditioned_cg, "PCG"),
+        (pcg, "PCG"),
         (scipy_cg, "SciPy"),
     ],
 )

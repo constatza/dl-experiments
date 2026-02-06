@@ -14,7 +14,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -157,8 +156,7 @@ def test_ilu_factorization_correctness(
     # Threshold chosen based on expected ILU approximation quality
     ILU_APPROXIMATION_THRESHOLD = 0.5
     np.testing.assert_array_less(
-        np.linalg.norm(M_inv_A - I, ord="fro"),
-        ILU_APPROXIMATION_THRESHOLD
+        np.linalg.norm(M_inv_A - I, ord="fro"), ILU_APPROXIMATION_THRESHOLD
     )
 
 
@@ -176,13 +174,13 @@ def test_ilu_improves_over_jacobi(
 
         Expected: iterations_ilu ≤ iterations_jacobi
     """
-    from neuralls.solver import preconditioned_cg
+    from neuralls.solver import pcg
 
     A, b, _ = tridiagonal_system_known_solution
     rtol, atol = integration_tolerances
 
     # Solve with Jacobi
-    _, result_jacobi = preconditioned_cg(
+    _, result_jacobi = pcg(
         A,
         b,
         preconditioner=jacobi_preconditioner_tridiagonal,
@@ -192,7 +190,7 @@ def test_ilu_improves_over_jacobi(
     )
 
     # Solve with ILU
-    _, result_ilu = preconditioned_cg(
+    _, result_ilu = pcg(
         A,
         b,
         preconditioner=ilu_preconditioner_tridiagonal,
@@ -285,7 +283,7 @@ def test_ilu_on_diagonal_matrix_matches_jacobi(
 
         Expected: iterations_ilu == iterations_jacobi
     """
-    from neuralls.solver import preconditioned_cg
+    from neuralls.solver import pcg
 
     A, b, _ = diagonal_system_known_solution
     rtol, atol = integration_tolerances
@@ -294,7 +292,7 @@ def test_ilu_on_diagonal_matrix_matches_jacobi(
     jacobi_precond = jacobi_preconditioner_factory(A)
 
     # Solve with Jacobi
-    _, result_jacobi = preconditioned_cg(
+    _, result_jacobi = pcg(
         A,
         b,
         preconditioner=jacobi_precond,
@@ -304,7 +302,7 @@ def test_ilu_on_diagonal_matrix_matches_jacobi(
     )
 
     # Solve with ILU
-    _, result_ilu = preconditioned_cg(
+    _, result_ilu = pcg(
         A,
         b,
         preconditioner=ilu_preconditioner_diagonal,
@@ -332,8 +330,7 @@ def test_jacobi_correctness_on_well_conditioned_diagonal(
 
     Note:
         This test uses well-conditioned diagonal elements to avoid
-        numerical issues. For safety with near-zero diagonals, use
-        JacobiBuilder from neuralls.preconditioner.builders.
+        numerical issues.
     """
     # Create well-conditioned diagonal matrix
     A = np.diag([2.0, 3.0, 4.0, 5.0, 1.0])
