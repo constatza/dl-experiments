@@ -8,27 +8,32 @@ Expected Outcome:
     Exact match (diff = 0) for all test cases.
 """
 
-import numpy as np
 import pytest
 
-from neuralls.solver.factories import preconditioned_cg, scipy_cg
+from neuralls.solver.factories import pcg, scipy_cg
 from tests.benchmarks.exactness.conftest import (
     BENCHMARK_SIZES,
     MATRIX_TYPES,
     SOLUTION_COMPARISON_ATOL,
     SOLUTION_COMPARISON_RTOL,
-    append_comparison_result,
     assert_solutions_match,
     generate_spd_system,
 )
 
 
+def _is_slow_case(size: int) -> bool:
+    """Mark test cases with size >= 500 as slow."""
+    return size >= 500
+
+
+@pytest.mark.benchmark
 @pytest.mark.parametrize("size", BENCHMARK_SIZES)
 @pytest.mark.parametrize("matrix_type", MATRIX_TYPES)
 def test_pcg_scipy_exact_match(
     size: int,
     matrix_type: str,
     convergence_tolerances: tuple[float, float],
+    request: pytest.FixtureRequest,
 ) -> None:
     """Test that PCG-ours and scipy-cg produce identical iteration counts.
 
@@ -36,12 +41,17 @@ def test_pcg_scipy_exact_match(
         size: System size (n × n)
         matrix_type: Matrix type ("tridiagonal", "diagonal")
         convergence_tolerances: Fixture providing (rtol, atol)
+        request: Pytest request fixture for dynamic marker application
 
     Validates:
         - Both solvers converge
         - Iteration counts match exactly (diff = 0)
         - Solutions match to convergence tolerance
     """
+    # Apply slow marker dynamically for large test cases
+    if _is_slow_case(size):
+        request.node.add_marker(pytest.mark.slow)
+
     # Generate SPD matrix + RHS
     A, b, x_exact, kappa = generate_spd_system(size, matrix_type)
     rtol, atol = convergence_tolerances
@@ -57,7 +67,7 @@ def test_pcg_scipy_exact_match(
     )
 
     # Run our PCG implementation
-    x_pcg, result_pcg = preconditioned_cg(
+    x_pcg, result_pcg = pcg(
         A,
         b,
         preconditioner=None,
@@ -71,25 +81,9 @@ def test_pcg_scipy_exact_match(
     assert result_scipy.converged, "Scipy-cg failed to converge"
     assert result_pcg.converged, "PCG-ours failed to converge"
 
-    # Check iteration count exactness
+    # Assert iteration count exactness (0 tolerance)
     diff = result_pcg.iterations - result_scipy.iterations
-    exact_match = diff == 0
-
-    # Record result
-    append_comparison_result(
-        filename=f"pcg_scipy_{matrix_type}.md",
-        title_prefix="PCG-ours vs PCG-scipy",
-        headers=("Scipy Iters", "Ours Iters"),
-        size=size,
-        kappa=kappa,
-        baseline_iters=result_scipy.iterations,
-        test_iters=result_pcg.iterations,
-        diff=diff,
-        exact=exact_match,
-    )
-
-    # Assert exactness (0 tolerance)
-    assert exact_match, (
+    assert diff == 0, (
         f"PCG-ours and scipy-cg iteration counts must match exactly. "
         f"Scipy={result_scipy.iterations}, Ours={result_pcg.iterations}, diff={diff}"
     )

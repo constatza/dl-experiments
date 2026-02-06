@@ -1,8 +1,5 @@
 """Fixtures and utilities for CG iteration count exactness benchmarks."""
 
-from pathlib import Path
-from typing import Callable
-
 import numpy as np
 import pytest
 from numpy.typing import NDArray
@@ -28,10 +25,6 @@ SOLUTION_COMPARISON_ATOL = 2 * EXACTNESS_ATOL
 
 # Iteration count difference thresholds
 ITER_DIFF_THRESHOLD_FCG_PCG = 2  # Allow up to 2 iterations difference for FCG vs PCG
-
-# Random seeds
-SEED_MATRIX = 42
-SEED_RHS = 123
 
 
 def _create_tridiagonal_spd(n: int) -> NDArray:
@@ -101,63 +94,53 @@ def _create_random_spd(
 def generate_spd_system(
     size: int,
     matrix_type: str,
-    seed_matrix: int = SEED_MATRIX,
-    seed_rhs: int = SEED_RHS,
 ) -> tuple[NDArray, NDArray, NDArray, float]:
-    """Generate SPD system with known solution.
+    """Generate DETERMINISTIC SPD system with known solution.
+
+    Completely deterministic - no randomness. Running with the same parameters
+    always produces identical A, b, x_exact.
+
+    Determinism details:
+    - Tridiagonal matrix: hardcoded structure (diag=4, off-diag=-1)
+    - Diagonal matrix: hardcoded entries (1, 2, ..., n)
+    - x_exact: vector of ones (no randomness)
+    - b: computed as A @ x_exact (fully deterministic)
 
     Args:
         size: Matrix size (n × n)
-        matrix_type: One of "tridiagonal", "diagonal", "random"
-        seed_matrix: Random seed for matrix generation
-        seed_rhs: Random seed for RHS generation
+        matrix_type: One of "tridiagonal", "diagonal"
 
     Returns:
-        Tuple of (A, b, x_exact, kappa) where:
+        Tuple of (A, b, x_exact, kappa) - all deterministic
             - A: SPD matrix (size × size)
             - b: RHS vector
-            - x_exact: Exact solution
+            - x_exact: Exact solution (vector of ones)
             - kappa: Condition number
+
+    Raises:
+        ValueError: If matrix_type is not recognized
     """
-    rng_mat = np.random.default_rng(seed_matrix)
-    rng_rhs = np.random.default_rng(seed_rhs)
+    match matrix_type:
+        case "tridiagonal":
+            # Tridiagonal: diag=4, off-diag=-1
+            # κ ≈ 4n²/π² for large n
+            A = _create_tridiagonal_spd(size)
+            kappa = _estimate_tridiagonal_kappa(size)
 
-    if matrix_type == "tridiagonal":
-        # Tridiagonal: diag=4, off-diag=-1
-        # κ ≈ 4n²/π² for large n
-        A = _create_tridiagonal_spd(size)
-        kappa = _estimate_tridiagonal_kappa(size)
+        case "diagonal":
+            # Diagonal with entries [1, 2, ..., size]
+            # κ = size / 1 = size
+            A = np.diag(np.arange(1, size + 1, dtype=np.float64))
+            kappa = float(size)
 
-    elif matrix_type == "diagonal":
-        # Diagonal with entries [1, 2, ..., size]
-        # κ = size / 1 = size
-        A = np.diag(np.arange(1, size + 1, dtype=np.float64))
-        kappa = float(size)
+        case _:
+            raise ValueError(f"Unknown matrix_type: {matrix_type}")
 
-    elif matrix_type == "random":
-        # Random SPD with controlled condition number
-        # Use QR to get orthogonal Q, then Q @ D @ Q.T
-        kappa_target = 100.0  # Well-conditioned
-        A, kappa = _create_random_spd(size, kappa_target, rng_mat)
-
-    else:
-        raise ValueError(f"Unknown matrix_type: {matrix_type}")
-
-    # Generate exact solution and RHS
-    x_exact = rng_rhs.standard_normal(size)
+    # Use ones for exact solution (completely deterministic)
+    x_exact = np.ones(size, dtype=np.float64)
     b = A @ x_exact
 
     return A, b, x_exact, kappa
-
-
-@pytest.fixture(scope="session", autouse=True)
-def clear_results_before_tests() -> None:
-    """Clear all result markdown files before test session starts."""
-    results_dir = Path(__file__).parent / "results"
-    if results_dir.exists():
-        for result_file in results_dir.glob("*.md"):
-            result_file.unlink()
-    yield
 
 
 @pytest.fixture
@@ -305,63 +288,3 @@ def assert_solutions_match(
             f"{diag['threshold']:.3e}\n"
             f"  Tolerances: rtol={rtol:.1e}, atol={atol:.1e}"
         )
-
-
-def append_comparison_result(
-    filename: str,
-    title_prefix: str,
-    headers: tuple[str, str],
-    size: int,
-    kappa: float,
-    baseline_iters: int,
-    test_iters: int,
-    diff: int,
-    exact: bool,
-) -> None:
-    """Append comparison result to markdown file.
-
-    Args:
-        filename: Output markdown filename
-        title_prefix: Prefix for title (e.g., "FCG(-1) vs PCG")
-        headers: Tuple of (baseline_header, test_header) for table
-        size: System size
-        kappa: Condition number
-        baseline_iters: Baseline solver iteration count
-        test_iters: Test solver iteration count
-        diff: Iteration count difference
-        exact: Whether counts match exactly
-    """
-    results_dir = Path(__file__).parent / "results"
-    results_dir.mkdir(exist_ok=True)
-    filepath = results_dir / filename
-
-    # Status can mean either "exact" or "within threshold" depending on test
-    status = "✓ EXACT" if exact else "✗ MISMATCH"
-    baseline_header, test_header = headers
-    row = (
-        f"| {size} | {kappa:.0f} | {baseline_iters} | {test_iters} | "
-        f"{diff:+d} | {status} |\n"
-    )
-
-    # First write creates file with header
-    if not filepath.exists():
-        matrix_name = (
-            Path(filename)
-            .stem.replace("fcg_vs_pcg_fixed_", "")
-            .replace("fcg_pcg_", "")
-            .replace("pcg_scipy_", "")
-            .replace("pcg_ours_ortho_scipy_", "")
-            .replace("_", " ")
-            .title()
-        )
-        table_header = (
-            f"| Size | κ | {baseline_header} | {test_header} | Diff | Status |\n"
-            f"|------|---|{'-' * len(baseline_header)}|{'-' * len(test_header)}|------|--------|\n"
-        )
-        with filepath.open("w") as f:
-            f.write(f"# {title_prefix}: {matrix_name}\n\n")
-            f.write(table_header)
-            f.write(row)
-    else:
-        with filepath.open("a") as f:
-            f.write(row)

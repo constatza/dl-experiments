@@ -11,27 +11,32 @@ Expected Outcome:
     This test is diagnostic, not a validation of exactness.
 """
 
-import numpy as np
 import pytest
 
-from neuralls.solver.factories import preconditioned_cg, scipy_cg
+from neuralls.solver.factories import pcg, scipy_cg
 from tests.benchmarks.exactness.conftest import (
     BENCHMARK_SIZES,
     MATRIX_TYPES,
     SOLUTION_COMPARISON_ATOL,
     SOLUTION_COMPARISON_RTOL,
-    append_comparison_result,
     assert_solutions_match,
     generate_spd_system,
 )
 
 
+def _is_slow_case(size: int) -> bool:
+    """Mark test cases with size >= 500 as slow."""
+    return size >= 500
+
+
+@pytest.mark.benchmark
 @pytest.mark.parametrize("size", BENCHMARK_SIZES)
 @pytest.mark.parametrize("matrix_type", MATRIX_TYPES)
 def test_pcg_ours_ortho_scipy_comparison(
     size: int,
     matrix_type: str,
     convergence_tolerances: tuple[float, float],
+    request: pytest.FixtureRequest,
 ) -> None:
     """Compare PCG-ours with reorthogonalization vs scipy-cg iteration counts.
 
@@ -39,12 +44,17 @@ def test_pcg_ours_ortho_scipy_comparison(
         size: System size (n × n)
         matrix_type: Matrix type ("tridiagonal", "diagonal")
         convergence_tolerances: Fixture providing (rtol, atol)
+        request: Pytest request fixture for dynamic marker application
 
     Validates:
         - Both solvers converge
         - Records iteration count differences (may not match)
         - Solutions match to convergence tolerance
     """
+    # Apply slow marker dynamically for large test cases
+    if _is_slow_case(size):
+        request.node.add_marker(pytest.mark.slow)
+
     # Generate SPD matrix + RHS
     A, b, x_exact, kappa = generate_spd_system(size, matrix_type)
     rtol, atol = convergence_tolerances
@@ -60,7 +70,7 @@ def test_pcg_ours_ortho_scipy_comparison(
     )
 
     # Run our PCG implementation WITH full reorthogonalization
-    x_pcg_ortho, result_pcg_ortho = preconditioned_cg(
+    x_pcg_ortho, result_pcg_ortho = pcg(
         A,
         b,
         preconditioner=None,
@@ -74,23 +84,6 @@ def test_pcg_ours_ortho_scipy_comparison(
     # Check convergence
     assert result_scipy.converged, "Scipy-cg failed to converge"
     assert result_pcg_ortho.converged, "PCG-ours-ortho failed to converge"
-
-    # Check iteration count difference
-    diff = result_pcg_ortho.iterations - result_scipy.iterations
-    exact_match = diff == 0
-
-    # Record result
-    append_comparison_result(
-        filename=f"pcg_ours_ortho_scipy_{matrix_type}.md",
-        title_prefix="PCG-ours-ortho vs PCG-scipy",
-        headers=("Scipy Iters", "Ours-Ortho Iters"),
-        size=size,
-        kappa=kappa,
-        baseline_iters=result_scipy.iterations,
-        test_iters=result_pcg_ortho.iterations,
-        diff=diff,
-        exact=exact_match,
-    )
 
     # NOTE: We don't assert exactness here since this is a diagnostic test
     # Reorthogonalization is expected to potentially change iteration counts
