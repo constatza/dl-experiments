@@ -79,15 +79,15 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
         iteration_indices: list[np.ndarray] = []
 
         # Import scipy CG solver
-        from ...solver.solvers.scipy_cg_solver import SciPyCGSolver
-        from ...solver.monitoring.trace_recorder import TraceRecorder
-        from ...solver.monitoring.events import EventType
+        from ...solver.scipy_wrapper import SciPyCGSolver
+        from ...solver.monitoring.iteration_history import IterationHistory
+        from ...solver.monitoring.trace_mode import TraceMode
 
         for sample_idx, (rhs_vec, true_sol) in enumerate(zip(rhs_samples, sols)):
             # Run classical CG (scipy) for fixed number of iterations
             # Use scipy.sparse.linalg.cg wrapper for standard CG implementation
-            event_log = TraceRecorder()
-            solver = SciPyCGSolver(event_logger=event_log)
+            iteration_history = IterationHistory(mode=TraceMode.FULL)
+            solver = SciPyCGSolver(iteration_history=iteration_history)
 
             _, info = solver.solve(
                 A=matrix,
@@ -99,10 +99,10 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
                 trace_mode="full",  # Collect all intermediate vectors
             )
 
-            # Extract vectors from scipy CG event log
-            assert info.event_log is not None
-            residual_seq = info.event_log.get_vectors(EventType.RESIDUAL)
-            solution_seq = info.event_log.get_vectors(EventType.SOLUTION)
+            # Extract vectors from iteration history
+            assert info.iteration_history is not None and info.iteration_history.residuals is not None
+            residual_seq = info.iteration_history.residuals.to_array()
+            solution_seq = info.iteration_history.solutions.to_array() if info.iteration_history.solutions else np.array([])
             num_pairs = residual_seq.shape[0]
 
             error_seq = np.array(

@@ -83,14 +83,14 @@ class SearchDirectionsStrategy(IDataGenerationStrategy):
         iteration_indices: list[np.ndarray] = []
 
         # Import scipy CG solver
-        from ...solver.solvers.scipy_cg_solver import SciPyCGSolver
-        from ...solver.monitoring.trace_recorder import TraceRecorder
-        from ...solver.monitoring.events import EventType
+        from ...solver.scipy_wrapper import SciPyCGSolver
+        from ...solver.monitoring.iteration_history import IterationHistory
+        from ...solver.monitoring.trace_mode import TraceMode
 
         for sample_idx, rhs_vec in enumerate(rhs_samples):
             # Run classical CG (scipy) for fixed number of iterations
-            event_log = TraceRecorder()
-            solver = SciPyCGSolver(event_logger=event_log)
+            iteration_history = IterationHistory(mode=TraceMode.FULL)
+            solver = SciPyCGSolver(iteration_history=iteration_history)
 
             _, info = solver.solve(
                 A=matrix,
@@ -102,12 +102,15 @@ class SearchDirectionsStrategy(IDataGenerationStrategy):
                 trace_mode="full",  # Collect all intermediate vectors
             )
 
-            # Extract search directions and products from scipy CG event log
-            assert info.event_log is not None
-            direction_seq = info.event_log.get_vectors(EventType.SEARCH_DIRECTION)
-            product_seq = info.event_log.get_vectors(EventType.SEARCH_DIRECTION_PRODUCT)
+            # Extract search directions from iteration history
+            # Note: scipy CG doesn't provide search directions, only residuals and solutions
+            # So directions and products will be empty arrays
+            assert info.iteration_history is not None and info.iteration_history.directions is not None
+            direction_seq = info.iteration_history.directions.to_array()
+            # For scipy CG, we don't have products, so use empty array
+            product_seq = np.array([])
 
-            num_pairs = direction_seq.shape[0]
+            num_pairs = direction_seq.shape[0] if direction_seq.size > 0 else 0
 
             direction_blocks.append(direction_seq)
             product_blocks.append(product_seq)
