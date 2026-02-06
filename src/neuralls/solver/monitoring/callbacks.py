@@ -5,21 +5,21 @@ for SciPyCGSolver, which wraps scipy.sparse.linalg.cg.
 
 Why this adapter exists:
     - scipy.sparse.linalg.cg uses a callback-based monitoring interface
-    - We cannot use TraceRecorder directly (scipy controls the iteration loop)
+    - We cannot use IterationHistory directly (scipy controls the iteration loop)
     - The adapter bridges scipy's callback protocol to our monitoring system
 
 Components:
-- SciPyCallbackAdapter: Bridges scipy.sparse.linalg.cg callbacks to HistoryTracker + TraceRecorder
+- SciPyCallbackAdapter: Bridges scipy.sparse.linalg.cg callbacks to ResidualHistoryTracker + IterationHistory
 - InitialStateComputer: Computes initial state (x_0, r_0) for solvers
 
 Usage by solver type:
     - SciPyCGSolver: Uses SciPyCallbackAdapter (required for scipy integration)
-    - Native solvers (PCG, FCG): Use TraceRecorder directly (full iteration control)
+    - Native solvers (PCG, FCG): Use IterationHistory + EventLog directly (full iteration control)
 
 Design:
     - SciPyCallbackAdapter: ONLY adapts callbacks (no history logic)
     - InitialStateComputer: ONLY computes initial state (pure function)
-    - Composition: Adapter uses HistoryTracker and TraceRecorder via dependency injection
+    - Composition: Adapter uses ResidualHistoryTracker and IterationHistory via dependency injection
 
 Theory:
     Separating callback adaptation from history tracking enables:
@@ -33,12 +33,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-from scipy.linalg import norm
 from scipy.sparse.linalg import LinearOperator
 
+# Note: Using np.linalg.norm instead of scipy.linalg.norm to avoid
+# NaN/Inf checks (scipy version raises ValueError on non-finite values)
+
 if TYPE_CHECKING:
-    from .trace_recorder import TraceRecorder
-    from .history_tracker import HistoryTracker
+    from .iteration_history import IterationHistory
+    from .residual_history_tracker import ResidualHistoryTracker
 
 
 class SciPyCallbackAdapter:
@@ -46,36 +48,36 @@ class SciPyCallbackAdapter:
 
     This is a **necessary compatibility layer** for SciPyCGSolver, which wraps
     scipy.sparse.linalg.cg. Since scipy uses callbacks for monitoring, we cannot
-    use TraceRecorder directly and need this adapter.
+    use IterationHistory directly and need this adapter.
 
     This class implements the SciPy CG callback protocol while delegating
-    history tracking to HistoryTracker and event logging to TraceRecorder.
+    history tracking to ResidualHistoryTracker and event logging to IterationHistory.
 
     Usage by solver type:
         - SciPyCGSolver: Creates SciPyCallbackAdapter (required for scipy callbacks)
-        - Native solvers (PCG, FCG): Use TraceRecorder directly (full iteration control)
+        - Native solvers (PCG, FCG): Use IterationHistory + EventLog directly (full iteration control)
 
     Responsibilities:
         - Implement __call__ for SciPy callback protocol
         - Convert callback arguments (xk or pr_norm) to residual norms
-        - Delegate to HistoryTracker and TraceRecorder (composition, not mixing)
+        - Delegate to ResidualHistoryTracker and IterationHistory (composition, not mixing)
 
     Attributes:
         A: System matrix (LinearOperator) for computing residuals.
         b: Right-hand side vector.
         callback_type: Type of callback ('x' for solution, 'pr_norm' for residual norm).
-        tracker: HistoryTracker for recording history (optional).
-        event_log: TraceRecorder for detailed event logging (optional).
+        tracker: ResidualHistoryTracker for recording history (optional).
+        iteration_history: IterationHistory for continuous monitoring (optional).
         rhs_norm: Cached ||b||_2 for computing relative residuals.
 
     See Also:
-        TraceRecorder: Event logging for native solvers
-        HistoryTracker: History tracking for scipy callbacks
+        IterationHistory: Continuous monitoring for native solvers
+        ResidualHistoryTracker: History tracking for scipy callbacks
 
     Example:
         >>> # Used by SciPyCGSolver
-        >>> from neuralls.solver.monitoring.history_tracker import HistoryTracker
-        >>> tracker = HistoryTracker()
+        >>> from neuralls.solver.monitoring.residual_history_tracker import ResidualHistoryTracker
+        >>> tracker = ResidualHistoryTracker()
         >>> adapter = SciPyCallbackAdapter(A, b, callback_type='x', tracker=tracker)
         >>> # Pass to scipy.sparse.linalg.cg
         >>> x, info = scipy.sparse.linalg.cg(A, b, callback=adapter)
@@ -89,8 +91,8 @@ class SciPyCallbackAdapter:
         b: np.ndarray,
         *,
         callback_type: Literal["x", "pr_norm"] = "x",
-        tracker: HistoryTracker | None = None,
-        event_log: TraceRecorder | None = None,
+        tracker: ResidualHistoryTracker | None = None,
+        iteration_history: IterationHistory | None = None,
     ) -> None:
         """Initialize SciPy callback adapter.
 
@@ -100,8 +102,8 @@ class SciPyCallbackAdapter:
             callback_type: Type of callback:
                 - 'x': Callback receives solution vector xk
                 - 'pr_norm': Callback receives residual norm directly
-            tracker: Optional HistoryTracker for recording history.
-            event_log: Optional TraceRecorder for detailed event logging.
+            tracker: Optional ResidualHistoryTracker for recording history.
+            iteration_history: Optional IterationHistory for continuous monitoring.
 
         Example:
             >>> adapter = SciPyCallbackAdapter(A, b, callback_type='x')
@@ -111,8 +113,8 @@ class SciPyCallbackAdapter:
         self.b = b
         self.callback_type = callback_type
         self.tracker = tracker
-        self.event_log = event_log
-        self.rhs_norm = float(norm(b))
+        self.iteration_history = iteration_history
+        self.rhs_norm = float(np.linalg.norm(b))
 
     def __call__(self, xk_or_norm: np.ndarray | float) -> None:
         """SciPy callback protocol implementation.
@@ -130,6 +132,7 @@ class SciPyCallbackAdapter:
         """
         residual_abs: float
         residual: np.ndarray | None = None
+        xk: np.ndarray | None = None
 
         if self.callback_type == "pr_norm":
             # Callback gives residual norm directly
@@ -139,16 +142,11 @@ class SciPyCallbackAdapter:
             # Callback gives solution vector, compute residual
             xk = np.asarray(xk_or_norm, dtype=np.float64, copy=False)
             residual = self.b - self.A @ xk
-            residual_abs = float(norm(residual))
+            residual_abs = float(np.linalg.norm(residual))
 
             # Record solution if tracking enabled
             if self.tracker and self.tracker.solutions is not None:
                 self.tracker.record_solution(xk)
-
-            # Log residual vector and solution if event logging enabled
-            if self.event_log and residual is not None:
-                self.event_log.log("residual", residual)
-                self.event_log.log("solution", xk)
 
         # Compute relative residual
         residual_rel = (
@@ -159,9 +157,13 @@ class SciPyCallbackAdapter:
         if self.tracker:
             self.tracker.record_residual(residual_abs, residual_rel)
 
-        # Log residual norm if event logging enabled
-        if self.event_log:
-            self.event_log.log("residual_norm", residual_abs)
+        # Log to IterationHistory if enabled
+        if self.iteration_history is not None:
+            self.iteration_history.log_iteration(
+                residual_norm=residual_abs,
+                residual=residual,
+                solution=xk if self.callback_type == "x" else None,
+            )
 
 
 class InitialStateComputer:
@@ -231,5 +233,5 @@ class InitialStateComputer:
             x_initial = np.asarray(x0, dtype=np.float64, copy=True)
             r_initial = b - A @ x_initial
 
-        r_norm = float(norm(r_initial))
+        r_norm = float(np.linalg.norm(r_initial))
         return x_initial, r_initial, r_norm

@@ -1,24 +1,24 @@
-"""History tracking for scipy.sparse.linalg.cg callback interface.
+"""Residual history tracking for scipy.sparse.linalg.cg callback interface.
 
-This module provides HistoryTracker as a **necessary compatibility layer** for
+This module provides ResidualHistoryTracker as a **necessary compatibility layer** for
 integrating with scipy.sparse.linalg.cg's callback protocol.
 
-Why HistoryTracker exists:
-    - scipy.sparse.linalg.cg controls the iteration loop (we can't use TraceRecorder directly)
+Why ResidualHistoryTracker exists:
+    - scipy.sparse.linalg.cg controls the iteration loop (we can't use IterationHistory directly)
     - scipy callbacks receive limited info (xk or pr_norm only)
     - We need an adapter to bridge scipy's callback to our monitoring system
 
 Usage by solver type:
-    - SciPyCGSolver: Uses HistoryTracker (required for scipy callback interface)
-    - Native solvers (PCG, FCG): Use TraceRecorder directly (full control over iteration)
+    - SciPyCGSolver: Uses ResidualHistoryTracker (required for scipy callback interface)
+    - Native solvers (PCG, FCG): Use IterationHistory + EventLog directly (full control over iteration)
 
 Both systems are valid and necessary:
-    - HistoryTracker: For scipy integration (callback-based)
-    - TraceRecorder: For native solvers (direct logging)
+    - ResidualHistoryTracker: For scipy integration (callback-based)
+    - IterationHistory + EventLog: For native solvers (direct logging)
     - SciPyCallbackAdapter: Composes both for unified monitoring
 
 Design:
-    - HistoryTracker: Simple mutable history accumulation
+    - ResidualHistoryTracker: Simple mutable history accumulation
     - Single Responsibility: ONLY tracks history (no callback logic)
     - Composition: Used by SciPyCallbackAdapter, not standalone
 
@@ -34,16 +34,16 @@ from __future__ import annotations
 import numpy as np
 
 
-class HistoryTracker:
-    """History tracker for scipy.sparse.linalg.cg callback interface.
+class ResidualHistoryTracker:
+    """Residual history tracker for scipy.sparse.linalg.cg callback interface.
 
     This is a **necessary compatibility layer** for SciPyCGSolver, which wraps
     scipy.sparse.linalg.cg. Since scipy controls the iteration loop, we cannot
-    use TraceRecorder directly and need this adapter-friendly tracker.
+    use IterationHistory directly and need this adapter-friendly tracker.
 
     Usage by solver type:
-        - SciPyCGSolver: Uses HistoryTracker (required for scipy callbacks)
-        - Native solvers (PCG, FCG): Use TraceRecorder (full iteration control)
+        - SciPyCGSolver: Uses ResidualHistoryTracker (required for scipy callbacks)
+        - Native solvers (PCG, FCG): Use IterationHistory + EventLog (full iteration control)
 
     This class has a single responsibility: accumulating residual norms
     and optionally solution vectors as the solver iterates.
@@ -54,12 +54,13 @@ class HistoryTracker:
         solutions: Optional list of solution vectors (heavy, use sparingly).
 
     See Also:
-        TraceRecorder: Type-safe event logging for native solvers
-        SciPyCallbackAdapter: Composes HistoryTracker with TraceRecorder
+        IterationHistory: Continuous monitoring for native solvers
+        EventLog: Discrete event logging for native solvers
+        SciPyCallbackAdapter: Composes ResidualHistoryTracker with IterationHistory
 
     Example:
         >>> # Used by SciPyCGSolver via SciPyCallbackAdapter
-        >>> tracker = HistoryTracker()
+        >>> tracker = ResidualHistoryTracker()
         >>> tracker.record_residual(norm_abs=1.0, norm_rel=0.1)
         >>> tracker.record_residual(norm_abs=0.5, norm_rel=0.05)
         >>> len(tracker.residual_norms_abs)
@@ -86,7 +87,7 @@ class HistoryTracker:
             norm_rel: Relative residual norm ||r_k||_2 / ||b||_2.
 
         Example:
-            >>> tracker = HistoryTracker()
+            >>> tracker = ResidualHistoryTracker()
             >>> tracker.record_residual(1.0, 0.1)
             >>> tracker.residual_norms_abs
             [1.0]
@@ -104,7 +105,7 @@ class HistoryTracker:
             RuntimeError: If solution tracking not enabled.
 
         Example:
-            >>> tracker = HistoryTracker()
+            >>> tracker = ResidualHistoryTracker()
             >>> tracker.enable_solution_tracking()
             >>> tracker.record_solution(np.zeros(10))
             >>> len(tracker.solutions)
@@ -122,7 +123,7 @@ class HistoryTracker:
         This allocates the solutions list. Call before recording any solutions.
 
         Example:
-            >>> tracker = HistoryTracker()
+            >>> tracker = ResidualHistoryTracker()
             >>> tracker.enable_solution_tracking()
             >>> tracker.solutions
             []
@@ -137,7 +138,7 @@ class HistoryTracker:
             Length of residual_norms_abs (same as residual_norms_rel).
 
         Example:
-            >>> tracker = HistoryTracker()
+            >>> tracker = ResidualHistoryTracker()
             >>> tracker.record_residual(1.0, 0.1)
             >>> len(tracker)
             1

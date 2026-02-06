@@ -1,30 +1,44 @@
 """Monitoring and callback components for solver execution.
 
 This package provides components for tracking solver execution:
-- trace_recorder: Type-safe event logging (TraceRecorder)
-- events: EventType enum for type-safe event names
+- iteration_history: Continuous monitoring (IterationHistory)
+- event_log: Discrete event logging (EventLog, SolverEvent)
+- events: EventType enum for discrete event types
 - trace_mode: TraceMode enum for controlling logging granularity
-- history_tracker: Residual and solution history tracking (HistoryTracker)
+- storage: Immutable history classes (ScalarHistory, VectorHistory)
+- residual_history_tracker: Scipy-specific residual tracking (ResidualHistoryTracker)
 - callbacks: SciPy callback adaptation (SciPyCallbackAdapter, InitialStateComputer)
 
 Design Principles:
+    - Separation of Concerns: Continuous monitoring vs discrete events
+    - Direct Access: iteration_history.residual_norms (not enum indexing)
+    - Industry Patterns: Telemetry/Metrics + Event Sourcing
     - Single Responsibility: Each class has one clear purpose
-    - Type Safety: EventType enum eliminates magic strings
+    - Type Safety: EventType enum for discrete events only
     - Composition: Components compose via dependency injection
     - Optional: All monitoring is optional (zero overhead when unused)
 """
 
 from .callbacks import InitialStateComputer, SciPyCallbackAdapter
+from .event_log import EventLog, SolverEvent
 from .events import EventType
-from .history_tracker import HistoryTracker
+from .iteration_history import IterationHistory
+from .residual_history_tracker import ResidualHistoryTracker
+from .storage import ScalarHistory, VectorHistory
 from .trace_mode import TraceMode
-from .trace_recorder import TraceRecorder
 
 __all__ = [
+    # Core monitoring classes
+    "IterationHistory",
+    "EventLog",
+    "SolverEvent",
     "EventType",
     "TraceMode",
-    "TraceRecorder",
-    "HistoryTracker",
+    # Storage classes
+    "ScalarHistory",
+    "VectorHistory",
+    # Scipy integration
+    "ResidualHistoryTracker",
     "SciPyCallbackAdapter",
     "InitialStateComputer",
 ]
