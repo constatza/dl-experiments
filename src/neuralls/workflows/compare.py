@@ -12,7 +12,7 @@ Architecture:
     1. Validate inputs
     2. Resolve paths (matrix, rhs, output, figures)
     3. Load and validate linear system
-    4. Create preconditioners via service (eliminates registry duplication)
+    4. Create preconditioners via service (uses factory function)
     5. Compute condition numbers for diagnostics
     6. Build solver options (iteration limits, fallbacks)
     7. Create fallback preconditioner
@@ -65,7 +65,7 @@ from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from neuralls.io.filesystem import ensure_dir
 from ..io.comparison import load_system_arrays
 from ..plotting import plot_convergence_comparison
-from ..preconditioner import create_default_registry
+from ..solver.preconditioners import create_preconditioner
 from ..solver import (
     format_results_summary,
     run_cg_comparison,
@@ -123,13 +123,11 @@ class LinearSystem:
 class PreconditionerService:
     """Service for creating and managing preconditioners.
 
-    This service centralizes preconditioner creation to eliminate registry duplication.
-    Before this service, the registry was created 3 times in different functions.
+    This service centralizes preconditioner creation using the factory function.
 
     The service pattern provides:
-    - Single source of truth for registry
-    - Clear dependency injection point
-    - Easy to test (can inject mock registry)
+    - Single source of truth for preconditioner creation
+    - Clear dependency injection point (can inject custom adapter for testing)
     - Consistent preconditioner creation
 
     Example:
@@ -140,13 +138,13 @@ class PreconditionerService:
         >>> precond_set = service.create_preconditioner_set(matrix, [jacobi_config, ...])
     """
 
-    def __init__(self):
-        """Initialize service with default registry.
+    def __init__(self, adapter=None):
+        """Initialize service.
 
-        Creates the preconditioner registry once and reuses it for all
-        preconditioner creation requests.
+        Args:
+            adapter: Optional adapter for neural preconditioner (DI for testing)
         """
-        self.registry = create_default_registry()
+        self._adapter = adapter
 
     def create_preconditioner(
         self,
@@ -160,7 +158,7 @@ class PreconditionerService:
             config: Preconditioner configuration (type, parameters, etc.)
 
         Returns:
-            Preconditioner function: ndarray -> ndarray
+            Preconditioner instance
 
         Example:
             >>> service = PreconditionerService()
@@ -168,9 +166,9 @@ class PreconditionerService:
             >>> config = StandardPreconditionerConfig(name="jacobi", type="jacobi")
             >>> M = service.create_preconditioner(A, config)
             >>> r = np.array([1.0, 2.0])
-            >>> z = M(r)  # Apply preconditioner
+            >>> z = M.apply(r)  # Apply preconditioner
         """
-        return self.registry.create(matrix, config)
+        return create_preconditioner(matrix, config, adapter=self._adapter)
 
     def create_preconditioner_set(
         self,
@@ -345,19 +343,17 @@ def _resolve_fallback_callable(
 ) -> Callable[[np.ndarray], np.ndarray]:
     """Resolve fallback preconditioner by name.
 
-    This uses the registry pattern to create preconditioners on-demand,
-    eliminating code duplication from the old factory approach.
+    Creates preconditioners on-demand using the factory function.
     """
     # Check if already created
     if name in preconditioners:
         return preconditioners[name]
 
-    # Create on-demand using registry
+    # Create on-demand using factory
     from neuralls.configuration.preconditioner import StandardPreconditionerConfig
 
-    registry = create_default_registry()
     config = StandardPreconditionerConfig(name=name, type=name)
-    return registry.create(A, config)
+    return create_preconditioner(A, config)
 
 
 def _build_solver_options(
@@ -500,7 +496,7 @@ def compare_preconditioners(
     # Step 3: Load and validate linear system
     system = _load_linear_system(paths)
 
-    # Step 4: Create preconditioners via service (eliminates registry duplication)
+    # Step 4: Create preconditioners via service (uses factory function)
     service = PreconditionerService()
     preconditioners = service.create_preconditioner_set(
         system.matrix, preconditioner_configs
