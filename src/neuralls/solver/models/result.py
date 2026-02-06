@@ -22,7 +22,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..monitoring.trace_recorder import TraceRecorder
+    from ..monitoring.event_log import EventLog
+    from ..monitoring.iteration_history import IterationHistory
 
 
 @dataclass
@@ -51,7 +52,8 @@ class SolverResult:
         tol: Tolerance used (for diagnostics).
         atol: Absolute tolerance used.
         maxiter: Maximum iterations allowed.
-        event_log: Optional TraceRecorder with detailed iteration traces.
+        event_log: Optional EventLog with discrete solver events.
+        iteration_history: Optional IterationHistory with continuous iteration diagnostics.
         stopping_criterion: Description of why solver stopped.
         residual_vectors: Optional full residual vectors (shape: iterations x n).
         solution_vectors: Optional full solution vectors (shape: iterations x n).
@@ -114,8 +116,11 @@ class SolverResult:
     maxiter: int | None = None
     """Maximum iterations allowed."""
 
-    event_log: TraceRecorder | None = None
-    """Optional TraceRecorder with detailed iteration traces."""
+    event_log: EventLog | None = None
+    """Optional EventLog with discrete solver events."""
+
+    iteration_history: IterationHistory | None = None
+    """Optional IterationHistory with continuous iteration diagnostics."""
 
     stopping_criterion: str | None = None
     """Description of why solver stopped (e.g., 'converged', 'max_iter', 'breakdown')."""

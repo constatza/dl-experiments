@@ -13,12 +13,12 @@ Design Principles:
 
 from .history import DirectionHistory, ResidualHistory
 from .result import CGComparisonResult, IterationContext, SolverResult
-from .state import CGState, KrylovState, SolverState
+from .state import CGState, SolverState
 
 __all__ = [
     # State hierarchy
     "SolverState",
-    "KrylovState",
+    "SolverState",
     "CGState",
     # History
     "DirectionHistory",

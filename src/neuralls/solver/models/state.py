@@ -78,7 +78,6 @@ class SolverState:
     rhs_norm: float
     """Right-hand side norm ||b||_2 (constant throughout solve)."""
 
-
     def __post_init__(self) -> None:
         """Validate state invariants.
 
@@ -121,7 +120,7 @@ class KrylovState(SolverState):
 
     Example:
         >>> import numpy as np
-        >>> state = KrylovState(
+        >>> state = SolverState(
         ...     iteration=0,
         ...     converged=False,
         ...     breakdown=False,
@@ -168,12 +167,25 @@ class CGState(KrylovState):
         residual_history: Residual norms (absolute and relative).
             Used for convergence monitoring and post-analysis.
 
+        w_prev: Previous preconditioned residual w_{k-1} (for two-term recurrence).
+            Used by TwoTermRecurrenceStrategy to compute beta coefficient.
+
+        r_prev: Previous residual r_{k-1} (for two-term recurrence).
+            Used by TwoTermRecurrenceStrategy to compute beta coefficient.
+
+        rw_prev: Previous inner product (r_{k-1}, w_{k-1}) (for two-term recurrence).
+            Used by TwoTermRecurrenceStrategy to compute beta coefficient.
+
     Theory (Notay 2000):
         FCG maintains a window of previous search directions to orthogonalize
         the new direction against:
             d_i = w_i - Σ_{k=i-m}^{i-1} [(w_i, q_k) / (d_k, q_k)] d_k
 
         The direction_history stores the last m (d_k, q_k) pairs.
+
+        PCG two-term recurrence needs only the previous iteration values:
+            β_k = (r_k, w_k) / (r_{k-1}, w_{k-1})
+            d_k = w_k + β_k * d_{k-1}
 
     Example:
         >>> import numpy as np
@@ -192,6 +204,9 @@ class CGState(KrylovState):
         ...     q=np.ones(10),
         ...     direction_history=DirectionHistory.empty(max_size=10),
         ...     residual_history=ResidualHistory.empty(),
+        ...     w_prev=None,
+        ...     r_prev=None,
+        ...     rw_prev=0.0,
         ... )
         >>> len(state.direction_history)
         0
@@ -202,6 +217,15 @@ class CGState(KrylovState):
 
     residual_history: ResidualHistory
     """Residual norms (absolute and relative) across iterations."""
+
+    w_prev: NDArray | None
+    """Previous preconditioned residual w_{k-1} (for two-term recurrence)."""
+
+    r_prev: NDArray | None
+    """Previous residual r_{k-1} (for two-term recurrence)."""
+
+    rw_prev: float
+    """Previous inner product (r_{k-1}, w_{k-1}) (for two-term recurrence)."""
 
     @classmethod
     def create_initial(
@@ -266,4 +290,7 @@ class CGState(KrylovState):
                 norm_abs=residual_norm,
                 norm_rel=residual_norm / rhs_norm if rhs_norm > 0 else residual_norm,
             ),
+            w_prev=None,
+            r_prev=None,
+            rw_prev=0.0,
         )
