@@ -33,6 +33,7 @@ References:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -109,8 +110,8 @@ class OrthogonalizationStrategy(ABC):
     def orthogonalize(
         self,
         vector: NDArray,
-        d_vectors: list[NDArray],
-        q_vectors: list[NDArray],
+        d_vectors: Sequence[NDArray],
+        q_vectors: Sequence[NDArray],
     ) -> tuple[NDArray, OrthogonalizationReport]:
         """Orthogonalize vector against basis vectors.
 
@@ -142,8 +143,13 @@ class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
     This creates a periodic pattern where the orthogonalization window
     resets to size 1 every (m_max + 1) iterations.
 
+    Special case: Setting m_max=np.inf implements FCG(∞), which orthogonalizes
+    against ALL previous directions without truncation or restart. This is
+    equivalent to full reorthogonalization and is used for ill-conditioned
+    problems requiring exact A-conjugacy.
+
     Attributes:
-        m_max: Maximum window size before reset.
+        m_max: Maximum window size before reset. Use np.inf for FCG(∞).
         epsilon: Threshold for small denominators.
 
     Theory (Notay 2000, Algorithm 2.1):
@@ -153,29 +159,35 @@ class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
         - For i = m_max + 1: m_i = 1 (RESTART - discard old directions)
         - Repeats with period m_max + 1
 
+        When m_max = ∞ (FCG(∞)): m_i = i (use all history, no restart)
+
         This periodic reset:
         1. Prevents accumulation of rounding errors
         2. Bounds memory at O(m_max * n)
         3. Is "generally more cost efficient" than pure truncation (Notay 2000, Table 1)
 
-    Example:
+    Examples:
         >>> orthog = PeriodicRestartOrthogonalization(m_max=10)
         >>> # At iteration 11, will only use 1 direction (restart)
         >>> p, report = orthog.orthogonalize(z, p_vectors, q_vectors)
+
+        >>> orthog_full = PeriodicRestartOrthogonalization(m_max=np.inf)  # FCG(∞)
+        >>> # Always uses all history, never restarts
     """
 
-    def __init__(self, m_max: int, epsilon: float = 1e-14):
+    def __init__(self, m_max: float, epsilon: float = 1e-14):
         """Initialize FCG orthogonalization with periodic restart.
 
         Args:
-            m_max: Maximum window size (m_max). At iteration m_max+1, resets to 1.
+            m_max: Maximum window size (m_max). Use np.inf for full orthogonalization (FCG(∞)).
+                   At iteration m_max+1, resets to 1 (unless m_max is infinite).
             epsilon: Threshold for skipping small denominators.
 
         Raises:
-            ValueError: If m_max < 1 or epsilon <= 0.
+            ValueError: If m_max < 1 (and not np.inf) or epsilon <= 0.
         """
-        if m_max < 1:
-            raise ValueError(f"m_max must be >= 1, got {m_max}")
+        if not (m_max >= 1 or np.isinf(m_max)):
+            raise ValueError(f"m_max must be >= 1 or np.inf, got {m_max}")
         if epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {epsilon}")
 
@@ -184,19 +196,22 @@ class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
         self._iteration_count = 0  # Track calls to compute m_i
 
     @property
-    def window_size(self) -> int:
+    def window_size(self) -> int | None:
         """Return m_max as window size for direction history.
 
         Returns:
-            Maximum number of directions (m_max from Notay 2000)
+            int: Maximum number of directions (m_max from Notay 2000)
+            None: Unlimited orthogonalization when m_max is np.inf (FCG(∞))
         """
-        return self.m_max
+        if np.isinf(self.m_max):
+            return None
+        return int(self.m_max)
 
     def orthogonalize(
         self,
         vector: NDArray,
-        d_vectors: list[NDArray],
-        q_vectors: list[NDArray],
+        d_vectors: Sequence[NDArray],
+        q_vectors: Sequence[NDArray],
     ) -> tuple[NDArray, OrthogonalizationReport]:
         """Orthogonalize via FCG with periodic restart (Notay 2000, Algorithm 2.1).
 
@@ -220,12 +235,16 @@ class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
             self._iteration_count += 1
             return result, OrthogonalizationReport(coefficients=[], breakdown=False)
 
-        # Compute m_i using FCG periodic restart formula
-        # m_i = max(1, i mod (m_max + 1))
-        i = self._iteration_count
-        m_i = max(1, i % (self.m_max + 1))
-        # Clamp to available history
-        m_i = min(m_i, n_history)
+        # Handle infinity: use all history (no periodic restart)
+        if np.isinf(self.m_max):
+            m_i = n_history  # Use ALL history for FCG(∞)
+        else:
+            # Compute m_i using FCG periodic restart formula
+            # m_i = max(1, i mod (m_max + 1))
+            i = self._iteration_count
+            m_i = max(1, i % (int(self.m_max) + 1))
+            # Clamp to available history
+            m_i = min(m_i, n_history)
 
         # Orthogonalize against last m_i directions
         coefficients: list[float] = []
@@ -237,23 +256,12 @@ class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
             q_j = q_vectors[j]
 
             # Notay (2000) Algorithm 2.1: d_i = w_i - Σ[(w_i, A d_j)/(d_j, A d_j)] d_j
+            # Classical Gram-Schmidt as per the summation in the original paper.
             numerator = float(np.dot(vector, q_j))  # (w_i, A d_j)
             denominator = float(np.dot(d_j, q_j))  # (d_j, A d_j)
 
-            if not np.isfinite(numerator) or not np.isfinite(denominator):
-                num_skipped += 1
-                continue
-
-            if abs(denominator) < self.epsilon:
-                num_skipped += 1
-                continue
-
             coeff = numerator / denominator
             coefficients.append(coeff)
-
-            if not np.isfinite(coeff):
-                num_skipped += 1
-                continue
 
             result -= coeff * d_j
 
@@ -328,8 +336,8 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
     def orthogonalize(
         self,
         vector: NDArray,
-        d_vectors: list[NDArray],
-        q_vectors: list[NDArray],
+        d_vectors: Sequence[NDArray],
+        q_vectors: Sequence[NDArray],
     ) -> tuple[NDArray, OrthogonalizationReport]:
         """Orthogonalize via truncated Gram-Schmidt.
 
@@ -402,10 +410,13 @@ class TruncatedGramSchmidt(OrthogonalizationStrategy):
 
 
 class ModifiedGramSchmidt(OrthogonalizationStrategy):
-    """Modified Gram-Schmidt orthogonalization (more stable).
+    """Modified Gram-Schmidt orthogonalization (internal use).
 
     Modified Gram-Schmidt is more numerically stable than classical
     Gram-Schmidt, especially for nearly linearly dependent vectors.
+
+    Note: This class is primarily for internal use. For FCG(∞) (full
+    orthogonalization), use PeriodicRestartOrthogonalization(m_max=np.inf).
 
     Attributes:
         epsilon: Threshold for small denominators.
@@ -448,8 +459,8 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
     def orthogonalize(
         self,
         vector: NDArray,
-        d_vectors: list[NDArray],
-        q_vectors: list[NDArray],
+        d_vectors: Sequence[NDArray],
+        q_vectors: Sequence[NDArray],
     ) -> tuple[NDArray, OrthogonalizationReport]:
         """Orthogonalize via modified Gram-Schmidt.
 
@@ -505,86 +516,8 @@ class ModifiedGramSchmidt(OrthogonalizationStrategy):
         )
 
 
-class FullOrthogonalization(OrthogonalizationStrategy):
-    """Full orthogonalization against all previous directions (FCG(∞) from Notay 2000).
-
-    This implements FCG with infinite orthogonalization window (m_max = ∞).
-    In the paper's notation, this is FCG(∞), which is theoretically equivalent
-    to full reorthogonalization - orthogonalizing against all previous search
-    directions to maintain exact A-conjugacy (within numerical precision).
-
-    From Notay (2000) Section 5.1: FCG(∞) is used for ill-conditioned problems
-    where truncation would degrade convergence (e.g., Case 3: κ=1100).
-
-    Memory and cost: O(n * iterations) - use for short runs or when maximum
-    accuracy is required.
-
-    Use this for:
-    - Ill-conditioned problems requiring exact A-conjugacy
-    - Short runs where memory is not a concern
-    - Maximum accuracy requirements
-    - Debugging truncated methods
-
-    Attributes:
-        epsilon: Threshold for small denominators.
-
-    Example:
-        >>> orthog = FullOrthogonalization()  # FCG(∞)
-        >>> d, report = orthog.orthogonalize(w, d_vectors, q_vectors)
-
-    References:
-        Notay (2000) Table 1, Case 3 uses FCG(∞) for κ=1100.
-    """
-
-    def __init__(self, epsilon: float = 1e-14):
-        """Initialize full orthogonalization.
-
-        Args:
-            epsilon: Threshold for skipping small denominators.
-        """
-        if epsilon <= 0:
-            raise ValueError(f"epsilon must be > 0, got {epsilon}")
-        self.epsilon = epsilon
-
-    @property
-    def window_size(self) -> None:
-        """Return None for unlimited orthogonalization.
-
-        Returns:
-            None: Indicates full orthogonalization (FCG(∞))
-        """
-        return None
-
-    def orthogonalize(
-        self,
-        vector: NDArray,
-        d_vectors: list[NDArray],
-        q_vectors: list[NDArray],
-    ) -> tuple[NDArray, OrthogonalizationReport]:
-        """Orthogonalize against all directions.
-
-        Args:
-            vector: Vector to orthogonalize w_i (Notay 2000).
-            d_vectors: All previous search directions d_j (Notay 2000).
-            q_vectors: All previous matrix-vector products A d_j.
-
-        Returns:
-            Tuple (orthogonalized_vector, report).
-
-        Note:
-            This implements FCG(∞) by orthogonalizing against all history.
-            In Notay (2000) formula m_i = max(1, i mod (m_max + 1)), setting
-            m_max → ∞ gives m_i = i, meaning "use all i previous vectors".
-            This direct implementation avoids iteration counting overhead while
-            being mathematically equivalent.
-        """
-        # Delegate to ModifiedGramSchmidt (no truncation)
-        mgs = ModifiedGramSchmidt(epsilon=self.epsilon)
-        return mgs.orthogonalize(vector, d_vectors, q_vectors)
-
-
 def create_fcg_orthogonalization(
-    m_max: int = DEFAULT_M_MAX,
+    m_max: float | int = DEFAULT_M_MAX,
 ) -> OrthogonalizationStrategy:
     """Create FCG(m) orthogonalization strategy following Notay (2000).
 
@@ -594,16 +527,15 @@ def create_fcg_orthogonalization(
 
     Args:
         m_max: Window size for orthogonalization (FCG(m) from Notay 2000).
-            - m_max > 0: PeriodicRestartOrthogonalization (FCG(m) with periodic restart)
-            - m_max = -1: FullOrthogonalization (FCG(∞) - full reorthogonalization)
+            - m_max > 0: FCG(m) with periodic restart
+            - m_max = -1 or np.inf: FCG(∞) - full reorthogonalization
 
-        Note: FCG(∞) means "infinite" orthogonalization window. This is implemented
-        via the sentinel value m_max=-1 and returns FullOrthogonalization, which
-        orthogonalizes against ALL previous directions. This is theoretically
-        equivalent to "full reorthogonalization" mentioned in the literature.
+        Note: FCG(∞) means "infinite" orthogonalization window, orthogonalizing
+        against ALL previous directions. The sentinel value m_max=-1 is converted
+        to np.inf for backward compatibility.
 
     Returns:
-        OrthogonalizationStrategy: Configured strategy instance.
+        PeriodicRestartOrthogonalization: Configured strategy instance.
 
     Raises:
         ValueError: If m_max < -1 or m_max == 0.
@@ -612,9 +544,17 @@ def create_fcg_orthogonalization(
         >>> orthog = create_fcg_orthogonalization(m_max=10)  # FCG(10)
         >>> isinstance(orthog, PeriodicRestartOrthogonalization)
         True
+        >>> orthog.window_size
+        10
 
-        >>> orthog = create_fcg_orthogonalization(m_max=-1)  # Full
-        >>> isinstance(orthog, FullOrthogonalization)
+        >>> orthog = create_fcg_orthogonalization(m_max=-1)  # FCG(∞) via sentinel
+        >>> isinstance(orthog, PeriodicRestartOrthogonalization)
+        True
+        >>> orthog.window_size is None
+        True
+
+        >>> orthog = create_fcg_orthogonalization(m_max=np.inf)  # FCG(∞) explicit
+        >>> orthog.window_size is None
         True
 
     References:
@@ -624,9 +564,11 @@ def create_fcg_orthogonalization(
         raise ValueError(
             "m_max cannot be 0. Use m_max=1 for minimal orthogonalization."
         )
-    if m_max < -1:
-        raise ValueError(f"m_max must be >= -1, got {m_max}")
+    if m_max < -1 and not np.isinf(m_max):
+        raise ValueError(f"m_max must be >= -1 or np.inf, got {m_max}")
 
+    # Convert sentinel -1 to np.inf for backward compatibility
     if m_max == -1:
-        return FullOrthogonalization()
+        m_max = np.inf
+
     return PeriodicRestartOrthogonalization(m_max=m_max)

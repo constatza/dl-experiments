@@ -119,5 +119,14 @@ class CombinedToleranceCriterion(IConvergenceCriterion):
 
         Returns:
             True if ||r||_norm <= max(rtol * ||b||, atol), False otherwise.
+            Returns False if residual norm or rhs_norm is non-finite (NaN/Inf).
         """
-        return bool(self.norm(residual) <= self.threshold(rhs_norm))
+        import numpy as np
+
+        residual_norm = self.norm(residual)
+
+        # Check for non-finite values - not converged if NaN/Inf present
+        if not np.isfinite(residual_norm) or not np.isfinite(rhs_norm):
+            return False
+
+        return bool(residual_norm <= self.threshold(rhs_norm))
