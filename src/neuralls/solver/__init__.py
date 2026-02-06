@@ -6,17 +6,19 @@ design patterns.
 
 Architecture Overview:
 
-1. **Core Abstractions** (core/):
-   - ISolver, IIterativeSolver: Solver interfaces
+1. **Core Abstractions** (base.py):
    - IterativeSolverBase: Template method base class
-   - KrylovSolverBase: Krylov subspace method base
 
-2. **Solver Implementations** (solvers/):
-   - FlexibleCGSolver: FCG with truncated orthogonalization
-   - PreconditionedCGSolver: PCG with two-term recurrence
-   - ConjugateGradientBase: CG-specific base class
+2. **Solver Implementations**:
+   - ConjugateGradientSolver (conjugate_gradient.py): Unified CG implementation
+   - PCGSolver, FCGSolver: Convenience wrappers
+   - SciPyCGSolver (scipy_wrapper.py): Wrapper for scipy.sparse.linalg.cg
 
 3. **Strategies** (strategies/):
+   - DirectionStrategy: Search direction computation
+     * TwoTermRecurrenceStrategy: PCG two-term recurrence
+     * OrthogonalizationDirectionStrategy: FCG orthogonalization
+     * CompositeDirectionStrategy: Combined strategies
    - OrthogonalizationStrategy: Direction orthogonalization
    - IConvergenceCriterion: Convergence testing
 
@@ -30,8 +32,9 @@ Architecture Overview:
    - preconditioned_cg(): PCG for classical preconditioners
 
 6. **Monitoring** (monitoring/):
-   - TraceRecorder: Iteration diagnostics and event logging
-   - HistoryTracker: Residual and solution tracking
+   - IterationHistory: Continuous iteration diagnostics
+   - EventLog: Discrete solver event logging
+   - ResidualHistoryTracker: Scipy callback integration
 
 Mathematical Background:
 
@@ -57,47 +60,49 @@ References:
 from __future__ import annotations
 
 # Factory functions (primary entry points)
-from .factories import flexible_cg, preconditioned_cg, scipy_cg
+from .factories import flexible_cg, pcg, scipy_cg
 
 # Solver classes
-from .solvers.fcg_solver import FlexibleCGSolver
-from .solvers.pcg_solver import PreconditionedCGSolver
-from .solvers.scipy_cg_solver import SciPyCGSolver
-from .solvers.cg_base import ConjugateGradientBase
+from .conjugate_gradient import ConjugateGradientSolver, PCGSolver, FCGSolver
+from .scipy_wrapper import SciPyCGSolver
 
-# Core interfaces and bases
-from .core.interfaces import IIterativeSolver, ISolver
-from .core.base import IterativeSolverBase
-from .core.krylov_base import KrylovSolverBase
+# Core bases
+from .base import IterativeSolverBase
 
 # State models
-from .models.state import CGState, KrylovState, SolverState
+from .models.state import CGState, SolverState
 from .models.history import DirectionHistory, ResidualHistory
 from .models.result import CGComparisonResult, IterationContext, SolverResult
 
 # Strategies
 from .strategies.convergence import CombinedToleranceCriterion, IConvergenceCriterion
+from .strategies.direction import (
+    DirectionStrategy,
+    TwoTermRecurrenceStrategy,
+    OrthogonalizationDirectionStrategy,
+    CompositeDirectionStrategy,
+)
 from .strategies.orthogonalization import (
     OrthogonalizationStrategy,
     OrthogonalizationReport,
     PeriodicRestartOrthogonalization,
     TruncatedGramSchmidt,
     ModifiedGramSchmidt,
-    FullOrthogonalization,
 )
 
 # Preconditioners
 from .preconditioners import (
-    FunctionPreconditioner,
-    IdentityPreconditioner,
+    CallablePreconditioner,
+    Identity,
     Preconditioner,
 )
 
 # Monitoring (with type-safe events)
 from .monitoring.events import EventType
 from .monitoring.trace_mode import TraceMode
-from .monitoring.trace_recorder import TraceRecorder
-from .monitoring.history_tracker import HistoryTracker
+from .monitoring.iteration_history import IterationHistory
+from .monitoring.event_log import EventLog
+from .monitoring.residual_history_tracker import ResidualHistoryTracker
 from .monitoring.callbacks import SciPyCallbackAdapter, InitialStateComputer
 
 # Protocols for type-safe state access
@@ -116,21 +121,18 @@ from .utils.numerics import stable_dot_product, compute_curvature, check_breakdo
 __all__ = [
     # Factory functions (recommended entry points)
     "flexible_cg",
-    "preconditioned_cg",
+    "pcg",
     "scipy_cg",
     # Solver classes
-    "FlexibleCGSolver",
-    "PreconditionedCGSolver",
+    "ConjugateGradientSolver",
+    "PCGSolver",
+    "FCGSolver",
     "SciPyCGSolver",
-    "ConjugateGradientBase",
-    # Core interfaces and bases
-    "ISolver",
-    "IIterativeSolver",
+    # Core bases
     "IterativeSolverBase",
-    "KrylovSolverBase",
     # State models
     "SolverState",
-    "KrylovState",
+    "SolverState",
     "CGState",
     "DirectionHistory",
     "ResidualHistory",
@@ -140,21 +142,25 @@ __all__ = [
     # Strategies
     "IConvergenceCriterion",
     "CombinedToleranceCriterion",
+    "DirectionStrategy",
+    "TwoTermRecurrenceStrategy",
+    "OrthogonalizationDirectionStrategy",
+    "CompositeDirectionStrategy",
     "OrthogonalizationStrategy",
     "OrthogonalizationReport",
     "PeriodicRestartOrthogonalization",
     "TruncatedGramSchmidt",
     "ModifiedGramSchmidt",
-    "FullOrthogonalization",
     # Preconditioners
     "Preconditioner",
-    "IdentityPreconditioner",
-    "FunctionPreconditioner",
+    "Identity",
+    "CallablePreconditioner",
     # Monitoring (type-safe events)
     "EventType",
     "TraceMode",
-    "TraceRecorder",
-    "HistoryTracker",
+    "IterationHistory",
+    "EventLog",
+    "ResidualHistoryTracker",
     "SciPyCallbackAdapter",
     "InitialStateComputer",
     # Protocols

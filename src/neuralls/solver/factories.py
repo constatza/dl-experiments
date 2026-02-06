@@ -32,18 +32,19 @@ from typing import TYPE_CHECKING
 
 from scipy.sparse.linalg import LinearOperator
 
-from .monitoring.trace_recorder import TraceRecorder
+from .monitoring.event_log import EventLog
+from .monitoring.iteration_history import IterationHistory
 from .monitoring.trace_mode import TraceMode
-from .solvers.fcg_solver import FlexibleCGSolver
-from .solvers.pcg_solver import PreconditionedCGSolver
+from .conjugate_gradient import FCGSolver, PCGSolver
 from .models.result import SolverResult
 from .strategies.orthogonalization import create_fcg_orthogonalization
 from .strategies.convergence import CombinedToleranceCriterion
 from .strategies.norms import Norm, euclidean_norm
 from .preconditioners import (
-    FunctionPreconditioner,
-    IdentityPreconditioner,
+    CallablePreconditioner,
+    Identity,
     LinearOperatorPreconditioner,
+    Preconditioner,
 )
 from ..constants import (
     DEFAULT_ATOL,
@@ -117,21 +118,28 @@ def flexible_cg(
     """
     # Create preconditioner strategy
     if preconditioner is None:
-        precond_strategy = IdentityPreconditioner()
+        precond_strategy = Identity()
+    elif isinstance(preconditioner, Preconditioner):
+        precond_strategy = preconditioner
     elif isinstance(preconditioner, LinearOperator):
         precond_strategy = LinearOperatorPreconditioner(preconditioner)
     else:
-        precond_strategy = FunctionPreconditioner(preconditioner)
+        precond_strategy = CallablePreconditioner(preconditioner)
 
     # Create orthogonalization strategy via factory
     orthog_strategy = create_fcg_orthogonalization(m_max=m_max)
 
-    # Create event logger based on trace mode
+    # Create logging objects based on trace mode
     # Convert string to TraceMode if needed
     trace_mode_enum = (
         TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
     )
-    logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
+    iteration_history = (
+        IterationHistory(mode=trace_mode_enum)
+        if trace_mode_enum != TraceMode.DISABLED
+        else None
+    )
+    event_log = EventLog() if trace_mode_enum != TraceMode.DISABLED else None
 
     # Create convergence criterion with injected norm
     convergence_criterion = CombinedToleranceCriterion(
@@ -140,16 +148,17 @@ def flexible_cg(
         norm=norm,
     )
 
-    # Construct solver with logging configuration
-    solver = FlexibleCGSolver(
-        preconditioner=precond_strategy,
+    # Construct FCG solver (convergence_criterion is now honored!)
+    solver = FCGSolver(
         orthogonalization=orthog_strategy,
+        preconditioner=precond_strategy,
         convergence_criterion=convergence_criterion,
-        event_log=logger,
+        iteration_history=iteration_history,
+        event_log=event_log,
         trace_mode=trace_mode_enum,
     )
 
-    # Solve system with explicit parameters
+    # Solve system (rtol/atol not needed - already in convergence_criterion)
     # Type ignore needed because solve() accepts both NDArray and Callable
     x, result = solver.solve(  # type: ignore[arg-type]
         A,
@@ -163,7 +172,7 @@ def flexible_cg(
     return x, result
 
 
-def preconditioned_cg(
+def pcg(
     A: NDArray,
     b: NDArray,
     x0: NDArray | None = None,
@@ -221,57 +230,71 @@ def preconditioned_cg(
 
     Examples:
         >>> # Standard PCG (no reorthogonalization)
-        >>> x, result = preconditioned_cg(A, b)
+        >>> x, result = pcg(A, b)
 
         >>> # PCG with full reorthogonalization
-        >>> x, result = preconditioned_cg(A, b, m_max=-1)
+        >>> x, result = pcg(A, b, m_max=-1)
 
         >>> # PCG with truncated reorthogonalization (window size 10)
-        >>> x, result = preconditioned_cg(A, b, m_max=10)
+        >>> x, result = pcg(A, b, m_max=10)
 
         >>> # Jacobi preconditioner
-        >>> x, result = preconditioned_cg(A, b, preconditioner=jacobi_precond)
+        >>> x, result = pcg(A, b, preconditioner=jacobi_precond)
     """
     # Create preconditioner strategy
     if preconditioner is None:
-        precond_strategy = IdentityPreconditioner()
+        precond_strategy = Identity()
+    elif isinstance(preconditioner, Preconditioner):
+        precond_strategy = preconditioner
     elif isinstance(preconditioner, LinearOperator):
         precond_strategy = LinearOperatorPreconditioner(preconditioner)
     else:
-        precond_strategy = FunctionPreconditioner(preconditioner)
+        precond_strategy = CallablePreconditioner(preconditioner)
 
-    # Create orthogonalization strategy
-    orthog_strategy = None
+    # Create reorthogonalization strategy if requested
+    reorthog_strategy = None
     if m_max is not None:
-        from .strategies.orthogonalization import create_fcg_orthogonalization
-        orthog_strategy = create_fcg_orthogonalization(m_max=m_max)
+        reorthog_strategy = create_fcg_orthogonalization(m_max=m_max)
 
-    # Create event logger based on trace mode
+    # Create logging objects based on trace mode
     # Convert string to TraceMode if needed
     trace_mode_enum = (
         TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
     )
-    logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
+    iteration_history = (
+        IterationHistory(mode=trace_mode_enum)
+        if trace_mode_enum != TraceMode.DISABLED
+        else None
+    )
+    event_log = EventLog() if trace_mode_enum != TraceMode.DISABLED else None
 
     # Resolve rtol alias before using it
     rtol_value = tol if tol is not None else rtol
 
-    # Construct solver with logging configuration
-    solver = PreconditionedCGSolver(
+    # Create convergence criterion
+    convergence_criterion = CombinedToleranceCriterion(
+        rtol=rtol_value,
+        atol=atol,
+    )
+
+    # Construct PCG solver (convergence_criterion is now honored!)
+    solver = PCGSolver(
         preconditioner=precond_strategy,
+        convergence_criterion=convergence_criterion,
+        reorthogonalization=reorthog_strategy,
         beta_formula=beta_formula,
-        orthogonalization=orthog_strategy,
-        event_log=logger,
+        iteration_history=iteration_history,
+        event_log=event_log,
         trace_mode=trace_mode_enum,
     )
 
-    # Solve system with explicit parameters
+    # Solve system (rtol/atol not needed - already in convergence_criterion)
     # Type ignore needed because solve() accepts both NDArray and Callable
     x, result = solver.solve(  # type: ignore[arg-type]
         A,
         b,
         x0,
-        rtol=rtol_value,
+        rtol=rtol,
         atol=atol,
         maxiter=maxiter,
     )
@@ -308,7 +331,7 @@ def scipy_cg(
         rtol: Relative tolerance for convergence. Default: 1e-6.
         atol: Absolute tolerance for convergence. Default: 1e-14.
         tol: Alternative name for rtol (overrides rtol if provided).
-        maxiter: Maximum number of iterations. Default: 100.
+        maxiter: Maximum number of iterations. Default: 10 * N.
         trace_mode: Tracing granularity level. Default: MINIMAL.
             MINIMAL: Log scalars only (iteration, residual_norm, flags)
             FULL: Log scalars + vectors (residual, solution)
@@ -330,21 +353,28 @@ def scipy_cg(
         - scipy.sparse.linalg.cg documentation
         - Hestenes & Stiefel (1952). Methods of Conjugate Gradients.
     """
-    from .solvers.scipy_cg_solver import SciPyCGSolver
+    from .scipy_wrapper import SciPyCGSolver
 
     # Create preconditioner strategy
     if preconditioner is None:
-        precond_strategy = IdentityPreconditioner()
+        precond_strategy = Identity()
+    elif isinstance(preconditioner, Preconditioner):
+        precond_strategy = preconditioner
     elif isinstance(preconditioner, LinearOperator):
         precond_strategy = LinearOperatorPreconditioner(preconditioner)
     else:
-        precond_strategy = FunctionPreconditioner(preconditioner)
+        precond_strategy = CallablePreconditioner(preconditioner)
 
-    # Create event logger based on trace mode
+    # Create logging objects based on trace mode
     trace_mode_enum = (
         TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
     )
-    logger = TraceRecorder() if trace_mode_enum != TraceMode.DISABLED else None
+    iteration_history = (
+        IterationHistory(mode=trace_mode_enum)
+        if trace_mode_enum != TraceMode.DISABLED
+        else None
+    )
+    event_log = EventLog() if trace_mode_enum != TraceMode.DISABLED else None
 
     # Resolve rtol alias
     rtol_value = tol if tol is not None else rtol
@@ -352,7 +382,8 @@ def scipy_cg(
     # Construct solver (SciPyCGSolver has different API, not based on IterativeSolverBase)
     solver = SciPyCGSolver(
         preconditioner=precond_strategy,
-        event_logger=logger,
+        iteration_history=iteration_history,
+        event_log=event_log,
     )
 
     # Solve system (SciPyCGSolver.solve() still accepts trace_mode as parameter)

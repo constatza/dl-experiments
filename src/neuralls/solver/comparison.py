@@ -9,7 +9,7 @@ import numpy as np
 from scipy.linalg import norm
 
 from ..constants import DEFAULT_ATOL, DEFAULT_BREAKDOWN_TOL, DEFAULT_M_MAX, DEFAULT_RTOL
-from .factories import flexible_cg, preconditioned_cg as _preconditioned_cg
+from .factories import flexible_cg, pcg as _preconditioned_cg
 from .models.result import CGComparisonResult, IterationContext, SolverResult
 
 
@@ -179,6 +179,8 @@ def run_cg_comparison(
         )
         if isinstance(limit_fallback, str) and limit_fallback in preconditioners:
             limit_fallback = preconditioners[limit_fallback]
+        # TODO: Handle case where limit_fallback is a string NOT in preconditioners dict.
+        # Currently would pass invalid string to _scheduled_preconditioner causing runtime error.
         apply_every = opts.get("apply_every", precond_every)
         first_n = opts.get("first_n", precond_first_n)
         scheduled_precond = _scheduled_preconditioner(
@@ -243,11 +245,11 @@ def run_cg_comparison(
                 else norm(x_sol - x_exact)
             )
 
-            # Extract residual history from event log if available
-            if info.event_log is not None:
-                res_hist_raw = info.event_log.get_history("residual_norm")
-                # Convert to list[float] if needed
-                residual_history: list[float] = [float(x) for x in res_hist_raw]
+            # Extract residual history from iteration history if available
+            if info.iteration_history is not None:
+                residual_history: list[float] = (
+                    info.iteration_history.residual_norms.to_list()
+                )
             else:
                 residual_history = [info.residual]
 
