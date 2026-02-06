@@ -46,7 +46,6 @@ from .conftest import (
     NOTAY_N,
     NOTAY_TOLERANCE,
     NotayResult,
-    append_result,
 )
 
 if TYPE_CHECKING:
@@ -70,6 +69,8 @@ def compute_tolerance(epsilon: float, expected_iterations: int) -> float:
     return ITERATION_BASE_ATOL + ITERATION_EPSILON_SCALE * epsilon * expected_iterations
 
 
+@pytest.mark.benchmark
+@pytest.mark.slow
 class TestCase1VariantA:
     """Case 1 + Variant (a): Uniform eigenvalues (κ=6) + random perturbation.
 
@@ -112,9 +113,6 @@ class TestCase1VariantA:
         passed = result.converged and np.isclose(
             result.iterations, expected.iterations, rtol=0, atol=atol
         )
-        append_result(
-            "case1.md", expected.epsilon, expected.iterations, result.iterations, passed
-        )
 
         assert result.converged, (
             f"FCG({CASE1_SPEC.m_max}) did not converge at ε={expected.epsilon}"
@@ -125,6 +123,8 @@ class TestCase1VariantA:
         )
 
 
+@pytest.mark.benchmark
+@pytest.mark.slow
 class TestCase1VariantADynamic:
     """Case 1 + Variant (a-dynamic): Fresh random perturbation each iteration.
 
@@ -164,15 +164,6 @@ class TestCase1VariantADynamic:
             trace_mode=TraceMode.MINIMAL,
         )
 
-        # Write results to file, comparing against static (paper) baseline
-        append_result(
-            "case1_dynamic.md",
-            expected.epsilon,
-            expected.iterations,
-            result.iterations,
-            passed=result.converged,
-        )
-
         # Just verify convergence, don't compare to paper results
         assert result.converged, (
             f"FCG({CASE1_SPEC.m_max}) did not converge at ε={expected.epsilon} (dynamic variant)"
@@ -184,6 +175,8 @@ class TestCase1VariantADynamic:
         )
 
 
+@pytest.mark.benchmark
+@pytest.mark.slow
 class TestCase2VariantA:
     """Case 2 + Variant (a): Uniform eigenvalues (κ=51) + random perturbation.
 
@@ -226,9 +219,6 @@ class TestCase2VariantA:
         passed = result.converged and np.isclose(
             result.iterations, expected.iterations, rtol=0, atol=atol
         )
-        append_result(
-            "case2.md", expected.epsilon, expected.iterations, result.iterations, passed
-        )
 
         assert result.converged, (
             f"FCG({CASE2_SPEC.m_max}) did not converge at ε={expected.epsilon}"
@@ -239,6 +229,8 @@ class TestCase2VariantA:
         )
 
 
+@pytest.mark.benchmark
+@pytest.mark.slow
 class TestCase2VariantADynamic:
     """Case 2 + Variant (a-dynamic): Fresh random perturbation each iteration.
 
@@ -278,21 +270,14 @@ class TestCase2VariantADynamic:
             trace_mode=TraceMode.MINIMAL,
         )
 
-        # Write results to file, comparing against static (paper) baseline
-        append_result(
-            "case2_dynamic.md",
-            expected.epsilon,
-            expected.iterations,
-            result.iterations,
-            passed=result.converged,
-        )
-
         # Just verify convergence
         assert result.converged, (
             f"FCG({CASE2_SPEC.m_max}) did not converge at ε={expected.epsilon} (dynamic variant)"
         )
 
 
+@pytest.mark.benchmark
+@pytest.mark.slow
 class TestCase3VariantA:
     """Case 3 + Variant (a): Isolated eigenvalue (κ=1100) + random perturbation.
 
@@ -335,9 +320,6 @@ class TestCase3VariantA:
         passed = result.converged and np.isclose(
             result.iterations, expected.iterations, rtol=0, atol=atol
         )
-        append_result(
-            "case3.md", expected.epsilon, expected.iterations, result.iterations, passed
-        )
 
         assert result.converged, (
             f"FCG({CASE3_SPEC.m_max}) did not converge at ε={expected.epsilon}"
@@ -348,6 +330,8 @@ class TestCase3VariantA:
         )
 
 
+@pytest.mark.benchmark
+@pytest.mark.slow
 class TestCase3VariantADynamic:
     """Case 3 + Variant (a-dynamic): Fresh random perturbation each iteration.
 
@@ -385,15 +369,6 @@ class TestCase3VariantADynamic:
             m_max=m_max,
             maxiter=500,
             trace_mode=TraceMode.MINIMAL,
-        )
-
-        # Write results to file, comparing against static (paper) baseline
-        append_result(
-            "case3_dynamic.md",
-            expected.epsilon,
-            expected.iterations,
-            result.iterations,
-            passed=result.converged,
         )
 
         # Just verify convergence
