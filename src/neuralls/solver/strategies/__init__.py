@@ -15,7 +15,6 @@ Design Principles:
 from .convergence import CombinedToleranceCriterion, IConvergenceCriterion
 from .norms import Norm, energy_norm, euclidean_norm
 from .orthogonalization import (
-    FullOrthogonalization,
     ModifiedGramSchmidt,
     OrthogonalizationReport,
     OrthogonalizationStrategy,
@@ -34,7 +33,6 @@ __all__ = [
     "PeriodicRestartOrthogonalization",
     "TruncatedGramSchmidt",
     "ModifiedGramSchmidt",
-    "FullOrthogonalization",
     # Convergence
     "IConvergenceCriterion",
     "CombinedToleranceCriterion",
