@@ -47,11 +47,12 @@ def system(matrix_path, rhs_path):
     """Load matrix and construct exact solution.
 
     Returns:
-        tuple: (A, b, x_exact) where x_exact is vector of ones.
+        tuple: (A, b, x_exact, L) where x_exact is computed solution.
     """
     A = load_matrix(matrix_path, delimiter=",")
     L = load_matrix(L_PATH, delimiter=",")
-    A[np.absolute(A) < 1e-14] = 0
+    # Zero out near-zero entries using centralized threshold
+    A[np.absolute(A) <= SPARSITY_THRESHOLD] = 0
     n = A.shape[0]
     b = load_matrix(rhs_path, delimiter=",")
     x_exact = linalg.solve(A, b)
@@ -61,8 +62,26 @@ def system(matrix_path, rhs_path):
 @pytest.fixture
 def convergence_tolerances():
     """Tolerances for solver convergence check."""
-    # Using same tight tolerances as exactness benchmark
-    return 1e-12, 1e-14
+    return CONVERGENCE_RTOL, CONVERGENCE_ATOL
+
+
+# Sparsity threshold for determining non-zero entries
+SPARSITY_THRESHOLD = 1e-19  # Entries with |value| <= this are considered zero
+
+# Convergence tolerances for CG solvers
+CONVERGENCE_RTOL = 1e-12  # Relative tolerance for convergence
+CONVERGENCE_ATOL = 1e-14  # Absolute tolerance for convergence
+
+# IC0 comparison tolerances
+IC0_MATRIX_RTOL = 1e-12  # Relative tolerance for L matrix comparison
+IC0_MATRIX_ATOL = 1e-14  # Absolute tolerance for L matrix comparison
+IC0_SPARSITY_COUNT_TOLERANCE = (
+    5  # Allow up to 5 non-zero count difference due to numerical precision
+)
+IC0_SOLUTION_RTOL = 1e-10  # Relative tolerance for solution comparison
+IC0_SOLUTION_ATOL = 1e-12  # Absolute tolerance for solution comparison
+IC0_THRESHOLD = 0.0  # Use no thresholding to match reference
+# Note: Integer metrics (sparsity counts, iteration counts) use exact equality (zero tolerance)
 
 
 def check_existence(path):

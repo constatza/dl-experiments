@@ -392,6 +392,14 @@ def diagonal_system_medium(
 # =============================================================================
 
 
+# =============================================================================
+# Preconditioner Fixtures (shared with solver integration tests)
+# =============================================================================
+# Note: Preconditioner-specific fixtures have been moved to
+# tests/solver/preconditioners/conftest.py. These fixtures remain here
+# because they're used by solver integration tests.
+
+
 @pytest.fixture
 def identity_preconditioner() -> Callable[[NDArray, object], NDArray]:
     """Identity preconditioner M = I.
