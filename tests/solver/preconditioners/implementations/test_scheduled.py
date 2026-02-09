@@ -1,15 +1,160 @@
-"""Unit tests for scheduled preconditioner functionality."""
+"""Tests for scheduled preconditioner functionality.
+
+This module tests the ScheduledPreconditioner class which provides:
+- limit_iters: switch to fallback after N iterations
+- apply_every: apply primary every N iterations
+- Combined scheduling strategies
+
+Tests cover both the class-based ScheduledPreconditioner and the legacy
+_scheduled_preconditioner function wrapper.
+"""
 
 from __future__ import annotations
 
-import pytest
 import numpy as np
+import pytest
 
 from neuralls.solver.comparison import _scheduled_preconditioner
 from neuralls.solver.models.result import IterationContext
+from neuralls.solver.preconditioners import (
+    Identity,
+    JacobiPreconditioner,
+    PreconditionerContext,
+    ScheduledPreconditioner,
+)
+
+
+# =============================================================================
+# ScheduledPreconditioner Class Tests
+# =============================================================================
 
 
 def test_scheduled_preconditioner_limit_iters() -> None:
+    """Verify ScheduledPreconditioner switches at limit_iters."""
+    A = np.diag([2.0, 2.0])
+    primary = JacobiPreconditioner(A)
+    fallback = Identity()
+
+    scheduled = ScheduledPreconditioner(primary, fallback, limit_iters=5)
+
+    r = np.array([2.0, 4.0])
+
+    # Before limit: use primary (Jacobi: z = r / diag = [2/2, 4/2] = [1, 2])
+    ctx = PreconditionerContext(iteration=3, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [1.0, 2.0])  # Primary (Jacobi)
+
+    # At limit: switch to fallback (Identity: z = r = [2, 4])
+    ctx = PreconditionerContext(iteration=5, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [2.0, 4.0])  # Fallback (Identity)
+
+    # After limit: still fallback
+    ctx = PreconditionerContext(iteration=10, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [2.0, 4.0])  # Fallback (Identity)
+
+
+def test_scheduled_preconditioner_apply_every() -> None:
+    """Verify ScheduledPreconditioner respects apply_every parameter."""
+    A = np.diag([2.0, 2.0])
+    primary = JacobiPreconditioner(A)
+    fallback = Identity()
+
+    scheduled = ScheduledPreconditioner(
+        primary, fallback, limit_iters=None, apply_every=3
+    )
+
+    r = np.array([2.0, 4.0])
+
+    # Iteration 0: apply primary (0 % 3 == 0)
+    ctx = PreconditionerContext(iteration=0, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [1.0, 2.0])  # Primary
+
+    # Iteration 1: use fallback (1 % 3 != 0)
+    ctx = PreconditionerContext(iteration=1, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [2.0, 4.0])  # Fallback
+
+    # Iteration 2: use fallback (2 % 3 != 0)
+    ctx = PreconditionerContext(iteration=2, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [2.0, 4.0])  # Fallback
+
+    # Iteration 3: apply primary (3 % 3 == 0)
+    ctx = PreconditionerContext(iteration=3, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [1.0, 2.0])  # Primary
+
+
+def test_scheduled_preconditioner_default_fallback() -> None:
+    """Verify ScheduledPreconditioner uses Identity as default fallback."""
+    A = np.diag([2.0, 2.0])
+    primary = JacobiPreconditioner(A)
+
+    # No fallback specified
+    scheduled = ScheduledPreconditioner(primary, fallback=None, limit_iters=2)
+
+    r = np.array([2.0, 4.0])
+
+    # After limit: should use Identity (default fallback)
+    ctx = PreconditionerContext(iteration=5, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [2.0, 4.0])  # Identity fallback
+
+
+def test_scheduled_preconditioner_combined_limits() -> None:
+    """Verify combined limit_iters and apply_every scheduling."""
+    A = np.diag([2.0, 2.0])
+    primary = JacobiPreconditioner(A)
+    fallback = Identity()
+
+    scheduled = ScheduledPreconditioner(
+        primary, fallback, limit_iters=6, apply_every=2
+    )
+
+    r = np.array([2.0, 4.0])
+
+    # Iteration 0: primary (0 % 2 == 0 and 0 < 6)
+    ctx = PreconditionerContext(iteration=0, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [1.0, 2.0])
+
+    # Iteration 1: fallback (1 % 2 != 0)
+    ctx = PreconditionerContext(iteration=1, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [2.0, 4.0])
+
+    # Iteration 4: primary (4 % 2 == 0 and 4 < 6)
+    ctx = PreconditionerContext(iteration=4, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [1.0, 2.0])
+
+    # Iteration 6: fallback (limit reached, even though 6 % 2 == 0)
+    ctx = PreconditionerContext(iteration=6, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(r, ctx)
+    np.testing.assert_allclose(z, [2.0, 4.0])
+
+
+def test_preconditioner_context_immutable() -> None:
+    """Verify PreconditionerContext is immutable (frozen dataclass)."""
+    ctx = PreconditionerContext(iteration=5, residual_norm=1.0, rhs_norm=2.0)
+
+    # Should not be able to modify
+    with pytest.raises(AttributeError):
+        ctx.iteration = 10  # type: ignore[misc]
+
+    with pytest.raises(AttributeError):
+        ctx.residual_norm = 5.0  # type: ignore[misc]
+
+
+# =============================================================================
+# Legacy _scheduled_preconditioner Function Tests
+# =============================================================================
+
+
+def test_legacy_scheduled_preconditioner_limit_iters() -> None:
     """Verify limit_iters switches to fallback after N iterations."""
     call_log: list[str] = []
 
@@ -58,7 +203,7 @@ def test_scheduled_preconditioner_limit_iters() -> None:
         np.testing.assert_array_equal(result, residual * 0.5)
 
 
-def test_scheduled_preconditioner_wrong_type_raises() -> None:
+def test_legacy_scheduled_preconditioner_wrong_type_raises() -> None:
     """Passing wrong type should raise AttributeError (no 'iteration' or 'residual' attr)."""
 
     def main_precond(r: np.ndarray) -> np.ndarray:
@@ -81,7 +226,7 @@ def test_scheduled_preconditioner_wrong_type_raises() -> None:
         wrapped({"iteration": 3})  # type: ignore[arg-type]
 
 
-def test_scheduled_preconditioner_apply_every() -> None:
+def test_legacy_scheduled_preconditioner_apply_every() -> None:
     """Test apply_every parameter correctly skips iterations."""
     call_log: list[str] = []
 
@@ -127,7 +272,7 @@ def test_scheduled_preconditioner_apply_every() -> None:
             np.testing.assert_array_equal(result, residual * 0.5)
 
 
-def test_scheduled_preconditioner_first_n() -> None:
+def test_legacy_scheduled_preconditioner_first_n() -> None:
     """Test first_n parameter limits main preconditioner to first N iterations."""
     call_log: list[str] = []
 
@@ -176,7 +321,7 @@ def test_scheduled_preconditioner_first_n() -> None:
         )
 
 
-def test_scheduled_preconditioner_iteration_zero() -> None:
+def test_legacy_scheduled_preconditioner_iteration_zero() -> None:
     """Test that iteration=0 uses main preconditioner with first_n scheduling."""
     call_log: list[str] = []
 
@@ -211,7 +356,7 @@ def test_scheduled_preconditioner_iteration_zero() -> None:
     np.testing.assert_array_equal(result, residual * 2.0)
 
 
-def test_scheduled_preconditioner_combined_parameters() -> None:
+def test_legacy_scheduled_preconditioner_combined_parameters() -> None:
     """Test combination of limit_iters, apply_every, and first_n parameters."""
     call_log: list[str] = []
 
@@ -265,7 +410,7 @@ def test_scheduled_preconditioner_combined_parameters() -> None:
         )
 
 
-def test_scheduled_preconditioner_no_fallback() -> None:
+def test_legacy_scheduled_preconditioner_no_fallback() -> None:
     """Test that when fallback is None, identity preconditioner is used."""
     call_log: list[str] = []
 
@@ -313,7 +458,7 @@ def test_scheduled_preconditioner_no_fallback() -> None:
     )  # Identity returns residual unchanged
 
 
-def test_scheduled_preconditioner_iteration_is_int() -> None:
+def test_legacy_scheduled_preconditioner_iteration_is_int() -> None:
     """Test that iteration attribute must be an int for proper scheduling."""
     from dataclasses import dataclass
 
