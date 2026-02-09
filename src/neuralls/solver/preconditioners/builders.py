@@ -29,6 +29,7 @@ from .implementations import (
     Identity,
     JacobiPreconditioner,
     ILUPreconditioner,
+    IC0Preconditioner,
     ICholeskyPreconditioner,
     NeuralPreconditioner,
 )
@@ -38,6 +39,7 @@ from ...configuration.preconditioner import PreconditionerType
 if TYPE_CHECKING:
     from neuralls.configuration.preconditioner import (
         PreconditionerConfig,
+        IC0PreconditionerConfig,
         NeuralPreconditionerConfig,
     )
     from .ports import PredictorAdapter
@@ -72,8 +74,11 @@ def create_preconditioner(
     Raises:
         ValueError: If preconditioner type is not supported
     """
-    # Special case: Neural (different config type)
-    from neuralls.configuration.preconditioner import NeuralPreconditionerConfig
+    # Special cases with additional config parameters
+    from neuralls.configuration.preconditioner import (
+        IC0PreconditionerConfig,
+        NeuralPreconditionerConfig,
+    )
 
     # Check if type is NEURAL but config is not NeuralPreconditionerConfig
     if config.type == PreconditionerType.NEURAL:
@@ -87,6 +92,14 @@ def create_preconditioner(
             data_config_path=config.data_config_path,
             adapter=adapter,
         )
+
+    # IC(0) with threshold parameter
+    if config.type == PreconditionerType.IC0:
+        if not isinstance(config, IC0PreconditionerConfig):
+            raise TypeError(
+                f"IC(0) type requires IC0PreconditionerConfig, got {type(config)}"
+            )
+        return IC0Preconditioner(matrix, threshold=config.threshold)
 
     # Standard cases: Use explicit mapping
     PRECONDITIONER_CLASSES: dict[PreconditionerType, type[Preconditioner]] = {

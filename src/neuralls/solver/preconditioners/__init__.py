@@ -52,12 +52,13 @@ from .implementations import (
     Identity,
     JacobiPreconditioner,
     ILUPreconditioner,
+    IC0Preconditioner,
     ICholeskyPreconditioner,
     NeuralPreconditioner,
-    CallablePreconditioner,
     ScheduledPreconditioner,
-    LinearOperatorPreconditioner,
 )
+from .callable import CallablePreconditioner
+from .linear_operator import LinearOperatorPreconditioner
 from .builders import create_preconditioner
 from .ports import PredictorPort, PredictorAdapter
 
@@ -72,6 +73,7 @@ __all__ = [
     "Identity",
     "JacobiPreconditioner",
     "ILUPreconditioner",
+    "IC0Preconditioner",
     "ICholeskyPreconditioner",
     "NeuralPreconditioner",
     "CallablePreconditioner",

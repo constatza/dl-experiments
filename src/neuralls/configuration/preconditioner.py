@@ -20,6 +20,7 @@ class PreconditionerType(StrEnum):
     IDENTITY = "identity"
     JACOBI = "jacobi"
     ILU = "ilu"
+    IC0 = "ic0"
     ICHOLESKY = "icholesky"
     NEURAL = "neural"
 
@@ -58,7 +59,7 @@ class BasePreconditionerConfig(BaseModel):
 
 
 class StandardPreconditionerConfig(BasePreconditionerConfig):
-    """Non-parametric, static preconditioners (identity, jacobi, ilu)."""
+    """Non-parametric, static preconditioners (identity, jacobi, ilu, icholesky)."""
 
     type: Literal[  # type: ignore[assignment]
         PreconditionerType.IDENTITY,
@@ -66,6 +67,16 @@ class StandardPreconditionerConfig(BasePreconditionerConfig):
         PreconditionerType.ILU,
         PreconditionerType.ICHOLESKY,
     ]
+
+
+class IC0PreconditionerConfig(BasePreconditionerConfig):
+    """IC(0) preconditioner configuration with threshold parameter."""
+
+    type: Literal[PreconditionerType.IC0] = PreconditionerType.IC0  # type: ignore[assignment]
+    threshold: float = Field(
+        default=1e-14,
+        description="Drop tolerance - entries with |value| < threshold are treated as zeros"
+    )
 
 
 class NeuralPreconditionerConfig(BasePreconditionerConfig):
@@ -82,7 +93,7 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
 
 # Discriminated union with normalization
 _StrictPreconditionerConfig = Annotated[
-    StandardPreconditionerConfig | NeuralPreconditionerConfig,
+    StandardPreconditionerConfig | IC0PreconditionerConfig | NeuralPreconditionerConfig,
     Field(discriminator="type"),
 ]
 
