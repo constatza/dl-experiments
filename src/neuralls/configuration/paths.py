@@ -64,6 +64,10 @@ def resolve_output_root(override: Path | str | None = None) -> Path:
     This is THE SINGLE SOURCE OF TRUTH for output paths.
     All MLflow paths are derived from this.
 
+    Priority order:
+    1. Explicit override (highest priority)
+    2. DEFAULT_OUTPUT_DIR (fallback)
+
     Args:
         override: Optional explicit output root path.
 

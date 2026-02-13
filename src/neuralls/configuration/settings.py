@@ -10,7 +10,7 @@ from typing import Any
 
 from dlkit.tools.io import load_settings
 from dlkit.tools.config.core.updater import update_settings
-from dlkit.tools.io.config import load_inference_config_eager
+from dlkit.tools.io.config import load_config
 
 from neuralls.configuration.domain import ExperimentWorkspace
 from neuralls.configuration.paths import PathContext
@@ -56,14 +56,8 @@ def build_settings(
                 }
             },
             "MLFLOW": {
-                # MLflow tracking database (derived from output_root)
-                "server": {
-                    "backend_store_uri": path_context.mlflow_tracking_uri,
-                    "artifacts_destination": path_context.mlflow_artifact_location,
-                },
+                # Only inject dynamic client values — server paths come from model config unchanged
                 "client": {
-                    # Client tracking_uri comes from config (http:// URL)
-                    # Only inject experiment/run names (run_name has timestamp for uniqueness)
                     "experiment_name": workspace.dataset_id,
                     "run_name": run_name,
                 },
@@ -106,7 +100,14 @@ def build_inference_settings(
         dlkit InferenceWorkflowConfig with all paths configured.
     """
     # Load base inference settings from dlkit
-    settings = load_inference_config_eager(str(model_config_path))
+    # Strip training-specific sections not accepted by InferenceWorkflowConfig
+    _INFERENCE_EXCLUDED = {"TRAINING", "MLFLOW", "OPTUNA"}
+    toml_data = load_config(model_config_path, raw=True)
+    inference_data = {k: v for k, v in toml_data.items() if k not in _INFERENCE_EXCLUDED}
+    from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
+    from dlkit.tools.io.config import _sync_session_root_to_environment  # type: ignore[attr-defined]
+    settings = InferenceWorkflowConfig.model_validate(inference_data)
+    _sync_session_root_to_environment(settings)
 
     # Use provided MLflow run name or default to workspace.run_id
     run_name = mlflow_run_name if mlflow_run_name is not None else workspace.run_id
@@ -131,17 +132,11 @@ def build_inference_settings(
         },
     }
 
-    # Only inject MLflow if enabled in config
-    if settings.MLFLOW is not None:
+    # Only inject MLflow if enabled in config (InferenceWorkflowConfig may not have MLFLOW)
+    if getattr(settings, "MLFLOW", None) is not None:
         updates["MLFLOW"] = {
-            # MLflow tracking database (derived from output_root)
-            "server": {
-                "backend_store_uri": path_context.mlflow_tracking_uri,
-                "artifacts_destination": path_context.mlflow_artifact_location,
-            },
+            # Only inject dynamic client values — server paths come from model config unchanged
             "client": {
-                # Client tracking_uri comes from config (http:// URL)
-                # Only inject experiment/run names (run_name has timestamp for uniqueness)
                 "experiment_name": workspace.dataset_id,
                 "run_name": run_name,
             },

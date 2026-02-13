@@ -6,6 +6,7 @@ All path resolution is delegated to the paths module.
 
 from __future__ import annotations
 
+import tomllib
 from datetime import datetime
 from pathlib import Path
 
@@ -20,6 +21,27 @@ from neuralls.configuration.paths import build_path_context
 from neuralls.configuration.services import WorkspaceFactory
 from neuralls.configuration.settings import build_inference_settings, build_settings
 from neuralls.io.toml_loader import load_data_config, load_model_config, load_raw_toml
+
+
+def _read_output_root_from_model_config(model_config_path: Path) -> Path | None:
+    """Extract output root from model config's MLFLOW.server.artifacts_destination.
+
+    Reads the raw TOML to avoid double-loading dlkit settings.
+    Returns the parent of artifacts_destination so workspace paths land in
+    the same base directory as MLflow artifacts.
+
+    Args:
+        model_config_path: Path to model config TOML.
+
+    Returns:
+        Resolved output root (parent of artifacts_destination), or None if not configured.
+    """
+    with open(model_config_path, "rb") as f:
+        raw = tomllib.load(f)
+    dest = raw.get("MLFLOW", {}).get("server", {}).get("artifacts_destination")
+    if dest:
+        return Path(dest).parent
+    return None
 
 
 def load_experiment(
@@ -57,6 +79,9 @@ def load_experiment(
     data_cfg = load_data_config(data_config_path)
 
     # 2. Resolve base paths (SINGLE SOURCE OF TRUTH)
+    # Derive output_root from model config's MLFLOW.server.artifacts_destination if not overridden
+    if output_root is None:
+        output_root = _read_output_root_from_model_config(Path(model_config_path))
     path_ctx = build_path_context(
         data_cfg,
         output_override=output_root,

@@ -147,10 +147,6 @@ class OutputConfig(BaseModel):
         default_factory=Path,
         description="Directory for processed/generated data",
     )
-    output_root: Path = Field(
-        default_factory=Path,
-        description="Output root directory that guides all outputs",
-    )
 
 
 class DataTestConfig(BaseModel):
