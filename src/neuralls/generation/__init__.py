@@ -39,6 +39,10 @@ from .runner import run_generation
 from .config_processing import process_config
 from .plan import GenerationPlan, StrategySpec, parse_generation_plan
 
+# SOLID Architecture (Phases 1-2 complete)
+from . import providers
+from . import transforms
+
 # Import strategies to trigger registration
 from . import strategies
 
@@ -60,6 +64,9 @@ __all__ = [
     "rng_from_seed",
     "rounded_counts",
     "select_archive_files",
+    # SOLID Components (Phase 1-2)
+    "providers",
+    "transforms",
     # Strategies (for registration)
     "strategies",
 ]

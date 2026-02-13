@@ -500,11 +500,42 @@ Final Dataset (.npz)
 
 ## Adding New Strategies
 
-1. Create `strategies/my_strategy.py` with:
-   - Config class extending `BaseStrategyConfig`
-   - Strategy class with `@register_strategy` decorator
-   - Implement `requires_rhs()` and `generate()` methods
+1. Create `strategies/my_strategy.py` using the provider + transform pattern:
+
+```python
+from ..interfaces import GeneratedSamples, ArchiveData
+from ..runner import register_strategy
+from ..strategy_configs import BaseStrategyConfig
+from ..providers import RandomInputProvider   # or other provider
+from ..transforms import ComputeRhsTransform  # or other transform
+
+class MyStrategyConfig(BaseStrategyConfig):
+    my_param: float = 1.0
+
+@register_strategy
+class MyStrategy:
+    name = "my_strategy"
+    ConfigType = MyStrategyConfig
+
+    def generate(
+        self,
+        matrix: np.ndarray,
+        *,
+        cfg: dict,
+        archive: ArchiveData | None = None,
+    ) -> GeneratedSamples:
+        config = MyStrategyConfig(**cfg)
+        # Layer 1: Input provision
+        provider = RandomInputProvider(seed=config.seed)
+        solutions = provider.provide(matrix, count=config.samples, rng=np.random.default_rng(config.seed))
+        # Layer 2: Transformation
+        transform = ComputeRhsTransform(matrix)
+        rhs = transform.transform(solutions)
+        return GeneratedSamples(matrix=matrix, rhs=rhs, solutions=solutions)
+```
 
 2. Add import to `strategies/__init__.py`
 
-See existing strategies for implementation patterns.
+Trace strategies (those that run CG and collect iteration data) also accept a
+`single_rhs: np.ndarray | None = None` parameter and must be listed in the
+`SINGLE_RHS_STRATEGIES` set in `runner.py`.

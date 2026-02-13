@@ -197,11 +197,11 @@ def _derive_rhs_from_solution_archive(
     samples = run_generation(
         "solution_archive",
         matrix,
-        None,
         cfg={
             "solutions_glob": str(representative),
             "samples": 1,
         },
+        archive=None,
     )
 
     if samples.rhs is None or len(samples.rhs) == 0:

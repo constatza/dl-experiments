@@ -232,80 +232,86 @@ def _resolve_strategy_counts(
     return nonzero
 
 
-def _load_or_generate_solutions(
-    count: int,
-    n: int,
-    rng: np.random.Generator,
-    target_rhs_scale: float,
-    archive: ArchiveData | None,
-) -> np.ndarray:
-    """Load solutions from archive or generate random solutions.
-
-    Pure function (modulo RNG): deterministic given RNG state.
-
-    Args:
-        count: Number of solutions needed
-        n: Dimension of solution space
-        rng: Random number generator
-        target_rhs_scale: Scale for random solutions
-        archive: Optional archive data
-
-    Returns:
-        Solution vectors, shape (count, n)
-
-    Raises:
-        ValueError: If archive has insufficient solutions
-    """
-    if archive is None:
-        return rng.normal(size=(count, n), scale=target_rhs_scale).astype(
-            np.float64, copy=False
-        )
-
-    if archive.solutions.shape[0] < count:
-        raise ValueError(
-            f"Not enough archive solutions: need {count}, "
-            f"got {archive.solutions.shape[0]}"
-        )
-
-    return archive.solutions[:count].astype(np.float64, copy=True)
 
 
-def _load_or_compute_rhs(
+def _solve_linear_systems(
     A: np.ndarray,
-    solutions: np.ndarray,
-    archive: ArchiveData | None,
+    rhs_vectors: np.ndarray,
+    method: Literal["direct", "cg"],
+    rtol: float = 1e-12,
+    atol: float = 0.0,
+    max_iters: int = 500,
+    assume_pos_def: bool = True,
 ) -> np.ndarray:
-    """Load RHS from archive or compute from solutions.
+    """Solve linear systems Ax = b using configured method.
 
-    Pure function (matrix multiplication).
+    Unified solving interface for inverse strategies. Supports direct solve
+    (via Cholesky factorization) or iterative CG solve.
 
     Args:
-        A: System matrix
-        solutions: Solution vectors
-        archive: Optional archive data
+        A: System matrix, shape (n, n)
+        rhs_vectors: RHS vectors, shape (num_systems, n)
+        method: Solving method ("direct" or "cg")
+        rtol: Relative tolerance for CG (ignored for direct)
+        atol: Absolute tolerance for CG (ignored for direct)
+        max_iters: Maximum CG iterations (ignored for direct)
+        assume_pos_def: Assume positive-definite for direct solve
 
     Returns:
-        RHS vectors, shape (N, n)
+        Solution vectors, shape (num_systems, n)
 
     Raises:
-        ValueError: If archive has insufficient RHS vectors
+        ValueError: If method is invalid
     """
-    if archive is None or archive.rhs_vectors is None:
-        return np.array([A @ x for x in solutions], dtype=np.float64)
+    num_systems, n = rhs_vectors.shape
+    solutions = np.zeros((num_systems, n), dtype=np.float64)
 
-    count = solutions.shape[0]
-    if archive.rhs_vectors.shape[0] < count:
-        raise ValueError(
-            f"Not enough archive RHS vectors: need {count}, "
-            f"got {archive.rhs_vectors.shape[0]}"
-        )
+    match method:
+        case "direct":
+            # Direct solve via Cholesky (O(n³) per system)
+            from scipy.linalg import solve
 
-    return archive.rhs_vectors[:count].astype(np.float64, copy=True)
+            assume_a = "pos" if assume_pos_def else "gen"
+            for idx, rhs in enumerate(rhs_vectors):
+                solutions[idx] = solve(A, rhs, assume_a=assume_a)
+
+        case "cg":
+            # Iterative CG solve (O(n² * iters) per system)
+            from scipy.sparse.linalg import cg as scipy_cg
+
+            for idx, rhs in enumerate(rhs_vectors):
+                solution, exit_code = scipy_cg(
+                    A,
+                    rhs,
+                    rtol=rtol,
+                    atol=atol,
+                    maxiter=max_iters,
+                )
+                solutions[idx] = solution
+
+                # Warn on convergence failure
+                if exit_code != 0:
+                    residual = np.linalg.norm(A @ solution - rhs)
+                    print(
+                        f"Warning: System {idx + 1} CG exit_code={exit_code} "
+                        f"(residual: {residual:.2e})"
+                    )
+
+        case _:
+            raise ValueError(
+                f"Invalid solve method: {method}. Must be 'direct' or 'cg'"
+            )
+
+    return solutions
+
+
 
 
 def _build_trace_indices(
     num_pairs: int,
     sample_idx: int,
+    *,
+    every_n: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build sample and iteration index arrays for trace data.
 
@@ -314,13 +320,14 @@ def _build_trace_indices(
     Args:
         num_pairs: Number of (residual, solution) pairs
         sample_idx: Sample index for this trace
+        every_n: Step size between CG iterations (iteration indices are 0, every_n, 2*every_n, ...)
 
     Returns:
         Tuple of (sample_indices, iteration_indices)
     """
     return (
         np.full(num_pairs, sample_idx, dtype=np.int64),
-        np.arange(num_pairs, dtype=np.int64),
+        np.arange(0, num_pairs * every_n, every_n, dtype=np.int64),
     )
 
 
@@ -547,6 +554,106 @@ def select_archive_files(
     return candidates[:count]
 
 
+# =============================================================================
+# KRYLOV STRATEGY HELPERS
+# =============================================================================
+
+
+def _lanczos_iteration(
+    matrix: np.ndarray,
+    krylov_dim: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Perform Lanczos iteration to build Krylov subspace basis.
+
+    Args:
+        matrix: System matrix A
+        krylov_dim: Dimension of Krylov subspace
+        rng: Random number generator
+
+    Returns:
+        Tuple of (V, T) where:
+            - V: Orthonormal basis vectors, shape (n, m_eff)
+            - T: Tridiagonal matrix, shape (m_eff, m_eff)
+            m_eff <= krylov_dim (early termination if breakdown occurs)
+    """
+    n = matrix.shape[0]
+    m = krylov_dim
+    V = np.zeros((n, m), dtype=np.float64)
+    alpha = np.zeros(m, dtype=np.float64)
+    beta = np.zeros(m + 1, dtype=np.float64)
+
+    # Initial random vector
+    v = rng.normal(size=n).astype(np.float64, copy=False)
+    v = v / norm(v)
+    V[:, 0] = v
+
+    v_prev = np.zeros(n, dtype=np.float64)
+    beta[0] = 0.0
+
+    # Lanczos iteration
+    m_eff = m
+    for j in range(m):
+        w = matrix @ V[:, j] - beta[j] * v_prev
+        alpha[j] = np.dot(V[:, j], w)
+        w = w - alpha[j] * V[:, j]
+        beta[j + 1] = norm(w)
+
+        # Check for breakdown (lucky breakdown)
+        if beta[j + 1] <= 1e-14:
+            m_eff = j + 1
+            V = V[:, :m_eff]
+            alpha = alpha[:m_eff]
+            beta = beta[: m_eff + 1]
+            break
+
+        v_prev = V[:, j].copy()
+        if j + 1 < m:
+            V[:, j + 1] = w / beta[j + 1]
+
+    # Build tridiagonal matrix
+    T = (
+        np.diag(alpha[:m_eff])
+        + np.diag(beta[1:m_eff], k=-1)
+        + np.diag(beta[1:m_eff], k=1)
+    )
+
+    return V, T
+
+
+def _generate_krylov_combinations(
+    V: np.ndarray,
+    T: np.ndarray,
+    num_samples: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Generate random linear combinations from Krylov basis.
+
+    Args:
+        V: Orthonormal Krylov basis, shape (n, m_eff)
+        T: Tridiagonal matrix from Lanczos, shape (m_eff, m_eff)
+        num_samples: Number of combinations to generate
+        rng: Random number generator
+
+    Returns:
+        Linear combinations, shape (num_samples, n)
+    """
+    m_eff = V.shape[1]
+
+    # Eigendecomposition of tridiagonal matrix
+    Lambda, Q = np.linalg.eigh(T)
+    Lambda_inv = 1.0 / Lambda
+
+    # Generate random combinations
+    combinations = []
+    for _ in range(num_samples):
+        eps = rng.normal(size=m_eff).astype(np.float64, copy=False)
+        x = V @ (Q @ (Lambda_inv * eps))
+        combinations.append(x)
+
+    return np.array(combinations, dtype=np.float64)
+
+
 __all__ = [
     "rng_from_seed",
     "rounded_counts",
@@ -554,12 +661,13 @@ __all__ = [
     "_calculate_normalization_scale",
     "_normalize_matrix_for_generation",
     "_resolve_strategy_counts",
-    "_load_or_generate_solutions",
-    "_load_or_compute_rhs",
+    "_solve_linear_systems",
     "_build_trace_indices",
     "_merge_strategy_outputs",
     "_compute_eigendecomposition",
     "_select_eigenvectors",
     "_generate_eigenvector_combinations",
     "_verify_solution_accuracy",
+    "_lanczos_iteration",
+    "_generate_krylov_combinations",
 ]

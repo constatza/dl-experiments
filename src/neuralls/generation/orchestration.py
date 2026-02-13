@@ -17,6 +17,7 @@ from .trace_utils import (
     _merge_error_traces,
 )
 from .interfaces import ArchiveData
+from ..constants import DEFAULT_RESIDUAL_TRACE_ITERS
 
 
 def _shuffle_samples(
@@ -65,7 +66,6 @@ def _shuffle_samples(
 
 def generate_mixture(
     A: np.ndarray,
-    b: np.ndarray | None = None,
     counts: Mapping[str, int] | None = None,
     *,
     mix: Mapping[str, float] | None = None,
@@ -76,6 +76,7 @@ def generate_mixture(
     strategy_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     archive_solutions: np.ndarray | None = None,
     archive_rhs: np.ndarray | None = None,
+    single_rhs: np.ndarray | None = None,
 ) -> tuple[
     np.ndarray, np.ndarray, ResidualTraceSamples | None, ErrorTraceSamples | None
 ]:
@@ -83,7 +84,6 @@ def generate_mixture(
 
     Args:
         A: System matrix, shape (n, n)
-        b: Mother RHS vector, shape (n,). Optional - only required for strategies that need it.
         counts: Optional explicit strategy counts
         mix: Optional strategy proportions (used with total)
         total: Total samples (required if mix provided)
@@ -95,6 +95,8 @@ def generate_mixture(
             strategy-specific parameters like krylov_iters and cg_iters.
         archive_solutions: Pre-computed solutions for archive-based generation
         archive_rhs: Pre-computed RHS vectors for archive-based generation
+        single_rhs: Optional single RHS vector, shape (n,). If provided to single-RHS strategies
+            (trace strategies), all samples will solve the same system A @ x = single_rhs
 
     Returns:
         Tuple of (features, targets, residual_traces, error_traces):
@@ -109,7 +111,7 @@ def generate_mixture(
     Examples:
         >>> # Generate 100 samples with equal mix of normal and krylov
         >>> X, Y, res_traces, err_traces = generate_mixture(
-        ...     A, b,
+        ...     A,
         ...     mix={"normal": 1.0, "krylov": 1.0},
         ...     total=100,
         ...     seed=42,
@@ -122,12 +124,21 @@ def generate_mixture(
 
         >>> # Generate explicit counts with strategy-specific configuration
         >>> X, Y, _, _ = generate_mixture(
-        ...     A, b,
+        ...     A,
         ...     counts={"normal": 50, "krylov": 30, "cg_residual": 20},
         ...     seed=42,
         ...     strategy_overrides={
         ...         "cg_residual": {"cg_iters": 10},
         ...     }
+        ... )
+
+        >>> # Generate with single RHS for trace strategies
+        >>> rhs = np.random.randn(n)
+        >>> X, Y, res_traces, _ = generate_mixture(
+        ...     A,
+        ...     counts={"cg_residual": 20},
+        ...     single_rhs=rhs,  # All 20 samples solve A @ x = rhs
+        ...     seed=42,
         ... )
     """
     # Ensure strategy modules are registered
@@ -168,33 +179,28 @@ def generate_mixture(
             "residual_error",
             "search_directions",
         }:
-            # Get cg_iters from strategy override or use default
-            strategy_cg_iters = cfg.get("cg_iters", 8)
+            # Get cg_iters and every_n from strategy override or use defaults
+            strategy_cg_iters = cfg.get("cg_iters", DEFAULT_RESIDUAL_TRACE_ITERS)
+            every_n = cfg.get("every_n", 1)
+            # Pairs per base system = ceil((cg_iters + 1) / every_n)
+            # The +1 accounts for the initial residual recorded before any CG step
+            pairs_per_system = (strategy_cg_iters + every_n) // every_n
             adjusted_count = max(
-                1, (count + strategy_cg_iters - 1) // strategy_cg_iters
+                1, (count + pairs_per_system - 1) // pairs_per_system
             )
             cfg["samples"] = adjusted_count
 
-        # Only pass b if strategy requires it
-        from .runner import _registry
-
-        strategy = _registry.get(strategy_name)
-        rhs_to_pass = b if strategy.requires_rhs() else None
-
-        # Filter cfg to only include fields that the strategy's ConfigType accepts
-        config_type = strategy.ConfigType
-        if hasattr(config_type, "model_fields"):
-            valid_fields = set(config_type.model_fields.keys())
-        elif hasattr(config_type, "__dataclass_fields__"):
-            valid_fields = set(config_type.__dataclass_fields__.keys())
-        else:
-            # Fallback for plain classes or TypedDicts if necessary, though expected types are defined
-            valid_fields = set(cfg.keys())
-        filtered_cfg = {k: v for k, v in cfg.items() if k in valid_fields}
-
-        # Run generation with Pydantic validation
+        # Run generation (all strategies now use unified interface)
+        # Single-RHS strategies (trace strategies) will receive single_rhs if provided
+        # Pydantic (extra="forbid") will raise ValidationError on unknown keys — fail fast.
         try:
-            generated = run_generation(strategy_name, A, rhs_to_pass, cfg=filtered_cfg, archive=archive_data)
+            generated = run_generation(
+                strategy_name,
+                A,
+                cfg=cfg,
+                archive=archive_data,
+                single_rhs=single_rhs,
+            )
         except ValidationError as e:
             raise ValueError(
                 f"Invalid configuration for strategy '{strategy_name}': {e}"
@@ -255,7 +261,7 @@ def build_dataset(
         counts: Explicit strategy counts (e.g., {"random": 100, "rhs_archive": 50})
         mix: Strategy proportions (used with total)
         total: Total samples (required if mix provided)
-        rhs_path: Path to mother RHS file (optional, needed for some strategies)
+        rhs_path: Path to single RHS file (optional, for single-RHS strategies like trace strategies)
         normalize: Normalization type ("none", "matrix", "rhs", "spectral", "diagonal")
         matrix_norm_type: Type of matrix norm to compute and save (default: "spectral").
             Options: "spectral", "frobenius", "nuclear", "one", "inf"
@@ -323,15 +329,15 @@ def build_dataset(
     dimension = matrix.shape[0]
     logger.info(f"  Dimension: {dimension}")
 
-    # Step 2: Load mother RHS if provided (needed for some strategies)
-    mother_rhs: np.ndarray | None
+    # Step 2: Load single RHS if provided (for single-RHS strategies like trace strategies)
+    single_rhs: np.ndarray | None
     if rhs_path:
-        mother_rhs = np.loadtxt(rhs_path, dtype=np.float64)
-        if mother_rhs.ndim > 1:
-            mother_rhs = mother_rhs.reshape(-1)
+        single_rhs = np.loadtxt(rhs_path, dtype=np.float64)
+        if single_rhs.ndim > 1:
+            single_rhs = single_rhs.reshape(-1)
     else:
-        # No mother RHS - will be None for strategies that don't need it
-        mother_rhs = None
+        # No single RHS - trace strategies will generate multiple RHS vectors
+        single_rhs = None
 
     # Step 3: Normalize matrix BEFORE strategy execution
     logger.info(f"  Normalization: {normalize}")
@@ -339,25 +345,25 @@ def build_dataset(
         matrix, normalize, spectral_radius_bound=None
     )
 
-    # Step 4: Normalize mother RHS (if provided and scale exists)
-    mother_rhs_norm: np.ndarray | None
-    if mother_rhs is not None and scale is not None:
-        mother_rhs_norm = scale.scale_rhs(mother_rhs)
+    # Step 4: Normalize single RHS (if provided and scale exists)
+    single_rhs_norm: np.ndarray | None
+    if single_rhs is not None and scale is not None:
+        single_rhs_norm = scale.scale_rhs(single_rhs)
     else:
-        mother_rhs_norm = mother_rhs
+        single_rhs_norm = single_rhs
 
     # Step 5: Call generate_mixture() with ALL strategies (archives + synthetic)
     # Note: krylov_iters and cg_iters are now passed via strategy_overrides
     logger.info("Generating/loading samples...")
     X, Y, residual_traces, error_traces = generate_mixture(
         matrix_norm,
-        mother_rhs_norm,
         counts=counts,
         mix=mix,
         total=total,
         seed=seed,
         shuffle=shuffle,
         strategy_overrides=strategy_overrides,
+        single_rhs=single_rhs_norm,
     )
 
     logger.info(f"  Generated {X.shape[0]} samples")
