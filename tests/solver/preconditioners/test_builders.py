@@ -22,13 +22,18 @@ from neuralls.configuration.preconditioner import (
     PreconditionerType,
     StandardPreconditionerConfig,
 )
-from neuralls.solver.preconditioners.builders import create_preconditioner
+from neuralls.solver.preconditioners.builders import (
+    create_preconditioner,
+    create_scheduled_preconditioner,
+)
 from neuralls.solver.preconditioners.ports import PredictorAdapter, PredictorPort
 from neuralls.solver.preconditioners import (
     Identity,
     ILUPreconditioner,
     JacobiPreconditioner,
     NeuralPreconditioner,
+    PreconditionerContext,
+    ScheduledPreconditioner,
 )
 
 if TYPE_CHECKING:
@@ -371,3 +376,61 @@ def test_factory_requires_neural_config_for_neural_type(
 
     with pytest.raises(TypeError, match="Neural type requires NeuralPreconditionerConfig"):
         create_preconditioner(well_conditioned_matrix, config)
+
+
+# ==============================================================================
+# Scheduled Preconditioner Builder Tests (4 tests)
+# ==============================================================================
+
+
+def test_create_scheduled_preconditioner_no_scheduling() -> None:
+    """Test builder returns primary unchanged when no scheduling needed."""
+    primary = Identity()
+    result = create_scheduled_preconditioner(primary, limit_iters=None)
+
+    # Should return same instance, not wrapped
+    assert result is primary
+
+
+def test_create_scheduled_preconditioner_with_limit() -> None:
+    """Test builder wraps preconditioner when limit_iters specified."""
+    primary = Identity()
+    result = create_scheduled_preconditioner(primary, limit_iters=10)
+
+    # Should wrap in ScheduledPreconditioner
+    assert isinstance(result, ScheduledPreconditioner)
+    assert result._limit_iters == 10
+
+
+def test_create_scheduled_preconditioner_default_fallback() -> None:
+    """Test Identity used as default fallback."""
+    primary = Identity()
+    result = create_scheduled_preconditioner(primary, limit_iters=5)
+
+    # Apply after limit and verify fallback is Identity
+    ctx = PreconditionerContext(iteration=10, residual_norm=1.0, rhs_norm=1.0)
+    r = np.array([1.0, 2.0])
+    z = result.apply(r, ctx)
+
+    # Identity behavior: z = r
+    assert_array_equal(z, r)
+
+
+def test_create_scheduled_preconditioner_with_explicit_fallback() -> None:
+    """Test explicit fallback preconditioner."""
+    A = np.diag([2.0, 2.0])
+    primary = Identity()
+    fallback = JacobiPreconditioner(A)
+
+    result = create_scheduled_preconditioner(
+        primary, fallback=fallback, limit_iters=5
+    )
+
+    # Apply after limit and verify Jacobi scaling
+    ctx = PreconditionerContext(iteration=10, residual_norm=1.0, rhs_norm=1.0)
+    r = np.array([2.0, 4.0])
+    z = result.apply(r, ctx)
+
+    # Jacobi: z = r / diag(A) = [2/2, 4/2] = [1, 2]
+    expected = np.array([1.0, 2.0])
+    assert_array_equal(z, expected)

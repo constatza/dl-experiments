@@ -87,7 +87,6 @@ class TestOptunaNestedRuns:
             },
             "output": {
                 "processed_dir": str(data_dir / "processed"),
-                "output_root": str(data_dir / "output"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -202,7 +201,6 @@ class TestOptunaNestedRuns:
             },
             "output": {
                 "processed_dir": str(data_dir / "processed"),
-                "output_root": str(data_dir / "output"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -286,7 +284,6 @@ class TestOptunaNestedRuns:
             "generation": {"normalize": "none", "strategy": [{"name": "random", "samples": 10}]},
             "output": {
                 "processed_dir": str(data_dir / "processed"),
-                "output_root": str(data_dir / "output"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -360,7 +357,6 @@ class TestOptunaWorkflowReadiness:
             "generation": {"normalize": "none", "strategy": [{"name": "random", "samples": 10}]},
             "output": {
                 "processed_dir": str(data_dir / "processed"),
-                "output_root": str(data_dir / "output"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -391,9 +387,10 @@ class TestOptunaWorkflowReadiness:
             output_root=output_root,
         )
 
-        # VERIFICATION: MLflow artifact destination supports nested structure
+        # VERIFICATION: MLflow artifact destination is not set (no [MLFLOW.server] in model config)
+        # dlkit handles nested artifact isolation automatically per trial
         artifacts_dest = experiment.settings.MLFLOW.server.artifacts_destination
-        assert "mlartifacts" in artifacts_dest
+        assert artifacts_dest is None
 
         # dlkit will create separate artifact directories for each trial:
         # - mlartifacts/{exp_id}/{parent_run_id}/

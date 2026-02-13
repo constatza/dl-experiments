@@ -104,12 +104,10 @@ class TestBuildSettings:
         # Check workspace root injected
         assert Path(settings.TRAINING.trainer.default_root_dir) == workspace.root_dir
 
-        # Check MLflow server paths injected from path_context
-        assert settings.MLFLOW.server.backend_store_uri == path_ctx.mlflow_tracking_uri
-        assert (
-            settings.MLFLOW.server.artifacts_destination
-            == path_ctx.mlflow_artifact_location
-        )
+        # Check MLflow server paths are NOT overridden — they come from model config unchanged
+        # (sample_model_config has no [MLFLOW.server] backend_store_uri/artifacts_destination)
+        assert settings.MLFLOW.server.backend_store_uri is None
+        assert settings.MLFLOW.server.artifacts_destination is None
 
         # Check MLflow client experiment/run names injected
         assert settings.MLFLOW.client.experiment_name == workspace.dataset_id
@@ -151,8 +149,9 @@ class TestBuildSettings:
         # Client tracking_uri should come from config (http URL)
         assert settings.MLFLOW.client.tracking_uri.startswith("http://")
 
-        # Server backend_store_uri should come from path_ctx (sqlite URI)
-        assert settings.MLFLOW.server.backend_store_uri.startswith("sqlite:///")
+        # Server backend_store_uri is NOT overridden — comes from model config unchanged
+        # (sample_model_config has no backend_store_uri configured, so it stays None)
+        assert settings.MLFLOW.server.backend_store_uri is None
 
 
 class TestLoadExperiment:
@@ -253,14 +252,10 @@ class TestLoadExperiment:
         assert experiment.settings.MLFLOW.client.run_name.startswith("test-model-")
         assert len(experiment.settings.MLFLOW.client.run_name) > len("test-model-")
 
-        # MLflow server URIs derived from output_root
-        expected_tracking = f"sqlite:///{(output_root / 'mlruns' / 'mlflow.db').as_posix()}"
-        assert experiment.settings.MLFLOW.server.backend_store_uri == expected_tracking
-
-        expected_artifacts = str((output_root / "mlartifacts").as_posix())
-        assert (
-            experiment.settings.MLFLOW.server.artifacts_destination == expected_artifacts
-        )
+        # MLflow server URIs: sample_model_config has no [MLFLOW.server] section,
+        # so these are not set (they come from model config unchanged)
+        assert experiment.settings.MLFLOW.server.backend_store_uri is None
+        assert experiment.settings.MLFLOW.server.artifacts_destination is None
 
     def test_load_with_default_output_root(
         self,
@@ -365,15 +360,10 @@ tracking_uri = "http://localhost:5000"
             output_root=output_root,
         )
 
-        # All MLflow paths should derive from output_root
-        mlflow_db = output_root / "mlruns" / "mlflow.db"
-        mlflow_artifacts = output_root / "mlartifacts"
-
-        assert mlflow_db.as_posix() in experiment.settings.MLFLOW.server.backend_store_uri
-        assert (
-            mlflow_artifacts.as_posix()
-            in experiment.settings.MLFLOW.server.artifacts_destination
-        )
+        # sample_model_config has no [MLFLOW.server] section — paths come from model config
+        # unchanged, so backend_store_uri and artifacts_destination are None
+        assert experiment.settings.MLFLOW.server.backend_store_uri is None
+        assert experiment.settings.MLFLOW.server.artifacts_destination is None
 
     def test_different_experiments_different_paths(
         self,

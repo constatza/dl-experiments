@@ -93,7 +93,6 @@ class TestTrainingPipelineWithMLflow:
             },
             "output": {
                 "processed_dir": str(data_dir / "processed"),
-                "output_root": str(data_dir / "output"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -218,7 +217,6 @@ class TestTrainingPipelineWithMLflow:
             },
             "output": {
                 "processed_dir": str(data_dir / "processed"),
-                "output_root": str(data_dir / "output"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -301,7 +299,6 @@ class TestTrainingPipelineWithMLflow:
             },
             "output": {
                 "processed_dir": str(data_dir / "processed"),
-                "output_root": str(data_dir / "output"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -334,13 +331,12 @@ class TestTrainingPipelineWithMLflow:
             output_root=custom_output_root,
         )
 
-        # Verify paths were injected from PathContext
+        # Model config has no [MLFLOW.server] section — paths are not injected
         tracking_uri = experiment.settings.MLFLOW.server.backend_store_uri
         artifacts_dest = experiment.settings.MLFLOW.server.artifacts_destination
 
-        # Both should reference custom_output_root
-        assert str(custom_output_root) in tracking_uri
-        assert str(custom_output_root) in artifacts_dest
+        assert tracking_uri is None
+        assert artifacts_dest is None
 
         # Experiment and run names should be injected
         assert experiment.settings.MLFLOW.client.experiment_name == "injection_test"

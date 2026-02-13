@@ -5,7 +5,9 @@ import pytest
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from neuralls.solver import flexible_cg, pcg, run_cg_comparison
+from neuralls.solver import flexible_cg, pcg
+from neuralls.solver.preconditioners import Identity
+from neuralls.workflows import run_cg_comparison
 from neuralls.solver.monitoring.trace_mode import TraceMode
 
 # Functional/Integration Test Tolerances
@@ -193,12 +195,13 @@ def test_run_cg_comparison_preconditioners(
     results = run_cg_comparison(
         A,
         b,
-        preconditioners={"none": lambda r: r, "identity": lambda r: r},
+        preconditioners={"identity": Identity()},
         rtol=FUNCTIONAL_RTOL,
         atol=FUNCTIONAL_ATOL,
         maxiter=200,
     )
 
+    # Note: "none" baseline is automatically added by run_cg_comparison
     assert set(results.keys()) == {"none", "identity"}
     for result in results.values():
         assert result.iterations > 0
