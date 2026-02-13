@@ -1,96 +1,73 @@
-"""Krylov strategy implementation using Lanczos basis."""
+"""Krylov strategy implementation using SOLID architecture pattern.
+
+Architecture:
+    Layer 1: KrylovBasisTransform → generate solutions via Lanczos
+    Layer 2: ComputeRhsTransform → compute RHS = A @ x
+
+The Krylov strategy uses Lanczos iteration to build an orthonormal basis for
+the Krylov subspace, then generates random linear combinations from this basis.
+"""
 
 from __future__ import annotations
 
-import numpy as np
-from scipy.linalg import norm
+from typing import Any
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
+import numpy as np
+
+from ..interfaces import GeneratedSamples, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import KrylovConfig
+from ..transforms import KrylovBasisTransform, ComputeRhsTransform
 
 
 @register_strategy
-class KrylovStrategy(IMatrixOnlyGenerationStrategy):
+class KrylovStrategy:
+    """Generate samples using Krylov subspace methods.
+
+    Architecture:
+        Layer 1: KrylovBasisTransform → generate solutions via Lanczos
+        Layer 2: ComputeRhsTransform → compute RHS = A @ x
+
+    The strategy builds a Krylov subspace K_m(A, v) using Lanczos iteration,
+    then generates random linear combinations from the orthonormal basis.
+    This produces solutions that span the Krylov subspace.
+
+    Performance: O(m * n²) for Lanczos + O(count * n²) for RHS computation
+    """
+
     name = "krylov"
     ConfigType = KrylovConfig
-
-    def requires_rhs(self) -> bool:
-        return False
 
     def generate(
         self,
         matrix: np.ndarray,
-        rhs: np.ndarray | None,
         *,
-        cfg: dict,
+        cfg: dict[str, Any],
         archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
         """Generate samples using Krylov subspace methods.
 
         Args:
             matrix: System matrix
-            rhs: Mother RHS (ignored)
             cfg: Configuration dictionary
             archive: Optional archive data (ignored)
 
         Returns:
             GeneratedSamples with Krylov-generated solutions
         """
-        # Validate and convert to typed config
+        # Validate configuration
         config = KrylovConfig(**cfg)
 
-        count = config.samples
-        m = config.krylov_iters
-        rng = np.random.default_rng(config.seed)
-
-        n = matrix.shape[0]
-        V = np.zeros((n, m), dtype=np.float64)
-        alpha = np.zeros(m, dtype=np.float64)
-        beta = np.zeros(m + 1, dtype=np.float64)
-
-        v = rng.normal(size=n).astype(np.float64, copy=False)
-        v = v / norm(v)
-        V[:, 0] = v
-
-        v_prev = np.zeros(n, dtype=np.float64)
-        beta[0] = 0.0
-
-        m_eff = m
-        for j in range(m):
-            w = matrix @ V[:, j] - beta[j] * v_prev
-            alpha[j] = np.dot(V[:, j], w)
-            w = w - alpha[j] * V[:, j]
-            beta[j + 1] = norm(w)
-            if beta[j + 1] <= 1e-14:
-                m_eff = j + 1
-                V = V[:, :m_eff]
-                alpha = alpha[:m_eff]
-                beta = beta[: m_eff + 1]
-                break
-            v_prev = V[:, j].copy()
-            if j + 1 < m:
-                V[:, j + 1] = w / beta[j + 1]
-
-        T = (
-            np.diag(alpha[:m_eff])
-            + np.diag(beta[1:m_eff], k=-1)
-            + np.diag(beta[1:m_eff], k=1)
+        # Layer 1: Build Krylov basis and generate combinations (solutions)
+        krylov_transform = KrylovBasisTransform(
+            krylov_dim=config.krylov_iters,
+            num_samples=config.samples,
+            rng=np.random.default_rng(config.seed),
         )
+        solutions = krylov_transform.transform(matrix)
 
-        Lambda, Q = np.linalg.eigh(T)
-        Lambda_inv = 1.0 / Lambda
+        # Layer 2: Compute RHS = A @ x
+        rhs_transform = ComputeRhsTransform(matrix)
+        rhs = rhs_transform.transform(solutions)
 
-        rhs_blocks: list[np.ndarray] = []
-        sol_blocks: list[np.ndarray] = []
-
-        for _ in range(count):
-            eps = rng.normal(size=m_eff).astype(np.float64, copy=False)
-            x = V @ (Q @ (Lambda_inv * eps))
-            b_sample = matrix @ x
-            rhs_blocks.append(b_sample)
-            sol_blocks.append(x)
-
-        rhs_out = np.array(rhs_blocks, dtype=np.float64)
-        sol_out = np.array(sol_blocks, dtype=np.float64)
-        return GeneratedSamples(matrix=matrix, rhs=rhs_out, solutions=sol_out)
+        return GeneratedSamples(matrix=matrix, rhs=rhs, solutions=solutions)

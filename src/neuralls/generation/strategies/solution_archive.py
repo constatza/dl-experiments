@@ -1,80 +1,37 @@
-"""Solution Archive Strategy - Load solution vectors from disk and compute RHS."""
+"""Solution Archive Strategy using SOLID provider + transform pattern.
+
+Architecture:
+    Layer 1 (Input): FileInputProvider loads solution vectors from disk
+    Layer 2 (Transform): ComputeRhsTransform computes b = A @ x
+    Layer 3 (Strategy): Orchestrates provider and transform
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
-from ..helpers import select_archive_files
+from ..interfaces import GeneratedSamples, ArchiveData
+from ..providers import FileInputProvider
 from ..runner import register_strategy
 from ..strategy_configs import SolutionArchiveConfig
-
-
-def _load_solution_vectors(
-    solution_files: list[Path],
-    expected_dimension: int,
-) -> np.ndarray:
-    """Load solution vectors from text files and validate dimensions.
-
-    Pure function (modulo I/O).
-
-    Args:
-        solution_files: List of solution file paths
-        expected_dimension: Expected vector dimension
-
-    Returns:
-        Stacked solution vectors, shape (num_files, n)
-
-    Raises:
-        ValueError: If no files or dimension mismatch
-    """
-    if not solution_files:
-        raise ValueError("No solution files provided")
-
-    solutions: list[np.ndarray] = []
-
-    for path in solution_files:
-        solution = np.loadtxt(path, dtype=np.float64)
-        if solution.ndim > 1:
-            solution = solution.reshape(-1)
-        if solution.size != expected_dimension:
-            raise ValueError(
-                f"Solution {path} has dimension {solution.size}, "
-                f"expected {expected_dimension}"
-            )
-        solutions.append(solution)
-
-    return np.stack(solutions, axis=0)
-
-
-def _compute_rhs_from_solutions(
-    matrix: np.ndarray,
-    solutions: np.ndarray,
-) -> np.ndarray:
-    """Compute RHS vectors from solutions: b = A @ x.
-
-    Pure function (matrix multiplication).
-
-    Args:
-        matrix: System matrix, shape (n, n)
-        solutions: Solution vectors, shape (num_solutions, n)
-
-    Returns:
-        RHS vectors, shape (num_solutions, n)
-    """
-    return np.array([matrix @ x for x in solutions], dtype=np.float64)
+from ..transforms import ComputeRhsTransform
 
 
 @register_strategy
-class SolutionArchiveStrategy(IMatrixOnlyGenerationStrategy):
+class SolutionArchiveStrategy:
     """Load solution vectors from archive and compute RHS = A @ x.
 
-    This strategy treats archive collection as data generation by loading
-    pre-computed solution vectors from disk and computing the corresponding
-    RHS vectors through matrix multiplication.
+    SOLID Pattern:
+        - FileInputProvider: Loads solutions from disk (Layer 1)
+        - ComputeRhsTransform: Computes b = A @ x (Layer 2)
+        - Strategy: Orchestrates provider and transform (Layer 3)
+
+    This decoupling enables:
+        - Replacing file input with in-memory archive
+        - Reusing ComputeRhsTransform across strategies
+        - Testing provider and transform independently
 
     Configuration:
         - solutions_glob (str): Glob pattern for solution files (e.g., "/data/sol_*.txt")
@@ -103,14 +60,9 @@ class SolutionArchiveStrategy(IMatrixOnlyGenerationStrategy):
     name = "solution_archive"
     ConfigType = SolutionArchiveConfig
 
-    def requires_rhs(self) -> bool:
-        """Archive is self-sufficient, doesn't need mother RHS."""
-        return False
-
     def generate(
         self,
         matrix: np.ndarray,
-        rhs: np.ndarray | None,
         *,
         cfg: dict[str, Any],
         archive: ArchiveData | None = None,
@@ -119,7 +71,6 @@ class SolutionArchiveStrategy(IMatrixOnlyGenerationStrategy):
 
         Args:
             matrix: System matrix (already normalized by orchestrator)
-            rhs: Mother RHS (ignored, strategy is self-sufficient)
             cfg: Configuration dictionary with keys:
                 - solutions_glob: Glob pattern for solution files
                 - samples: Number of files to load
@@ -143,27 +94,27 @@ class SolutionArchiveStrategy(IMatrixOnlyGenerationStrategy):
         shuffle = config.shuffle
         seed = config.seed
 
-        # Select files from archive
-        solution_files = select_archive_files(
+        print(f"Loading solution vectors from archive: {solutions_glob}")
+
+        # Layer 1: Input provision (load from files)
+        provider = FileInputProvider(
             glob_pattern=solutions_glob,
-            count=samples,
             shuffle=shuffle,
             seed=seed,
         )
+        rng = np.random.default_rng(seed)
+        solutions = provider.provide(matrix, count=samples, rng=rng)
 
-        print(f"Loading {len(solution_files)} solution vectors from archive...")
+        print(f"Loaded {len(solutions)} solution vectors")
 
-        # Load solution vectors
-        expected_dimension = matrix.shape[0]
-        solutions = _load_solution_vectors(solution_files, expected_dimension)
-
-        # Compute RHS = A @ x
-        print(f"Computing RHS for {len(solution_files)} solutions...")
-        rhs_vectors = _compute_rhs_from_solutions(matrix, solutions)
+        # Layer 2: Transformation (compute RHS from solutions)
+        print(f"Computing RHS for {len(solutions)} solutions...")
+        transform = ComputeRhsTransform(matrix)
+        rhs = transform.transform(solutions)
 
         return GeneratedSamples(
             matrix=matrix,
-            rhs=rhs_vectors,
+            rhs=rhs,
             solutions=solutions,
             residual_traces=None,
             error_traces=None,

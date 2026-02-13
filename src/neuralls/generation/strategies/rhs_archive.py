@@ -1,102 +1,38 @@
-"""RHS Archive Strategy - Load RHS vectors from disk and optionally solve systems."""
+"""RHS Archive Strategy using SOLID provider + transform pattern.
+
+Architecture:
+    Layer 1 (Input): FileInputProvider loads RHS vectors from disk
+    Layer 2 (Transform): SolveTransform computes x = A^-1 @ b
+    Layer 3 (Strategy): Orchestrates provider and transform
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
-from scipy.sparse.linalg import cg as scipy_cg
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
-from ...validation import validate_rhs_vector as validate_rhs
-from ..helpers import select_archive_files
+from ..interfaces import GeneratedSamples, ArchiveData
+from ..providers import FileInputProvider
 from ..runner import register_strategy
 from ..strategy_configs import RhsArchiveConfig
-
-
-def _load_rhs_vectors(
-    rhs_files: list[Path],
-    matrix: np.ndarray,
-) -> np.ndarray:
-    """Load RHS vectors from text files and validate against matrix.
-
-    Pure function (modulo I/O).
-
-    Args:
-        rhs_files: List of RHS file paths
-        matrix: System matrix for dimension validation
-
-    Returns:
-        Stacked RHS vectors, shape (num_files, n)
-
-    Raises:
-        ValueError: If no files or dimension mismatch
-    """
-    if not rhs_files:
-        raise ValueError("No RHS files provided")
-
-    rhs_list: list[np.ndarray] = []
-    matrix.shape[0]
-
-    for rhs_file in rhs_files:
-        rhs = np.loadtxt(rhs_file, dtype=np.float64)
-        if rhs.ndim > 1:
-            rhs = rhs.reshape(-1)
-        validate_rhs(rhs, matrix)
-        rhs_list.append(rhs)
-
-    return np.stack(rhs_list, axis=0)
-
-
-def _solve_systems(
-    matrix: np.ndarray,
-    rhs_vectors: np.ndarray,
-    cg_tolerance: float,
-    cg_max_iters: int,
-) -> np.ndarray:
-    """Solve linear systems Ax = b using Conjugate Gradient.
-
-    Args:
-        matrix: System matrix, shape (n, n)
-        rhs_vectors: RHS vectors, shape (num_systems, n)
-        cg_tolerance: Relative tolerance for CG
-        cg_max_iters: Maximum CG iterations
-
-    Returns:
-        Solution vectors, shape (num_systems, n)
-    """
-    num_systems, n = rhs_vectors.shape
-    solutions = np.zeros((num_systems, n), dtype=np.float64)
-    absolute_tolerance = 0.0
-
-    for idx, rhs in enumerate(rhs_vectors):
-        solution, exit_code = scipy_cg(
-            matrix,
-            rhs,
-            rtol=cg_tolerance,
-            maxiter=cg_max_iters,
-            atol=absolute_tolerance,
-        )
-        solutions[idx, :] = solution
-
-        if exit_code != 0:
-            residual = np.linalg.norm(matrix @ solution - rhs)
-            print(
-                f"Warning: RHS archive system {idx + 1} exit_code={exit_code} "
-                f"(residual: {residual:.2e})"
-            )
-
-    return solutions
+from ..transforms import SolveTransform
 
 
 @register_strategy
-class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
-    """Load RHS vectors from archive and optionally solve systems.
+class RhsArchiveStrategy:
+    """Load RHS vectors from archive and solve systems.
 
-    This strategy treats archive collection as data generation by loading
-    pre-computed RHS vectors from disk. It can optionally solve the linear
-    systems to obtain solution vectors.
+    SOLID Pattern:
+        - FileInputProvider: Loads RHS from disk (Layer 1)
+        - SolveTransform: Computes x = A^-1 @ b (Layer 2)
+        - Strategy: Orchestrates provider and transform (Layer 3)
+
+    This decoupling enables:
+        - Replacing file input with in-memory archive
+        - Reusing SolveTransform across strategies
+        - Testing provider and transform independently
+        - Switching between CG and direct solvers
 
     Configuration:
         - rhs_glob (str): Glob pattern for RHS files (e.g., "/data/rhs_*.txt")
@@ -131,23 +67,17 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
     name = "rhs_archive"
     ConfigType = RhsArchiveConfig
 
-    def requires_rhs(self) -> bool:
-        """Archive is self-sufficient, doesn't need mother RHS."""
-        return False
-
     def generate(
         self,
         matrix: np.ndarray,
-        rhs: np.ndarray | None,
         *,
         cfg: dict[str, Any],
         archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
-        """Load RHS vectors from archive and optionally solve systems.
+        """Load RHS vectors from archive and solve systems.
 
         Args:
             matrix: System matrix (already normalized by orchestrator)
-            rhs: Mother RHS (ignored, strategy is self-sufficient)
             cfg: Configuration dictionary with keys:
                 - rhs_glob: Glob pattern for RHS files
                 - samples: Number of files to load
@@ -158,7 +88,7 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
             archive: Optional pre-loaded archive data (ignored by this strategy as it loads from disk)
 
         Returns:
-            GeneratedSamples with loaded RHS and optionally solved solutions
+            GeneratedSamples with loaded RHS and solved solutions
 
         Raises:
             ValueError: If rhs_glob not provided or insufficient files
@@ -175,26 +105,34 @@ class RhsArchiveStrategy(IMatrixOnlyGenerationStrategy):
         cg_tolerance = config.cg_tolerance
         cg_max_iters = config.cg_max_iters
 
-        # Select files from archive
-        rhs_files = select_archive_files(
+        print(f"Loading RHS vectors from archive: {rhs_glob}")
+
+        # Layer 1: Input provision (load from files)
+        provider = FileInputProvider(
             glob_pattern=rhs_glob,
-            count=samples,
             shuffle=shuffle,
             seed=seed,
         )
+        rng = np.random.default_rng(seed)
+        rhs = provider.provide(matrix, count=samples, rng=rng)
 
-        print(f"Loading {len(rhs_files)} RHS vectors from archive...")
+        print(f"Loaded {len(rhs)} RHS vectors")
 
-        # Load RHS vectors
-        rhs_vectors = _load_rhs_vectors(rhs_files, matrix)
-
-        # Always solve systems to produce valid (b, A^-1@b) training pairs
-        print(f"Solving {len(rhs_files)} linear systems...")
-        solutions = _solve_systems(matrix, rhs_vectors, cg_tolerance, cg_max_iters)
+        # Layer 2: Transformation (solve systems)
+        print(f"Solving {len(rhs)} linear systems...")
+        transform = SolveTransform(
+            matrix,
+            method="cg",
+            rtol=cg_tolerance,
+            atol=0.0,
+            max_iters=cg_max_iters,
+            assume_pos_def=True,
+        )
+        solutions = transform.transform(rhs)
 
         return GeneratedSamples(
             matrix=matrix,
-            rhs=rhs_vectors,
+            rhs=rhs,
             solutions=solutions,
             residual_traces=None,
             error_traces=None,

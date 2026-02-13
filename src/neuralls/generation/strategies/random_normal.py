@@ -1,26 +1,43 @@
-"""Random/normal strategy implementation using registry."""
+"""Random/normal strategy implementation using SOLID provider + transform pattern.
+
+Architecture:
+    Layer 1 (Input): RandomInputProvider generates random normal solutions
+    Layer 2 (Transform): ComputeRhsTransform computes b = A @ x
+    Layer 3 (Strategy): Orchestrates provider and transform
+"""
 
 from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
+from ..interfaces import GeneratedSamples, ArchiveData
+from ..providers import RandomInputProvider
 from ..runner import register_strategy
 from ..strategy_configs import RandomNormalConfig
+from ..transforms import ComputeRhsTransform
 
 
 @register_strategy
-class RandomNormalStrategy(IMatrixOnlyGenerationStrategy):
+class RandomNormalStrategy:
+    """Generate random normal solutions and compute RHS.
+
+    SOLID Pattern:
+        - RandomInputProvider: Generates random solutions (Layer 1)
+        - ComputeRhsTransform: Computes b = A @ x (Layer 2)
+        - Strategy: Orchestrates provider and transform (Layer 3)
+
+    This decoupling enables:
+        - Replacing random input with archive/file input
+        - Reusing ComputeRhsTransform across strategies
+        - Testing provider and transform independently
+    """
+
     name = "random"
     ConfigType = RandomNormalConfig
-
-    def requires_rhs(self) -> bool:
-        return False
 
     def generate(
         self,
         matrix: np.ndarray,
-        rhs: np.ndarray | None,
         *,
         cfg: dict,
         archive: ArchiveData | None = None,
@@ -29,7 +46,6 @@ class RandomNormalStrategy(IMatrixOnlyGenerationStrategy):
 
         Args:
             matrix: System matrix
-            rhs: Mother RHS (ignored)
             cfg: Configuration dictionary
             archive: Optional archive data (ignored)
 
@@ -39,16 +55,16 @@ class RandomNormalStrategy(IMatrixOnlyGenerationStrategy):
         # Validate and convert to typed config
         config = RandomNormalConfig(**cfg)
 
-        count = config.samples
-        scale = config.target_rhs_scale
+        # Layer 1: Input provision (random generation)
+        provider = RandomInputProvider(seed=config.seed, scale=config.target_rhs_scale)
         rng = np.random.default_rng(config.seed)
+        solutions = provider.provide(matrix, count=config.samples, rng=rng)
 
-        n = matrix.shape[0]
-        solutions = rng.normal(size=(count, n), scale=scale).astype(
-            np.float64, copy=False
-        )
-        rhs_out = np.array([matrix @ x for x in solutions], dtype=np.float64)
-        return GeneratedSamples(matrix=matrix, rhs=rhs_out, solutions=solutions)
+        # Layer 2: Transformation (compute RHS from solutions)
+        transform = ComputeRhsTransform(matrix)
+        rhs = transform.transform(solutions)
+
+        return GeneratedSamples(matrix=matrix, rhs=rhs, solutions=solutions)
 
 
 # Alias for "normal"

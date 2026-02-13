@@ -1,0 +1,391 @@
+"""Input providers for generation strategies (SOLID Layer 1: Data Provision).
+
+Providers abstract the source of input data (solutions, RHS, or both) from the
+transformation logic. This enables strategies to be agnostic to whether data comes
+from random generation, archives, files, or external sources.
+
+Architecture:
+    - InputProvider: Protocol for any data source
+    - Concrete implementations: Random, File, Constant, Hybrid, etc.
+    - Strategies compose providers to obtain inputs
+
+Examples:
+    >>> # Random input
+    >>> provider = RandomInputProvider(seed=42, scale=1.0)
+    >>> solutions = provider.provide(matrix, count=50, rng=rng)
+
+    >>> # File input
+    >>> provider = FileInputProvider(glob_pattern="/data/sols_*.npy")
+    >>> solutions = provider.provide(matrix, count=50, rng=rng)
+
+    >>> # Hybrid (archive with fallback)
+    >>> provider = HybridInputProvider(archive=archive_data)
+    >>> solutions = provider.provide(matrix, count=50, rng=rng)
+"""
+
+from __future__ import annotations
+
+from abc import abstractmethod
+from typing import Protocol, TypeVar
+
+import numpy as np
+
+from .helpers import select_archive_files
+from .interfaces import ArchiveData
+
+T = TypeVar("T")
+
+
+class InputProvider(Protocol[T]):
+    """Protocol for input data providers.
+
+    Providers abstract the source of input data, enabling strategies to be
+    agnostic to whether data comes from random generation, archives, files,
+    or external sources.
+    """
+
+    @abstractmethod
+    def provide(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        rng: np.random.Generator,
+    ) -> T:
+        """Provide input data.
+
+        Args:
+            matrix: System matrix (may be used for dimension inference)
+            count: Number of vectors requested
+            rng: Random number generator (for stochastic providers)
+
+        Returns:
+            Input data of type T (e.g., np.ndarray for solutions/RHS)
+        """
+        ...
+
+
+class RandomInputProvider:
+    """Generate random normal vectors.
+
+    Examples:
+        >>> provider = RandomInputProvider(seed=42, scale=1.0)
+        >>> solutions = provider.provide(matrix=np.eye(10), count=5, rng=rng)
+        >>> solutions.shape
+        (5, 10)
+    """
+
+    def __init__(self, seed: int | None = None, scale: float = 1.0) -> None:
+        """Initialize random provider.
+
+        Args:
+            seed: Random seed for reproducibility
+            scale: Standard deviation for normal distribution
+        """
+        self.seed = seed
+        self.scale = scale
+
+    def provide(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Generate random normal vectors.
+
+        Args:
+            matrix: System matrix (used for dimension)
+            count: Number of vectors
+            rng: Random number generator (ignored if seed provided)
+
+        Returns:
+            Random vectors, shape (count, n)
+        """
+        n = matrix.shape[0]
+        # Use local RNG if seed provided, otherwise use passed RNG
+        local_rng = np.random.default_rng(self.seed) if self.seed is not None else rng
+        return local_rng.normal(size=(count, n), scale=self.scale).astype(
+            np.float64, copy=False
+        )
+
+
+class ConstantInputProvider:
+    """Generate constant vectors (e.g., ones, zeros).
+
+    Examples:
+        >>> provider = ConstantInputProvider(value=1.0)
+        >>> solutions = provider.provide(matrix=np.eye(10), count=5, rng=rng)
+        >>> np.all(solutions == 1.0)
+        True
+    """
+
+    def __init__(self, value: float = 1.0) -> None:
+        """Initialize constant provider.
+
+        Args:
+            value: Constant value for all entries
+        """
+        self.value = value
+
+    def provide(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Generate constant vectors.
+
+        Args:
+            matrix: System matrix (used for dimension)
+            count: Number of vectors
+            rng: Random number generator (unused)
+
+        Returns:
+            Constant vectors, shape (count, n)
+        """
+        n = matrix.shape[0]
+        return np.full((count, n), self.value, dtype=np.float64)
+
+
+class FileInputProvider:
+    """Load vectors from files matching glob pattern.
+
+    Examples:
+        >>> provider = FileInputProvider(
+        ...     glob_pattern="/data/sols_*.npy",
+        ...     shuffle=True,
+        ...     seed=42
+        ... )
+        >>> solutions = provider.provide(matrix=np.eye(10), count=5, rng=rng)
+        >>> solutions.shape
+        (5, 10)
+    """
+
+    def __init__(
+        self,
+        glob_pattern: str,
+        shuffle: bool = False,
+        seed: int | None = None,
+    ) -> None:
+        """Initialize file provider.
+
+        Args:
+            glob_pattern: Pattern like "/data/sols_*.npy"
+            shuffle: Whether to shuffle files before selection
+            seed: Random seed for shuffling
+        """
+        self.glob_pattern = glob_pattern
+        self.shuffle = shuffle
+        self.seed = seed
+
+    def provide(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Load vectors from files.
+
+        Args:
+            matrix: System matrix (unused, for protocol compliance)
+            count: Number of vectors (-1 for all available)
+            rng: Random number generator (unused, seed used instead)
+
+        Returns:
+            Loaded vectors, shape (count, n)
+
+        Raises:
+            FileNotFoundError: If no files match pattern
+            ValueError: If insufficient files available
+        """
+        files = select_archive_files(
+            self.glob_pattern,
+            count=count,
+            shuffle=self.shuffle,
+            seed=self.seed,
+        )
+        vectors = [np.loadtxt(f) for f in files]
+        return np.array(vectors, dtype=np.float64)
+
+
+class HybridInputProvider:
+    """Hybrid provider: try archive first, fallback to random.
+
+    This provider attempts to use archive data if available, falling back to
+    random generation if archive is None or has insufficient vectors.
+
+    Examples:
+        >>> # With archive
+        >>> archive = ArchiveData(solutions=np.random.randn(20, 10))
+        >>> provider = HybridInputProvider(archive, field="solutions")
+        >>> solutions = provider.provide(matrix=np.eye(10), count=5, rng=rng)
+        >>> solutions.shape
+        (5, 10)
+
+        >>> # Without archive (fallback to random)
+        >>> provider = HybridInputProvider(None, field="solutions", scale=1.0)
+        >>> solutions = provider.provide(matrix=np.eye(10), count=5, rng=rng)
+        >>> solutions.shape
+        (5, 10)
+    """
+
+    def __init__(
+        self,
+        archive: ArchiveData | None,
+        field: str = "solutions",
+        scale: float = 1.0,
+    ) -> None:
+        """Initialize hybrid provider.
+
+        Args:
+            archive: Optional archive data
+            field: Field to extract from archive ("solutions" or "rhs_vectors")
+            scale: Scale for random fallback
+        """
+        self.archive = archive
+        self.field = field
+        self.scale = scale
+
+    def provide(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Provide vectors from archive or generate random.
+
+        Args:
+            matrix: System matrix (used for dimension if generating)
+            count: Number of vectors
+            rng: Random number generator (for fallback)
+
+        Returns:
+            Vectors from archive or random, shape (count, n)
+
+        Raises:
+            ValueError: If archive has insufficient vectors
+        """
+        # Try archive first
+        if self.archive is not None:
+            data = getattr(self.archive, self.field, None)
+            if data is not None:
+                if data.shape[0] < count:
+                    raise ValueError(
+                        f"Not enough archive {self.field}: "
+                        f"need {count}, got {data.shape[0]}"
+                    )
+                return data[:count].astype(np.float64, copy=True)
+
+        # Fallback to random
+        n = matrix.shape[0]
+        return rng.normal(size=(count, n), scale=self.scale).astype(
+            np.float64, copy=False
+        )
+
+
+class PairedFileInputProvider:
+    """Load paired (solutions, RHS) from files.
+
+    Examples:
+        >>> provider = PairedFileInputProvider(
+        ...     solution_glob="/data/sols_*.npy",
+        ...     rhs_glob="/data/rhs_*.npy"
+        ... )
+        >>> solutions, rhs = provider.provide(matrix=np.eye(10), count=5, rng=rng)
+        >>> solutions.shape, rhs.shape
+        ((5, 10), (5, 10))
+    """
+
+    def __init__(
+        self,
+        solution_glob: str,
+        rhs_glob: str,
+        shuffle: bool = False,
+        seed: int | None = None,
+    ) -> None:
+        """Initialize paired file provider.
+
+        Args:
+            solution_glob: Pattern for solution files
+            rhs_glob: Pattern for RHS files
+            shuffle: Whether to shuffle files
+            seed: Random seed for shuffling
+        """
+        self.solution_provider = FileInputProvider(solution_glob, shuffle, seed)
+        self.rhs_provider = FileInputProvider(rhs_glob, shuffle, seed)
+
+    def provide(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        rng: np.random.Generator,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Load paired vectors from files.
+
+        Args:
+            matrix: System matrix (unused)
+            count: Number of pairs
+            rng: Random number generator (unused)
+
+        Returns:
+            Tuple of (solutions, rhs), both shape (count, n)
+        """
+        solutions = self.solution_provider.provide(matrix, count, rng)
+        rhs = self.rhs_provider.provide(matrix, count, rng)
+        return solutions, rhs
+
+
+def provide_solutions(
+    matrix: np.ndarray,
+    count: int,
+    rng: np.random.Generator,
+    *,
+    solutions_glob: str | None,
+    archive: ArchiveData | None,
+    shuffle: bool,
+    seed: int | None,
+    strategy_name: str,
+) -> np.ndarray:
+    """Load solution vectors from glob, archive, or raise immediately.
+
+    Centralises the three-way dispatch used by residual trace strategies so the
+    logic is not repeated in every strategy class.
+
+    Args:
+        matrix: System matrix (used for dimension validation by providers).
+        count: Number of solution vectors to return.
+        rng: Random number generator for providers that need it.
+        solutions_glob: Optional glob pattern. When set, files are loaded directly.
+        archive: Optional in-memory archive. Used when glob is absent.
+        shuffle: Whether to shuffle the loaded files (passed to FileInputProvider).
+        seed: Random seed for shuffling (passed to FileInputProvider).
+        strategy_name: Name used in the error message when no source is available.
+
+    Returns:
+        Solution vectors, shape (count, n).
+
+    Raises:
+        ValueError: If neither solutions_glob nor archive solutions are available.
+    """
+    if solutions_glob is not None:
+        return FileInputProvider(solutions_glob, shuffle=shuffle, seed=seed).provide(
+            matrix, count=count, rng=rng
+        )
+    if archive is not None and archive.solutions is not None:
+        return HybridInputProvider(archive=archive, field="solutions", scale=1.0).provide(
+            matrix, count=count, rng=rng
+        )
+    raise ValueError(
+        f"{strategy_name} requires 'solutions_glob' in config or "
+        "archive solutions passed via generate_mixture()."
+    )
+
+
+__all__ = [
+    "InputProvider",
+    "RandomInputProvider",
+    "ConstantInputProvider",
+    "FileInputProvider",
+    "HybridInputProvider",
+    "PairedFileInputProvider",
+    "provide_solutions",
+]

@@ -1,12 +1,20 @@
-"""Neutral ones strategy: x=ones, b=A@x for unbiased baseline testing."""
+"""Neutral ones strategy: x=ones, b=A@x for unbiased baseline testing using SOLID pattern.
+
+Architecture:
+    Layer 1 (Input): ConstantInputProvider generates x=ones solutions
+    Layer 2 (Transform): ComputeRhsTransform computes b = A @ x
+    Layer 3 (Strategy): Orchestrates provider and transform
+"""
 
 from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IMatrixOnlyGenerationStrategy, ArchiveData
+from ..interfaces import GeneratedSamples, ArchiveData
+from ..providers import ConstantInputProvider
 from ..runner import register_strategy
 from ..strategy_configs import BaseStrategyConfig
+from ..transforms import ComputeRhsTransform
 
 
 class NeutralOnesConfig(BaseStrategyConfig):
@@ -15,12 +23,18 @@ class NeutralOnesConfig(BaseStrategyConfig):
     Generates neutral test cases where x = ones and b = A @ x.
     This provides an unbiased baseline for solver comparison across experiments.
     """
+
     pass
 
 
 @register_strategy
-class NeutralOnesStrategy(IMatrixOnlyGenerationStrategy):
+class NeutralOnesStrategy:
     """Generate neutral test cases with x=ones, b=A@x.
+
+    SOLID Pattern:
+        - ConstantInputProvider: Generates x=ones solutions (Layer 1)
+        - ComputeRhsTransform: Computes b = A @ x (Layer 2)
+        - Strategy: Orchestrates provider and transform (Layer 3)
 
     This strategy creates a deterministic, unbiased test case where the solution
     is simply a vector of ones. This is useful for:
@@ -31,17 +45,13 @@ class NeutralOnesStrategy(IMatrixOnlyGenerationStrategy):
     The normalization is applied by the data generation pipeline BEFORE this
     strategy is called, so this generates normalized data in normalized space.
     """
+
     name = "neutral_ones"
     ConfigType = NeutralOnesConfig
-
-    def requires_rhs(self) -> bool:
-        """Neutral ones doesn't require mother RHS."""
-        return False
 
     def generate(
         self,
         matrix: np.ndarray,
-        rhs: np.ndarray | None,
         *,
         cfg: dict,
         archive: ArchiveData | None = None,
@@ -50,7 +60,6 @@ class NeutralOnesStrategy(IMatrixOnlyGenerationStrategy):
 
         Args:
             matrix: System matrix (already normalized)
-            rhs: Mother RHS (ignored, not needed for neutral test)
             cfg: Configuration dictionary
             archive: Optional archive data (ignored)
 
@@ -60,13 +69,14 @@ class NeutralOnesStrategy(IMatrixOnlyGenerationStrategy):
         # Validate and convert to typed config
         config = NeutralOnesConfig(**cfg)
 
-        count = config.samples
-        n = matrix.shape[0]
+        rng = np.random.default_rng()  # Unused, for protocol compliance
 
-        # Generate x = ones for all samples
-        solutions = np.ones((count, n), dtype=np.float64)
+        # Layer 1: Input provision (constant ones)
+        provider = ConstantInputProvider(value=1.0)
+        solutions = provider.provide(matrix, count=config.samples, rng=rng)
 
-        # Compute b = A @ x for each solution
-        rhs_out = np.array([matrix @ x for x in solutions], dtype=np.float64)
+        # Layer 2: Transformation (compute RHS from solutions)
+        transform = ComputeRhsTransform(matrix)
+        rhs = transform.transform(solutions)
 
-        return GeneratedSamples(matrix=matrix, rhs=rhs_out, solutions=solutions)
+        return GeneratedSamples(matrix=matrix, rhs=rhs, solutions=solutions)

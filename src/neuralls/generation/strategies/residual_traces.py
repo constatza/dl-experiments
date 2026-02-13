@@ -1,49 +1,56 @@
-"""Residual trace strategy (cg_residual/residual)."""
+"""Residual trace strategy (cg_residual/residual) using SOLID architecture.
+
+Architecture:
+    Layer 1: RandomInputProvider or ArchiveInputProvider → generate solutions
+    Layer 2: ComputeRhsTransform → compute RHS = A @ x
+    Layer 3: SciPyCGSolver → run CG with iteration history tracking
+    Layer 4: Collect residual traces from iteration history
+
+This strategy runs CG solver and collects residual vectors at each iteration,
+useful for training preconditioners or analyzing CG convergence behavior.
+"""
 
 from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IDataGenerationStrategy, ArchiveData
+from ..interfaces import GeneratedSamples, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import ResidualTraceConfig
-from ..helpers import (
-    _load_or_generate_solutions,
-    _load_or_compute_rhs,
-    _build_trace_indices,
-)
+from ..helpers import _build_trace_indices
+from ..providers import provide_solutions, HybridInputProvider
+from ..transforms import ComputeRhsTransform
 from ...normalization import ResidualTraceSamples
 
 
 @register_strategy
-class ResidualTraceStrategy(IDataGenerationStrategy):
+class ResidualTraceStrategy:
     name = "cg_residual"
     ConfigType = ResidualTraceConfig
-
-    def requires_rhs(self) -> bool:
-        return True
 
     def generate(
         self,
         matrix: np.ndarray,
-        rhs: np.ndarray | None,
         *,
         cfg: dict,
+        single_rhs: np.ndarray | None = None,
         archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
         """Generate samples with residual traces (no true error).
 
+        Supports two modes:
+        - Single RHS mode: If single_rhs provided, run CG multiple times on the same RHS
+        - Multiple RHS mode: If single_rhs is None, generate N different RHS vectors
+
         Args:
             matrix: System matrix
-            rhs: Mother RHS vector (required)
             cfg: Configuration dictionary
+            single_rhs: Optional single RHS vector. If provided, all samples solve A @ x = single_rhs
             archive: Optional archive data to seed generation
 
         Returns:
             GeneratedSamples with residual_traces populated
         """
-        if rhs is None:
-            raise ValueError("cg_residual requires rhs input")
 
         # Validate and convert to typed config
         config = ResidualTraceConfig(**cfg)
@@ -55,9 +62,42 @@ class ResidualTraceStrategy(IDataGenerationStrategy):
         rng = np.random.default_rng(config.seed)
 
         n = matrix.shape[0]
-        # Generate base systems
-        sols = _load_or_generate_solutions(num_base_systems, n, rng, 1.0, archive)
-        rhs_samples = _load_or_compute_rhs(matrix, sols, archive)
+
+        # Choose mode based on single_rhs parameter
+        if single_rhs is not None:
+            # Mode 1: Single RHS - run CG multiple times on the SAME RHS
+            # Create array of identical RHS vectors for processing
+            rhs_samples = np.tile(single_rhs, (num_base_systems, 1))
+            # Note: We don't generate solutions in this mode (CG will solve from x0=0)
+            sols = None
+        else:
+            # Mode 2: Multiple RHS - load solutions from glob, archive, or fail fast.
+            sols = provide_solutions(
+                matrix, num_base_systems, rng,
+                solutions_glob=config.solutions_glob,
+                archive=archive,
+                shuffle=config.shuffle,
+                seed=config.seed,
+                strategy_name="cg_residual",
+            )
+
+            # Layer 2: Transform (compute RHS or load from archive)
+            rhs_provider = HybridInputProvider(
+                archive=archive, field="rhs_vectors", scale=1.0
+            )
+            rhs_from_archive = (
+                archive is not None
+                and archive.rhs_vectors is not None
+                and archive.rhs_vectors.shape[0] >= num_base_systems
+            )
+
+            if rhs_from_archive:
+                # Use RHS directly from archive
+                rhs_samples = rhs_provider.provide(matrix, count=num_base_systems, rng=rng)
+            else:
+                # Compute RHS = A @ x
+                transform = ComputeRhsTransform(matrix)
+                rhs_samples = transform.transform(sols)
 
         residual_blocks: list[np.ndarray] = []
         solution_blocks: list[np.ndarray] = []
@@ -89,11 +129,14 @@ class ResidualTraceStrategy(IDataGenerationStrategy):
             residual_seq = info.iteration_history.residuals.to_array()
             solution_seq = info.iteration_history.solutions.to_array() if info.iteration_history.solutions else np.array([])
 
+            residual_seq = residual_seq[::config.every_n]
+            if solution_seq.size > 0:
+                solution_seq = solution_seq[::config.every_n]
             num_pairs = residual_seq.shape[0]
 
             residual_blocks.append(residual_seq)
             solution_blocks.append(solution_seq)
-            sidx, iidx = _build_trace_indices(num_pairs, sample_idx)
+            sidx, iidx = _build_trace_indices(num_pairs, sample_idx, every_n=config.every_n)
             sample_indices.append(sidx)
             iteration_indices.append(iidx)
 

@@ -1,51 +1,56 @@
-"""Residual error strategy (cg_residual_error/residual_error)."""
+"""Residual error strategy (cg_residual_error/residual_error) using SOLID architecture.
+
+Architecture:
+    Layer 1: RandomInputProvider or ArchiveInputProvider → generate solutions
+    Layer 2: ComputeRhsTransform → compute RHS = A @ x
+    Layer 3: SciPyCGSolver → run CG with iteration history tracking
+    Layer 4: Collect residual and error traces from iteration history
+
+This strategy runs CG solver and collects both residual vectors and error vectors
+at each iteration, useful for training preconditioners with true error information.
+"""
 
 from __future__ import annotations
 
-import warnings
-
 import numpy as np
 
-from ..interfaces import GeneratedSamples, IDataGenerationStrategy, ArchiveData
+from ..interfaces import GeneratedSamples, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import ResidualErrorConfig
-from ..helpers import (
-    _load_or_generate_solutions,
-    _load_or_compute_rhs,
-    _build_trace_indices,
-)
+from ..helpers import _build_trace_indices
+from ..providers import provide_solutions, HybridInputProvider
+from ..transforms import ComputeRhsTransform
 from ...normalization import ErrorTraceSamples
 
 
 @register_strategy
-class ResidualErrorStrategy(IDataGenerationStrategy):
+class ResidualErrorStrategy:
     name = "cg_residual_error"
     ConfigType = ResidualErrorConfig
-
-    def requires_rhs(self) -> bool:
-        return True
 
     def generate(
         self,
         matrix: np.ndarray,
-        rhs: np.ndarray | None,
         *,
         cfg: dict,
+        single_rhs: np.ndarray | None = None,
         archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
         """Generate samples with full residual error traces.
 
+        Supports two modes:
+        - Single RHS mode: If single_rhs provided, run CG multiple times on the same RHS
+        - Multiple RHS mode: If single_rhs is None, generate N different RHS vectors
+
         Args:
             matrix: System matrix
-            rhs: Mother RHS vector (required)
             cfg: Configuration dictionary
+            single_rhs: Optional single RHS vector. If provided, all samples solve A @ x = single_rhs
             archive: Optional archive data to seed generation
 
         Returns:
             GeneratedSamples with error_traces populated
         """
-        if rhs is None:
-            raise ValueError("cg_residual_error requires rhs input")
 
         # Validate and convert to typed config
         config = ResidualErrorConfig(**cfg)
@@ -58,19 +63,55 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
 
         n = matrix.shape[0]
 
-        # Warn if using random generation (error traces are more meaningful with known solutions)
-        if archive is None or archive.solutions is None:
-            warnings.warn(
-                "residual_error strategy is generating random solutions. "
-                "Error traces are most useful when computed from known archive solutions. "
-                "Consider passing archive_solutions to generate_mixture().",
-                UserWarning,
-                stacklevel=2,
+        # Choose mode based on single_rhs parameter
+        if single_rhs is not None:
+            # Mode 1: Single RHS - run CG multiple times on the SAME RHS
+            # Note: Error traces require true solution, which we don't have in single RHS mode
+            # So we'll solve once to get approximate solution, then use it as "true" for comparison
+            from ...solver.scipy_wrapper import SciPyCGSolver
+
+            # Solve once with high accuracy to get "true" solution
+            solver = SciPyCGSolver()
+            true_sol, _ = solver.solve(
+                A=matrix,
+                b=single_rhs,
+                x0=np.zeros(n, dtype=np.float64),
+                maxiter=10000,
+                rtol=1e-12,
+                atol=1e-12,
             )
 
-        # Generate base systems
-        sols = _load_or_generate_solutions(num_base_systems, n, rng, 1.0, archive)
-        rhs_samples = _load_or_compute_rhs(matrix, sols, archive)
+            # Create array of identical RHS and solution vectors
+            rhs_samples = np.tile(single_rhs, (num_base_systems, 1))
+            sols = np.tile(true_sol, (num_base_systems, 1))
+        else:
+            # Mode 2: Multiple RHS - load solutions from glob, archive, or fail fast.
+            sols = provide_solutions(
+                matrix, num_base_systems, rng,
+                solutions_glob=config.solutions_glob,
+                archive=archive,
+                shuffle=config.shuffle,
+                seed=config.seed,
+                strategy_name="cg_residual_error",
+            )
+
+            # Layer 2: Transform (compute RHS or load from archive)
+            rhs_provider = HybridInputProvider(
+                archive=archive, field="rhs_vectors", scale=1.0
+            )
+            rhs_from_archive = (
+                archive is not None
+                and archive.rhs_vectors is not None
+                and archive.rhs_vectors.shape[0] >= num_base_systems
+            )
+
+            if rhs_from_archive:
+                # Use RHS directly from archive
+                rhs_samples = rhs_provider.provide(matrix, count=num_base_systems, rng=rng)
+            else:
+                # Compute RHS = A @ x
+                transform = ComputeRhsTransform(matrix)
+                rhs_samples = transform.transform(sols)
 
         residual_blocks: list[np.ndarray] = []
         solution_current_blocks: list[np.ndarray] = []
@@ -103,6 +144,10 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
             assert info.iteration_history is not None and info.iteration_history.residuals is not None
             residual_seq = info.iteration_history.residuals.to_array()
             solution_seq = info.iteration_history.solutions.to_array() if info.iteration_history.solutions else np.array([])
+
+            residual_seq = residual_seq[::config.every_n]
+            if solution_seq.size > 0:
+                solution_seq = solution_seq[::config.every_n]
             num_pairs = residual_seq.shape[0]
 
             error_seq = np.array(
@@ -112,7 +157,7 @@ class ResidualErrorStrategy(IDataGenerationStrategy):
             residual_blocks.append(residual_seq)
             solution_current_blocks.append(solution_seq)
             error_blocks.append(error_seq)
-            sidx, iidx = _build_trace_indices(num_pairs, sample_idx)
+            sidx, iidx = _build_trace_indices(num_pairs, sample_idx, every_n=config.every_n)
             sample_indices.append(sidx)
             iteration_indices.append(iidx)
 
