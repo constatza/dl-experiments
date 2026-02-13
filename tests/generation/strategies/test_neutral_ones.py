@@ -23,7 +23,6 @@ def test_neutral_ones_strategy_basic(sample_matrix):
 
     result = strategy.generate(
         matrix=sample_matrix,
-        rhs=None,
         cfg=config,
         archive=None,
     )
@@ -47,7 +46,6 @@ def test_neutral_ones_multiple_samples(sample_matrix):
 
     result = strategy.generate(
         matrix=sample_matrix,
-        rhs=None,
         cfg=config,
         archive=None,
     )
@@ -65,19 +63,13 @@ def test_neutral_ones_multiple_samples(sample_matrix):
         np.testing.assert_array_almost_equal(result.rhs[i], expected_rhs)
 
 
-def test_neutral_ones_requires_rhs():
-    """Test that neutral_ones doesn't require mother RHS."""
-    strategy = NeutralOnesStrategy()
-    assert strategy.requires_rhs() is False
-
-
 def test_neutral_ones_deterministic(sample_matrix):
     """Test that neutral_ones produces deterministic results."""
     strategy = NeutralOnesStrategy()
     config = {"samples": 2, "seed": 42}
 
-    result1 = strategy.generate(matrix=sample_matrix, rhs=None, cfg=config, archive=None)
-    result2 = strategy.generate(matrix=sample_matrix, rhs=None, cfg=config, archive=None)
+    result1 = strategy.generate(matrix=sample_matrix, cfg=config, archive=None)
+    result2 = strategy.generate(matrix=sample_matrix, cfg=config, archive=None)
 
     np.testing.assert_array_equal(result1.rhs, result2.rhs)
     np.testing.assert_array_equal(result1.solutions, result2.solutions)

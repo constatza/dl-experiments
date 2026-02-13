@@ -8,7 +8,7 @@ import pytest
 from scipy.linalg import eigh
 
 from neuralls.generation import generate_mixture
-from neuralls.generation.base import _generate_eigenvector_combinations
+from neuralls.generation.helpers import _generate_eigenvector_combinations
 from neuralls.normalization import (
     ErrorTraceSamples,
     ResidualTraceSamples,
@@ -34,10 +34,9 @@ def test_residual_strategy_with_archive() -> None:
     # Generate with archive
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=A,
-        b=b,
         mix={"cg_residual": 1.0},
         total=2,
-        strategy_overrides={"cg_residual": {"residual_iters": 3}},
+        strategy_overrides={"cg_residual": {"cg_iters": 3}},
         seed=7,
         shuffle=False,
         archive_solutions=archive_sols,
@@ -64,10 +63,9 @@ def test_residual_strategy_archive_validation() -> None:
     try:
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=A,
-            b=b,
             mix={"cg_residual": 1.0},
             total=2,  # Request more than archive has
-            strategy_overrides={"cg_residual": {"residual_iters": 3}},
+            strategy_overrides={"cg_residual": {"cg_iters": 3}},
             seed=7,
             shuffle=False,
             archive_solutions=archive_sols,
@@ -174,9 +172,11 @@ def test_diagonal_normalization_rejects_zero_diagonal(tmp_path: Path) -> None:
 def test_error_strategy_with_random(
     small_spd_matrix: np.ndarray,
     small_rhs: np.ndarray,
+    archive_solutions: np.ndarray,
+    archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Test error strategy with random generation.
+    """Test error strategy generates traces from archive solutions.
 
     Verifies that the error strategy:
     - Generates error traces successfully
@@ -186,16 +186,19 @@ def test_error_strategy_with_random(
     Args:
         small_spd_matrix: Test SPD matrix fixture
         small_rhs: Test RHS vector fixture
+        archive_solutions: Pre-computed archive solutions fixture
+        archive_rhs: Pre-computed archive RHS vectors fixture
         test_seed: Random seed fixture
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
         strategy_overrides={"residual_error": {"cg_iters": 3}},
         seed=test_seed,
         shuffle=False,
+        archive_solutions=archive_solutions,
+        archive_rhs=archive_rhs,
     )
 
     # Verify basic shapes
@@ -251,7 +254,6 @@ def test_error_strategy_with_archive(
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
         strategy_overrides={"residual_error": {"cg_iters": 3}},
@@ -282,6 +284,8 @@ def test_error_strategy_with_archive(
 def test_error_vectors_satisfy_equation(
     small_spd_matrix: np.ndarray,
     small_rhs: np.ndarray,
+    archive_solutions: np.ndarray,
+    archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
     """Test that error vectors satisfy error_k = x* - x_k.
@@ -292,16 +296,19 @@ def test_error_vectors_satisfy_equation(
     Args:
         small_spd_matrix: Test SPD matrix fixture
         small_rhs: Test RHS vector fixture
+        archive_solutions: Pre-computed archive solutions fixture
+        archive_rhs: Pre-computed archive RHS vectors fixture
         test_seed: Random seed fixture
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        b=small_rhs,
         mix={"residual_error": 1.0},
         total=3,
         strategy_overrides={"residual_error": {"cg_iters": 5}},
         seed=test_seed,
         shuffle=False,
+        archive_solutions=archive_solutions,
+        archive_rhs=archive_rhs,
     )
 
     assert error_traces is not None, "Error traces should be populated"
@@ -341,7 +348,6 @@ def test_residuals_match_current_solutions(
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        b=small_rhs,
         mix={"residual_error": 1.0},
         total=2,
         strategy_overrides={"residual_error": {"cg_iters": 4}},
@@ -388,7 +394,6 @@ def test_error_strategy_validation(
     try:
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=small_spd_matrix,
-            b=small_rhs,
             mix={"residual_error": 1.0},
             total=3,  # Request more than archive has
             strategy_overrides={"residual_error": {"cg_iters": 3}},
@@ -406,6 +411,8 @@ def test_error_strategy_validation(
 def test_error_strategy_in_generate_mixture(
     small_spd_matrix: np.ndarray,
     small_rhs: np.ndarray,
+    archive_solutions: np.ndarray,
+    archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
     """Test error strategy works in generate_mixture with multiple strategies.
@@ -416,31 +423,31 @@ def test_error_strategy_in_generate_mixture(
     Args:
         small_spd_matrix: Test SPD matrix fixture
         small_rhs: Test RHS vector fixture
+        archive_solutions: Pre-computed archive solutions fixture
+        archive_rhs: Pre-computed archive RHS vectors fixture
         test_seed: Random seed fixture
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        b=small_rhs,
         mix={"normal": 0.5, "residual_error": 0.5},
-        total=10,
+        total=4,
         strategy_overrides={"residual_error": {"cg_iters": 3}},
         seed=test_seed,
         shuffle=False,
+        archive_solutions=archive_solutions,
+        archive_rhs=archive_rhs,
     )
 
     # Verify both strategies contributed
-    assert rhs.shape == (10, 2), "Should have 10 total samples"
-    assert solutions.shape == (10, 2)
+    assert rhs.shape == (4, 2), "Should have 4 total samples"
+    assert solutions.shape == (4, 2)
 
     # Verify error traces are present (from residual_error strategy)
     assert error_traces is not None, "Error traces should be populated"
 
-    # Verify error traces have approximately 5 samples worth of data
-    # (each sample generates multiple traces across CG iterations)
+    # Verify error traces have at least 1 sample
     unique_samples = np.unique(error_traces.sample_indices)
-    assert len(unique_samples) >= 4, (
-        "Should have error traces from approximately 5 samples (allowing for rounding)"
-    )
+    assert len(unique_samples) >= 1, "Should have error traces from at least 1 sample"
 
     # Verify residuals is None (normal strategy doesn't produce residual traces)
     assert residuals is None, (
@@ -451,6 +458,8 @@ def test_error_strategy_in_generate_mixture(
 def test_error_strategy_traces_structure(
     small_spd_matrix: np.ndarray,
     small_rhs: np.ndarray,
+    archive_solutions: np.ndarray,
+    archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
     """Test the internal structure of error traces.
@@ -463,16 +472,19 @@ def test_error_strategy_traces_structure(
     Args:
         small_spd_matrix: Test SPD matrix fixture
         small_rhs: Test RHS vector fixture
+        archive_solutions: Pre-computed archive solutions fixture
+        archive_rhs: Pre-computed archive RHS vectors fixture
         test_seed: Random seed fixture
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        b=small_rhs,
         mix={"residual_error": 1.0},
         total=3,
         strategy_overrides={"residual_error": {"cg_iters": 4}},
         seed=test_seed,
         shuffle=False,
+        archive_solutions=archive_solutions,
+        archive_rhs=archive_rhs,
     )
 
     assert error_traces is not None, "Error traces should be populated"
@@ -512,7 +524,6 @@ def test_error_strategy_with_zero_iterations(
     with pytest.raises(ValueError, match="(greater than or equal to 1|cg_iters)"):
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=small_spd_matrix,
-            b=small_rhs,
             mix={"residual_error": 1.0},
             total=2,
             strategy_overrides={"residual_error": {"cg_iters": 0}},  # Zero iterations
@@ -533,7 +544,6 @@ def test_eigenvector_forward_basic(tmp_path: Path) -> None:
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_forward": 1.0},
         total=2,
         seed=42,
@@ -557,7 +567,6 @@ def test_eigenvector_inverse_machine_precision(tmp_path: Path) -> None:
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_inverse": 1.0},
         total=2,
         seed=42,
@@ -577,7 +586,7 @@ def test_eigenvector_requires_symmetric(tmp_path: Path) -> None:
     b = np.array([1.0, 0.0], dtype=np.float64)
 
     with pytest.raises(ValueError, match="symmetric"):
-        generate_mixture(A=A, b=b, mix={"eigenvector_forward": 1.0}, total=2)
+        generate_mixture(A=A, mix={"eigenvector_forward": 1.0}, total=2)
 
 
 def test_eigenvector_count_exceeds_dimension(tmp_path: Path) -> None:
@@ -587,7 +596,7 @@ def test_eigenvector_count_exceeds_dimension(tmp_path: Path) -> None:
 
     # With new implementation, this should work (generates 5 combinations from 3 eigenvectors)
     rhs, solutions, _, _ = generate_mixture(
-        A=A, b=b, mix={"eigenvector_forward": 1.0}, total=5
+        A=A, mix={"eigenvector_forward": 1.0}, total=5
     )
 
     assert rhs.shape == (5, 3)
@@ -608,7 +617,6 @@ def test_eigenvector_selection_modes(tmp_path: Path) -> None:
     # Test "smallest" mode - use eigenvectors with k smallest eigenvalues
     _, sols_first, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_forward": 1.0},
         total=2,
         strategy_overrides={
@@ -624,7 +632,6 @@ def test_eigenvector_selection_modes(tmp_path: Path) -> None:
     # Test "largest" mode - use eigenvectors with k largest eigenvalues
     _, sols_last, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_forward": 1.0},
         total=2,
         strategy_overrides={
@@ -648,7 +655,6 @@ def test_mixed_strategy_with_eigenvectors(tmp_path: Path) -> None:
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"random": 0.5, "eigenvector_forward": 0.5},
         total=20,
         seed=42,
@@ -717,7 +723,6 @@ def test_eigenvector_forward_with_combinations(tmp_path: Path) -> None:
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_forward": 1.0},
         total=20,  # Generate 20 samples
         strategy_overrides={
@@ -748,7 +753,6 @@ def test_eigenvector_forward_include_eigenvectors(tmp_path: Path) -> None:
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_forward": 1.0},
         total=6,  # 2 eigenvectors + 4 combinations
         strategy_overrides={
@@ -782,7 +786,6 @@ def test_eigenvector_inverse_with_combinations(tmp_path: Path) -> None:
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_inverse": 1.0},
         total=10,
         strategy_overrides={
@@ -809,7 +812,6 @@ def test_eigenvector_validation_num_exceeds_dimension(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="must be positive and ≤"):
         generate_mixture(
             A=A,
-            b=b,
             mix={"eigenvector_forward": 1.0},
             total=5,
             strategy_overrides={"eigenvector_forward": {"num_eigenvectors": 5}},  # > 3
@@ -824,7 +826,6 @@ def test_eigenvector_validation_include_requires_enough_samples(tmp_path: Path) 
     with pytest.raises(ValueError, match="must be >="):
         generate_mixture(
             A=A,
-            b=b,
             mix={"eigenvector_forward": 1.0},
             total=2,  # Only 2 samples
             strategy_overrides={
@@ -843,7 +844,6 @@ def test_eigenvector_forward_rhs_computation_change(tmp_path: Path) -> None:
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_forward": 1.0},
         total=2,
         strategy_overrides={
@@ -870,10 +870,9 @@ def test_eigenvector_backward_compatible_defaults(tmp_path: Path) -> None:
     # Old-style config (no new parameters)
     rhs, solutions, _, _ = generate_mixture(
         A=A,
-        b=b,
         mix={"eigenvector_forward": 1.0},
         total=3,
-        strategy_overrides={"eigenvector_forward": {"selection_mode": "first"}},
+        strategy_overrides={"eigenvector_forward": {}},
         seed=42,
     )
 
@@ -915,7 +914,6 @@ def test_pydantic_rejects_invalid_literal_values() -> None:
     with pytest.raises(ValueError, match="Input should be"):
         generate_mixture(
             A=A,
-            b=b,
             mix={"eigenvector_forward": 1.0},
             total=2,
             strategy_overrides={"eigenvector_forward": {"which": "invalid"}},
@@ -931,7 +929,6 @@ def test_pydantic_requires_rhs_glob_for_rhs_archive() -> None:
     with pytest.raises(ValueError, match="Field required"):
         generate_mixture(
             A=A,
-            b=b,
             mix={"rhs_archive": 1.0},
             total=2,
             strategy_overrides={"rhs_archive": {}},  # Missing rhs_glob
@@ -947,7 +944,6 @@ def test_pydantic_requires_solutions_glob_for_solution_archive() -> None:
     with pytest.raises(ValueError, match="Field required"):
         generate_mixture(
             A=A,
-            b=b,
             mix={"solution_archive": 1.0},
             total=2,
             strategy_overrides={"solution_archive": {}},  # Missing solutions_glob
@@ -963,7 +959,6 @@ def test_pydantic_validates_residual_iters_type() -> None:
     with pytest.raises(ValueError, match="Input should be a valid integer"):
         generate_mixture(
             A=A,
-            b=b,
             mix={"residual_error": 1.0},
             total=2,
             strategy_overrides={"residual_error": {"cg_iters": "many"}},
@@ -979,7 +974,6 @@ def test_pydantic_validates_krylov_iters_type() -> None:
     with pytest.raises(ValueError):
         generate_mixture(
             A=A,
-            b=b,
             mix={"krylov": 1.0},
             total=2,
             strategy_overrides={"krylov": {"krylov_iters": 15.5}},

@@ -6,7 +6,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.linalg import norm
 
-from neuralls.generation.base import normal_strategy, krylov_strategy, rng_from_seed
+from neuralls.generation.strategies.random_normal import RandomNormalStrategy
+from neuralls.generation.strategies.krylov import KrylovStrategy
 
 
 def test_normal_strategy_normalization():
@@ -23,8 +24,12 @@ def test_normal_strategy_normalization():
     print(f"  Mother RHS norm: {mother_rhs_norm:.6f}")
 
     # Generate samples
-    rng = rng_from_seed(42)
-    output = normal_strategy(A, b, count=100, rng=rng)
+    strategy = RandomNormalStrategy()
+    output = strategy.generate(
+        matrix=A,
+        cfg={"samples": 100, "seed": 42, "target_rhs_scale": 1.0},
+        archive=None
+    )
     R = output.rhs
     X = output.solutions
 
@@ -60,8 +65,12 @@ def test_krylov_strategy_normalization():
     print(f"  Mother RHS norm: {mother_rhs_norm:.6f}")
 
     # Generate samples
-    rng = rng_from_seed(42)
-    output = krylov_strategy(A, b, count=100, krylov_iters=10, rng=rng)
+    strategy = KrylovStrategy()
+    output = strategy.generate(
+        matrix=A,
+        cfg={"samples": 100, "seed": 42, "krylov_iters": 10},
+        archive=None
+    )
     R = output.rhs
     X = output.solutions
 
