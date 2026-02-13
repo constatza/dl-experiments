@@ -11,6 +11,7 @@ from typing import Any
 from collections.abc import Iterator
 
 import numpy as np
+import torch
 from loguru import logger
 
 from dlkit import load_model
@@ -82,7 +83,8 @@ def collect_predictions(
     predictions: list[Any] = []
     total_duration = 0.0
     for batch in iterate_feature_batches(feature_arrays, batch_size):
-        result = predictor.predict(batch)
+        tensor_batch = {k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()}
+        result = predictor.predict(tensor_batch)
         predictions.append(result.predictions)
         total_duration += getattr(result, "duration_seconds", 0.0)
     if not predictions:
@@ -134,21 +136,13 @@ def create_predictor(
         precision=PrecisionStrategy.FULL_64,
     )
 
-    # Verify transforms loaded from checkpoint
-    if hasattr(predictor, "model_state"):
-        feature_transforms = predictor.model_state.feature_transforms
-        target_transforms = predictor.model_state.target_transforms
-
-        if feature_transforms:
-            logger.info(
-                f"Loaded {len(feature_transforms)} feature transform chain(s) from checkpoint"
-            )
-        if target_transforms:
-            logger.info(
-                f"Loaded {len(target_transforms)} target transform chain(s) from checkpoint"
-            )
-    else:
-        logger.warning("Predictor missing model_state - cannot verify transforms")
+    # Verify transforms loaded from checkpoint (DLKit stores state in _model_state)
+    model_state = getattr(predictor, "_model_state", None)
+    if model_state is not None:
+        if model_state.feature_transforms:
+            logger.info(f"Loaded {len(model_state.feature_transforms)} feature transform chain(s) from checkpoint")
+        if model_state.target_transforms:
+            logger.info(f"Loaded {len(model_state.target_transforms)} target transform chain(s) from checkpoint")
 
     return predictor
 

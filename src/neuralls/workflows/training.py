@@ -470,12 +470,76 @@ def _configure_training_pipeline(
     return settings, workspace
 
 
+def _log_artifacts_to_mlflow(
+    tracking_uri: str,
+    artifacts_destination: str,
+    dataset_id: str,
+    run_name: str,
+    model_config_path: Path,
+    data_config_path: Path | None,
+    checkpoint_path: Path | None,
+) -> None:
+    """Copy run artifacts into the MLflow run's artifact directory.
+
+    Uses MlflowClient (SQLite) to look up exp_id/run_id, then copies files
+    directly to the filesystem. This avoids the HTTP server which is shut down
+    by DLKit before this function is called.
+
+    Layout:
+        {artifacts_destination}/{exp_id}/{run_id}/artifacts/configs/   <- TOML configs
+        {artifacts_destination}/{exp_id}/{run_id}/artifacts/checkpoints/ <- .ckpt
+
+    Args:
+        tracking_uri: SQLite tracking URI (backend_store_uri from model config).
+        artifacts_destination: Local filesystem path for MLflow artifacts.
+        dataset_id: MLflow experiment name.
+        run_name: MLflow run name matching workspace.run_id.
+        model_config_path: Original model config TOML.
+        data_config_path: Original data config TOML (or None).
+        checkpoint_path: Saved checkpoint file (or None if training produced none).
+    """
+    import shutil
+
+    import mlflow
+
+    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    experiment = client.get_experiment_by_name(dataset_id)
+    if experiment is None:
+        return
+
+    runs = client.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        filter_string=f"attributes.run_name = '{run_name}'",
+        max_results=1,
+    )
+    if not runs:
+        return
+
+    exp_id = experiment.experiment_id
+    run_id = runs[0].info.run_id
+    artifact_root = Path(artifacts_destination) / exp_id / run_id / "artifacts"
+
+    # Copy configs
+    configs_dir = artifact_root / "configs"
+    configs_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(model_config_path.resolve(), configs_dir / model_config_path.name)
+    if data_config_path is not None:
+        shutil.copy2(data_config_path.resolve(), configs_dir / data_config_path.name)
+
+    # Copy checkpoint
+    if checkpoint_path is not None:
+        ckpt_dir = artifact_root / "checkpoints"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(checkpoint_path, ckpt_dir / checkpoint_path.name)
+
+
 def train_model(
     *,
     config_path: str | Path,
     data_config_path: str | Path | None = None,
     session_name: str | None = None,
     output_root: Path | str | None = None,
+    max_epochs: int | None = None,
 ) -> Path:
     """Train a DLKit model using resolved data+config context.
 
@@ -536,6 +600,8 @@ def train_model(
 
     # Step 4: Execute training via DLKit
     # DLKit handles all MLflow operations including server startup and tracking
+    if max_epochs is not None:
+        settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
     execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
 
     # Step 5: Retrieve saved checkpoint
@@ -543,5 +609,21 @@ def train_model(
     checkpoint_path = get_latest_checkpoint(checkpoint_dir)
     if checkpoint_path is None:
         raise RuntimeError(f"No checkpoint found in {checkpoint_dir}")
+
+    # Step 6: Copy configs + checkpoint into MLflow artifacts directory
+    mlflow_cfg = getattr(settings, "MLFLOW", None)
+    server_cfg = getattr(mlflow_cfg, "server", None)
+    tracking_uri = getattr(server_cfg, "backend_store_uri", None) if server_cfg else None
+    artifacts_destination = getattr(server_cfg, "artifacts_destination", None) if server_cfg else None
+    if tracking_uri and artifacts_destination:
+        _log_artifacts_to_mlflow(
+            tracking_uri=tracking_uri,
+            artifacts_destination=artifacts_destination,
+            dataset_id=dataset_id,
+            run_name=workspace.run_id,
+            model_config_path=Path(config_path),
+            data_config_path=Path(data_config_path) if data_config_path else None,
+            checkpoint_path=checkpoint_path,
+        )
 
     return checkpoint_path

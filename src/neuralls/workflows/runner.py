@@ -39,6 +39,7 @@ def run_experiment(
     output_root: Path,
     force: bool,
     src_hash: str,
+    max_epochs: int | None = None,
 ) -> ExperimentResult:
     """Run data generation and model training for a single experiment.
 
@@ -95,6 +96,7 @@ def run_experiment(
                 config_path=model_config_path,
                 data_config_path=data_config_path,
                 output_root=output_root,
+                max_epochs=max_epochs,
             )
             logger.info(f"Training complete: {checkpoint}")
         else:
@@ -118,6 +120,7 @@ def run_experiment_matrix(
     *,
     force: bool = False,
     project_root: Path | None = None,
+    max_epochs: int | None = None,
 ) -> list[ExperimentResult]:
     """Run training for all experiments defined in experiments.toml.
 
@@ -185,6 +188,7 @@ def run_experiment_matrix(
             output_root=batch.output_root,
             force=force,
             src_hash=src_hash,
+            max_epochs=max_epochs,
         )
         results.append(result)
 
