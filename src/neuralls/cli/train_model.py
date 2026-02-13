@@ -27,6 +27,10 @@ def main(
         None,
         help="Path to data config providing dataset metadata",
     ),
+    max_epochs: int | None = typer.Option(
+        None,
+        help="Override max training epochs. Use a multiple of every_n_epochs (default 50) to ensure a checkpoint is saved.",
+    ),
 ) -> None:
     """Train model using configuration files."""
     if config is None:
@@ -40,6 +44,7 @@ def main(
         checkpoint_path = train_model(
             config_path=config,
             data_config_path=data_config,
+            max_epochs=max_epochs,
         )
 
         print(f"\nTraining complete. Checkpoint saved to: {checkpoint_path}")
@@ -47,6 +52,11 @@ def main(
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         print(f"Error: {exc}")
         raise typer.Exit(code=EXIT_FAILURE)
+
+
+def run() -> None:
+    """Entry point for pyproject.toml script registration."""
+    typer.run(main)
 
 
 if __name__ == "__main__":

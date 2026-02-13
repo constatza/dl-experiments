@@ -53,6 +53,11 @@ def main(
     logger.info(f"\n{SYMBOL_CHECKMARK} Comparison completed successfully!")
 
 
+def run() -> None:
+    """Entry point for pyproject.toml script registration."""
+    typer.run(main)
+
+
 if __name__ == "__main__":
     try:
         typer.run(main)

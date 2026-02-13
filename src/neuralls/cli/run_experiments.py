@@ -30,6 +30,10 @@ def main(
         "-f",
         help="Force re-train all models (ignore existing checkpoints)",
     ),
+    max_epochs: int | None = typer.Option(
+        None,
+        help="Override max training epochs (for quick tests)",
+    ),
 ) -> None:
     """Train all models defined in experiments.toml.
 
@@ -71,6 +75,7 @@ def main(
             experiments_config_path=config,
             force=force,
             project_root=DEFAULT_PROJECT_ROOT,
+            max_epochs=max_epochs,
         )
 
         print("\n" + "=" * 80)
@@ -89,6 +94,11 @@ def main(
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as e:
         print(f"\nError: {e}")
         raise typer.Exit(code=EXIT_FAILURE)
+
+
+def run() -> None:
+    """Entry point for pyproject.toml script registration."""
+    typer.run(main)
 
 
 if __name__ == "__main__":
