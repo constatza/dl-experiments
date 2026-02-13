@@ -180,18 +180,14 @@ class CGComparisonResult:
         ...     residual_abs=1e-8,
         ...     residual_history=[1.0, 0.1, 0.01, 0.001, 1e-8],
         ...     residual_history_abs=[1.0, 0.1, 0.01, 0.001, 1e-8],
-        ...     warm_start='neural',
         ...     preconditioner='jacobi',
-        ...     step_helper='none',
         ...     initial_guess=np.zeros(10),
         ...     exact_error=None,
         ...     rhs_norm=1.0,
         ...     breakdown=False,
-        ...     helper_iterations=[],
-        ...     helper_norms=[],
         ... )
-        >>> result.warm_start
-        'neural'
+        >>> result.preconditioner
+        'jacobi'
     """
 
     x: np.ndarray
@@ -215,14 +211,8 @@ class CGComparisonResult:
     residual_history_abs: list[float]
     """Absolute residual norms across iterations."""
 
-    warm_start: str
-    """Warm start strategy name (e.g., 'none', 'neural', 'precond')."""
-
     preconditioner: str
     """Preconditioner strategy name (e.g., 'none', 'jacobi', 'neural')."""
-
-    step_helper: str
-    """Step helper strategy name (e.g., 'none', 'neural')."""
 
     initial_guess: np.ndarray
     """Initial guess vector x_0."""
@@ -235,12 +225,6 @@ class CGComparisonResult:
 
     breakdown: bool
     """Whether numerical breakdown occurred."""
-
-    helper_iterations: list[int]
-    """Iterations where step helper was invoked."""
-
-    helper_norms: list[float]
-    """Residual norms after step helper application."""
 
     error: str | None = None
     """Error message if solver failed."""

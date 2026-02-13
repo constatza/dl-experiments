@@ -8,19 +8,17 @@ preconditioners. It follows clean architecture principles:
 - Pure orchestration in main function
 
 Architecture:
-    The comparison workflow consists of 12 clear steps:
+    The comparison workflow consists of 10 clear steps:
     1. Validate inputs
     2. Resolve paths (matrix, rhs, output, figures)
     3. Load and validate linear system
     4. Create preconditioners via service (uses factory function)
     5. Compute condition numbers for diagnostics
-    6. Build solver options (iteration limits, fallbacks)
-    7. Create fallback preconditioner
-    8. Configure solver parameters
-    9. Run CG comparison
-    10. Generate recommendations
-    11. Generate plots (if enabled)
-    12. Return result
+    6. Wrap preconditioners with scheduling (iteration limits, fallbacks)
+    7. Run CG comparison
+    8. Generate recommendations
+    9. Generate plots (if enabled)
+    10. Return result
 
 Key Components:
     - `compare_preconditioners()`: Main entry point (orchestration only)
@@ -59,14 +57,14 @@ from collections.abc import Callable, Sequence
 
 import numpy as np
 
-from neuralls.configuration.preconditioner import PreconditionerConfig
+from neuralls.configuration.preconditioner import PreconditionerConfig, StandardPreconditionerConfig
 from neuralls.configuration.comparison import GeneralSolverConfig
 from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from neuralls.io.filesystem import ensure_dir
 from ..io.comparison import load_system_arrays
 from ..plotting import plot_convergence_comparison
-from ..solver.preconditioners import create_preconditioner
-from ..solver import (
+from ..solver.preconditioners import create_preconditioner, create_scheduled_preconditioner
+from .cg_runner import (
     format_results_summary,
     run_cg_comparison,
     summarize_best_combinations,
@@ -338,47 +336,50 @@ def _load_linear_system(paths: ComparisonPaths) -> LinearSystem:
     return LinearSystem(matrix=A, rhs=b)
 
 
-def _resolve_fallback_callable(
-    name: str, A: np.ndarray, preconditioners: dict[str, Any]
-) -> Callable[[np.ndarray], np.ndarray]:
-    """Resolve fallback preconditioner by name.
-
-    Creates preconditioners on-demand using the factory function.
-    """
-    # Check if already created
-    if name in preconditioners:
-        return preconditioners[name]
-
-    # Create on-demand using factory
-    from neuralls.configuration.preconditioner import StandardPreconditionerConfig
-
-    config = StandardPreconditionerConfig(name=name, type=name)
-    return create_preconditioner(A, config)
-
-
-def _build_solver_options(
+def _create_scheduled_preconditioners(
     preconditioner_configs: Sequence[PreconditionerConfig],
     matrix: np.ndarray,
-    preconditioners: dict[str, Callable],
-) -> dict[str, dict[str, Any]]:
-    """Build solver options for each preconditioner.
+    base_preconditioners: dict[str, Any],
+) -> dict[str, Any]:
+    """Wrap preconditioners with scheduling if configured.
 
     Args:
-        preconditioner_configs: Preconditioner configurations
-        matrix: System matrix
-        preconditioners: Created preconditioner functions
+        preconditioner_configs: Config objects with scheduling parameters
+        matrix: System matrix (needed for fallback creation)
+        base_preconditioners: Already-created preconditioner instances
 
     Returns:
-        Dictionary mapping solver names to options
+        Dict mapping names to scheduled preconditioner instances
     """
-    solver_options: dict[str, dict[str, Any]] = {}
+    from ..solver.preconditioners.base import Preconditioner
+
+    scheduled: dict[str, Any] = {}
+
     for cfg in preconditioner_configs:
-        limit = cfg.limit_iters if cfg.limit_iters >= 0 else None
-        solver_options[cfg.name] = {
-            "limit_iters": limit,
-            "fallback": _resolve_fallback_callable(cfg.fallback, matrix, preconditioners),
-        }
-    return solver_options
+        primary = base_preconditioners[cfg.name]
+
+        # Create fallback preconditioner if iteration limit is specified
+        fallback: Preconditioner | None = None
+        if cfg.limit_iters >= 0:
+            # Create fallback on-demand
+            if cfg.fallback in base_preconditioners:
+                fallback = base_preconditioners[cfg.fallback]
+            else:
+                fallback_config = StandardPreconditionerConfig(
+                    name=f"{cfg.name}_fallback",
+                    type=cfg.fallback,
+                )
+                fallback = create_preconditioner(matrix, fallback_config)
+
+        # Wrap with scheduling if limit_iters is specified
+        limit_iters = cfg.limit_iters if cfg.limit_iters >= 0 else None
+        scheduled[cfg.name] = create_scheduled_preconditioner(
+            primary=primary,
+            fallback=fallback,
+            limit_iters=limit_iters,
+        )
+
+    return scheduled
 
 
 def _generate_comparison_plots(
@@ -501,50 +502,31 @@ def compare_preconditioners(
     preconditioners = service.create_preconditioner_set(
         system.matrix, preconditioner_configs
     )
-    solver_types = {cfg.name: cfg.type for cfg in preconditioner_configs}
 
     # Step 5: Compute condition numbers for diagnostics
     cond_numbers = compute_condition_numbers(system.matrix, preconditioners)
 
-    # Step 6: Build solver options (iteration limits, fallbacks)
-    solver_options = _build_solver_options(
-        preconditioner_configs, system.matrix, preconditioners
+    # Step 6: Wrap preconditioners with scheduling if configured
+    scheduled_preconditioners = _create_scheduled_preconditioners(
+        preconditioner_configs=preconditioner_configs,
+        matrix=system.matrix,
+        base_preconditioners=preconditioners,
     )
 
-    # Step 7: Create fallback preconditioner (identity)
-    from neuralls.configuration.preconditioner import StandardPreconditionerConfig
-
-    fallback_config = StandardPreconditionerConfig(name="identity", type="identity")
-    fallback_precond = service.create_preconditioner(system.matrix, fallback_config)
-
-    # Step 8: Configure solver parameters
-    stopping_criterion = _map_stopping_criterion(general_params.stopping_criterion)
-
-    # Step 9: Run CG comparison
+    # Step 7: Run CG comparison with scheduled preconditioners
     results = run_cg_comparison(
         system.matrix,
         system.rhs,
-        preconditioners=preconditioners,
+        preconditioners=scheduled_preconditioners,
         rtol=general_params.rtol,
         atol=general_params.atol,
         maxiter=general_params.max_iterations,
-        stopping_criterion=stopping_criterion,
-        breakdown_tol=0.0,
         m_max=general_params.m_max,
-        precond_iters=None,
-        fallback_preconditioner=fallback_precond,
-        precond_every=1,
-        precond_first_n=None,
-        combination_plan=None,
-        limited_preconditioner=None,
-        solver_types=solver_types,
-        solver_options=solver_options,
     )
-
-    # Step 10: Generate recommendations (best solver combinations)
+    # Step 8: Generate recommendations (best solver combinations)
     recommendations = summarize_best_combinations(results)
 
-    # Step 11: Generate diagnostic plots (if enabled)
+    # Step 9: Generate diagnostic plots (if enabled)
     plot_paths = (
         _generate_comparison_plots(results, cond_numbers, paths)
         if save_plots

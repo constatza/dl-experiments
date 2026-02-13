@@ -108,13 +108,6 @@ from .monitoring.callbacks import SciPyCallbackAdapter, InitialStateComputer
 # Protocols for type-safe state access
 from .models.protocols import HasVectors, HasDirectionHistory
 
-# Comparison tools
-from .comparison import (
-    format_results_summary,
-    run_cg_comparison,
-    summarize_best_combinations,
-)
-
 # Utilities
 from .utils.numerics import stable_dot_product, compute_curvature, check_breakdown
 
@@ -166,10 +159,6 @@ __all__ = [
     # Protocols
     "HasVectors",
     "HasDirectionHistory",
-    # Comparison
-    "run_cg_comparison",
-    "format_results_summary",
-    "summarize_best_combinations",
     # Utilities
     "stable_dot_product",
     "compute_curvature",
