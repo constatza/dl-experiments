@@ -59,7 +59,7 @@ from .implementations import (
 )
 from .callable import CallablePreconditioner
 from .linear_operator import LinearOperatorPreconditioner
-from .builders import create_preconditioner
+from .builders import create_preconditioner, create_scheduled_preconditioner
 from .ports import PredictorPort, PredictorAdapter
 
 __all__ = [
@@ -81,6 +81,7 @@ __all__ = [
     "LinearOperatorPreconditioner",
     # Factory
     "create_preconditioner",
+    "create_scheduled_preconditioner",
     # Adapters
     "PredictorPort",
     "PredictorAdapter",

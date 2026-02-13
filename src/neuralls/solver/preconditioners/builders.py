@@ -122,3 +122,38 @@ def create_preconditioner(
         return Identity()
     else:
         return cls(matrix)  # type: ignore[call-arg]  # Matrix-based preconditioners
+
+
+def create_scheduled_preconditioner(
+    primary: Preconditioner,
+    fallback: Preconditioner | None = None,
+    limit_iters: int | None = None,
+) -> Preconditioner:
+    """Create a scheduled preconditioner if iteration limit is specified.
+
+    Args:
+        primary: Main preconditioner to apply
+        fallback: Preconditioner to use after limit (defaults to Identity)
+        limit_iters: Switch to fallback after N iterations (None = unlimited)
+
+    Returns:
+        ScheduledPreconditioner if limit_iters is specified, otherwise primary unchanged
+
+    Example:
+        >>> # Limit neural preconditioner to first 10 iterations
+        >>> scheduled = create_scheduled_preconditioner(
+        ...     primary=neural_precond,
+        ...     fallback=jacobi_precond,
+        ...     limit_iters=10,
+        ... )
+    """
+    if limit_iters is None:
+        return primary
+
+    from .implementations.scheduled import ScheduledPreconditioner
+
+    return ScheduledPreconditioner(
+        primary=primary,
+        fallback=fallback or Identity(),
+        limit_iters=limit_iters,
+    )
