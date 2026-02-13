@@ -18,6 +18,14 @@ dependencies = [
     "typer>=0.19.2",
 ]
 
+[project.scripts]
+compare-preconditioners = "neuralls.cli.compare_preconditioners:run"
+compare-single          = "neuralls.cli.compare_single:run"
+predict                 = "neuralls.cli.predict:run"
+process-data            = "neuralls.cli.process_data:run"
+run-experiments         = "neuralls.cli.run_experiments:run"
+train-model             = "neuralls.cli.train_model:run"
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"

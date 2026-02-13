@@ -25,10 +25,9 @@ seed = 42
 
 [[generation.strategy]]
 name = "cg_residual_error"
-samples = 10000          # TOTAL pairs (NOT base systems!)
-                         # num_base_systems = ceil(10000/50) = 200
-residual_iters = 50      # CG iterations per base system
-                         # Total pairs ≈ 200 × 50 = 10000
+samples = 200            # Base systems (solution files to load)
+                         # Total pairs = 200 × 50 = 10000
+cg_iters = 50            # CG iterations per base system
 solutions_glob = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 #[[generation.strategy]]

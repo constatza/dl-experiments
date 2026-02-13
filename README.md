@@ -11,9 +11,9 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 - `src/neuralls/` – Library code organized by functionality:
   - `cli/` – Command-line entry points for data processing, training, comparison, and orchestration
   - `configuration/` – Config loading, validation, and Pydantic models
-  - `solver/` – CG algorithms and preconditioner implementations
-  - `workflows/` – Prefect-based orchestration workflows
-  - `generation/` – Data synthesis and collection utilities
+  - `solver/` – CG algorithms and preconditioner implementations ([README](src/neuralls/solver/README.md))
+  - `workflows/` – High-level orchestration for experiments and comparisons ([README](src/neuralls/workflows/README.md))
+  - `generation/` – Data synthesis and collection utilities ([README](src/neuralls/generation/README.md))
   - `diagnostics/` – Logging, metrics, and analysis tools
 - `tests/` – End-to-end and unit coverage across CLI, configuration, generation, solver, and workflows.
 
@@ -125,15 +125,23 @@ from neuralls.solver.preconditioners import create_preconditioner
 
 **Moved functions:**
 - `load_solver_config()`: `io.comparison` → `io.toml_loader` (canonical location with other loaders)
+- `run_cg_comparison()`, `format_results_summary()`, `summarize_best_combinations()`: `solver/` → `workflows/` (architectural cleanup - comparison orchestration is a workflow concern, not core solver logic)
 
 **Import updates:**
 ```python
-# Before
-from neuralls.io.comparison import load_solver_config
+# Config loading
+from neuralls.io.toml_loader import load_solver_config  # ✓ Canonical location
 
-# After
-from neuralls.io.toml_loader import load_solver_config
+# Comparison orchestration
+from neuralls.workflows import run_cg_comparison  # ✓ Moved from solver module
+
+# Old import (deprecated)
+from neuralls.solver import run_cg_comparison  # ✗ No longer available
 ```
+
+**API simplification:**
+- Removed parameters: `apply_every` (preconditioners applied continuously), `first_n` (redundant with `limit_iters`)
+- Scheduling now handled by `ScheduledPreconditioner` wrapper (see `workflows/README.md`)
 
 ## Workflows and CLI
 
@@ -159,10 +167,27 @@ All CLI scripts are located in `src/neuralls/cli/` and use the `neuralls` packag
     --data-config configs/datasets/collect-504-solutions.toml
   ```
 
-- **Compare preconditioners** across experiments:
+- **Compare a single experiment** (isolated testing):
   ```bash
-uv run python src/neuralls/cli/compare_preconditioners.py --experiments configs/experiments.toml
+  uv run python src/neuralls/cli/compare_single.py \
+    --model-config configs/models/linear.toml \
+    --data-config configs/datasets/collect-504-solutions.toml \
+    --solver-config configs/solvers/default.toml
   ```
+
+- **Compare preconditioners** across experiments (batch processing):
+  ```bash
+  uv run python src/neuralls/cli/compare_preconditioners.py \
+    --experiments configs/experiments.toml \
+    --solver-config configs/solvers/default.toml
+  ```
+
+### Comparison Workflows
+
+The repository provides two tools for evaluating solver performance:
+
+1.  **`compare_single.py`**: Used during active development. It takes direct paths to a model and data configuration, resolves the latest checkpoint, and benchmarks it against baselines.
+2.  **`compare_preconditioners.py`**: Used for systematic reporting. It processes a master `experiments.toml` matrix, automatically running comparisons for all defined model/data combinations and providing an aggregated summary of the "Best Preconditioner" per experiment.
 
 - **Run full experiment matrix** (data + train + compare):
   ```bash
