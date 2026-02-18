@@ -1,4 +1,4 @@
-# Master configuration file for all experiments.
+# Master configuration file for all FFNN experiments.
 # Format: [[experiment]] entries with dataset + model refs.
 # Checkpoint paths are no longer stored here — they are resolved
 # via ComparisonRun produced by train-multiple.
@@ -11,26 +11,26 @@ tracking_uri      = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.d
 artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
 
 [[experiment]]
-id = "linear_test_solutions"
+id = "ffnn_test_solutions"
 dataset = "test-solutions"
-model = "linear"
+model = "ffnn"
 
 [[experiment]]
-id = "linear_test_eigenvector_solutions_largest"
+id = "ffnn_test_eigenvector_solutions_largest"
 dataset = "test-eigenvector-solutions-largest"
-model = "linear"
+model = "ffnn"
 
 [[experiment]]
-id = "linear_test_eigenvector_solutions_smallest"
+id = "ffnn_test_eigenvector_solutions_smallest"
 dataset = "test-eigenvector-solutions-smallest"
-model = "linear"
+model = "ffnn"
 
 [[experiment]]
-id = "linear_test_eigenvector_rhs_largest"
+id = "ffnn_test_eigenvector_rhs_largest"
 dataset = "test-eigenvector-rhs-largest"
-model = "linear"
+model = "ffnn"
 
 [[experiment]]
-id = "linear_test_eigenvector_rhs_smallest"
+id = "ffnn_test_eigenvector_rhs_smallest"
 dataset = "test-eigenvector-rhs-smallest"
-model = "linear"
+model = "ffnn"

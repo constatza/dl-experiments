@@ -43,9 +43,8 @@ def main(
     3. Trains all models (skips if checkpoint exists, unless --force)
 
     For solver comparison after training, use:
-        $ uv run python src/neuralls/cli/compare_preconditioners.py \\
-            --experiments configs/experiments.toml \\
-            --solver-config configs/solvers/default.toml
+        $ uv run train-multiple configs/experiments.toml
+        $ uv run compare-preconditioners --solver-config configs/solvers/default.toml --comparison-run output/training/comparison_run.json
 
     Example:
         # Train all experiments
