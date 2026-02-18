@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from typing import Any, Literal
 
 import numpy as np
+from loguru import logger
 from scipy.linalg import eigh, norm
 
 from ..constants import (
@@ -292,8 +293,8 @@ def _solve_linear_systems(
                 # Warn on convergence failure
                 if exit_code != 0:
                     residual = np.linalg.norm(A @ solution - rhs)
-                    print(
-                        f"Warning: System {idx + 1} CG exit_code={exit_code} "
+                    logger.warning(
+                        f"System {idx + 1} CG exit_code={exit_code} "
                         f"(residual: {residual:.2e})"
                     )
 

@@ -109,7 +109,7 @@ def _merge_rhs_archive_options(
     context: DataGenerationContext,
 ) -> dict[str, Any]:
     """Combine generation-level options with strategy-specific overrides."""
-    relevant_keys = ("solve_systems", "cg_tolerance", "cg_max_iters")
+    relevant_keys = ("cg_tolerance", "cg_max_iters")
     merged: dict[str, Any] = {}
 
     generation_cfg = context.generation_cfg

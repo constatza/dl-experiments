@@ -23,14 +23,11 @@ def load_data_config(config_path: Path) -> Mapping[str, Any]:
 
 def _apply_generation_overrides(
     config: Mapping[str, Any],
-    *,
-    solve_systems: bool | None = None,
 ) -> dict[str, Any]:
     """Apply generation section overrides to config (immutable).
 
     Args:
         config: Source configuration mapping.
-        solve_systems: Override for solve_systems flag.
 
     Returns:
         New config dict with overrides applied.
@@ -38,17 +35,12 @@ def _apply_generation_overrides(
     config_copy = dict(config)
     generation = dict(config_copy.get("generation", {}))
 
-    if solve_systems is not None:
-        generation["solve_systems"] = solve_systems
-
     config_copy["generation"] = generation
     return config_copy
 
 
 def process_data_from_config(
     config_path: Path,
-    *,
-    solve_systems: bool | None = None,
 ) -> Path:
     """Unified entry point for data collection and generation.
 
@@ -57,14 +49,10 @@ def process_data_from_config(
 
     Args:
         config_path: Path to TOML data configuration file.
-        solve_systems: Override for solve_systems flag (collection mode).
 
     Returns:
         Path to output dataset directory.
     """
     config = load_data_config(config_path)
-    config = _apply_generation_overrides(
-        config,
-        solve_systems=solve_systems,
-    )
+    config = _apply_generation_overrides(config)
     return process_config(config, config_path=config_path)

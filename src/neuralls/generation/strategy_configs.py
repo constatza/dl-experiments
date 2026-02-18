@@ -197,14 +197,15 @@ class RhsArchiveConfig(BaseStrategyConfig):
     rhs_glob: str = Field(
         ..., description="Glob pattern for RHS files to load. Overrides source.rhs_path."
     )
-    cg_tolerance: float = Field(
-        MIN_TOLERANCE, description="CG convergence tolerance.", ge=MIN_TOLERANCE
-    )
-    cg_max_iters: int = Field(
-        MAX_ITERATIONS_UPPER_LIMIT,
-        description="Maximum CG iterations.",
-        ge=1,
-        le=MAX_ITERATIONS_UPPER_LIMIT,
+    solve_config: SolveConfig = Field(
+        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
+            method="cg",
+            rtol=MIN_TOLERANCE,
+            atol=0.0,
+            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
+            assume_pos_def=True,
+        ),
+        description="Configuration for solving linear systems x = A^-1 @ b",
     )
 
 

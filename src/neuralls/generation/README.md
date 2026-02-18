@@ -4,6 +4,16 @@ This module implements a plugin-based strategy pattern for generating training d
 for neural CG solvers and preconditioners. Each strategy encapsulates a specific
 algorithm for producing training pairs from a system matrix **A**.
 
+## Entry Point
+
+Use the **`process-data`** CLI to execute data generation or collection from a config file:
+
+```bash
+uv run process-data configs/datasets/my-dataset.toml
+```
+
+- `config`: (Argument) Path to the data configuration TOML.
+
 ## Quick Reference
 
 | Strategy | Requires b | Output | Description |
@@ -341,9 +351,9 @@ Unlike residual/error strategies, this doesn't require known solutions.
    b₁, b₂, ..., bₙ ← files matching rhs_glob
    ```
 
-2. **Solve each system** using scipy CG:
+2. **Solve each system** using configured solver (CG or direct):
    ```
-   xᵢ = CG(A, bᵢ, tol=ε, maxiter=M)
+   xᵢ = solve(A, bᵢ, cfg=solve_config)
    ```
 
 **Output:** {(bᵢ, xᵢ)}ᵢ₌₁ᴺ
@@ -351,8 +361,7 @@ Unlike residual/error strategies, this doesn't require known solutions.
 **Parameters:**
 - `samples`: N files to load (−1 for all)
 - `rhs_glob`: file pattern (e.g., `/data/rhs_*.txt`)
-- `cg_tolerance`: ε
-- `cg_max_iters`: M
+- `solve_config`: Configurable solving parameters (method, rtol, atol, max_iters)
 
 ---
 

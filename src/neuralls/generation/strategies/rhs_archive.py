@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 from ..interfaces import GeneratedSamples, ArchiveData
 from ..providers import FileInputProvider
@@ -39,18 +40,17 @@ class RhsArchiveStrategy:
         - samples (int): Number of files to load (-1 for all)
         - shuffle (bool): Whether to shuffle file selection (default: False)
         - seed (int | None): Random seed for shuffling (required if shuffle=True)
-        - cg_tolerance (float): CG relative tolerance (default: 1e-12)
-        - cg_max_iters (int): CG max iterations (default: 500)
+        - solve_config (SolveConfig): Configuration for solving systems (rtol, atol, etc.)
 
     Note:
         This strategy ALWAYS solves systems to produce valid (b, A^-1@b) training pairs.
 
     Examples:
-        >>> # Load first 100 RHS files and solve
+        >>> # Load first 100 RHS files and solve with specific tolerances
         >>> cfg = {
         ...     "rhs_glob": "/data/rhs_*.txt",
         ...     "samples": 100,
-        ...     "cg_tolerance": 1e-12,
+        ...     "solve_config": {"method": "cg", "rtol": 1e-12, "atol": 1e-15}
         ... }
         >>> samples = strategy.generate(matrix, None, cfg=cfg)
 
@@ -83,8 +83,7 @@ class RhsArchiveStrategy:
                 - samples: Number of files to load
                 - shuffle: Whether to shuffle file selection
                 - seed: Random seed for shuffling
-                - cg_tolerance: CG relative tolerance
-                - cg_max_iters: CG max iterations
+                - solve_config: SolveConfig or dict with solve parameters
             archive: Optional pre-loaded archive data (ignored by this strategy as it loads from disk)
 
         Returns:
@@ -102,10 +101,9 @@ class RhsArchiveStrategy:
         samples = config.samples
         shuffle = config.shuffle
         seed = config.seed
-        cg_tolerance = config.cg_tolerance
-        cg_max_iters = config.cg_max_iters
+        solve_cfg = config.solve_config
 
-        print(f"Loading RHS vectors from archive: {rhs_glob}")
+        logger.info(f"Loading RHS vectors from archive: {rhs_glob}")
 
         # Layer 1: Input provision (load from files)
         provider = FileInputProvider(
@@ -116,17 +114,17 @@ class RhsArchiveStrategy:
         rng = np.random.default_rng(seed)
         rhs = provider.provide(matrix, count=samples, rng=rng)
 
-        print(f"Loaded {len(rhs)} RHS vectors")
+        logger.info(f"Loaded {len(rhs)} RHS vectors")
 
         # Layer 2: Transformation (solve systems)
-        print(f"Solving {len(rhs)} linear systems...")
+        logger.info(f"Solving {len(rhs)} linear systems using {solve_cfg.method}...")
         transform = SolveTransform(
             matrix,
-            method="cg",
-            rtol=cg_tolerance,
-            atol=0.0,
-            max_iters=cg_max_iters,
-            assume_pos_def=True,
+            method=solve_cfg.method,
+            rtol=solve_cfg.rtol,
+            atol=solve_cfg.atol,
+            max_iters=solve_cfg.max_iters,
+            assume_pos_def=solve_cfg.assume_pos_def,
         )
         solutions = transform.transform(rhs)
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 from ..interfaces import GeneratedSamples, ArchiveData
 from ..providers import FileInputProvider
@@ -94,7 +95,7 @@ class SolutionArchiveStrategy:
         shuffle = config.shuffle
         seed = config.seed
 
-        print(f"Loading solution vectors from archive: {solutions_glob}")
+        logger.info(f"Loading solution vectors from archive: {solutions_glob}")
 
         # Layer 1: Input provision (load from files)
         provider = FileInputProvider(
@@ -105,10 +106,10 @@ class SolutionArchiveStrategy:
         rng = np.random.default_rng(seed)
         solutions = provider.provide(matrix, count=samples, rng=rng)
 
-        print(f"Loaded {len(solutions)} solution vectors")
+        logger.info(f"Loaded {len(solutions)} solution vectors")
 
         # Layer 2: Transformation (compute RHS from solutions)
-        print(f"Computing RHS for {len(solutions)} solutions...")
+        logger.info(f"Computing RHS for {len(solutions)} solutions...")
         transform = ComputeRhsTransform(matrix)
         rhs = transform.transform(solutions)
 

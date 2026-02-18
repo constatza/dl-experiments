@@ -36,11 +36,6 @@ def main(
         ...,
         help="Path to data-config file (TOML)",
     ),
-    solve: bool = typer.Option(
-        True,
-        "--solve/--no-solve",
-        help="Solve linear systems via CG (for collection mode)",
-    ),
 ) -> None:
     """Process data via unified pipeline using configuration files.
 
@@ -55,10 +50,7 @@ def main(
     """
     try:
         print(f"Loading data config: {config}")
-        output_path = process_data_from_config(
-            config,
-            solve_systems=solve,
-        )
+        output_path = process_data_from_config(config)
 
         print(f"\n{SYMBOL_SUCCESS} Data processing complete!")
         print(f"  Output: {output_path}")

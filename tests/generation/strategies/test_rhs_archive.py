@@ -52,7 +52,15 @@ def test_rhs_archive_solves_ax_equals_b(
 ) -> None:
     """Returned solutions satisfy A @ x = b within tolerance."""
     files, glob_pattern = rhs_files
-    cfg = {"rhs_glob": glob_pattern, "samples": 2, "cg_tolerance": 1e-10, "cg_max_iters": 100}
+    cfg = {
+        "rhs_glob": glob_pattern,
+        "samples": 2,
+        "solve_config": {
+            "method": "cg",
+            "rtol": 1e-10,
+            "max_iters": 100,
+        },
+    }
 
     result = run_generation("rhs_archive", spd_matrix, cfg=cfg)
 

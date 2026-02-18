@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 from ..interfaces import GeneratedSamples, ArchiveData
 from ..providers import PairedFileInputProvider
@@ -111,7 +112,7 @@ class ValidatedArchiveStrategy:
         verification_tolerance = config.verification_tolerance
         fail_on_invalid = config.fail_on_invalid
 
-        print(
+        logger.info(
             f"Loading (solution, RHS) pairs from archive:\n"
             f"  Solutions: {solutions_glob}\n"
             f"  RHS: {rhs_glob}"
@@ -127,16 +128,16 @@ class ValidatedArchiveStrategy:
         rng = np.random.default_rng(seed)
         solutions, rhs = provider.provide(matrix, count=samples, rng=rng)
 
-        print(f"Loaded {len(solutions)} (solution, RHS) pairs")
+        logger.info(f"Loaded {len(solutions)} (solution, RHS) pairs")
 
         # Layer 2: Transformation (verify consistency)
-        print(f"Verifying consistency (tolerance: {verification_tolerance:.2e})...")
+        logger.info(f"Verifying consistency (tolerance: {verification_tolerance:.2e})...")
         transform = VerifyTransform(matrix, tolerance=verification_tolerance)
         residuals = transform.transform((solutions, rhs))
 
         # Report results
         max_error = float(np.max(residuals))
-        print(f"Verification complete: max relative error = {max_error:.2e}")
+        logger.info(f"Verification complete: max relative error = {max_error:.2e}")
 
         # Check for invalid pairs
         invalid_indices = np.where(residuals > verification_tolerance)[0].tolist()
@@ -156,7 +157,7 @@ class ValidatedArchiveStrategy:
                     else f"{msg}\nInvalid indices: {invalid_indices}"
                 )
             else:
-                print(f"Warning: {msg}")
+                logger.warning(f"{msg}")
 
         return GeneratedSamples(
             matrix=matrix,

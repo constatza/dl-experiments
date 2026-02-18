@@ -143,10 +143,9 @@ def test_validated_archive_generate_invalid_warn(
     assert samples.rhs is not None
     assert samples.solutions is not None
 
-    # Check that warning was printed
+    # Check that warning was printed (loguru sends to stderr by default in conftest)
     captured = capsys.readouterr()
-    assert "Warning:" in captured.out
-    assert "invalid pairs" in captured.out
+    assert "Found 5/5 invalid pairs" in captured.err
 
 
 def test_validated_archive_shuffle(
