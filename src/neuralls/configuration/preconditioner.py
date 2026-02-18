@@ -83,7 +83,8 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
     """Neural preconditioner configuration."""
 
     type: Literal[PreconditionerType.NEURAL] = PreconditionerType.NEURAL  # type: ignore[assignment]
-    checkpoint_path: Path
+    checkpoint_path: Path | None = None
+    experiment: str | None = None
     config_path: Path | None = None
     data_config_path: Path | None = None
     limit_iters: int = Field(

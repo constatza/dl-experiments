@@ -284,11 +284,16 @@ def _resolve_comparison_paths(
     matrix_file = Path(general_params.matrix_path)
     rhs_file = Path(general_params.rhs_path)
 
-    base_root = output_root or getattr(general_params, "output_root", None)
-    if base_root is None:
-        raise ValueError("output_root must be set in solver general config.")
+    if output_root is not None:
+        # Caller supplies exact directory — use as-is (no timestamp suffix)
+        output_base = Path(output_root).expanduser().resolve()
+    else:
+        configured_root = getattr(general_params, "output_root", None)
+        if not configured_root:
+            raise ValueError("output_root must be set in solver general config.")
+        matrix_stem = Path(general_params.matrix_path).stem
+        output_base = Path(configured_root).expanduser().resolve() / matrix_stem
 
-    output_base = Path(base_root).expanduser().resolve()
     figs_base = Path(figures_root) if figures_root else output_base / "figures"
 
     return ComparisonPaths(
@@ -300,14 +305,16 @@ def _resolve_comparison_paths(
 
 
 def _ensure_comparison_directories(paths: ComparisonPaths) -> None:
-    """Ensure output directories exist.
+    """Ensure the figures directory exists.
 
-    Creates directories if they don't exist. Safe to call multiple times.
+    Only the figures subdirectory needs explicit creation; the output root
+    is either caller-supplied or an MLflow-managed artifact directory.
+    ``mkdir(parents=True)`` inside ``ensure_dir`` creates any intermediate
+    directories (including ``paths.output``) as a side effect.
 
     Args:
         paths: Comparison paths with output and figures directories
     """
-    ensure_dir(paths.output)
     ensure_dir(paths.figures)
 
 
@@ -398,12 +405,16 @@ def _generate_comparison_plots(
         Dictionary mapping plot types to paths
     """
     suffix = paths.matrix.stem or "comparison"
-    plot_condition_numbers(cond_numbers, save_dir=paths.figures, suffix=suffix)
+    cond_path = plot_condition_numbers(cond_numbers, save_dir=paths.figures, suffix=suffix)
 
     convergence_path = paths.figures / f"preconditioner_convergence_{suffix}.png"
     plot_convergence_comparison(results, metadata=None, save_path=convergence_path)
 
-    return {"convergence": convergence_path}
+    plot_paths = {"convergence": convergence_path}
+    if cond_path:
+        plot_paths["condition_numbers"] = cond_path
+
+    return plot_paths
 
 
 def compare_preconditioners(
@@ -539,6 +550,8 @@ def compare_preconditioners(
         summary=format_results_summary(results),
         plot_paths=plot_paths,
         preconditioners=list(preconditioners.keys()),
+        condition_numbers=cond_numbers,
         solver_params=general_params,
         recommendations=recommendations,
+        output_dir=paths.output,
     )

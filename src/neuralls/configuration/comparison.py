@@ -19,6 +19,22 @@ from neuralls.constants import (
 from neuralls.configuration.preconditioner import PreconditionerConfig
 
 
+class ComparisonsTrackingConfig(BaseModel):
+    """Explicit MLflow coordinates for the comparisons DB.
+
+    Reused in both experiments config and solver config.
+
+    Attributes:
+        tracking_uri: SQLite URI for the comparisons DB.
+        artifact_location: Absolute path for comparison artifacts.
+    """
+
+    tracking_uri: str = Field(..., description="SQLite URI for the comparisons DB")
+    artifact_location: str = Field(..., description="Absolute path for comparison artifacts")
+
+    model_config = ConfigDict(frozen=True)
+
+
 class GeneralSolverConfig(BaseModel):
     """Validates [general] section from solver comparison TOML."""
 
@@ -66,6 +82,13 @@ class GeneralSolverConfig(BaseModel):
     output_root: Path = Field(
         ...,
         description="Base directory for comparison outputs",
+    )
+    comparisons: ComparisonsTrackingConfig | None = Field(
+        default=None,
+        description=(
+            "MLflow config for comparisons DB. Required in standalone mode "
+            "(no ComparisonRun); optional in pipeline mode."
+        ),
     )
 
     model_config = ConfigDict(

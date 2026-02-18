@@ -65,6 +65,10 @@ class ComparisonResult(BaseModel):
         default_factory=list,
         description="List of preconditioner names tested",
     )
+    condition_numbers: dict[str, float] = Field(
+        default_factory=dict,
+        description="Condition numbers of preconditioned matrices",
+    )
     solver_params: Any = Field(
         ...,
         description="Solver parameters used (GeneralSolverParams)",
@@ -72,6 +76,10 @@ class ComparisonResult(BaseModel):
     recommendations: dict[str, Any] = Field(
         default_factory=dict,
         description="Best solver recommendations",
+    )
+    output_dir: Path | None = Field(
+        default=None,
+        description="Output directory where comparison artefacts were saved",
     )
 
     model_config = ConfigDict(

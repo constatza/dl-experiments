@@ -1,3 +1,9 @@
+# Standalone solver config with explicit checkpoint_path.
+# For standalone mode (no ComparisonRun needed):
+#   uv run compare-preconditioners --solver-config configs/solvers/default.toml
+# For pipeline mode (with ComparisonRun from train-multiple):
+#   uv run compare-preconditioners --solver-config configs/solvers/default.toml --comparison-run <path>
+
 [general]
 rtol = 1.0e-9
 atol = 1.0e-14
@@ -10,6 +16,10 @@ output_root = "/data/projects/graph-cg/data/output"
 # CG algorithm control parameters
 m_max = 10  # FCG(m) orthogonalization window size. Use -1 for full orthogonalization.
 
+[general.comparisons]
+tracking_uri      = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
+artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
+
 # Solver entries (names are display labels; type must map to a known solver/preconditioner key)
 [[solvers]]
 name = "none"
@@ -20,13 +30,13 @@ name = "jacobi"
 type = "jacobi"
 
 [[solvers]]
-name = "ilu"
-type = "ilu"
+name = "ic0"
+type = "ic0"
 
 [[solvers]]
 name = "neural"
 type = "neural"
 # Preconditioner control parameters
 limit_iters = 1  # 0 = unlimited, N = apply for first N iterations
-fallback = "identity"  # Fallback preconditioner after limit_iters: "identity", "jacobi", "ilu"
+fallback = "identity"  # Fallback preconditioner after limit_iters: "identity", "jacobi", "ic0"
 checkpoint_path = "/data/projects/graph-cg/data/output/test-solutions/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"

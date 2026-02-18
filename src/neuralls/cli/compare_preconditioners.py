@@ -1,31 +1,41 @@
 #!/usr/bin/env python3
-"""CLI wrapper for preconditioner comparison (aggregated per solver config).
+"""CLI wrapper for preconditioner comparison.
 
-Experiments (optional) are only used to resolve neural checkpoints; the comparison itself
-runs once for the provided solver config and writes shared diagnostics."""
+Supports two modes:
+- Pipeline mode: with ``--comparison-run`` from ``train-multiple``.
+- Standalone mode: without ``--comparison-run``; solver config must have
+  ``[general.comparisons]`` and neural specs must have explicit ``checkpoint_path``.
+
+Usage::
+
+    # Standalone mode (no ComparisonRun needed)
+    uv run compare-preconditioners --solver-config configs/solvers/default.toml
+
+    # Pipeline mode (with ComparisonRun from train-multiple)
+    uv run compare-preconditioners \\
+        --solver-config configs/solvers/default.toml \\
+        --comparison-run output/training/comparison_run.json
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-
-
 import os
+from pathlib import Path
 
 import typer
 from loguru import logger
 
 from neuralls.constants import (
-    DEFAULT_EXPERIMENTS_CONFIG,
-    DEFAULT_PROJECT_ROOT,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_CHECKMARK,
 )
-from neuralls.workflows.comparison import run_batch_comparison
+from neuralls.workflows.comparison import run_comparison
+from neuralls.workflows.comparison_run import load_comparison_run
 from neuralls.workflows.results import ComparisonResult
 from neuralls.workflows.specs import (
-    ComparisonParams,
     ComparisonOutcome,
+    ComparisonParams,
 )
 
 os.environ.setdefault("MPLBACKEND", "Agg")
@@ -55,7 +65,7 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
     failed = [o for o in outcomes if not o.success]
     for outcome in outcomes:
         logger.info("=" * 80)
-        logger.info(f"Experiment: {outcome.name}")
+        logger.info(f"Solver config: {outcome.name}")
         logger.info("=" * 80)
         if outcome.success and outcome.payload:
             _log_comparison_results(outcome.payload)
@@ -66,7 +76,7 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
     logger.info("=" * 80)
     logger.info("FINAL SUMMARY")
     logger.info("=" * 80)
-    logger.info(f"Total experiments: {len(outcomes)}")
+    logger.info(f"Total comparisons: {len(outcomes)}")
     logger.info(f"Successful: {len(successful)}")
     logger.info(f"Failed: {len(failed)}")
     if failed:
@@ -77,17 +87,21 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
 
 
 def main(
-    experiments: Path = typer.Option(
-        None,
-        "--experiments",
-        "-e",
-        help="Path to experiments config (defaults to configs/experiments.toml)",
-    ),
     solver_config: Path = typer.Option(
         ...,
         "--solver-config",
         "-s",
         help="Path to solver config (e.g., configs/solvers/default.toml)",
+    ),
+    comparison_run: Path | None = typer.Option(
+        default=None,
+        help=(
+            "Path to comparison_run.json produced by train-multiple "
+            "(e.g., output/training/comparison_run.json). "
+            "Optional: if omitted, solver config must have [general.comparisons] "
+            "and neural specs must have explicit checkpoint_path."
+        ),
+        exists=True,
     ),
     plots: bool = typer.Option(
         True,
@@ -95,15 +109,26 @@ def main(
         help="Save comparison plots to disk (default: True)",
     ),
 ) -> None:
-    """Compare preconditioner methods using configuration files."""
-    experiments_path = (
-        experiments if experiments is not None else DEFAULT_PROJECT_ROOT / DEFAULT_EXPERIMENTS_CONFIG
-    )
+    """Compare preconditioner methods using solver config.
+
+    Supports pipeline mode (with --comparison-run) and standalone mode (without).
+    """
+    cr = None
+    if comparison_run is not None:
+        try:
+            cr = load_comparison_run(comparison_run)
+        except (FileNotFoundError, KeyError) as exc:
+            logger.error(f"Could not load comparison run from '{comparison_run}': {exc}")
+            raise typer.Exit(code=EXIT_FAILURE) from exc
+        logger.info(f"Loaded comparison_run_id = {cr.mlflow_run_id}")
+    else:
+        logger.info("Standalone mode: no comparison_run provided")
+
     params = ComparisonParams(save_plots=plots)
 
     try:
-        outcomes = run_batch_comparison(experiments_path, solver_config, params)
-    except ValueError as exc:
+        outcomes = run_comparison(solver_config, params, cr)
+    except (ValueError, KeyError) as exc:
         logger.error(str(exc))
         raise typer.Exit(code=EXIT_FAILURE) from exc
 
