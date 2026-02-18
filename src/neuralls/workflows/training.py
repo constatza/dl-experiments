@@ -24,6 +24,9 @@ Key Functions:
 from __future__ import annotations
 
 
+import os
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -42,7 +45,10 @@ from dlkit.tools.config.dataset_settings import DatasetSettings
 
 from neuralls.configuration import ExperimentWorkspace
 from neuralls.configuration.loader import load_experiment
+from neuralls.constants import DEFAULT_OUTPUT_DIR
 from neuralls.io.checkpoints import get_latest_checkpoint
+from neuralls.workflows.diagnostics import compute_diagnostics
+from neuralls.workflows.inference.output import write_mlflow_sidecar
 
 
 @dataclass(frozen=True)
@@ -478,7 +484,7 @@ def _log_artifacts_to_mlflow(
     model_config_path: Path,
     data_config_path: Path | None,
     checkpoint_path: Path | None,
-) -> None:
+) -> tuple[str, str] | None:
     """Copy run artifacts into the MLflow run's artifact directory.
 
     Uses MlflowClient (SQLite) to look up exp_id/run_id, then copies files
@@ -497,6 +503,9 @@ def _log_artifacts_to_mlflow(
         model_config_path: Original model config TOML.
         data_config_path: Original data config TOML (or None).
         checkpoint_path: Saved checkpoint file (or None if training produced none).
+
+    Returns:
+        Tuple of (exp_id, run_id), or None if the run was not found.
     """
     import shutil
 
@@ -505,7 +514,7 @@ def _log_artifacts_to_mlflow(
     client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
     experiment = client.get_experiment_by_name(dataset_id)
     if experiment is None:
-        return
+        return None
 
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
@@ -513,7 +522,7 @@ def _log_artifacts_to_mlflow(
         max_results=1,
     )
     if not runs:
-        return
+        return None
 
     exp_id = experiment.experiment_id
     run_id = runs[0].info.run_id
@@ -532,6 +541,68 @@ def _log_artifacts_to_mlflow(
         ckpt_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(checkpoint_path, ckpt_dir / checkpoint_path.name)
 
+    return exp_id, run_id
+
+
+def _log_training_evaluation(
+    tracking_uri: str,
+    run_id: str,
+    exp_id: str,
+    artifacts_destination: str,
+    training_result: Any,
+    figures_dir: Path,
+) -> None:
+    """Compute diagnostics from training predictions and log to existing MLflow run.
+
+    Uses the predictions and targets already captured by `trainer.predict()` during
+    training. No additional inference step is executed. Targets come from the same
+    data split as predictions, so shapes are guaranteed to align.
+
+    Also produces a 2-panel parity+residuals figure and copies it directly to the
+    MLflow artifact filesystem under ``figures/diagnostics_training.png``.
+    Direct filesystem copy avoids the MLflow HTTP server (already shut down by DLKit).
+
+    Args:
+        tracking_uri: SQLite tracking URI.
+        run_id: Existing MLflow run ID to reopen.
+        exp_id: MLflow experiment ID (for filesystem artifact path).
+        artifacts_destination: Local filesystem path for MLflow artifacts.
+        training_result: DLKit TrainingResult with captured predictions and targets.
+        figures_dir: Directory to write the diagnostics figure.
+    """
+    import shutil
+
+    import mlflow
+
+    from neuralls.plotting import plot_parity_and_residuals
+
+    y_pred = training_result.stacked_predictions()
+    y_true = training_result.stacked_targets()
+    if y_pred is None or y_true is None:
+        return
+
+    diagnostics = compute_diagnostics(y_pred, y_true)
+
+    figure_path = figures_dir / "diagnostics_training.png"
+    plot_parity_and_residuals(
+        y_true.ravel(),
+        y_pred.ravel(),
+        rel_l2_error=diagnostics.rel_error,
+        save_path=figure_path,
+    )
+
+    # Log metrics via SQLite (no HTTP server needed)
+    mlflow.set_tracking_uri(tracking_uri)
+    with mlflow.start_run(run_id=run_id):
+        mlflow.log_metrics(diagnostics.metrics)
+
+    # Copy figure directly to artifact filesystem (HTTP server is already shut down)
+    artifact_figures_dir = (
+        Path(artifacts_destination) / exp_id / run_id / "artifacts" / "figures"
+    )
+    artifact_figures_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(figure_path, artifact_figures_dir / figure_path.name)
+
 
 def train_model(
     *,
@@ -540,15 +611,21 @@ def train_model(
     session_name: str | None = None,
     output_root: Path | str | None = None,
     max_epochs: int | None = None,
+    parent_run_id: str | None = None,
 ) -> Path:
     """Train a DLKit model using resolved data+config context.
 
     This is the main entry point for model training. It orchestrates:
-    1. Load experiment configuration (model + data configs)
+    1. Load experiment configuration (model + data configs) into a temp dir
     2. Load training data from normalized.npz
     3. Configure DLKit settings (dataset, paths, MLflow)
     4. Execute training via DLKit
-    5. Return path to saved checkpoint
+    5. Copy checkpoint to permanent location under output_root
+    6. Return path to saved checkpoint
+
+    The workspace (checkpoints, figures, predictions) is created in a temporary
+    directory and deleted after training. Only the final checkpoint and sidecar
+    are copied to the permanent ``output_root / "checkpoints" / dataset_id``.
 
     DLKit handles all MLflow operations including server startup and tracking.
 
@@ -556,10 +633,13 @@ def train_model(
         config_path: Path to model configuration TOML (e.g., configs/linear.toml)
         data_config_path: Path to data configuration TOML (e.g., data-configs/collect-504.toml)
         session_name: Optional session name for MLflow (unused, for compatibility)
-        output_root: Optional custom output root (defaults to constants.DEFAULT_OUTPUT_ROOT)
+        output_root: Root directory for the permanent checkpoint. Defaults to
+            ``DEFAULT_OUTPUT_DIR`` from constants.
+        parent_run_id: Optional MLflow parent run UUID. When set, the training run is
+            nested as a child of the given parent via ``MLFLOW_PARENT_RUN_ID``.
 
     Returns:
-        Path to saved model checkpoint (.ckpt file)
+        Path to saved model checkpoint (.ckpt file) in the permanent location
 
     Raises:
         RuntimeError: If no checkpoint found after training
@@ -571,59 +651,97 @@ def train_model(
         ...     data_config_path="data-configs/collect-504.toml",
         ... )
         >>> print(checkpoint)
-        Path('output/collect-504/linear/2025-12-30T15-24-30/checkpoints/epoch=9-step=1000.ckpt')
+        Path('output/checkpoints/collect-504/linear.ckpt')
     """
-    # Step 1: Load experiment configuration
-    # Creates workspace directories and loads both model + data configs
-    experiment = load_experiment(
-        config_path,
-        data_config_path,
-        output_root=output_root,
-    )
-    settings = experiment.settings
-    workspace = experiment.workspace
-    dataset_id = experiment.spec.data_config_path.stem
+    with tempfile.TemporaryDirectory(prefix="neuralls_train_") as _tmp:
+        tmp_path = Path(_tmp)
 
-    # Step 2: Load training data from normalized.npz
-    # Creates Feature/Target configs with in-memory arrays
-    _, features, targets = _load_and_prepare_data(settings, workspace)
+        # Step 1: Load experiment configuration into temp dir
+        experiment = load_experiment(
+            config_path,
+            data_config_path,
+            output_root=tmp_path,
+        )
+        settings = experiment.settings
+        workspace = experiment.workspace
+        dataset_id = experiment.spec.data_config_path.stem
 
-    # Step 3: Configure DLKit settings
-    # Applies three transformations: dataset, paths, MLflow
-    settings, workspace = _configure_training_pipeline(
-        settings,
-        workspace,
-        features,
-        targets,
-        dataset_id,
-    )
+        # Step 2: Load training data from normalized.npz
+        _, features, targets = _load_and_prepare_data(settings, workspace)
 
-    # Step 4: Execute training via DLKit
-    # DLKit handles all MLflow operations including server startup and tracking
-    if max_epochs is not None:
-        settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
-    execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
-
-    # Step 5: Retrieve saved checkpoint
-    checkpoint_dir = workspace.checkpoint_dir
-    checkpoint_path = get_latest_checkpoint(checkpoint_dir)
-    if checkpoint_path is None:
-        raise RuntimeError(f"No checkpoint found in {checkpoint_dir}")
-
-    # Step 6: Copy configs + checkpoint into MLflow artifacts directory
-    mlflow_cfg = getattr(settings, "MLFLOW", None)
-    server_cfg = getattr(mlflow_cfg, "server", None)
-    tracking_uri = getattr(server_cfg, "backend_store_uri", None) if server_cfg else None
-    artifacts_destination = getattr(server_cfg, "artifacts_destination", None) if server_cfg else None
-    if tracking_uri and artifacts_destination:
-        _log_artifacts_to_mlflow(
-            tracking_uri=tracking_uri,
-            artifacts_destination=artifacts_destination,
-            dataset_id=dataset_id,
-            run_name=workspace.run_id,
-            model_config_path=Path(config_path),
-            data_config_path=Path(data_config_path) if data_config_path else None,
-            checkpoint_path=checkpoint_path,
+        # Step 3: Configure DLKit settings (dataset, paths, MLflow)
+        settings, workspace = _configure_training_pipeline(
+            settings,
+            workspace,
+            features,
+            targets,
+            dataset_id,
         )
 
-    return checkpoint_path
+        # Step 4: Execute training via DLKit
+        if max_epochs is not None:
+            settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
+        _prev_parent_run_id = os.environ.get("MLFLOW_PARENT_RUN_ID")
+        if parent_run_id is not None:
+            os.environ["MLFLOW_PARENT_RUN_ID"] = parent_run_id
+        try:
+            training_result = execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
+        finally:
+            if parent_run_id is not None:
+                if _prev_parent_run_id is None:
+                    os.environ.pop("MLFLOW_PARENT_RUN_ID", None)
+                else:
+                    os.environ["MLFLOW_PARENT_RUN_ID"] = _prev_parent_run_id
+
+        # Step 5: Retrieve checkpoint from temp dir (before it is deleted)
+        local_checkpoint = get_latest_checkpoint(workspace.checkpoint_dir)
+        if local_checkpoint is None:
+            raise RuntimeError(f"No checkpoint found in {workspace.checkpoint_dir}")
+
+        # Step 6: Log artifacts to MLflow (must happen while temp dir still exists)
+        mlflow_cfg = getattr(settings, "MLFLOW", None)
+        server_cfg = getattr(mlflow_cfg, "server", None)
+        tracking_uri = getattr(server_cfg, "backend_store_uri", None) if server_cfg else None
+        artifacts_destination = getattr(server_cfg, "artifacts_destination", None) if server_cfg else None
+
+        mlflow_ids: tuple[str, str] | None = None
+        if tracking_uri and artifacts_destination:
+            mlflow_ids = _log_artifacts_to_mlflow(
+                tracking_uri=tracking_uri,
+                artifacts_destination=artifacts_destination,
+                dataset_id=dataset_id,
+                run_name=workspace.run_id,
+                model_config_path=Path(config_path),
+                data_config_path=Path(data_config_path) if data_config_path else None,
+                checkpoint_path=local_checkpoint,
+            )
+            if mlflow_ids is not None:
+                exp_id, run_id = mlflow_ids
+                _log_training_evaluation(
+                    tracking_uri,
+                    run_id,
+                    exp_id,
+                    artifacts_destination,
+                    training_result,
+                    workspace.figures_dir,
+                )
+
+        # Step 7: Copy checkpoint to permanent location (temp dir deleted after this block)
+        permanent_root = Path(output_root).resolve() if output_root else DEFAULT_OUTPUT_DIR
+        permanent_dir = permanent_root / "checkpoints" / dataset_id
+        permanent_dir.mkdir(parents=True, exist_ok=True)
+        permanent_checkpoint = Path(shutil.copy2(local_checkpoint, permanent_dir))
+
+        # Step 8: Write sidecar next to permanent checkpoint
+        if mlflow_ids is not None:
+            exp_id, run_id = mlflow_ids
+            write_mlflow_sidecar(
+                path=permanent_dir / "mlflow_run.json",
+                run_id=run_id,
+                experiment_id=exp_id,
+                tracking_uri=tracking_uri,
+                artifacts_destination=artifacts_destination,
+            )
+
+    # temp dir deleted here
+    return permanent_checkpoint

@@ -22,6 +22,7 @@ def plot_parity_and_residuals(
     sample: int = 0,
     save_path: str | Path | None = None,
     show: bool = False,
+    rel_l2_error: float | None = None,
 ) -> None:
     """Create parity and residuals plots.
 
@@ -31,6 +32,7 @@ def plot_parity_and_residuals(
         sample: Sample number for title
         save_path: Path to save plot
         show: Whether to show plot
+        rel_l2_error: Optional RVN (RelativeVectorNorm) error to display as suptitle
     """
     y_true = np.asarray(y_true).ravel()
     y_pred = np.asarray(y_pred).ravel()
@@ -86,12 +88,15 @@ def plot_parity_and_residuals(
     ax.grid(True, alpha=0.3)
     ax.legend(loc="upper left")
 
+    if rel_l2_error is not None:
+        fig.suptitle(f"RVN (RelativeVectorNorm): {rel_l2_error:.4f}", fontsize=12, y=1.02)
+
     fig.tight_layout()
 
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(save_path, dpi=200)
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
         print(f"Saved parity+residuals plot to: {save_path}")
 
     if show:
@@ -639,6 +644,77 @@ def plot_prediction_diagnostics(
         save_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path, dpi=200, bbox_inches="tight")
         print(f"Saved diagnostic plot to: {save_path}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
+def plot_metric_comparison(
+    labels: list[str],
+    values: list[float],
+    *,
+    metric_name: str,
+    legend: Mapping[str, str] | None = None,
+    save_path: Path | None = None,
+    show: bool = False,
+) -> None:
+    """Bar chart comparing a single metric across labelled experiments.
+
+    Experiments are identified by short labels (e.g. "1", "2", "3") on the
+    x-axis. When ``legend`` is provided it is embedded below the plot as a
+    text block so the full experiment identity is preserved without cluttering
+    the axis.
+
+    Args:
+        labels: Short axis labels for each bar (e.g. ``["1", "2", "3"]``).
+        values: Metric value for each corresponding label.
+        metric_name: Human-readable metric description used as y-axis label
+            and figure title (e.g. ``"Relative Error (eval/rel_error)"``).
+        legend: Optional mapping from label to full experiment description
+            (e.g. ``{"1": "ffnn_test_solutions (run: abc123…)"}``) embedded
+            below the chart.
+        save_path: Path to save the figure. Parent directories are created
+            automatically if they do not exist.
+        show: Whether to call ``plt.show()`` (disabled by default for
+            headless / batch use).
+    """
+    fig, ax = plt.subplots(figsize=(max(6, len(labels) * 1.2), 5))
+
+    x_pos = np.arange(len(labels))
+    colormap = cm.get_cmap("Set1")
+    colors = colormap(np.linspace(0, 0.9, max(len(labels), 1)))
+
+    ax.bar(x_pos, values, color=colors, alpha=0.85, edgecolor="black", linewidth=0.7)
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.set_xlabel("Experiment", fontsize=12)
+    ax.set_ylabel(metric_name, fontsize=12)
+    ax.set_title(f"Metric Comparison: {metric_name}", fontsize=13, fontweight="bold")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    if legend:
+        legend_lines = "\n".join(f"  {k}: {v}" for k, v in sorted(legend.items()))
+        legend_text = f"Legend:\n{legend_lines}"
+        fig.text(
+            0.01,
+            -0.05,
+            legend_text,
+            fontsize=8,
+            fontfamily="monospace",
+            va="top",
+            wrap=True,
+        )
+        fig.subplots_adjust(bottom=0.05 + 0.03 * len(legend))
+
+    fig.tight_layout()
+
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        logger.info(f"Saved metric comparison plot to: {save_path}")
 
     if show:
         plt.show()

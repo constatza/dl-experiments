@@ -6,6 +6,7 @@ optionally logging them to MLflow for experiment tracking.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -273,6 +274,48 @@ def save_inference_outputs(
         plot_paths=list(plot_paths_dict.values()),
         metrics=metrics,
     )
+
+
+def write_mlflow_sidecar(
+    path: Path,
+    *,
+    run_id: str,
+    experiment_id: str,
+    tracking_uri: str,
+    artifacts_destination: str,
+) -> None:
+    """Write MLflow run metadata sidecar JSON next to checkpoint.
+
+    Args:
+        path: Destination path (e.g. checkpoint_dir / "mlflow_run.json")
+        run_id: MLflow run ID
+        experiment_id: MLflow experiment ID
+        tracking_uri: SQLite or HTTP tracking URI
+        artifacts_destination: Local filesystem path for MLflow artifacts
+    """
+    data = {
+        "run_id": run_id,
+        "experiment_id": experiment_id,
+        "tracking_uri": tracking_uri,
+        "artifacts_destination": artifacts_destination,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2))
+    logger.debug(f"Wrote MLflow sidecar: {path}")
+
+
+def read_mlflow_sidecar(path: Path) -> dict[str, str] | None:
+    """Read MLflow run metadata sidecar JSON.
+
+    Args:
+        path: Path to mlflow_run.json sidecar
+
+    Returns:
+        Parsed sidecar dict, or None if file not found
+    """
+    if not path.exists():
+        return None
+    return json.loads(path.read_text())  # type: ignore[return-value]
 
 
 def finalize_mlflow_run(

@@ -8,6 +8,7 @@ from collections.abc import Callable
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg as linalg
+from loguru import logger
 
 
 def precondition_matrix(
@@ -58,9 +59,9 @@ def plot_condition_numbers(
     *,
     save_dir: Path | None = None,
     suffix: str = "conditions",
-) -> None:
+) -> Path | None:
     if not cond_numbers:
-        return
+        return None
     labels = list(cond_numbers.keys())
     values = [cond_numbers[name] for name in labels]
     fig, ax = plt.subplots()
@@ -78,11 +79,13 @@ def plot_condition_numbers(
             fontsize=8,
         )
     fig.tight_layout()
+    cond_path = None
     if save_dir is not None:
         save_dir.mkdir(parents=True, exist_ok=True)
         cond_path = Path(save_dir) / f"preconditioner_condition_numbers_{suffix}.png"
         fig.savefig(cond_path, dpi=150)
-        print(f"Saved condition number plot to: {cond_path}")
+        logger.info(f"Saved condition number plot to: {cond_path}")
     else:
         plt.show()
     plt.close(fig)
+    return cond_path
