@@ -145,60 +145,68 @@ from neuralls.solver import run_cg_comparison  # ✗ No longer available
 
 ## Workflows and CLI
 
-All CLI scripts are located in `src/neuralls/cli/` and use the `neuralls` package.
+All CLI scripts are registered as commands and can be run via `uv run <command>`.
 
 - **Process data** (collection or generation):
   ```bash
-  uv run python src/neuralls/cli/process_data.py configs/datasets/collect-504-solutions.toml --solve
+  uv run process-data configs/datasets/collect-504-solutions.toml
   ```
+  - `config`: Path to data configuration TOML.
 
 - **Train a model**:
   ```bash
-  # Using model config and data config
-  uv run python src/neuralls/cli/train_model.py \
-    configs/experiments/default/linear.toml \
-    --data-config configs/datasets/collect-504-solutions.toml
+  uv run train-model configs/models/linear.toml --data-config configs/datasets/collect-504-solutions.toml
   ```
+  - `config`: Path to model architecture configuration.
+  - `--data-config`: Path to the dataset metadata config used for training.
+  - `--max-epochs`: (Optional) Override the maximum number of training epochs.
 
 - **Make predictions**:
   ```bash
-  uv run python src/neuralls/cli/predict.py \
-    configs/experiments/default/linear.toml \
-    --data-config configs/datasets/collect-504-solutions.toml
+  uv run predict --config configs/models/linear.toml --data-config configs/datasets/collect-504-solutions.toml
   ```
+  - `--config`: Path to the model configuration.
+  - `--data-config`: Path to the data configuration.
+  - `--synthetic`: Run a synthetic benchmark (using $x=ones$, $b=Ax$) instead of loading data.
 
-- **Compare a single experiment** (isolated testing):
+- **Compare preconditioners** (standalone mode):
   ```bash
-  uv run python src/neuralls/cli/compare_single.py \
-    --model-config configs/models/linear.toml \
-    --data-config configs/datasets/collect-504-solutions.toml \
-    --solver-config configs/solvers/default.toml
+  uv run compare-preconditioners --solver-config configs/solvers/default.toml
   ```
+  - `--solver-config`: Path to solver parameters and preconditioner specs.
+  - *Note: In standalone mode, neural solvers must specify an explicit `checkpoint_path`.*
 
-- **Compare preconditioners** across experiments (batch processing):
+- **Compare preconditioners** (pipeline mode):
   ```bash
-  uv run python src/neuralls/cli/compare_preconditioners.py \
-    --experiments configs/experiments.toml \
-    --solver-config configs/solvers/default.toml
+  uv run compare-preconditioners --solver-config configs/solvers/default.toml --comparison-run output/training/comparison_run.json
   ```
+  - `--comparison-run`: Path to the `comparison_run.json` produced by `train-multiple`. Enables resolution of experiment IDs to their latest checkpoints.
+
+- **Run full experiment matrix** (data + train):
+  ```bash
+  uv run run-experiments --config configs/experiments.toml
+  ```
+  - `--config`: Path to the master experiments registry.
+  - `--force`: Force re-training even if checkpoints already exist.
+
+- **Batch training with aggregate metrics**:
+  ```bash
+  uv run train-multiple configs/experiments.toml --metric eval/rel_error
+  ```
+  - `config`: Path to the master experiments registry.
+  - `--metric`: The MLflow metric to compare and plot across experiments.
 
 ### Comparison Workflows
 
-The repository provides two tools for evaluating solver performance:
+The repository uses **`compare-preconditioners`** as the unified tool for evaluating solver performance. It supports two modes:
 
-1.  **`compare_single.py`**: Used during active development. It takes direct paths to a model and data configuration, resolves the latest checkpoint, and benchmarks it against baselines.
-2.  **`compare_preconditioners.py`**: Used for systematic reporting. It processes a master `experiments.toml` matrix, automatically running comparisons for all defined model/data combinations and providing an aggregated summary of the "Best Preconditioner" per experiment.
+1.  **Standalone**: Benchmarks specific checkpoints against classical baselines (Jacobi, ILU).
+2.  **Pipeline**: Automates the comparison of all experiments defined in a training batch, using the metadata generated during the `train-multiple` phase.
 
-- **Run full experiment matrix** (data + train + compare):
+- **Optional MLflow logging**:
   ```bash
-  uv run python src/neuralls/cli/run_experiments.py --config configs/experiments.toml
-  ```
-
-- **Optional MLflow logging** (adds remote tracking; local files remain):
-  ```bash
-  # Add --enable-mlflow to any CLI command
-  uv run python src/neuralls/cli/train_model.py configs/experiments/default/linear.toml \
-    --data-config configs/datasets/collect-504-solutions.toml --enable-mlflow
+  # Add --enable-mlflow to supported CLI commands (e.g., predict)
+  uv run predict --config configs/models/linear.toml --enable-mlflow
   ```
 
 Prefect orchestration is implemented in `src/neuralls/workflows/` and exposed via the CLI scripts above.
@@ -227,9 +235,12 @@ uv run pyright src/neuralls
 - Override via environment: `export GRAPH_CG_OUTPUT_DIR=/custom/path`
 - Or configure in `configs/experiments.toml` under the `output_dir` key
 
-The `output_root` is the single source of truth for all experiment artifacts. MLflow tracking database and artifact storage are automatically derived from it:
+The `output_root` is the single source of truth for all experiment artifacts:
 - MLflow tracking: `{output_root}/mlruns/mlflow.db`
 - MLflow artifacts: `{output_root}/mlartifacts/{experiment_id}/{run_id}/`
+- Checkpoints: `{output_root}/checkpoints/{dataset_id}/{model_name}.ckpt`
+- Comparison tracking: `/data/projects/graph-cg/data/comparisons/mlflow.db`
+- Comparison artifacts: `/data/projects/graph-cg/data/comparisons/mlartifacts/{exp_id}/{run_id}/`
 
 Processed datasets live separately in the `processed_root` directory (configurable per dataset config).
 

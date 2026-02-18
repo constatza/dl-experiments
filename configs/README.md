@@ -41,14 +41,14 @@ id = "ffnn_test_solutions"
 dataset = "test-solutions"
 model = "ffnn"
 solver = "default"
-checkpoint_path = "/data/projects/graph-cg/data/output/test-solutions/NormScaledConstantWidthFFNN/checkpoints/ffnn.ckpt"
+checkpoint_path = "/data/projects/graph-cg/data/output/checkpoints/test-solutions/ffnn.ckpt"
 
 [[experiment]]
 id = "gnn_test_solutions"
 dataset = "test-solutions"  # SAME dataset
 model = "gnn"                # Different model
 solver = "default"           # SAME solver config
-checkpoint_path = "/data/projects/graph-cg/data/output/test-solutions/GNN/checkpoints/gnn.ckpt"
+checkpoint_path = "/data/projects/graph-cg/data/output/checkpoints/test-solutions/gnn.ckpt"
 ```
 
 **Benefits**:
@@ -178,32 +178,34 @@ fallback = "identity"
 
 ### Training a Model
 ```bash
-# Load experiment from experiments.toml
-uv run python src/neuralls/cli/train_model.py ffnn_test_solutions
+# Train using specific model and data configs
+uv run train-model configs/models/ffnn.toml --data-config configs/datasets/test-solutions.toml
 
-# Or specify configs directly
-uv run python src/neuralls/cli/train_model.py \
-  --model-config configs/models/ffnn.toml \
-  --data-config configs/datasets/test-solutions.toml
+# Or run the full experiment matrix defined in experiments.toml
+uv run run-experiments --config configs/experiments.toml
 ```
+- `train-model`: Trains a single neural network architecture on a specific dataset.
+- `run-experiments`: Automates dataset generation and training for all `[[experiment]]` entries in the master registry.
 
 ### Generating a Dataset
 ```bash
 # Generate neutral test dataset
-uv run python src/neuralls/cli/process_data.py \
-  configs/datasets/neutral-test-45x15-displacements.toml
+uv run process-data configs/datasets/neutral-test-45x15-displacements.toml
 
 # Generate training dataset
-uv run python src/neuralls/cli/process_data.py \
-  configs/datasets/collect-504-solutions.toml
+uv run process-data configs/datasets/collect-504-solutions.toml
 ```
+- `process-data`: Unified entry point for data collection and synthetic generation.
 
 ### Comparing Solvers
 ```bash
-# Compare all neural preconditioners + baselines on neutral test
-uv run python src/neuralls/cli/compare_preconditioners.py \
-  --solver-config configs/solvers/compare-all-on-neutral-test.toml
+# Compare neural preconditioners and baselines on a neutral test set
+uv run compare-preconditioners \
+  --solver-config configs/solvers/compare-all-on-neutral-test.toml \
+  --comparison-run output/training/comparison_run.json
 ```
+- `compare-preconditioners`: Benchmarks various preconditioners (Jacobi, ILU, Neural) against each other.
+- `--comparison-run`: References the training batch metadata to resolve neural model checkpoints automatically.
 
 ### Adding a New Experiment
 
@@ -221,7 +223,7 @@ id = "my_new_experiment"
 dataset = "test-solutions"  # Reuse existing dataset
 model = "my_new_model"      # Reference new model
 solver = "default"          # Reuse existing solver
-checkpoint_path = "/data/.../checkpoints/my_model.ckpt"  # After training
+checkpoint_path = "/data/projects/graph-cg/data/output/checkpoints/test-solutions/my_new_model.ckpt"  # After training
 ```
 
 **Step 3**: Train:

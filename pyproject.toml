@@ -20,15 +20,15 @@ dependencies = [
 
 [project.scripts]
 compare-preconditioners = "neuralls.cli.compare_preconditioners:run"
-compare-single          = "neuralls.cli.compare_single:run"
 predict                 = "neuralls.cli.predict:run"
 process-data            = "neuralls.cli.process_data:run"
 run-experiments         = "neuralls.cli.run_experiments:run"
 train-model             = "neuralls.cli.train_model:run"
+train-multiple          = "neuralls.cli.train_multiple:run"
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+#[build-system]
+#requires = ["setuptools>=61.0"]
+#build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]  # Tells setuptools to look inside 'src'
@@ -46,6 +46,7 @@ convention = "google"
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.151.6",
     "pyright>=1.1.407",
     "pytest>=9.0",
 ]

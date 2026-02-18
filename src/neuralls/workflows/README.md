@@ -113,10 +113,12 @@ neural_config = NeuralPreconditionerConfig(
 
 **Usage**:
 ```bash
-uv run python src/neuralls/cli/compare_preconditioners.py \
-  --experiments configs/experiments.toml \
-  --solver-config configs/solvers/default.toml
+uv run compare-preconditioners \
+  --solver-config configs/solvers/default.toml \
+  --comparison-run output/training/comparison_run.json
 ```
+- `--solver-config`: The solver configuration containing preconditioner specs.
+- `--comparison-run`: The metadata file from `train-multiple` used to resolve model checkpoints.
 
 ### 4. Experiment Runner (`runner.py`)
 
@@ -135,7 +137,7 @@ uv run python src/neuralls/cli/compare_preconditioners.py \
 
 **Usage**:
 ```bash
-uv run python src/neuralls/cli/run_experiments.py --config configs/experiments.toml
+uv run run-experiments --config configs/experiments.toml
 ```
 
 ## Design Principles

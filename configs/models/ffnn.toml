@@ -21,7 +21,7 @@ mode = "linear"
 
 
 [TRAINING.trainer]
-max_epochs = 500
+max_epochs = 400
 accelerator = "auto"
 enable_checkpointing = true
 
@@ -73,8 +73,8 @@ shuffle = true
 enabled = true
 
 [MLFLOW.server]
-backend_store_uri = "sqlite:////data/projects/graph-cg/data/mlruns/mlflow.db"
-artifacts_destination = "/data/projects/graph-cg/data/mlartifacts"
+backend_store_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
+artifacts_destination = "/data/projects/graph-cg/data/output/mlartifacts"
 
 
 [OPTUNA]
