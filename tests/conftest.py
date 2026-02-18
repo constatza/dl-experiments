@@ -85,32 +85,6 @@ def test_seed() -> int:
 
 
 @pytest.fixture
-def linear_config_path() -> str:
-    """Path to linear model config.
-
-    Returns:
-        Path to linear model configuration file
-    """
-    import os
-
-    dlx_root = os.environ.get("DLX_ROOT", "/")
-    return f"{dlx_root}/graph-cg/configs/linear.toml"
-
-
-@pytest.fixture
-def data_config_path() -> str:
-    """Path to data collection config.
-
-    Returns:
-        Path to 504-solutions data collection configuration file
-    """
-    import os
-
-    dlx_root = os.environ.get("DLX_ROOT", "/")
-    return f"{dlx_root}/graph-cg/data-configs/collect-504-solutions.toml"
-
-
-@pytest.fixture
 def sample_dataset_npz(tmp_path, small_spd_matrix, archive_solutions, archive_rhs):
     """Create a sample dataset in new .npz format.
 

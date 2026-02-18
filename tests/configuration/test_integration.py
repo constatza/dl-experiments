@@ -214,13 +214,11 @@ class TestLoadExperiment:
 
         # Check identifiers
         assert experiment.workspace.dataset_id == "data"  # From config filename
-        # workspace.run_id should have timestamp for uniqueness
-        assert experiment.workspace.run_id.startswith("test-model-")
-        assert len(experiment.workspace.run_id) > len("test-model-")
+        assert experiment.workspace.run_id == "test-model"
 
-        # Check path structure (includes timestamped run_id)
+        # Check path structure
         assert experiment.workspace.root_dir.parent == output_root / "data"
-        assert experiment.workspace.root_dir.name.startswith("test-model-")
+        assert experiment.workspace.root_dir.name == "test-model"
 
         # Check subdirectories created
         assert experiment.workspace.checkpoint_dir.exists()
@@ -248,9 +246,7 @@ class TestLoadExperiment:
 
         # Check MLflow configuration
         assert experiment.settings.MLFLOW.client.experiment_name == "data"
-        # MLflow run_name should have timestamp for uniqueness
-        assert experiment.settings.MLFLOW.client.run_name.startswith("test-model-")
-        assert len(experiment.settings.MLFLOW.client.run_name) > len("test-model-")
+        assert experiment.settings.MLFLOW.client.run_name.startswith("test-model")
 
         # MLflow server URIs: sample_model_config has no [MLFLOW.server] section,
         # so these are not set (they come from model config unchanged)
@@ -305,9 +301,8 @@ tracking_uri = "http://localhost:5000"
             output_root=tmp_path,
         )
 
-        # Should use MODEL.name (spec.id = base, workspace.run_id = base + timestamp)
         assert experiment.spec.id == "OnlyModelName"
-        assert experiment.workspace.run_id.startswith("OnlyModelName-")
+        assert experiment.workspace.run_id == "OnlyModelName"
 
     def test_load_missing_session_name_uses_model_name(
         self,

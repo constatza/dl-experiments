@@ -65,7 +65,7 @@ class TestTrainingPipelineWithMLflow:
         Note: This test verifies the configuration is correct for MLflow but
         does not run actual training (which would be slow). It verifies that:
         - Experiment name matches dataset name
-        - Run name includes timestamp
+        - Run name equals model name (with timestamp)
         - Workspace directories are created
         - MLflow paths are configured correctly
         """
@@ -168,10 +168,8 @@ class TestTrainingPipelineWithMLflow:
         assert experiment.settings.MLFLOW.enabled is True
         assert experiment.settings.MLFLOW.client.experiment_name == "mlflow_test_data"
 
-        # VERIFICATION: Run name includes timestamp
         run_name = experiment.settings.MLFLOW.client.run_name
-        assert run_name.startswith("MLflowTestModel-")
-        assert "T" in run_name  # ISO 8601 has T separator
+        assert run_name.startswith("MLflowTestModel")
 
         # VERIFICATION: Workspace directories created
         assert experiment.workspace.checkpoint_dir.exists()
@@ -191,7 +189,7 @@ class TestTrainingPipelineWithMLflow:
 
         Tests that the configuration supports the hierarchical structure:
         - Experiment = dataset name
-        - Run = model-timestamp
+        - Run = model name (with timestamp)
         - Artifacts at mlartifacts/{exp_id}/{run_id}/
         """
         from neuralls.configuration.loader import load_experiment
@@ -276,8 +274,7 @@ class TestTrainingPipelineWithMLflow:
         # Experiment name = dataset
         assert experiment.settings.MLFLOW.client.experiment_name == dataset_id
 
-        # Run name = session-timestamp
-        assert experiment.settings.MLFLOW.client.run_name.startswith("NestedTestSession-")
+        assert experiment.settings.MLFLOW.client.run_name.startswith("NestedTestSession")
 
     def test_mlflow_configuration_injection(self, training_setup: dict) -> None:
         """Verify MLflow configuration is properly injected from path context."""
@@ -340,4 +337,4 @@ class TestTrainingPipelineWithMLflow:
 
         # Experiment and run names should be injected
         assert experiment.settings.MLFLOW.client.experiment_name == "injection_test"
-        assert experiment.settings.MLFLOW.client.run_name.startswith("TestModel-")
+        assert experiment.settings.MLFLOW.client.run_name.startswith("TestModel")

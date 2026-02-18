@@ -7,7 +7,6 @@ All path resolution is delegated to the paths module.
 from __future__ import annotations
 
 import tomllib
-from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
@@ -101,9 +100,12 @@ def load_experiment(
             "Model name missing. Set [SESSION].name or [MODEL].name in model config."
         )
 
-    # Add ISO 8601 timestamp for uniqueness
-    timestamp = datetime.now().isoformat(timespec="seconds")
-    run_id_with_timestamp = f"{base_name}-{timestamp}"
+    # Use timestamp for MLflow run name (traceability)
+    # but NOT for workspace directory (clean paths)
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    mlflow_run_name = f"{base_name}-{timestamp}"
+    workspace_run_id = base_name
 
     # 4. Build experiment spec (use base_name for logical ID)
     spec = ExperimentSpec(
@@ -112,9 +114,9 @@ def load_experiment(
         data_config_path=data_config_path,
     )
 
-    # 5. Create workspace (with timestamped run_id for uniqueness)
+    # 5. Create workspace
     factory = WorkspaceFactory(path_ctx.output_root, path_ctx.processed_root)
-    workspace = factory.create(dataset_id, run_id_with_timestamp)
+    workspace = factory.create(dataset_id, workspace_run_id)
 
     # 6. Build settings (mode-specific: training or inference)
     if mode == "inference":
@@ -124,7 +126,7 @@ def load_experiment(
             model_config_path=model_config_path,
             workspace=workspace,
             path_context=path_ctx,
-            mlflow_run_name=run_id_with_timestamp,
+            mlflow_run_name=mlflow_run_name,
         )
         logger.debug(f"Loaded inference settings (DATASET/DATAMODULE optional)")
     else:
@@ -133,7 +135,7 @@ def load_experiment(
             model_config_path=model_config_path,
             workspace=workspace,
             path_context=path_ctx,
-            mlflow_run_name=run_id_with_timestamp,
+            mlflow_run_name=mlflow_run_name,
         )
         logger.debug(f"Loaded training settings (DATASET/DATAMODULE required)")
 
