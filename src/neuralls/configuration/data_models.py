@@ -65,6 +65,10 @@ class SourceConfig(BaseModel):
         default=None,
         description="Path or glob pattern for solution vectors",
     )
+    sample_id_regex: str | None = Field(
+        default=None,
+        description="Regex used to extract sample IDs from glob filenames for source pairing",
+    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -143,9 +147,25 @@ class OutputConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    processed_dir: Path = Field(
-        default_factory=Path,
-        description="Directory for processed/generated data",
+    data_dir: Path | None = Field(
+        default=None,
+        description="Output directory for generated data",
+    )
+    dataset_format: Literal["npy_coo"] = Field(
+        default="npy_coo",
+        description="Dataset storage format",
+    )
+    matrix_codec: Literal["coo"] = Field(
+        default="coo",
+        description="Sparse matrix codec",
+    )
+    matrix_replication: Literal["duplicate_per_sample"] = Field(
+        default="duplicate_per_sample",
+        description="Matrix replication policy",
+    )
+    dtype: Literal["float64"] = Field(
+        default="float64",
+        description="Numeric dtype for persisted arrays",
     )
 
 

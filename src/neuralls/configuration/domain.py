@@ -42,7 +42,7 @@ class ExperimentWorkspace:
         dataset_id: Dataset identifier (for organizing experiments).
         run_id: Model/run identifier (for organizing within dataset).
         root_dir: Experiment root directory (for this specific run).
-        data_dir: Directory containing input data (normalized.npz).
+        data_dir: Directory containing input data artifacts (manifest + arrays).
     """
 
     dataset_id: str

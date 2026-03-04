@@ -134,7 +134,7 @@ class TestDataConfigFile:
         assert config.flow.id is None
         assert config.source.matrix_path is None
         assert config.generation.normalize == "matrix"
-        assert config.output.processed_dir == Path('.')
+        assert config.output.data_dir is None
         assert config.test.solutions_path is None
 
     def test_data_config_file_full(self):
@@ -156,13 +156,13 @@ class TestDataConfigFile:
                     )
                 ],
             ),
-            output=OutputConfig(processed_dir="/data/processed"),
+            output=OutputConfig(data_dir="/data/processed"),
             test=DataTestConfig(solutions_path="/data/test/solutions.txt"),
         )
         assert config.flow.id == "test_flow"
         assert config.source.type == "solution_archive"
         assert config.generation.strategy[0].name == "solution_archive"
-        assert config.output.processed_dir == Path("/data/processed")
+        assert config.output.data_dir == Path("/data/processed")
         assert config.test.solutions_path == "/data/test/solutions.txt"
 
     def test_data_config_file_immutable(self):

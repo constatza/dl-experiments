@@ -66,7 +66,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
             ]
         },
         "output": {
-            "processed_dir": str(data_dir / "processed"),
+            "data_dir": str(data_dir / "processed"),
         }
     }
     with open(data_config_path, "wb") as f:
@@ -249,7 +249,7 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
             ]
         },
         "output": {
-            "processed_dir": str(data_dir / "processed"),
+            "data_dir": str(data_dir / "processed"),
         }
     }
     with open(data_config_path, "wb") as f:

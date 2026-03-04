@@ -91,7 +91,7 @@ class TestResolveProcessedRoot:
 
     def test_default_processed_root(self, tmp_path: Path):
         """Test default processed root when not specified in config."""
-        data_cfg = DataConfigFile(output=OutputConfig(processed_dir=Path()))
+        data_cfg = DataConfigFile(output=OutputConfig())
 
         result = resolve_processed_root(data_cfg, tmp_path)
         assert result == DEFAULT_PROCESSED_DATA_DIR
@@ -102,7 +102,7 @@ class TestResolveProcessedRoot:
         absolute_processed.mkdir()
 
         data_cfg = DataConfigFile(
-            output=OutputConfig(processed_dir=absolute_processed)
+            output=OutputConfig(data_dir=absolute_processed)
         )
 
         result = resolve_processed_root(data_cfg, tmp_path)
@@ -116,7 +116,7 @@ class TestResolveProcessedRoot:
         (project_root / "relative" / "processed").mkdir(parents=True)
 
         data_cfg = DataConfigFile(
-            output=OutputConfig(processed_dir=Path("relative/processed"))
+            output=OutputConfig(data_dir=Path("relative/processed"))
         )
 
         result = resolve_processed_root(data_cfg, project_root)
@@ -187,7 +187,7 @@ class TestBuildPathContext:
 
     def test_build_with_defaults(self, tmp_path: Path):
         """Test building path context with all defaults."""
-        data_cfg = DataConfigFile(output=OutputConfig(processed_dir=Path()))
+        data_cfg = DataConfigFile(output=OutputConfig())
 
         ctx = build_path_context(data_cfg)
 
@@ -197,7 +197,7 @@ class TestBuildPathContext:
 
     def test_build_with_output_override(self, tmp_path: Path):
         """Test building with output_root override."""
-        data_cfg = DataConfigFile(output=OutputConfig(processed_dir=Path()))
+        data_cfg = DataConfigFile(output=OutputConfig())
         custom_output = tmp_path / "custom_output"
         custom_output.mkdir()
 
@@ -210,7 +210,7 @@ class TestBuildPathContext:
 
     def test_build_with_project_override(self, tmp_path: Path):
         """Test building with project_root override."""
-        data_cfg = DataConfigFile(output=OutputConfig(processed_dir=Path()))
+        data_cfg = DataConfigFile(output=OutputConfig())
         custom_project = tmp_path / "custom_project"
         custom_project.mkdir()
 
@@ -229,7 +229,7 @@ class TestBuildPathContext:
         (project_root / "data" / "processed").mkdir(parents=True)
 
         data_cfg = DataConfigFile(
-            output=OutputConfig(processed_dir=Path("data/processed"))
+            output=OutputConfig(data_dir=Path("data/processed"))
         )
 
         ctx = build_path_context(data_cfg, project_override=project_root)
@@ -247,7 +247,7 @@ class TestBuildPathContext:
             path.mkdir()
 
         data_cfg = DataConfigFile(
-            output=OutputConfig(processed_dir=processed_dir)
+            output=OutputConfig(data_dir=processed_dir)
         )
 
         ctx = build_path_context(
@@ -265,7 +265,7 @@ class TestBuildPathContext:
         output_root = tmp_path / "experiments_output"
         output_root.mkdir()
 
-        data_cfg = DataConfigFile(output=OutputConfig(processed_dir=Path()))
+        data_cfg = DataConfigFile(output=OutputConfig())
 
         ctx = build_path_context(data_cfg, output_override=output_root)
 

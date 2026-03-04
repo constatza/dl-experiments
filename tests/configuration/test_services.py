@@ -122,8 +122,8 @@ class TestWorkspaceFactory:
     def test_workspace_nested_dataset_structure(self, factory: WorkspaceFactory):
         """Test workspaces for same dataset but different models."""
         dataset_id = "shared-dataset"
-        model1_id = "model-v1"
-        model2_id = "model-v2"
+        model1_id = "model-a"
+        model2_id = "model-b"
 
         workspace1 = factory.create(dataset_id, model1_id)
         workspace2 = factory.create(dataset_id, model2_id)
@@ -157,7 +157,7 @@ class TestWorkspaceFactory:
 
     def test_create_with_special_characters_in_ids(self, factory: WorkspaceFactory):
         """Test creating workspace with special characters in IDs."""
-        dataset_id = "test-dataset_v1.0"
+        dataset_id = "test-dataset-alpha"
         run_id = "model-2024-12-24"
 
         workspace = factory.create(dataset_id, run_id)

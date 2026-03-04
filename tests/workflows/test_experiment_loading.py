@@ -92,7 +92,7 @@ class TestTrainingPipelineWithMLflow:
                 "strategy": [{"name": "random", "samples": 20}],
             },
             "output": {
-                "processed_dir": str(data_dir / "processed"),
+                "data_dir": str(data_dir / "processed"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -214,7 +214,7 @@ class TestTrainingPipelineWithMLflow:
                 "strategy": [{"name": "random", "samples": 20}],
             },
             "output": {
-                "processed_dir": str(data_dir / "processed"),
+                "data_dir": str(data_dir / "processed"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -295,7 +295,7 @@ class TestTrainingPipelineWithMLflow:
                 "strategy": [{"name": "random", "samples": 10}],
             },
             "output": {
-                "processed_dir": str(data_dir / "processed"),
+                "data_dir": str(data_dir / "processed"),
             },
         }
         with open(data_config_path, "wb") as f:

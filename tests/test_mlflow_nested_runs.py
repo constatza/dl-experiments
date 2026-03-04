@@ -86,7 +86,7 @@ class TestOptunaNestedRuns:
                 "strategy": [{"name": "random", "samples": 20}],
             },
             "output": {
-                "processed_dir": str(data_dir / "processed"),
+                "data_dir": str(data_dir / "processed"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -200,7 +200,7 @@ class TestOptunaNestedRuns:
                 "strategy": [{"name": "random", "samples": 10}],
             },
             "output": {
-                "processed_dir": str(data_dir / "processed"),
+                "data_dir": str(data_dir / "processed"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -283,7 +283,7 @@ class TestOptunaNestedRuns:
             "source": {"matrix_path": str(matrix_path), "rhs_path": str(rhs_path)},
             "generation": {"normalize": "none", "strategy": [{"name": "random", "samples": 10}]},
             "output": {
-                "processed_dir": str(data_dir / "processed"),
+                "data_dir": str(data_dir / "processed"),
             },
         }
         with open(data_config_path, "wb") as f:
@@ -356,7 +356,7 @@ class TestOptunaWorkflowReadiness:
             "source": {"matrix_path": str(matrix_path), "rhs_path": str(rhs_path)},
             "generation": {"normalize": "none", "strategy": [{"name": "random", "samples": 10}]},
             "output": {
-                "processed_dir": str(data_dir / "processed"),
+                "data_dir": str(data_dir / "processed"),
             },
         }
         with open(data_config_path, "wb") as f:

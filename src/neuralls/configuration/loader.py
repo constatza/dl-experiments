@@ -11,6 +11,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from dlkit.tools.config.core.updater import update_settings
+
 from neuralls.configuration.domain import (
     ExperimentBatch,
     ExperimentSpec,
@@ -48,6 +50,7 @@ def load_experiment(
     data_config_path: Path,
     output_root: Path | None = None,
     mode: str = "training",
+    experiments_config_path: Path | None = None,
 ) -> RunnableExperiment:
     """Load a single experiment configuration.
 
@@ -60,6 +63,8 @@ def load_experiment(
         mode: Workflow mode - "training" or "inference" (default: "training").
               Training mode loads TrainingWorkflowConfig (requires DATASET/DATAMODULE).
               Inference mode loads InferenceWorkflowConfig (DATASET/DATAMODULE optional).
+        experiments_config_path: Optional path to experiments TOML for MLflow topology
+              injection. When provided, overrides MLFLOW settings in model config.
 
     Returns:
         RunnableExperiment with validated configs and workspace.
@@ -138,6 +143,24 @@ def load_experiment(
             mlflow_run_name=mlflow_run_name,
         )
         logger.debug(f"Loaded training settings (DATASET/DATAMODULE required)")
+
+    if experiments_config_path is not None:
+        sys_raw = load_raw_toml(Path(experiments_config_path))
+        tracking_uri = sys_raw["mlflow"]["client"]["tracking_uri"]
+        exp_name = sys_raw.get("names", {}).get("training", "neuralls-training")
+        settings = update_settings(
+            settings,
+            {
+                "MLFLOW": {
+                    "enabled": True,
+                    "client": {
+                        "tracking_uri": tracking_uri,
+                        "experiment_name": exp_name,
+                        "run_name": None,
+                    },
+                }
+            },
+        )
 
     return RunnableExperiment(
         spec=spec,

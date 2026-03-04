@@ -85,7 +85,7 @@ def resolve_processed_root(
 ) -> Path:
     """Resolve processed data directory from data config.
 
-    Processed data is where generated datasets live (normalized.npz, etc.).
+    Processed data is where generated datasets live (manifest + split arrays).
     This is SEPARATE from experiment artifacts (which go under output_root).
 
     Args:
@@ -95,9 +95,9 @@ def resolve_processed_root(
     Returns:
         Resolved absolute processed data directory.
     """
-    processed_dir = data_cfg.output.processed_dir
-    if processed_dir and str(processed_dir).strip() and str(processed_dir) not in (".", ""):
-        path = Path(processed_dir)
+    data_dir = data_cfg.output.data_dir
+    if data_dir is not None:
+        path = Path(data_dir)
         if not path.is_absolute():
             path = (project_root / path).resolve()
         return path

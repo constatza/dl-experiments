@@ -261,7 +261,7 @@ enabled = false
         special_config = tmp_path / "special_model.toml"
         special_config_content = """
 [SESSION]
-name = "Model_v2.0-alpha"
+name = "Model_release-alpha"
 seed = 42
 
 [MODEL]
@@ -286,4 +286,4 @@ enabled = false
             output_root=tmp_path / "output",
         )
 
-        assert experiment.workspace.run_id == "Model_v2.0-alpha"
+        assert experiment.workspace.run_id == "Model_release-alpha"

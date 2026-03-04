@@ -27,7 +27,6 @@ def temp_config_structure(tmp_path: Path) -> Path:
     (project_root / "configs").mkdir()
     (project_root / "configs" / "datasets").mkdir()
     (project_root / "configs" / "models").mkdir()
-    (project_root / "configs" / "solvers").mkdir()
 
     # Master config (NEW FORMAT: [[experiment]] entries)
     with open(project_root / "configs" / "experiments.toml", "w") as f:
@@ -55,7 +54,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write('shuffle = false\n')
         f.write('seed = 42\n\n')
         f.write('[output]\n')
-        f.write(f'processed_dir = "{project_root / "data"}"\n')
+        f.write(f'data_dir = "{project_root / "data"}"\n')
 
     with open(project_root / "configs" / "datasets" / "exp2_data.toml", "w") as f:
         f.write('[flow]\n\n')
@@ -66,7 +65,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write('shuffle = false\n')
         f.write('seed = 42\n\n')
         f.write('[output]\n')
-        f.write(f'processed_dir = "{project_root / "data"}"\n')
+        f.write(f'data_dir = "{project_root / "data"}"\n')
 
     # Model configs
     with open(project_root / "configs" / "models" / "exp1_model.toml", "w") as f:
@@ -82,13 +81,6 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write('[MODEL]\n')
         f.write('name = "TestModel2"\n')
         f.write('module_path = "test.module2"\n')
-
-    # Solver config (shared)
-    with open(project_root / "configs" / "solvers" / "default.toml", "w") as f:
-        f.write('[general]\n')
-        f.write('rtol = 1e-6\n')
-        f.write('atol = 1e-10\n')
-        f.write('max_iterations = 100\n')
 
     return project_root
 
@@ -137,7 +129,7 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
 
 
 def test_load_experiments_missing_config(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
-    """Test that FileNotFoundError is raised for missing dataset/model/solver configs."""
+    """Test that FileNotFoundError is raised for missing dataset/model configs."""
     monkeypatch.chdir(temp_config_structure)
 
     # Create experiments.toml with reference to non-existent dataset
