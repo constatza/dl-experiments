@@ -121,7 +121,7 @@ def compute_data_files_hash(data_dir: Path | str) -> str:
     This ensures Prefect cache is invalidated when data content changes.
 
     Args:
-        data_dir: Path to data directory containing .npy files
+        data_dir: Path to data directory containing dataset artifacts
 
     Returns:
         SHA-1 hash of data file contents, or "empty" if directory doesn't exist
@@ -134,11 +134,11 @@ def compute_data_files_hash(data_dir: Path | str) -> str:
 
     try:
         # Find all data files with stable sorting
-        candidates = []
-        for pattern in ("*.npy", "*.npz"):
+        candidates: list[Path] = []
+        for pattern in ("*.npy", "matrix_coo/*.npy"):
             candidates.extend(sorted(data_dir.glob(pattern)))
 
-        for filename in ("metadata.json", "normalization.json"):
+        for filename in ("manifest.json", "metadata.json", "normalization.json"):
             candidate = data_dir / filename
             if candidate.exists():
                 candidates.append(candidate)

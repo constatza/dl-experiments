@@ -1,8 +1,4 @@
-"""Dataset loading and tracking utilities.
-
-This module handles dataset I/O operations including loading from .npz files,
-tracking dataset files, and managing dataset variants.
-"""
+"""Dataset loading and tracking utilities."""
 
 from __future__ import annotations
 from pathlib import Path
@@ -10,6 +6,13 @@ from typing import Any
 
 import numpy as np
 from dlkit.tools.io import load_array
+
+from neuralls.io.dataset_storage import (
+    load_dataset_manifest,
+    load_dense_training_arrays,
+    load_matrix_dense_sample,
+    resolve_dataset_paths,
+)
 
 
 def load_numpy_array(path: str | Path) -> np.ndarray:
@@ -37,54 +40,37 @@ def load_numpy_array(path: str | Path) -> np.ndarray:
 
 def load_dataset(
     dataset_dir: str | Path,
-    variant: str = "normalized",
+    variant: str = "dataset",
 ) -> dict[str, np.ndarray]:
-    """Load dataset from .npz file.
+    """Load dataset from split-array sparse storage.
 
     I/O action - reads dataset from disk.
 
     Args:
         dataset_dir: Directory containing dataset files
-        variant: Dataset variant to load ('normalized', 'raw', or 'comparison')
+        variant: Dataset variant to load ('dataset' only)
 
     Returns:
         Dictionary with keys: 'matrix', 'rhs', 'solutions'
 
     Raises:
-        FileNotFoundError: If requested .npz file doesn't exist
-        ValueError: If .npz file missing required arrays
+        FileNotFoundError: If required dataset artifacts are missing
+        ValueError: If variant is not supported
     """
-    dataset_dir = Path(dataset_dir)
-    filename = f"{variant}.npz"
-    filepath = dataset_dir / filename
-
-    if not filepath.exists():
-        raise FileNotFoundError(
-            f"Dataset file '{filename}' not found in {dataset_dir}. "
-            f"Available variants: {list_available_variants(dataset_dir)}"
-        )
-
-    # Load .npz file
-    data = np.load(filepath)
-
-    # Validate required arrays present
-    required = ["matrix", "rhs", "solutions"]
-    missing = [k for k in required if k not in data]
-    if missing:
+    if variant != "dataset":
         raise ValueError(
-            f"Dataset file '{filename}' missing required arrays: {missing}. "
-            f"Found: {list(data.keys())}"
+            f"Unsupported dataset variant '{variant}'. Only 'dataset' is supported."
         )
 
-    # Return as dictionary
-    matrix = data["matrix"]
-    rhs = data["rhs"]
-    solutions = data["solutions"]
+    dataset_dir = Path(dataset_dir)
+    load_dataset_manifest(dataset_dir)
+    rhs, solutions = load_dense_training_arrays(dataset_dir)
+    matrix = load_matrix_dense_sample(dataset_dir, sample_index=0)
 
-    for name, arr in (("matrix", matrix), ("rhs", rhs), ("solutions", solutions)):
+    for name, arr in (("rhs", rhs), ("solutions", solutions), ("matrix", matrix)):
         if arr.dtype != np.float64:
             raise ValueError(
-                f"{filename}:{name} dtype must be float64, got {arr.dtype}"
+                f"{name} dtype must be float64, got {arr.dtype}"
             )
 
     return {"matrix": matrix, "rhs": rhs, "solutions": solutions}
@@ -99,9 +85,9 @@ def has_comparison_split(dataset_dir: str | Path) -> bool:
         dataset_dir: Directory containing dataset files
 
     Returns:
-        True if comparison.npz exists, False otherwise
+        True if a dedicated comparison split exists, False otherwise
     """
-    return (Path(dataset_dir) / "comparison.npz").exists()
+    return False
 
 
 def list_available_variants(dataset_dir: str | Path) -> list[str]:
@@ -113,14 +99,18 @@ def list_available_variants(dataset_dir: str | Path) -> list[str]:
         dataset_dir: Directory containing dataset files
 
     Returns:
-        List of available variant names (e.g., ['normalized', 'raw', 'comparison'])
+        List of available variant names.
     """
     dataset_dir = Path(dataset_dir)
-    variants = []
-    for variant in ["normalized", "raw", "comparison"]:
-        if (dataset_dir / f"{variant}.npz").exists():
-            variants.append(variant)
-    return variants
+    paths = resolve_dataset_paths(dataset_dir)
+    if (
+        paths.manifest_path.exists()
+        and paths.rhs_path.exists()
+        and paths.solutions_path.exists()
+        and paths.matrix_pack_dir.exists()
+    ):
+        return ["dataset"]
+    return []
 
 
 def save_numpy_array(array: np.ndarray, path: str | Path) -> None:

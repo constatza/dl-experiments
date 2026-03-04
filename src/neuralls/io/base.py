@@ -7,17 +7,8 @@ from pathlib import Path
 import numpy as np
 
 
-def load_npz_entry(npz_path: str | Path, key: str) -> np.ndarray:
-    """Load a single entry from an NPZ without reshaping or warnings."""
-    npz_path = Path(npz_path)
-    data = np.load(npz_path)
-    if key not in data:
-        raise KeyError(f"{npz_path} missing key '{key}'")
-    return np.asarray(data[key], dtype=np.float64, copy=False)
-
-
 def load_matrix(matrix_path: str | Path, delimiter: str | None = None) -> np.ndarray:
-    """Load matrix from file (txt, npy, or npz format).
+    """Load matrix from file (txt or npy format).
 
     Args:
         matrix_path: Path to matrix file
@@ -35,13 +26,14 @@ def load_matrix(matrix_path: str | Path, delimiter: str | None = None) -> np.nda
     if not matrix_path.exists():
         raise FileNotFoundError(f"Matrix file not found: {matrix_path}")
 
-    # NPZ format
-    if matrix_path.suffix == ".npz":
-        return load_npz_entry(matrix_path, "matrix")
-
     # NPY binary format
     if matrix_path.suffix == ".npy":
         return np.load(matrix_path).astype(np.float64, copy=False)
+
+    if matrix_path.suffix == ".npz":
+        raise ValueError(
+            f"NPZ files are no longer supported ({matrix_path}). Use dataset directories or .npy files."
+        )
 
     # Text format (default)
     return np.loadtxt(matrix_path, dtype=np.float64, delimiter=delimiter)

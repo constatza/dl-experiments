@@ -17,8 +17,12 @@ import numpy as np
 
 from loguru import logger
 
-from neuralls.io.base import load_npz_entry
-from neuralls.constants import NORMALIZED_DATASET_FILENAME
+from neuralls.io.dataset_storage import (
+    load_dense_training_arrays,
+    load_matrix_dense_sample,
+    load_dataset_manifest,
+    resolve_dataset_paths,
+)
 
 
 def derive_checkpoint_path(
@@ -59,7 +63,7 @@ def derive_checkpoint_path(
 
 
 def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
-    """Load matrix from dataset directory (.npz format).
+    """Load matrix from dataset directory or file.
 
     I/O action - reads matrix from disk.
 
@@ -73,24 +77,15 @@ def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
 
     matrix_path = Path(matrix_path)
 
-    # If it's a directory, load from normalized.npz
+    # If it's a dataset directory, load first matrix sample from sparse pack.
     if matrix_path.is_dir():
-        data = load_dataset(matrix_path, variant="normalized")
-        return data["matrix"]
-
-    if matrix_path.suffix == ".npz":
-        mat = load_npz_entry(matrix_path, "matrix")
-        if mat.ndim > 2:
-            logger.warning(
-                f"{matrix_path} contains multiple matrices; using the first slice."
-            )
-            mat = mat[0]
-        return np.asarray(mat, dtype=np.float64, copy=False)
-
-    # If it's a file path like .../normalized.npz, load from parent dir
-    if matrix_path.name == NORMALIZED_DATASET_FILENAME:
-        data = load_dataset(matrix_path.parent, variant="normalized")
-        return data["matrix"]
+        try:
+            load_dataset_manifest(matrix_path)
+            return load_matrix_dense_sample(matrix_path, sample_index=0)
+        except (FileNotFoundError, ValueError):
+            # Fallback: allow direct sparse pack directory path.
+            if (matrix_path / "manifest.json").exists() and (matrix_path / "values.npy").exists():
+                return load_matrix_dense_sample(matrix_path.parent, sample_index=0)
 
     # Handle .npy binary format or text files
     if matrix_path.suffix == ".npy":
@@ -100,7 +95,7 @@ def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
 
 
 def _load_rhs_file(rhs_path: str | Path) -> np.ndarray:
-    """Load RHS vector from dataset directory (.npz format).
+    """Load RHS vector from dataset directory or file.
 
     I/O action - reads RHS from disk.
 
@@ -125,25 +120,19 @@ def _load_rhs_file(rhs_path: str | Path) -> np.ndarray:
             )
         raise ValueError(f"RHS array must be 1D or 2D, got shape {rhs_array.shape}")
 
-    # If it's a directory, load from normalized.npz
+    # If it's a dataset directory, load first sample from rhs.npy.
     if rhs_path.is_dir():
-        data = load_dataset(rhs_path, variant="normalized")
-        b = data["rhs"][0]  # First sample as mother RHS
-        return _validate_and_flatten(b)
+        try:
+            rhs, _ = load_dense_training_arrays(rhs_path)
+            b = rhs[0]
+            return _validate_and_flatten(b)
+        except (FileNotFoundError, ValueError):
+            pass
 
-    if rhs_path.suffix == ".npz":
-        b = load_npz_entry(rhs_path, "rhs")
-        if b.ndim > 1 and b.shape[0] > 1:
-            logger.warning(
-                f"{rhs_path} contains multiple RHS entries; using the first."
-            )
+    if rhs_path.name == "rhs.npy" and rhs_path.exists():
+        b = np.load(rhs_path).astype(np.float64, copy=False)
+        if b.ndim > 1:
             b = b[0]
-        return _validate_and_flatten(b)
-
-    # If it's a file path like .../normalized.npz, load from parent dir
-    if rhs_path.name == NORMALIZED_DATASET_FILENAME:
-        data = load_dataset(rhs_path.parent, variant="normalized")
-        b = data["rhs"][0]
         return _validate_and_flatten(b)
 
     # Handle .npy binary format or text files
@@ -235,7 +224,7 @@ def save_training_data(
 
 def load_case_data(
     data_dir: str | Path,
-    variant: str = "normalized",
+    variant: str = "dataset",
 ) -> Mapping[str, np.ndarray | dict[str, Any]]:
     """Load all data from a case directory.
 
@@ -243,7 +232,7 @@ def load_case_data(
 
     Args:
         data_dir: Path to case directory (e.g., collect-504-norm)
-        variant: Dataset variant to load ('normalized', 'raw', or 'test')
+        variant: Dataset variant to load ('dataset')
 
     Returns:
         Dictionary with keys: matrix, rhs, solutions, metadata
@@ -261,7 +250,7 @@ def load_case_data(
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
 
-    # Load dataset using new .npz format
+    # Load dataset using split sparse format
     result = load_dataset(data_dir, variant=variant)
 
     # Load metadata

@@ -177,7 +177,7 @@ class IScale(ABC):
         """Serialize scale parameters to dictionary.
 
         Returns:
-            Mapping of scale parameters suitable for saving to .npz files.
+            Mapping of scale parameters suitable for saving to dataset manifests.
         """
         ...
 

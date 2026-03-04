@@ -6,6 +6,7 @@ maintainability and avoid duplication.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -24,12 +25,32 @@ EXIT_KEYBOARD_INTERRUPT = 130
 # Dynamically determine project root relative to this file (src/neuralls/constants.py)
 # src/neuralls/constants.py -> src/neuralls -> src -> project_root
 DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_PROCESSED_DATA_DIR = DEFAULT_PROJECT_ROOT / "data" / "processed"
-DEFAULT_OUTPUT_DIR = DEFAULT_PROJECT_ROOT / "data" / "output"
-DEFAULT_FIGURES_DIR = DEFAULT_PROJECT_ROOT / "data" / "figures"
+
+
+def _path_from_env(var_name: str, fallback: Path) -> Path:
+    """Resolve default path from env override when present."""
+    value = os.getenv(var_name)
+    if value:
+        return Path(value).expanduser().resolve()
+    return fallback
+
+
+DEFAULT_PROCESSED_DATA_DIR = _path_from_env(
+    "GRAPH_CG_PROCESSED_DIR", DEFAULT_PROJECT_ROOT / "data" / "processed"
+)
+DEFAULT_OUTPUT_DIR = _path_from_env(
+    "GRAPH_CG_OUTPUT_DIR", DEFAULT_PROJECT_ROOT / "data" / "output"
+)
+DEFAULT_FIGURES_DIR = _path_from_env(
+    "GRAPH_CG_FIGURES_DIR", DEFAULT_PROJECT_ROOT / "data" / "figures"
+)
 DEFAULT_CHECKPOINTS_DIR = DEFAULT_OUTPUT_DIR / "checkpoints"
-DEFAULT_MLRUNS_DIR = DEFAULT_PROJECT_ROOT / "data" / "mlruns"
-DEFAULT_MLARTIFACTS_DIR = DEFAULT_PROJECT_ROOT / "data" / "mlartifacts"
+DEFAULT_MLRUNS_DIR = _path_from_env(
+    "GRAPH_CG_MLRUNS_DIR", DEFAULT_PROJECT_ROOT / "data" / "mlruns"
+)
+DEFAULT_MLARTIFACTS_DIR = _path_from_env(
+    "GRAPH_CG_MLARTIFACTS_DIR", DEFAULT_PROJECT_ROOT / "data" / "mlartifacts"
+)
 
 # Legacy compatibility - these match old common.py constants
 DEFAULT_PROCESSED_DIR = str(DEFAULT_PROCESSED_DATA_DIR)
@@ -189,8 +210,11 @@ def get_overflow_threshold(dtype: type[np.floating] = np.float64) -> float:  # t
 # =============================================================================
 DEFAULT_NUM_SAMPLES = 6000
 
-# Dataset filenames (no magic strings!)
-NORMALIZED_DATASET_FILENAME = "normalized.npz"
+# Dataset artifacts (split format)
+DATASET_MANIFEST_FILENAME = "manifest.json"
+RHS_ARRAY_FILENAME = "rhs.npy"
+SOLUTIONS_ARRAY_FILENAME = "solutions.npy"
+MATRIX_COO_DIRNAME = "matrix_coo"
 
 # Strategy-specific iteration parameters
 # These are now configured at the strategy level (not generation level):
