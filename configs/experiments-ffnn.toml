@@ -12,25 +12,25 @@ artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
 
 [[experiment]]
 id = "ffnn_test_solutions"
-dataset = "test-solutions"
+dataset = "solutions"
 model = "ffnn"
 
 [[experiment]]
 id = "ffnn_test_eigenvector_solutions_largest"
-dataset = "test-eigenvector-solutions-largest"
+dataset = "eigenvector-solutions-largest"
 model = "ffnn"
 
 [[experiment]]
 id = "ffnn_test_eigenvector_solutions_smallest"
-dataset = "test-eigenvector-solutions-smallest"
+dataset = "eigenvector-solutions-smallest"
 model = "ffnn"
 
 [[experiment]]
 id = "ffnn_test_eigenvector_rhs_largest"
-dataset = "test-eigenvector-rhs-largest"
+dataset = "eigenvector-rhs-largest"
 model = "ffnn"
 
 [[experiment]]
 id = "ffnn_test_eigenvector_rhs_smallest"
-dataset = "test-eigenvector-rhs-smallest"
+dataset = "eigenvector-rhs-smallest"
 model = "ffnn"

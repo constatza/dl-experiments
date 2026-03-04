@@ -33,7 +33,7 @@ cg_iters = 10            # CG iterations per base system
 solutions_glob = "/data/projects/graph-cg/data/raw/SpectralData/93x31-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]
-processed_dir = "/data/projects/graph-cg/data/processed"
+data_dir = "/data/projects/graph-cg/processed"
 
 [test]
 # Test solutions (ua vectors) - system will compute b_test = A @ x_test

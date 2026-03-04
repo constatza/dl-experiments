@@ -1,0 +1,26 @@
+# Test config: Pure solution archive collection (all avae lable solutions)
+# Uses 45x15-displacements UaVectors with pure collection - no synthetic generation
+# Pure solution-to-RHS mapping: b = A @ x for each solution vector
+#
+# Usage: uv run python src/neuralls/cli/process_data.py data-configs/solutions.toml
+# Output: solutions-{normalization}/
+
+id = "solutions"
+
+[source]
+matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+solutions_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+# Pure solution archive strategy: collect ALL available solution vectors
+[[generation.strategy]]
+name = "solution_archive"
+samples = -1  # Use all available solutions
+solutions_glob = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[output]
+data_dir = "/data/projects/graph-cg/processed"

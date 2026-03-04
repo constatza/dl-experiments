@@ -1,0 +1,69 @@
+# Optional: if omitted, MLflow will assign a random run name.
+# run_name = "comparison-ffnn"
+
+schema_version = 3
+
+[general]
+
+[general.params]
+rtol = 1.0e-6
+atol = 1.0e-14
+max_iterations = 200
+stopping_criterion = "residual_norm"
+m_max = 10
+
+[general.data]
+matrix_path = "/data/projects/graph-cg/processed/solutions"
+rhs_path = "/data/projects/graph-cg/processed/gaussian-rhs"
+normalize_system = "matrix"
+# rhs_index = 0   # Which RHS sample to use (0 = first)
+
+[general.tracking]
+tracking_uri = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
+artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
+experiment_name = "neuralls-comparisons"
+
+[general.model_store]
+tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
+
+[[preconditioners]]
+name = "none"
+type = "identity"
+
+[[preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[preconditioners]]
+name = "ic0"
+type = "ic0"
+
+[[preconditioners]]
+name = "neural_norm_scaled_constant_width_ffnn_solutions"
+type = "neural"
+fallback = "identity"
+model_ref = { source = "registered", name = "NormScaledConstantWidthFFNN", alias = "solutions" }
+
+[[preconditioners]]
+name = "neural_norm_scaled_constant_width_ffnn_eigenvector_solutions_largest"
+type = "neural"
+fallback = "identity"
+model_ref = { source = "registered", name = "NormScaledConstantWidthFFNN", alias = "eigenvector-solutions-largest" }
+
+[[preconditioners]]
+name = "neural_norm_scaled_constant_width_ffnn_eigenvector_solutions_smallest"
+type = "neural"
+fallback = "identity"
+model_ref = { source = "registered", name = "NormScaledConstantWidthFFNN", alias = "eigenvector-solutions-smallest" }
+
+[[preconditioners]]
+name = "neural_norm_scaled_constant_width_ffnn_eigenvector_rhs_largest"
+type = "neural"
+fallback = "identity"
+model_ref = { source = "registered", name = "NormScaledConstantWidthFFNN", alias = "eigenvector-rhs-largest" }
+
+[[preconditioners]]
+name = "neural_norm_scaled_constant_width_ffnn_eigenvector_rhs_smallest"
+type = "neural"
+fallback = "identity"
+model_ref = { source = "registered", name = "NormScaledConstantWidthFFNN", alias = "eigenvector-rhs-smallest" }

@@ -36,6 +36,12 @@ factor = 0.5
 patience = 30
 min_lr = 1e-14
 
+[TRAINING.loss_function]
+name = "relative_energy_norm_loss"
+module_path = "dlkit.core.training.functional"
+target_key = "targets.solutions"
+extra_inputs = [{ key = "features.matrix", arg = "matrix" }]
+
 # Model checkpoint callback configuration
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
@@ -68,16 +74,16 @@ name = "GraphDataset"
 # GraphDataset configuration (dlkit.core.datasets.graph.GraphDataset)
 #
 # Dataset uses PRE-NORMALIZED data from the data generation pipeline.
-# Data is normalized during generation (see data_pipeline.py) and saved as normalized.npz.
+# Data is normalized during generation and saved as split arrays + manifest.
 # NO additional transforms are applied during training to avoid double normalization.
 #
-# Features/targets are injected programmatically at runtime with in-memory arrays (not file paths).
+# Features/targets are injected programmatically at runtime as path-based entries.
 # This follows dlkit's hybrid TOML + Python configuration pattern.
 #
 # Runtime injection provides (via src/cli/training.py):
-# - x: In-memory RHS vectors as node features (from normalized.npz)
+# - x: RHS vectors as node features (from rhs.npy)
 # - edge_index: In-memory adjacency matrix (shared across all samples)
-# - y: In-memory solution vectors as targets (from normalized.npz)
+# - y: Solution vectors as targets (from solutions.npy)
 #
 # For our linear system Ax=b:
 # - Each sample gets its RHS vector as node features

@@ -2,13 +2,13 @@
 # Uses eigenvectors as RHS, solves A^-1 @ v for solutions (inverse mode)
 # Mirrors the forward eigenvector setup but flips RHS/solution roles
 #
-# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/test-eigenvector-rhs-smallest.toml
-# Output: test-eigenvector-rhs-smallest-{normalization}/
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/eigenvector-rhs-smallest.toml
+# Output: eigenvector-rhs-smallest-{normalization}/
 
-[flow]
+id = "eigenvector-rhs-smallest"
 
 [source]
-matrix_path = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 # Spectral normalization preserves eigenvalue properties
@@ -24,4 +24,4 @@ num_eigenvectors = 100
 samples = 6000
 
 [output]
-processed_dir = "/data/projects/graph-cg/data/processed"
+data_dir = "/data/projects/graph-cg/processed"

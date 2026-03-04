@@ -1,0 +1,22 @@
+# Gaussian RHS dataset: b ~ N(0, 1), x solved from A x = b
+#
+# Usage: uv run process-data configs/datasets/gaussian-rhs.toml
+
+id = "gaussian-rhs"
+
+[source]
+matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "gaussian_inverse"
+samples = 6000
+mu = 0.0
+sigma = 1.0
+
+[output]
+data_dir = "/data/projects/graph-cg/processed"
