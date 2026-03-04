@@ -3,18 +3,18 @@
 
 Supports two modes:
 - Pipeline mode: with ``--comparison-run`` from ``train-multiple``.
-- Standalone mode: without ``--comparison-run``; solver config must have
-  ``[general.comparisons]`` and neural specs must have explicit ``checkpoint_path``.
+- Standalone mode: without ``--comparison-run``; comparison config must include
+  ``[general.tracking]``.
 
 Usage::
 
     # Standalone mode (no ComparisonRun needed)
-    uv run compare-preconditioners --solver-config configs/solvers/default.toml
+    uv run compare-preconditioners --comparison-config configs/comparison/linear.toml
 
     # Pipeline mode (with ComparisonRun from train-multiple)
     uv run compare-preconditioners \\
-        --solver-config configs/solvers/default.toml \\
-        --comparison-run output/training/comparison_run.json
+        --comparison-config configs/comparison/linear.toml \\
+        --comparison-run /path/to/comparison_run.json
 """
 
 from __future__ import annotations
@@ -87,21 +87,20 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
 
 
 def main(
-    solver_config: Path = typer.Option(
+    comparison_config: Path = typer.Option(
         ...,
-        "--solver-config",
+        "--comparison-config",
         "-s",
-        help="Path to solver config (e.g., configs/solvers/default.toml)",
+        help="Path to comparison config (e.g., configs/comparison/linear.toml)",
     ),
     comparison_run: Path | None = typer.Option(
         default=None,
         help=(
             "Path to comparison_run.json produced by train-multiple "
-            "(e.g., output/training/comparison_run.json). "
-            "Optional: if omitted, solver config must have [general.comparisons] "
-            "and neural specs must have explicit checkpoint_path."
+            "(optional metadata-only context). "
+            "Comparison tracking is always taken from [general.tracking]."
         ),
-        exists=True,
+        exists=False,
     ),
     plots: bool = typer.Option(
         True,
@@ -109,7 +108,7 @@ def main(
         help="Save comparison plots to disk (default: True)",
     ),
 ) -> None:
-    """Compare preconditioner methods using solver config.
+    """Compare preconditioner methods using comparison config.
 
     Supports pipeline mode (with --comparison-run) and standalone mode (without).
     """
@@ -117,17 +116,22 @@ def main(
     if comparison_run is not None:
         try:
             cr = load_comparison_run(comparison_run)
-        except (FileNotFoundError, KeyError) as exc:
-            logger.error(f"Could not load comparison run from '{comparison_run}': {exc}")
-            raise typer.Exit(code=EXIT_FAILURE) from exc
-        logger.info(f"Loaded comparison_run_id = {cr.mlflow_run_id}")
+        except (FileNotFoundError, KeyError, ValueError, OSError) as exc:
+            logger.warning(
+                "Could not load comparison run from '{}': {}. Continuing without it.",
+                comparison_run,
+                exc,
+            )
+            cr = None
+        if cr is not None:
+            logger.info(f"Loaded comparison_run_id = {cr.mlflow_run_id}")
     else:
         logger.info("Standalone mode: no comparison_run provided")
 
     params = ComparisonParams(save_plots=plots)
 
     try:
-        outcomes = run_comparison(solver_config, params, cr)
+        outcomes = run_comparison(comparison_config, params, cr)
     except (ValueError, KeyError) as exc:
         logger.error(str(exc))
         raise typer.Exit(code=EXIT_FAILURE) from exc

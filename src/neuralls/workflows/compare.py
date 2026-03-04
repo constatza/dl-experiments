@@ -1,4 +1,4 @@
-"""Simplified preconditioner comparison workflow driven by solver config.
+"""Simplified preconditioner comparison workflow driven by comparison config.
 
 This module provides the core comparison workflow for benchmarking CG solver
 preconditioners. It follows clean architecture principles:
@@ -28,13 +28,14 @@ Key Components:
 
 Example:
     >>> from neuralls.workflows.compare import compare_preconditioners
-    >>> from neuralls.configuration.comparison import GeneralSolverConfig
+    >>> from neuralls.configuration.comparison import ComparisonGeneral, SolverParams, ComparisonData
     >>> from neuralls.configuration.preconditioner import StandardPreconditionerConfig
     >>>
-    >>> general = GeneralSolverConfig(
-    ...     matrix_path="data/matrix.txt",
-    ...     rhs_path="data/rhs.txt",
-    ...     output_root="output/comparison",
+    >>> general = ComparisonGeneral(
+    ...     params=SolverParams(rtol=1e-6, atol=1e-14, max_iterations=100, stopping_criterion="residual_norm", m_max=10, breakdown_tol=None),
+    ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
+    ...     tracking=None,
+    ...     model_store=None,
     ... )
     >>> configs = [
     ...     StandardPreconditionerConfig(name="jacobi", type="jacobi"),
@@ -58,10 +59,11 @@ from collections.abc import Callable, Sequence
 import numpy as np
 
 from neuralls.configuration.preconditioner import PreconditionerConfig, StandardPreconditionerConfig
-from neuralls.configuration.comparison import GeneralSolverConfig
+from neuralls.configuration.comparison import ComparisonGeneral
 from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from neuralls.io.filesystem import ensure_dir
 from ..io.comparison import load_system_arrays
+from neuralls.normalization import create_scale_from_config
 from ..plotting import plot_convergence_comparison
 from ..solver.preconditioners import create_preconditioner, create_scheduled_preconditioner
 from .cg_runner import (
@@ -244,7 +246,7 @@ def _map_stopping_criterion(name: str) -> StoppingCriterion:
 
 def _resolve_comparison_paths(
     *,
-    general_params: GeneralSolverConfig,
+    general_params: ComparisonGeneral,
     output_root: Path | None,
     figures_root: Path | None,
 ) -> ComparisonPaths:
@@ -254,7 +256,7 @@ def _resolve_comparison_paths(
     It ensures all required paths are set and handles optional overrides.
 
     Args:
-        general_params: General solver configuration with matrix_path, rhs_path, output_root
+        general_params: Comparison general configuration with params+data context
         output_root: Optional override for output root directory
         figures_root: Optional override for figures directory
 
@@ -262,13 +264,14 @@ def _resolve_comparison_paths(
         ComparisonPaths with all resolved and validated paths
 
     Raises:
-        ValueError: If matrix_path, rhs_path, or output_root not configured
+        ValueError: If matrix_path/rhs_path are missing or invalid
 
     Example:
-        >>> general = GeneralSolverConfig(
-        ...     matrix_path="data/matrix.txt",
-        ...     rhs_path="data/rhs.txt",
-        ...     output_root="output",
+        >>> general = ComparisonGeneral(
+        ...     params=SolverParams(rtol=1e-6, atol=1e-14, max_iterations=100, stopping_criterion="residual_norm", m_max=10, breakdown_tol=None),
+        ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
+        ...     tracking=None,
+        ...     model_store=None,
         ... )
         >>> paths = _resolve_comparison_paths(
         ...     general_params=general,
@@ -278,21 +281,14 @@ def _resolve_comparison_paths(
         >>> print(paths.figures)
         Path('output/figures')
     """
-    if general_params.matrix_path is None or general_params.rhs_path is None:
-        raise ValueError("Matrix and RHS must be provided in solver config.")
-
-    matrix_file = Path(general_params.matrix_path)
-    rhs_file = Path(general_params.rhs_path)
+    matrix_file = Path(general_params.data.matrix_path)
+    rhs_file = Path(general_params.data.rhs_path)
 
     if output_root is not None:
         # Caller supplies exact directory — use as-is (no timestamp suffix)
         output_base = Path(output_root).expanduser().resolve()
     else:
-        configured_root = getattr(general_params, "output_root", None)
-        if not configured_root:
-            raise ValueError("output_root must be set in solver general config.")
-        matrix_stem = Path(general_params.matrix_path).stem
-        output_base = Path(configured_root).expanduser().resolve() / matrix_stem
+        output_base = (Path.cwd() / "comparison" / matrix_file.stem).resolve()
 
     figs_base = Path(figures_root) if figures_root else output_base / "figures"
 
@@ -318,7 +314,47 @@ def _ensure_comparison_directories(paths: ComparisonPaths) -> None:
     ensure_dir(paths.figures)
 
 
-def _load_linear_system(paths: ComparisonPaths) -> LinearSystem:
+def _normalize_linear_system(
+    matrix: np.ndarray,
+    rhs: np.ndarray,
+    normalize_system: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Apply comparison-time normalization to matrix and RHS."""
+    if normalize_system == "none":
+        return matrix, rhs
+    if normalize_system == "rhs":
+        rhs_norm = float(np.linalg.norm(rhs))
+        if rhs_norm == 0.0:
+            return matrix, rhs
+        return matrix, rhs / rhs_norm
+    if normalize_system == "both":
+        matrix, rhs = _normalize_linear_system(matrix, rhs, "matrix")
+        return _normalize_linear_system(matrix, rhs, "rhs")
+
+    strategy = normalize_system
+    if strategy not in {"matrix", "diagonal", "spectral"}:
+        raise ValueError(
+            f"Unsupported normalize_system value: {normalize_system!r}. "
+            "Expected one of none, matrix, rhs, both, diagonal, spectral."
+        )
+
+    rhs_samples = rhs.reshape(1, -1) if strategy == "spectral" else None
+    scale = create_scale_from_config(strategy, matrix, rhs_samples=rhs_samples)
+    if scale is None:
+        return matrix, rhs
+    if isinstance(scale, list):
+        if not scale:
+            return matrix, rhs
+        scale = scale[0]
+    return scale.scale_matrix(matrix), scale.scale_rhs(rhs)
+
+
+def _load_linear_system(
+    paths: ComparisonPaths,
+    *,
+    rhs_index: int,
+    normalize_system: str,
+) -> LinearSystem:
     """Load and validate linear system.
 
     This function:
@@ -337,7 +373,8 @@ def _load_linear_system(paths: ComparisonPaths) -> LinearSystem:
         ValueError: If validation fails (wrong shape, NaN values, incompatible dimensions)
         FileNotFoundError: If matrix or rhs files don't exist
     """
-    A, b = load_system_arrays(paths.matrix, paths.rhs)
+    A, b = load_system_arrays(paths.matrix, paths.rhs, rhs_index=rhs_index)
+    A, b = _normalize_linear_system(A, b, normalize_system)
     validate_matrix(A)
     validate_rhs_vector(b, A)
     return LinearSystem(matrix=A, rhs=b)
@@ -419,7 +456,7 @@ def _generate_comparison_plots(
 
 def compare_preconditioners(
     *,
-    general_params: GeneralSolverConfig,
+    general_params: ComparisonGeneral,
     preconditioner_configs: Sequence[PreconditionerConfig],
     output_root: Path | None = None,
     figures_root: Path | None = None,
@@ -448,7 +485,7 @@ def compare_preconditioners(
         12. Result packaging - Return comprehensive result object
 
     Args:
-        general_params: General solver configuration (rtol, atol, max_iter, paths)
+        general_params: Comparison general configuration
         preconditioner_configs: Sequence of preconditioner configurations
         output_root: Optional override for output root directory
         figures_root: Optional override for figures directory
@@ -470,16 +507,14 @@ def compare_preconditioners(
 
     Example:
         >>> from neuralls.workflows.compare import compare_preconditioners
-        >>> from neuralls.configuration.comparison import GeneralSolverConfig
+        >>> from neuralls.configuration.comparison import ComparisonGeneral, SolverParams, ComparisonData
         >>> from neuralls.configuration.preconditioner import StandardPreconditionerConfig
         >>>
-        >>> general = GeneralSolverConfig(
-        ...     matrix_path="data/matrix.txt",
-        ...     rhs_path="data/rhs.txt",
-        ...     output_root="output/comparison",
-        ...     rtol=1e-6,
-        ...     atol=0.0,
-        ...     max_iterations=1000,
+        >>> general = ComparisonGeneral(
+        ...     params=SolverParams(rtol=1e-6, atol=0.0, max_iterations=1000, stopping_criterion="residual_norm", m_max=10, breakdown_tol=None),
+        ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
+        ...     tracking=None,
+        ...     model_store=None,
         ... )
         >>> configs = [
         ...     StandardPreconditionerConfig(name="jacobi", type="jacobi"),
@@ -506,7 +541,11 @@ def compare_preconditioners(
     _ensure_comparison_directories(paths)
 
     # Step 3: Load and validate linear system
-    system = _load_linear_system(paths)
+    system = _load_linear_system(
+        paths,
+        rhs_index=general_params.data.rhs_index,
+        normalize_system=general_params.data.normalize_system,
+    )
 
     # Step 4: Create preconditioners via service (uses factory function)
     service = PreconditionerService()
@@ -529,10 +568,11 @@ def compare_preconditioners(
         system.matrix,
         system.rhs,
         preconditioners=scheduled_preconditioners,
-        rtol=general_params.rtol,
-        atol=general_params.atol,
-        maxiter=general_params.max_iterations,
-        m_max=general_params.m_max,
+        rtol=general_params.params.rtol,
+        atol=general_params.params.atol,
+        maxiter=general_params.params.max_iterations,
+        m_max=general_params.params.m_max,
+        breakdown_tol=general_params.params.breakdown_tol,
     )
     # Step 8: Generate recommendations (best solver combinations)
     recommendations = summarize_best_combinations(results)

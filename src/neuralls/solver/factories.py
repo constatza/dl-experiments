@@ -66,6 +66,7 @@ def flexible_cg(
     norm: Norm = euclidean_norm,
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
+    breakdown_tol: float | None = None,
     maxiter: int | None = None,
     trace_mode: TraceMode = TraceMode.MINIMAL,
 ) -> tuple[NDArray, SolverResult]:
@@ -93,6 +94,7 @@ def flexible_cg(
             Use energy_norm(A) for A-norm convergence criterion.
         rtol: Relative tolerance for convergence. Default: 1e-6.
         atol: Absolute tolerance for convergence. Default: 1e-14.
+        breakdown_tol: Breakdown detection tolerance.
         tol: Alternative name for rtol (overrides rtol if provided).
         maxiter: Maximum number of iterations. Default: 100.
         trace_mode: Tracing granularity level. Default: MINIMAL.
@@ -166,6 +168,7 @@ def flexible_cg(
         x0,
         rtol=rtol,
         atol=atol,
+        breakdown_tol=breakdown_tol,
         maxiter=maxiter,
     )
 
@@ -181,6 +184,7 @@ def pcg(
     m_max: int | None = None,
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
+    breakdown_tol: float | None = None,
     tol: float | None = None,
     maxiter: int | None = None,
     beta_formula: str = "fletcher_reeves",
@@ -215,6 +219,7 @@ def pcg(
             - >0: Truncated reorthogonalization (window size m_max)
         rtol: Relative tolerance for convergence. Default: 1e-6.
         atol: Absolute tolerance for convergence. Default: 1e-14.
+        breakdown_tol: Breakdown detection tolerance.
         tol: Alternative name for rtol (overrides rtol if provided).
         maxiter: Maximum number of iterations. Default: 100.
         beta_formula: Beta formula ("fletcher_reeves", "polak_ribiere"). Default: "fletcher_reeves".
@@ -296,6 +301,7 @@ def pcg(
         x0,
         rtol=rtol,
         atol=atol,
+        breakdown_tol=breakdown_tol,
         maxiter=maxiter,
     )
 

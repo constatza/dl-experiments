@@ -65,7 +65,7 @@ def create_preconditioner(
 
     Example:
         >>> # Load from TOML
-        >>> config = load_solver_config("solver.toml")
+        >>> config = load_comparison_config("comparison.toml")
         >>> precond = create_preconditioner(A, config.preconditioner)
         >>>
         >>> # Use it

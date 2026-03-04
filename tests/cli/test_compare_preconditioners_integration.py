@@ -46,23 +46,37 @@ def comparison_run_file(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def solver_config_file(tmp_path: Path) -> Path:
-    """Minimal solver config TOML file.
+def comparison_config_file(tmp_path: Path) -> Path:
+    """Minimal comparison config TOML file.
 
     Args:
         tmp_path: Pytest temporary directory.
 
     Returns:
-        Path to a written solver.toml file.
+        Path to a written comparison.toml file.
     """
-    path = tmp_path / "solver.toml"
+    path = tmp_path / "comparison.toml"
     path.write_text(
-        "[general]\n"
-        f'output_root = "{tmp_path / "output"}"\n'
+        "schema_version = 3\n"
         "\n"
-        "[general.comparisons]\n"
+        "[general]\n"
+        "\n"
+        "[general.params]\n"
+        "rtol = 1e-6\n"
+        "atol = 1e-14\n"
+        "max_iterations = 10\n"
+        "\n"
+        "[general.data]\n"
+        f'matrix_path = "{tmp_path}"\n'
+        f'rhs_path = "{tmp_path}"\n'
+        "\n"
+        "[general.tracking]\n"
         f'tracking_uri = "sqlite:///{tmp_path / "comparisons" / "mlflow.db"}"\n'
         f'artifact_location = "{tmp_path / "comparisons" / "artifacts"}"\n'
+        "\n"
+        "[[preconditioners]]\n"
+        'name = "none"\n'
+        'type = "identity"\n'
     )
     return path
 
@@ -81,14 +95,14 @@ def test_script_help() -> None:
 def test_pipeline_mode_with_comparison_run(
     mock_run: MagicMock,
     comparison_run_file: Path,
-    solver_config_file: Path,
+    comparison_config_file: Path,
 ) -> None:
     """Pipeline mode: run_comparison called with loaded ComparisonRun.
 
     Args:
         mock_run: Mocked run_comparison function.
         comparison_run_file: Path to comparison_run.json fixture.
-        solver_config_file: Path to solver config TOML fixture.
+        comparison_config_file: Path to comparison config TOML fixture.
     """
     outcome = ComparisonOutcome(
         name="solver",
@@ -103,7 +117,7 @@ def test_pipeline_mode_with_comparison_run(
     result = runner.invoke(
         test_app,
         [
-            "--solver-config", str(solver_config_file),
+            "--comparison-config", str(comparison_config_file),
             "--comparison-run", str(comparison_run_file),
             "--no-plots",
         ],
@@ -120,13 +134,13 @@ def test_pipeline_mode_with_comparison_run(
 @patch("neuralls.cli.compare_preconditioners.run_comparison")
 def test_standalone_mode_without_comparison_run(
     mock_run: MagicMock,
-    solver_config_file: Path,
+    comparison_config_file: Path,
 ) -> None:
     """Standalone mode: run_comparison called with comparison_run=None.
 
     Args:
         mock_run: Mocked run_comparison function.
-        solver_config_file: Path to solver config TOML fixture.
+        comparison_config_file: Path to comparison config TOML fixture.
     """
     outcome = ComparisonOutcome(
         name="solver",
@@ -141,7 +155,7 @@ def test_standalone_mode_without_comparison_run(
     result = runner.invoke(
         test_app,
         [
-            "--solver-config", str(solver_config_file),
+            "--comparison-config", str(comparison_config_file),
             "--no-plots",
         ],
     )
@@ -156,13 +170,13 @@ def test_standalone_mode_without_comparison_run(
 @patch("neuralls.cli.compare_preconditioners.run_comparison")
 def test_failure_outcome_exits_nonzero(
     mock_run: MagicMock,
-    solver_config_file: Path,
+    comparison_config_file: Path,
 ) -> None:
     """Failed comparison outcome causes non-zero exit code.
 
     Args:
         mock_run: Mocked run_comparison function.
-        solver_config_file: Path to solver config TOML fixture.
+        comparison_config_file: Path to comparison config TOML fixture.
     """
     outcome = ComparisonOutcome(name="solver", success=False, error="test error")
     mock_run.return_value = [outcome]
@@ -172,7 +186,39 @@ def test_failure_outcome_exits_nonzero(
 
     result = runner.invoke(
         test_app,
-        ["--solver-config", str(solver_config_file), "--no-plots"],
+        ["--comparison-config", str(comparison_config_file), "--no-plots"],
     )
 
     assert result.exit_code != 0
+
+
+@patch("neuralls.cli.compare_preconditioners.run_comparison")
+def test_invalid_comparison_run_falls_back_to_standalone(
+    mock_run: MagicMock,
+    tmp_path: Path,
+    comparison_config_file: Path,
+) -> None:
+    """Invalid comparison_run input should warn and continue with cr=None."""
+    outcome = ComparisonOutcome(
+        name="solver",
+        success=True,
+        payload=MagicMock(summary="ok", preconditioners=["none"], recommendations={}),
+    )
+    mock_run.return_value = [outcome]
+
+    bad_cr = tmp_path / "missing-comparison-run.json"
+    test_app = typer.Typer()
+    test_app.command()(main)
+
+    result = runner.invoke(
+        test_app,
+        [
+            "--comparison-config", str(comparison_config_file),
+            "--comparison-run", str(bad_cr),
+            "--no-plots",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_run.assert_called_once()
+    assert mock_run.call_args.args[2] is None

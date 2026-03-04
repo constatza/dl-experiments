@@ -14,10 +14,12 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from neuralls.cli.compare_preconditioners import main as compare_main
 from neuralls.cli.train_multiple import main as train_multiple_main
+from neuralls.io.dataset_storage import save_dataset
 from neuralls.workflows.comparison_run import ComparisonRun
 from neuralls.workflows.specs import ComparisonOutcome
 
@@ -87,33 +89,51 @@ def fake_checkpoint(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def solver_config(tmp_path: Path) -> Path:
-    """Minimal solver TOML with one neural solver and [general.comparisons] section."""
-    matrix_path = tmp_path / "normalized.npz"
-    matrix_path.touch()
+def comparison_config(tmp_path: Path) -> Path:
+    """Minimal comparison TOML with one neural preconditioner."""
+    dataset_dir = tmp_path / "dataset"
+    save_dataset(
+        dataset_dir=dataset_dir,
+        rhs=np.ones((1, 2), dtype=np.float64),
+        solutions=np.ones((1, 2), dtype=np.float64),
+        matrix=np.eye(2, dtype=np.float64),
+        normalization_type="matrix",
+        matrix_norm=1.0,
+        matrix_norm_type="spectral",
+        scale_metadata={},
+    )
     comparisons_db = tmp_path / "comparisons" / "mlflow.db"
     comparisons_artifacts = tmp_path / "comparisons" / "artifacts"
     content = "\n".join([
+        "schema_version = 3",
+        "",
         "[general]",
+        "",
+        "[general.params]",
         "rtol = 1e-6",
         "atol = 1e-14",
         "max_iterations = 10",
         'stopping_criterion = "residual_norm"',
-        f'matrix_path = "{matrix_path}"',
-        f'rhs_path = "{matrix_path}"',
-        f'output_root = "{tmp_path / "output"}"',
         "",
-        "[general.comparisons]",
+        "[general.data]",
+        f'matrix_path = "{dataset_dir}"',
+        f'rhs_path = "{dataset_dir}"',
+        'normalize_system = "matrix"',
+        "",
+        "[general.tracking]",
         f'tracking_uri = "sqlite:///{comparisons_db}"',
         f'artifact_location = "{comparisons_artifacts}"',
         "",
-        "[[solvers]]",
+        "[general.model_store]",
+        f'tracking_uri = "sqlite:///{comparisons_db}"',
+        "",
+        "[[preconditioners]]",
         'name = "neural"',
         'type = "neural"',
-        'experiment = "test_exp_1"',
+        'model_ref = { source = "registered", name = "NormScaledLinearFFNN", alias = "solutions" }',
         "",
     ])
-    p = tmp_path / "test_solver.toml"
+    p = tmp_path / "test_comparison.toml"
     p.write_text(content)
     return p
 
@@ -191,7 +211,7 @@ def test_train_multiple_echoes_comparison_run_info(
 def test_compare_preconditioners_loads_comparison_run(
     tmp_path: Path,
     stub_comparison_run: ComparisonRun,
-    solver_config: Path,
+    comparison_config: Path,
 ) -> None:
     """compare-preconditioners reads comparison_run.json and passes it to run_batch_comparison."""
     from neuralls.workflows.comparison_run import save_comparison_run
@@ -200,7 +220,7 @@ def test_compare_preconditioners_loads_comparison_run(
     save_comparison_run(stub_comparison_run, cr_path)
 
     success_outcome = ComparisonOutcome(
-        name=solver_config.stem,
+        name=comparison_config.stem,
         success=True,
         payload=MagicMock(summary="ok", preconditioners=["neural"], recommendations={}),
     )
@@ -211,14 +231,14 @@ def test_compare_preconditioners_loads_comparison_run(
     ) as mock_compare:
         compare_main(
             comparison_run=cr_path,
-            solver_config=solver_config,
+            comparison_config=comparison_config,
             plots=False,
         )
 
     mock_compare.assert_called_once()
     call_args = mock_compare.call_args
-    # First positional arg is solver_config path
-    assert call_args.args[0] == solver_config
+    # First positional arg is comparison_config path
+    assert call_args.args[0] == comparison_config
     # Third positional arg is the loaded ComparisonRun
     loaded_cr: ComparisonRun = call_args.args[2]
     assert loaded_cr.mlflow_run_id == stub_comparison_run.mlflow_run_id
@@ -230,7 +250,7 @@ def test_full_workflow_integration(
     experiments_config: Path,
     stub_comparison_run: ComparisonRun,
     stub_artifact_dir: Path,
-    solver_config: Path,
+    comparison_config: Path,
 ) -> None:
     """End-to-end: train-multiple → comparison_run.json → compare-preconditioners."""
     from neuralls.workflows.multi_training import BatchResult, TrainingRunResult
@@ -269,7 +289,7 @@ def test_full_workflow_integration(
 
     # Phase 2: comparison
     success_outcome = ComparisonOutcome(
-        name=solver_config.stem,
+        name=comparison_config.stem,
         success=True,
         payload=MagicMock(summary="ok", preconditioners=["neural"], recommendations={}),
     )
@@ -279,7 +299,7 @@ def test_full_workflow_integration(
     ) as mock_compare:
         compare_main(
             comparison_run=cr_path,
-            solver_config=solver_config,
+            comparison_config=comparison_config,
             plots=False,
         )
 

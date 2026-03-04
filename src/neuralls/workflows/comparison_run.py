@@ -63,7 +63,11 @@ class ComparisonRun:
 # ---------------------------------------------------------------------------
 
 
-def setup_comparison_tracking(tracking_uri: str, artifact_location: str) -> None:
+def setup_comparison_tracking(
+    tracking_uri: str,
+    artifact_location: str,
+    experiment_name: str = _COMPARISON_EXPERIMENT_NAME,
+) -> None:
     """Configure MLflow for a comparison run. Idempotent.
 
     Sets tracking URI, creates the comparisons experiment with a fixed
@@ -76,11 +80,11 @@ def setup_comparison_tracking(tracking_uri: str, artifact_location: str) -> None
     """
     mlflow.set_tracking_uri(tracking_uri)
     client = MlflowClient(tracking_uri=tracking_uri)
-    if client.get_experiment_by_name(_COMPARISON_EXPERIMENT_NAME) is None:
+    if client.get_experiment_by_name(experiment_name) is None:
         client.create_experiment(
-            _COMPARISON_EXPERIMENT_NAME, artifact_location=artifact_location
+            experiment_name, artifact_location=artifact_location
         )
-    mlflow.set_experiment(_COMPARISON_EXPERIMENT_NAME)
+    mlflow.set_experiment(experiment_name)
 
 
 # ---------------------------------------------------------------------------

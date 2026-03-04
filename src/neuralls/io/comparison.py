@@ -7,7 +7,7 @@ from pathlib import Path
 from loguru import logger
 import numpy as np
 
-from .base import load_npz_entry as load_npz_entry_raw
+from .dataset_storage import load_dense_training_arrays, load_matrix_dense_sample, load_dataset_manifest
 
 
 def resolve_system_paths(
@@ -19,7 +19,7 @@ def resolve_system_paths(
 ) -> tuple[Path, Path]:
     """Choose matrix/RHS paths with explicit inputs (no implicit filenames)."""
     matrix = matrix_path or config_matrix
-    rhs = rhs_path or config_rhs or matrix
+    rhs = rhs_path or config_rhs
 
     if matrix is None or rhs is None:
         raise ValueError(
@@ -35,50 +35,68 @@ def _flatten_rhs_if_needed(arr: np.ndarray, source_path: Path) -> np.ndarray:
     is_column_vector = arr.ndim == 2 and arr.shape[1] == 1
 
     if arr.ndim > 1 and arr.shape[0] > 1 and not is_column_vector:
-        logger.warning(f"{source_path} contains multiple RHS entries; using the first.")
+        logger.debug(
+            f"{source_path} contains multiple RHS entries; rhs_index will select one row."
+        )
 
     # Only extract the first row if it's NOT a column vector
-    if arr.ndim > 1 and not is_column_vector:
-        arr = arr[0]
-
-    return arr.reshape(-1)
-
-
-def load_npz_entry(npz_path: str | Path, key: str) -> np.ndarray:
-    """Load a single entry from an NPZ file, warning when multiple are present."""
-    npz_path = Path(npz_path)
-    arr = load_npz_entry_raw(npz_path, key)
-    if key == "matrix" and arr.ndim > 2:
-        logger.warning(f"{npz_path} contains multiple matrices; using the first slice.")
-        arr = arr[0]
-    if key == "rhs":
-        arr = _flatten_rhs_if_needed(arr, npz_path)
+    if arr.ndim > 1 and is_column_vector:
+        return arr.reshape(-1)
 
     return arr
 
 
-def load_system_arrays(
-    matrix_path: Path, rhs_path: Path | None = None
-) -> tuple[np.ndarray, np.ndarray | None]:
-    """Load matrix and RHS from explicit file paths (npz/npy/txt).
+def _select_rhs_sample(arr: np.ndarray, rhs_index: int, source_path: Path) -> np.ndarray:
+    """Select one RHS sample by index from 1D/2D RHS arrays."""
+    is_column_vector = arr.ndim == 2 and arr.shape[1] == 1
+    if arr.ndim == 1 or is_column_vector:
+        return arr.reshape(-1)
 
-    - npz: use load_npz_entry for "matrix" and "rhs" keys.
-    - npy/txt: load directly; RHS is flattened and warns on extra rows.
-    """
+    if rhs_index == -1:
+        return arr[0].reshape(-1)
+
+    if rhs_index < -1 or rhs_index >= arr.shape[0]:
+        raise IndexError(
+            f"rhs_index={rhs_index} out of range for {source_path} "
+            f"(available rows: 0..{arr.shape[0]-1}, or -1 for first row)."
+        )
+    return arr[rhs_index].reshape(-1)
+
+
+def load_system_arrays(
+    matrix_path: Path, rhs_path: Path | None = None, rhs_index: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load matrix and RHS from explicit file paths (dataset dir, npy, txt)."""
     matrix_path = Path(matrix_path)
-    rhs_path = Path(rhs_path) if rhs_path is not None else matrix_path
+    if rhs_path is None:
+        raise ValueError("rhs_path is required for loading system arrays.")
+    rhs_path = Path(rhs_path)
 
     def _load_array(path: Path, key: str) -> np.ndarray:
+        if path.is_dir():
+            try:
+                load_dataset_manifest(path)
+                if key == "matrix":
+                    return load_matrix_dense_sample(path, sample_index=0)
+                rhs, _ = load_dense_training_arrays(path)
+                return np.asarray(rhs, dtype=np.float64)
+            except (FileNotFoundError, ValueError):
+                if key == "matrix" and (path / "values.npy").exists():
+                    return load_matrix_dense_sample(path.parent, sample_index=0)
+                raise
         match path.suffix:
-            case ".npz":
-                return load_npz_entry(path, key)
             case ".npy":
                 return np.load(path).astype(np.float64, copy=False)
+            case ".npz":
+                raise ValueError(
+                    f"NPZ inputs are no longer supported ({path}). Use dataset directories or .npy files."
+                )
             case _:
                 return np.loadtxt(path, dtype=np.float64)
 
     A = _load_array(matrix_path, "matrix")
     b_raw = _load_array(rhs_path, "rhs")
-    b = _flatten_rhs_if_needed(b_raw, rhs_path) if b_raw is not None else None
+    b = _flatten_rhs_if_needed(b_raw, rhs_path)
+    b = _select_rhs_sample(b, rhs_index, rhs_path)
 
     return A, b

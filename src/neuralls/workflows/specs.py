@@ -19,7 +19,7 @@ class ComparisonSpec:
     name: str
     model_config: Path
     data_config: Path
-    solver_config: Path
+    comparison_config: Path
     workspace: ExperimentWorkspace
     checkpoint: Path
     matrix_override: Path | None = None

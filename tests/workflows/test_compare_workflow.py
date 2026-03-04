@@ -5,41 +5,60 @@ from pathlib import Path
 import numpy as np
 
 from neuralls.workflows.compare import compare_preconditioners
-from neuralls.io.toml_loader import load_solver_config
+from neuralls.io.toml_loader import load_comparison_config
+from neuralls.io.dataset_storage import save_dataset
 
 
-def _write_normalized_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:
+def _write_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:
     solutions = np.linalg.solve(A, b)
     rhs = b.reshape(1, -1)
     sols = solutions.reshape(1, -1)
-    np.savez(root / "normalized.npz", matrix=A, rhs=rhs, solutions=sols)
+    save_dataset(
+        dataset_dir=root,
+        rhs=rhs,
+        solutions=sols,
+        matrix=A,
+        normalization_type="matrix",
+        matrix_norm=float(np.linalg.norm(A, ord=2)),
+        matrix_norm_type="spectral",
+        scale_metadata={},
+    )
 
 
-def _write_solver_config(path: Path, system_path: Path) -> None:
+def _write_comparison_config(path: Path, system_path: Path) -> None:
     output_root = path.parent / "output"
     path.write_text(
         "\n".join(
             [
+                "schema_version = 3",
+                "",
                 "[general]",
+                "",
+                "[general.params]",
                 "rtol = 1e-6",
                 "atol = 1e-14",
                 "max_iterations = 50",
                 'stopping_criterion = "residual_norm"',
+                "",
+                "[general.data]",
                 f'matrix_path = "{system_path}"',
                 f'rhs_path = "{system_path}"',
-                f'output_root = "{output_root}"',
+                "normalize_system = \"matrix\"",
                 "",
-                "[[solvers]]",
+                "[general.tracking]",
+                f'tracking_uri = "sqlite:///{(path.parent / "comparisons.db").as_posix()}"',
+                f'artifact_location = "{(output_root / "mlartifacts").as_posix()}"',
+                "",
+                "[general.model_store]",
+                f'tracking_uri = "sqlite:///{(path.parent / "models.db").as_posix()}"',
+                "",
+                "[[preconditioners]]",
                 'name = "none"',
-                'type = "none"',
+                'type = "identity"',
                 "",
-                "[[solvers]]",
+                "[[preconditioners]]",
                 'name = "jacobi"',
                 'type = "jacobi"',
-                "",
-                "[data_generation]",
-                'normalize = "matrix"',
-                "",
             ]
         ),
         encoding="utf-8",
@@ -55,7 +74,7 @@ def _write_data_config(path: Path, data_root: Path) -> None:
                 'dataset = "test-dataset"',
                 "",
                 "[output]",
-                f'processed_dir = "{data_root}"',
+                f'data_dir = "{data_root}"',
                 f'output_root = "{data_root}"',
                 "",
             ]
@@ -96,15 +115,13 @@ def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
 
 
 def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
-    """End-to-end check that compare_preconditioners loads solver config and data."""
+    """End-to-end check that compare_preconditioners loads config and data."""
     A = np.array([[4.0, -1.0], [-1.0, 3.0]], dtype=np.float64)
     b = np.array([1.0, 2.0], dtype=np.float64)
-    _write_normalized_dataset(tmp_path, A, b)
+    _write_dataset(tmp_path, A, b)
 
-    normalized_npz = tmp_path / "normalized.npz"
-
-    solver_cfg = tmp_path / "solver_config.toml"
-    _write_solver_config(solver_cfg, normalized_npz)
+    comparison_cfg = tmp_path / "comparison_config.toml"
+    _write_comparison_config(comparison_cfg, tmp_path)
 
     # Create minimal data config pointing to tmp_path
     data_cfg = tmp_path / "data_config.toml"
@@ -116,11 +133,11 @@ def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
     checkpoint_dir.mkdir()
     _write_model_config(model_cfg, checkpoint_dir)
 
-    solver_cfg_model = load_solver_config(solver_cfg)
+    comparison_cfg_model = load_comparison_config(comparison_cfg)
 
     results = compare_preconditioners(
-        general_params=solver_cfg_model.general,
-        preconditioner_configs=solver_cfg_model.solvers,
+        general_params=comparison_cfg_model.general,
+        preconditioner_configs=comparison_cfg_model.preconditioners,
     )
 
     # Access results from ComparisonResult Pydantic model

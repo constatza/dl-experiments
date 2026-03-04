@@ -31,6 +31,7 @@ def run_cg_comparison(
     atol: float = DEFAULT_ATOL,
     maxiter: int = 100,
     m_max: int = DEFAULT_M_MAX,
+    breakdown_tol: float | None = None,
 ) -> dict[str, CGComparisonResult]:
     """Run CG with multiple preconditioners for comparison.
 
@@ -45,6 +46,7 @@ def run_cg_comparison(
         atol: Absolute tolerance
         maxiter: Maximum iterations
         m_max: FCG orthogonalization restart parameter
+        breakdown_tol: Breakdown detection tolerance.
 
     Returns:
         Dict mapping preconditioner names to CGComparisonResult
@@ -88,6 +90,7 @@ def run_cg_comparison(
                     maxiter=maxiter,
                     preconditioner=precond,
                     m_max=m_max,
+                    breakdown_tol=breakdown_tol,
                 )
             else:
                 # Use standard PCG for constant preconditioners
@@ -99,6 +102,7 @@ def run_cg_comparison(
                     atol=atol,
                     maxiter=maxiter,
                     preconditioner=precond,
+                    breakdown_tol=breakdown_tol,
                 )
         except (ValueError, RuntimeError, np.linalg.LinAlgError) as solver_exc:
             result = CGComparisonResult(

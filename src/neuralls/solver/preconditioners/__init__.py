@@ -37,7 +37,7 @@ Example:
     >>> z = precond.apply(residual)
     >>>
     >>> # Factory from TOML
-    >>> config = load_solver_config("solver.toml")
+    >>> config = load_comparison_config("comparison.toml")
     >>> precond = create_preconditioner(matrix, config.preconditioner)
 """
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from neuralls.configuration.data_models import DataConfigFile
-from neuralls.configuration.comparison import ComparisonConfig
+from neuralls.configuration.comparison import ComparisonConfig, parse_comparison_config
 
 
 def load_model_config(path: Path) -> TrainingWorkflowSettings:
@@ -48,20 +48,20 @@ def load_data_config(path: Path) -> DataConfigFile:
     return DataConfigFile(**raw)
 
 
-def load_solver_config(path: Path) -> ComparisonConfig:
-    """Load and validate solver.toml file.
+def load_comparison_config(path: Path) -> ComparisonConfig:
+    """Load and validate comparison TOML file.
 
     Args:
-        path: Path to solver configuration TOML file.
+        path: Path to comparison configuration TOML file.
 
     Returns:
-        Validated SolverConfigFile instance.
+        Parsed ComparisonConfig dataclass.
 
     Raises:
         ConfigLoadError: If file cannot be read or validation fails.
     """
     raw = load_raw_toml(path)
-    return ComparisonConfig(**raw)
+    return parse_comparison_config(raw)
 
 
 def load_raw_toml(path: Path) -> dict[str, Any]:

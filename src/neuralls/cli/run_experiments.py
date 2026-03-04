@@ -44,7 +44,7 @@ def main(
 
     For solver comparison after training, use:
         $ uv run train-multiple configs/experiments.toml
-        $ uv run compare-preconditioners --solver-config configs/solvers/default.toml --comparison-run output/training/comparison_run.json
+        $ uv run compare-preconditioners --comparison-config configs/comparison/linear.toml --comparison-run /path/to/comparison_run.json
 
     Example:
         # Train all experiments

@@ -1,40 +1,8 @@
-"""Backend helpers for comparison workflows.
-
-This module provides orchestration for running CG solver comparisons.
-Neural preconditioner checkpoints are resolved from a ``ComparisonRun``
-produced by ``train_batch()`` — no ``experiments.toml`` needed here.
-
-Architecture:
-    ``run_comparison()`` is the single entry point.  It supports two modes:
-
-    - Pipeline mode (``comparison_run`` provided): resolves neural checkpoint
-      references from ``checkpoint_map``; uses ``comparison_run.tracking_uri``.
-    - Standalone mode (``comparison_run=None``): neural specs must carry explicit
-      ``checkpoint_path``; uses ``solver_cfg.general.comparisons.tracking_uri``.
-
-    Comparison runs are tagged with ``batch_run_id`` for grouping (pipeline mode)
-    or ``phase=direct_comparison`` (standalone mode).
-
-Key Functions:
-    - ``run_comparison()``: Unified entry point for both modes.
-    - ``_resolve_preconditioner()``: Pure: inject checkpoint into a neural solver spec.
-    - ``_resolve_neural_preconditioners()``: Pure map over all solver specs.
-    - ``_validate_neural_preconditioner()``: Pure validation helper.
-
-Example:
-    >>> from neuralls.workflows.comparison import run_comparison
-    >>> from neuralls.workflows.comparison_run import load_comparison_run
-    >>> comparison_run = load_comparison_run(Path("output/training/comparison_run.json"))
-    >>> outcomes = run_comparison(
-    ...     Path("configs/solvers/default.toml"),
-    ...     ComparisonParams(save_plots=True),
-    ...     comparison_run,
-    ... )
-    >>> print(f"{sum(o.success for o in outcomes)}/{len(outcomes)} comparisons succeeded")
-"""
+"""Backend helpers for comparison workflows."""
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -42,120 +10,67 @@ import mlflow
 import tomli_w
 from loguru import logger
 
-from neuralls.configuration.comparison import ComparisonsTrackingConfig
-from neuralls.configuration.preconditioner import PreconditionerConfig
-from neuralls.io.toml_loader import load_solver_config
+from neuralls.configuration.comparison import ComparisonConfig
+from neuralls.configuration.preconditioner import (
+    NeuralPreconditionerConfig,
+    PreconditionerConfig,
+)
+from neuralls.io.toml_loader import load_comparison_config
 from neuralls.workflows.comparison_run import (
     ComparisonRun,
     _artifact_uri_to_local_path,
-    resolve_checkpoint_from_run,
     setup_comparison_tracking,
 )
 from neuralls.workflows.compare import compare_preconditioners
-from neuralls.workflows.specs import ComparisonOutcome, ComparisonParams
+from neuralls.workflows.model_resolution import resolve_preconditioner_models
 from neuralls.workflows.results import ComparisonResult
-
-
-# ---------------------------------------------------------------------------
-# Pure helpers
-# ---------------------------------------------------------------------------
+from neuralls.workflows.specs import ComparisonOutcome, ComparisonParams
 
 
 def _validate_neural_preconditioner(spec: Any) -> None:
-    """Pure: validate that a neural solver spec has a resolvable checkpoint source.
-
-    Neural preconditioners must specify either:
-    - ``checkpoint_path`` (explicit path), or
-    - ``experiment`` (ID to resolve from ``ComparisonRun``).
-
-    Args:
-        spec: Solver specification (``SolverSpecConfig`` from solver.toml).
-
-    Raises:
-        ValueError: If neural solver lacks both ``checkpoint_path`` and ``experiment``.
-    """
-    if spec.type != "neural":
+    """Validate strict neural preconditioner requirements for schema_version=3."""
+    if not isinstance(spec, NeuralPreconditionerConfig):
         return
-    if not spec.checkpoint_path and not spec.experiment:
+    if spec.model_ref is None:
         raise ValueError(
-            f"Neural solver '{spec.name}' must specify "
-            "either 'checkpoint_path' or 'experiment'."
+            f"Neural preconditioner '{spec.name}' must define model_ref."
+        )
+    if spec.checkpoint_path is not None or spec.experiment is not None:
+        raise ValueError(
+            f"Neural preconditioner '{spec.name}' cannot use checkpoint_path/experiment "
+            "in schema_version=3."
         )
 
 
 def _resolve_preconditioner(
     spec: Any,
-    comparison_run: ComparisonRun,
+    comparison_run: ComparisonRun,  # noqa: ARG001
 ) -> Any:
-    """Pure: inject checkpoint_path into a neural solver spec from ComparisonRun.
-
-    Three cases:
-    1. Non-neural solver → returned unchanged.
-    2. Neural with explicit ``checkpoint_path`` → returned unchanged.
-    3. Neural with ``experiment`` ref → checkpoint resolved from ComparisonRun.
-
-    Args:
-        spec: Solver specification (``SolverSpecConfig``).
-        comparison_run: ComparisonRun produced by ``train_batch()``.
-
-    Returns:
-        Resolved solver spec (unchanged or with ``checkpoint_path`` injected).
-
-    Raises:
-        ValueError: If neural solver config is invalid.
-        KeyError: If experiment ref not found in ``comparison_run.checkpoint_map``.
-    """
-    if spec.type != "neural":
-        return spec
-    if spec.checkpoint_path:
-        return spec
-
+    """Strict schema keeps model resolution in model_ref path (no checkpoint-map rewrite)."""
     _validate_neural_preconditioner(spec)
-    checkpoint = resolve_checkpoint_from_run(spec, comparison_run)
-    return spec.model_copy(update={"checkpoint_path": checkpoint})
+    return spec
 
 
 def _resolve_neural_preconditioners(
     solver_specs: list[Any],
-    comparison_run: ComparisonRun,
+    comparison_run: ComparisonRun,  # noqa: ARG001
 ) -> list[PreconditionerConfig]:
-    """Pure: resolve checkpoints for all neural solver specs.
-
-    Non-neural and already-resolved specs pass through unchanged.
-
-    Args:
-        solver_specs: List of ``SolverSpecConfig`` from solver.toml ``[solvers]``.
-        comparison_run: ComparisonRun with checkpoint_map from training phase.
-
-    Returns:
-        List of solver specs with all neural ``experiment`` refs resolved to
-        ``checkpoint_path`` values.
-
-    Raises:
-        ValueError: If any neural spec is misconfigured.
-        KeyError: If any experiment ref is missing from ``comparison_run.checkpoint_map``.
-    """
+    """Validate neural preconditioners and return unchanged specs."""
     return [_resolve_preconditioner(spec, comparison_run) for spec in solver_specs]
 
 
 def _save_comparison_toml(result: ComparisonResult, output_path: Path) -> None:
-    """Save comparison diagnostics to a TOML file.
-
-    Args:
-        result: The comparison result.
-        output_path: Path to the output TOML file.
-    """
+    """Save comparison diagnostics to a TOML file."""
     data: dict[str, Any] = {
         "condition_number": result.condition_numbers,
     }
 
-    # Add other scalar metrics
     iterations: dict[str, int] = {}
     residuals: dict[str, float] = {}
     for name, res in result.results.items():
         iterations[name] = res.iterations
         residuals[name] = res.residual
-    
+
     data["iterations"] = iterations
     data["final_residual"] = residuals
 
@@ -163,104 +78,120 @@ def _save_comparison_toml(result: ComparisonResult, output_path: Path) -> None:
         tomli_w.dump(data, f)
 
 
-# ---------------------------------------------------------------------------
-# Side-effect orchestration
-# ---------------------------------------------------------------------------
+def _needs_model_resolution(specs: tuple[PreconditionerConfig, ...]) -> bool:
+    """Return True when any neural preconditioner needs model_ref lookup."""
+    for spec in specs:
+        if not isinstance(spec, NeuralPreconditionerConfig):
+            continue
+        if spec.model_ref is not None:
+            return True
+    return False
+
+
+def _resolve_tracking(
+    cfg: ComparisonConfig,
+    comparison_run: ComparisonRun | None,
+) -> tuple[str, str, str, dict[str, str]]:
+    """Resolve comparison tracking coordinates and run tags."""
+    if cfg.general.tracking is None:
+        raise ValueError(
+            "general.tracking is required for comparison runs."
+        )
+    tags: dict[str, str] = {"phase": "comparison"}
+    if comparison_run is not None:
+        tags["batch_run_id"] = comparison_run.mlflow_run_id
+    return (
+        cfg.general.tracking.tracking_uri,
+        str(cfg.general.tracking.artifact_location),
+        cfg.general.tracking.experiment_name,
+        tags,
+    )
+
+
+def _resolve_specs(
+    cfg: ComparisonConfig,
+    work_root: Path,
+) -> list[PreconditionerConfig]:
+    """Resolve model_ref preconditioners into concrete checkpoint paths."""
+    specs = list(cfg.preconditioners)
+    if not _needs_model_resolution(cfg.preconditioners):
+        return specs
+
+    model_store = cfg.general.model_store
+    if model_store is None:
+        raise ValueError(
+            "general.model_store.tracking_uri is required when neural preconditioners use model_ref."
+        )
+    return resolve_preconditioner_models(
+        specs=specs,
+        tracking_uri=model_store.tracking_uri,
+        download_root=work_root / "models",
+        dataset_alias=cfg.general.data.dataset_alias,
+    )
 
 
 def run_comparison(
-    solver_config: Path,
+    comparison_config: Path,
     params: ComparisonParams,
     comparison_run: ComparisonRun | None = None,
+    experiments_config_path: Path | None = None,
 ) -> list[ComparisonOutcome]:
-    """Run a preconditioner comparison.
-
-    Two modes depending on whether a ComparisonRun is provided:
-
-    - Pipeline mode (``comparison_run`` provided): resolves neural checkpoint
-      references from ``checkpoint_map``; uses ``comparison_run.tracking_uri``.
-    - Standalone mode (``comparison_run=None``): neural specs must carry explicit
-      ``checkpoint_path``; uses ``solver_cfg.general.comparisons.tracking_uri``.
-
-    Args:
-        solver_config: Path to solver TOML (e.g. ``configs/solvers/default.toml``).
-        params: Comparison parameters (save_plots, etc.).
-        comparison_run: Optional handshake from ``train_batch()``. When ``None``,
-            solver_config must have ``[general.comparisons]`` configured and all
-            neural specs must have explicit ``checkpoint_path``.
-
-    Returns:
-        List with a single ``ComparisonOutcome`` for the solver config.
-
-    Raises:
-        ValueError: If standalone mode is used without ``[general.comparisons]``
-            or a neural spec is missing ``checkpoint_path``.
-        KeyError: If a neural spec references an experiment not in ``checkpoint_map``.
-    """
+    """Run a preconditioner comparison from a schema_version=3 config."""
     try:
-        solver_cfg = load_solver_config(solver_config)
-
-        if comparison_run is not None:
-            resolved_specs = _resolve_neural_preconditioners(solver_cfg.solvers, comparison_run)
-            tracking = ComparisonsTrackingConfig(
-                tracking_uri=comparison_run.tracking_uri,
-                artifact_location=comparison_run.artifact_location,
+        if experiments_config_path is not None:
+            raise ValueError(
+                "experiments_config_path is not supported in comparison schema_version=3."
             )
-            tags: dict[str, str] = {
-                "phase": "comparison",
-                "batch_run_id": comparison_run.mlflow_run_id,
-            }
-        else:
-            for spec in solver_cfg.solvers:
-                _validate_neural_preconditioner(spec)
-                if spec.type == "neural" and not spec.checkpoint_path:
-                    raise ValueError(
-                        f"Neural solver '{spec.name}' requires explicit checkpoint_path "
-                        "in standalone mode (no ComparisonRun provided)."
-                    )
-            if solver_cfg.general.comparisons is None:
-                raise ValueError(
-                    "[general.comparisons] is required in solver config for standalone mode."
-                )
-            resolved_specs = solver_cfg.solvers
-            tracking = solver_cfg.general.comparisons
-            tags = {"phase": "direct_comparison"}
 
-        setup_comparison_tracking(tracking.tracking_uri, tracking.artifact_location)
-        run_name = f"comparison-{solver_config.stem}"
+        cfg = load_comparison_config(comparison_config)
+        tracking_uri, artifact_location, experiment_name, tags = _resolve_tracking(
+            cfg, comparison_run
+        )
+
+        setup_comparison_tracking(
+            tracking_uri=tracking_uri,
+            artifact_location=artifact_location,
+            experiment_name=experiment_name,
+        )
+        run_name = cfg.run_name or f"comparison-{comparison_config.stem}"
+
         with mlflow.start_run(run_name=run_name, tags=tags) as comp_run:
             comp_run_id = comp_run.info.run_id
-            output_root = _artifact_uri_to_local_path(mlflow.get_artifact_uri())
+            _ = _artifact_uri_to_local_path(mlflow.get_artifact_uri())
 
-            result = compare_preconditioners(
-                general_params=solver_cfg.general,
-                preconditioner_configs=resolved_specs,
-                output_root=output_root,
-                save_plots=params.save_plots,
-            )
+            with tempfile.TemporaryDirectory() as _tmp:
+                work_root = Path(_tmp)
+                resolved_specs = _resolve_specs(cfg, work_root)
 
-            # Save comparison.toml
-            output_root.mkdir(parents=True, exist_ok=True)
-            toml_path = output_root / "comparison.toml"
-            _save_comparison_toml(result, toml_path)
+                result = compare_preconditioners(
+                    general_params=cfg.general,
+                    preconditioner_configs=resolved_specs,
+                    output_root=work_root,
+                    save_plots=params.save_plots,
+                )
 
-            # Log all artifacts in output_root to MLflow
-            mlflow.log_artifacts(str(output_root))
-            
-            # Explicitly log the solver config file
-            mlflow.log_artifact(str(solver_config))
-            
-            mlflow.log_param("solver_config", solver_config.stem)
+                toml_path = work_root / "comparison.toml"
+                _save_comparison_toml(result, toml_path)
+                mlflow.log_artifacts(str(work_root))
+
+            mlflow.log_artifact(str(comparison_config), artifact_path="config")
+            mlflow.log_param("comparison_config", comparison_config.stem)
             mlflow.log_param("comp_run_id", comp_run_id)
             best = (result.recommendations or {}).get("best_overall")
             if best:
-                mlflow.log_metrics({
-                    "best_iterations": float(best.get("iterations", 0)),
-                    "best_residual": float(best.get("residual", 0)),
-                })
+                mlflow.log_metrics(
+                    {
+                        "best_iterations": float(best.get("iterations", 0)),
+                        "best_residual": float(best.get("residual", 0)),
+                    }
+                )
 
     except (ValueError, RuntimeError, OSError, FileNotFoundError, KeyError) as exc:
         logger.error(f"Comparison failed: {exc}")
-        return [ComparisonOutcome(name=solver_config.stem, success=False, error=str(exc))]
+        return [
+            ComparisonOutcome(
+                name=comparison_config.stem, success=False, error=str(exc)
+            )
+        ]
 
-    return [ComparisonOutcome(name=solver_config.stem, success=True, payload=result)]
+    return [ComparisonOutcome(name=comparison_config.stem, success=True, payload=result)]

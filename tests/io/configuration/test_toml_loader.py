@@ -11,8 +11,8 @@ import pytest
 
 from neuralls.io.toml_loader import (
     load_data_config,
+    load_comparison_config,
     load_raw_toml,
-    load_solver_config,
 )
 
 import tomllib
@@ -43,7 +43,7 @@ name = "solution_archive"
 samples = 1000
 
 [output]
-processed_dir = "/data/processed"
+data_dir = "/data/processed"
 
 [test]
 solutions_path = "/data/test/solutions.txt"
@@ -56,7 +56,7 @@ solutions_path = "/data/test/solutions.txt"
         assert config.generation.normalize == "matrix"
         assert len(config.generation.strategy) == 1
         assert config.generation.strategy[0].name == "solution_archive"
-        assert config.output.processed_dir == Path("/data/processed")
+        assert config.output.data_dir == Path("/data/processed")
         assert config.test.solutions_path == "/data/test/solutions.txt"
 
     def test_load_data_config_with_defaults(self, tmp_path: Path):
@@ -96,54 +96,145 @@ residual_iters = 0  # Should be >= 1
         assert "validation error for DataConfigFile" in str(exc_info.value)
 
 
-class TestLoadSolverConfig:
-    """Tests for load_solver_config function."""
+class TestLoadComparisonConfig:
+    """Tests for load_comparison_config function."""
 
-    def test_load_valid_solver_config(self, tmp_path: Path):
-        """Test loading a valid solver config."""
-        config_file = tmp_path / "solver.toml"
-        output_root = tmp_path / "output"
+    def test_load_valid_comparison_config(self, tmp_path: Path):
+        """Test loading a valid comparison config."""
+        config_file = tmp_path / "comparison.toml"
         config_file.write_text(
             f"""
+schema_version = 3
+
 [general]
+
+[general.params]
 rtol = 1e-6
 atol = 1e-12
 max_iterations = 100
-output_root = "{output_root}"
 
-[[solvers]]
+[general.data]
+matrix_path = "{tmp_path / "matrix.npy"}"
+rhs_path = "{tmp_path / "rhs.npy"}"
+normalize_system = "matrix"
+
+[general.tracking]
+tracking_uri = "sqlite:///{(tmp_path / "comparisons.db").as_posix()}"
+artifact_location = "{(tmp_path / "mlartifacts").as_posix()}"
+
+[general.model_store]
+tracking_uri = "sqlite:///{(tmp_path / "models.db").as_posix()}"
+
+[[preconditioners]]
 name = "test_solver"
 type = "jacobi"
 """
         )
 
-        config = load_solver_config(config_file)
-        assert config.general.rtol == 1e-6
-        assert config.general.atol == 1e-12
-        assert len(config.solvers) == 1
-        assert config.solvers[0].name == "test_solver"
-        assert config.solvers[0].type == "jacobi"
+        config = load_comparison_config(config_file)
+        assert config.schema_version == 3
+        assert config.general.params.rtol == 1e-6
+        assert config.general.params.atol == 1e-12
+        assert len(config.preconditioners) == 1
+        assert config.preconditioners[0].name == "test_solver"
+        assert config.preconditioners[0].type == "jacobi"
 
-    def test_load_solver_config_with_defaults(self, tmp_path: Path):
-        """Test loading solver config with defaults."""
-        config_file = tmp_path / "solver.toml"
-        output_root = tmp_path / "output"
+    def test_legacy_schema_rejected(self, tmp_path: Path):
+        """Legacy solver schema must fail."""
+        config_file = tmp_path / "comparison.toml"
         config_file.write_text(
             f"""
 [general]
-# Use all defaults
-output_root = "{output_root}"
+rtol = 1e-6
 
 [[solvers]]
-name = "default_solver"
+name = "legacy_solver"
 type = "none"
 """
         )
 
-        config = load_solver_config(config_file)
-        # Check defaults from constants
-        assert config.general.max_iterations == 100  # Default
-        assert config.general.stopping_criterion == "residual_norm"  # Default
+        with pytest.raises(ValidationError):
+            load_comparison_config(config_file)
+
+    def test_neural_model_ref_requires_model_store(self, tmp_path: Path) -> None:
+        """Neural model_ref configs must define general.model_store."""
+        config_file = tmp_path / "comparison.toml"
+        config_file.write_text(
+            f"""
+schema_version = 3
+
+[general]
+
+[general.params]
+rtol = 1e-6
+atol = 1e-12
+max_iterations = 100
+
+[general.data]
+matrix_path = "{tmp_path / "matrix.npy"}"
+rhs_path = "{tmp_path / "rhs.npy"}"
+
+[general.tracking]
+tracking_uri = "sqlite:///{(tmp_path / "comparisons.db").as_posix()}"
+artifact_location = "{(tmp_path / "mlartifacts").as_posix()}"
+
+[[preconditioners]]
+name = "neural"
+type = "neural"
+model_ref = {{ source = "registered", name = "NormScaledLinearFFNN", alias = "solutions" }}
+"""
+        )
+        with pytest.raises(ValidationError, match="general.model_store"):
+            load_comparison_config(config_file)
+
+    def test_dataset_alias_required_for_at_dataset(self, tmp_path: Path) -> None:
+        """@dataset requires general.data.dataset_alias."""
+        config_file = tmp_path / "comparison.toml"
+        config_file.write_text(
+            f"""
+schema_version = 3
+
+[general]
+
+[general.params]
+rtol = 1e-6
+atol = 1e-12
+max_iterations = 100
+
+[general.data]
+matrix_path = "{tmp_path / "matrix.npy"}"
+rhs_path = "{tmp_path / "rhs.npy"}"
+
+[general.tracking]
+tracking_uri = "sqlite:///{(tmp_path / "comparisons.db").as_posix()}"
+artifact_location = "{(tmp_path / "mlartifacts").as_posix()}"
+
+[general.model_store]
+tracking_uri = "sqlite:///{(tmp_path / "models.db").as_posix()}"
+
+[[preconditioners]]
+name = "neural"
+type = "neural"
+model_ref = {{ source = "registered", name = "NormScaledLinearFFNN", alias = "@dataset" }}
+"""
+        )
+        with pytest.raises(ValidationError, match="dataset_alias"):
+            load_comparison_config(config_file)
+
+    def test_project_comparison_configs_load(self) -> None:
+        """Project comparison configs (linear/ffnn) load successfully."""
+        project_root = Path(__file__).resolve().parents[3]
+        comparison_dir = project_root / "configs" / "comparison"
+        linear_cfg = comparison_dir / "linear.toml"
+        ffnn_cfg = comparison_dir / "ffnn.toml"
+
+        linear = load_comparison_config(linear_cfg)
+        ffnn = load_comparison_config(ffnn_cfg)
+
+        assert linear.schema_version == 3
+        assert ffnn.schema_version == 3
+        assert len(linear.preconditioners) > 0
+        assert len(ffnn.preconditioners) > 0
 
 
 class TestLoadRawToml:
