@@ -1,320 +1,128 @@
 # Configuration System
 
-This directory contains all configuration files for the dl-experiments project using a **dataset-centric organization**.
+This project now uses a strict split between:
+- training configs (`experiments.toml` + `models/*` + `datasets/*`)
+- comparison configs (`comparison/*`, `schema_version = 3`)
 
-## Directory Structure
+## Directory Layout
 
-```
+```text
 configs/
-  experiments.toml          # Master experiment registry (NEW FORMAT)
-  datasets/                 # Dataset generation configs (shared)
-    test-solutions.toml
-    collect-504-solutions.toml
-    neutral-test-*.toml
-  models/                   # Model architecture configs (shared)
-    ffnn.toml
-    gnn.toml
-    linear.toml
-  solvers/                  # Solver comparison configs (shared)
-    default.toml
-    compare-all-on-neutral-test.toml
+  experiments.toml          # Training experiment matrix
+  experiments-ffnn.toml     # Alternate training matrix
+  models/                   # Model/training settings
+  datasets/                 # Dataset generation settings
+  comparison/
+    linear.toml             # Comparison settings for NormScaledLinearFFNN
+    ffnn.toml               # Comparison settings for NormScaledConstantWidthFFNN
 ```
 
-## New Configuration Format
+## Training Protocol
 
-### experiments.toml (Master Registry)
+`experiments.toml` defines training runs via `[[experiment]]` (or `[[run]]` in direct-path mode).
 
-**Format**: Array of `[[experiment]]` entries, each defining:
-- `id`: Unique experiment identifier
-- `dataset`: Reference to dataset config (in `datasets/`)
-- `model`: Reference to model config (in `models/`)
-- `solver`: Reference to solver config (in `solvers/`)
-- `checkpoint_path`: **Explicit** path to trained checkpoint
+Example (`[[experiment]]` form):
 
-**Example**:
 ```toml
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
 
-[[experiment]]
-id = "ffnn_test_solutions"
-dataset = "test-solutions"
-model = "ffnn"
-solver = "default"
-checkpoint_path = "/data/projects/graph-cg/data/output/checkpoints/test-solutions/ffnn.ckpt"
+[comparisons]
+tracking_uri = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
+artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
 
 [[experiment]]
-id = "gnn_test_solutions"
-dataset = "test-solutions"  # SAME dataset
-model = "gnn"                # Different model
-solver = "default"           # SAME solver config
-checkpoint_path = "/data/projects/graph-cg/data/output/checkpoints/test-solutions/gnn.ckpt"
+id = "linear_test_solutions"
+dataset = "solutions"
+model = "linear"
 ```
 
-**Benefits**:
-- ✅ Zero config duplication (one config per unique dataset/model/solver)
-- ✅ Explicit checkpoint paths (no auto-resolution magic)
-- ✅ Easy to add new experiments (just add one [[experiment]] entry)
-- ✅ Clear relationships: experiment = dataset + model + solver + checkpoint
+Notes:
+- `dataset` and `model` are IDs, not file paths.
+- The loader resolves actual config files from the active config root.
+- Checkpoints are training outputs; they are not declared in `experiments.toml`.
 
-### Dataset Configs (`datasets/`)
+## Comparison Protocol (Strict)
 
-**Shared across experiments** - define data generation settings:
-
-```toml
-# datasets/neutral-test-45x15-displacements.toml
-[flow]
-
-[source]
-matrix_path = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
-
-[generation]
-normalize = "matrix"
-shuffle = false
-seed = 42
-
-[[generation.strategy]]
-name = "neutral_ones"  # x=ones, b=A@x (unbiased baseline)
-samples = 1
-
-[output]
-processed_dir = "/data/projects/graph-cg/data/processed/neutral-tests"
-```
-
-### Model Configs (`models/`)
-
-**Shared across experiments** - define neural network architecture:
+Comparison configs must use `schema_version = 3` and `[[preconditioners]]`.
 
 ```toml
-# models/ffnn.toml
-[SESSION]
-seed = 42
-precision = "float64"
+schema_version = 3
+run_name = "comparison-default"
 
-[MODEL]
-name = "NormScaledConstantWidthFFNN"
-module_path = "dlkit.nn.ffnn"
-hidden_size = 500
-num_layers = 1
-
-[TRAINING]
-max_epochs = 500
-
-[TRAINING.optimizer]
-lr = 1e-2
-name = "AdamW"
-
-[DATASET]
-name = "FlexibleDataset"
-
-[DATAMODULE]
-name = "InMemoryModule"
-
-[DATAMODULE.dataloader]
-batch_size = 32
-```
-
-### Solver Configs (`solvers/`)
-
-**Shared across experiments** - define solver comparison settings:
-
-```toml
-# solvers/compare-all-on-neutral-test.toml
 [general]
-# Test on shared neutral dataset
-matrix_path = "/data/projects/graph-cg/data/processed/neutral-tests/neutral-test-45x15-displacements/normalized.npz"
-rhs_path = "/data/projects/graph-cg/data/processed/neutral-tests/neutral-test-45x15-displacements/normalized.npz"
-rtol = 1.0e-9
-atol = 1.0e-14
+
+[general.params]
+rtol = 1e-6
+atol = 1e-14
 max_iterations = 200
+stopping_criterion = "residual_norm"
+m_max = 10
+breakdown_tol = 1e-14
 
-# Baseline preconditioners
-[[solvers]]
-name = "none"
-type = "none"
+[general.data]
+matrix_path = "/data/processed/solutions"
+rhs_path = "/data/processed/gaussian-rhs"
+rhs_index = 0
+dataset_alias = "solutions"
+normalize_system = "matrix"
 
-[[solvers]]
+[general.tracking]
+tracking_uri = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
+artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
+experiment_name = "neuralls-comparisons"
+
+[general.model_store]
+tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
+
+[[preconditioners]]
 name = "jacobi"
 type = "jacobi"
 
-# Neural preconditioners (reference experiments by ID)
-[[solvers]]
-name = "neural_ffnn"
+[[preconditioners]]
+name = "neural_linear"
 type = "neural"
-experiment = "ffnn_test_solutions"  # Checkpoint auto-resolved from experiments.toml
-limit_iters = 1
 fallback = "identity"
+model_ref = { source = "registered", name = "NormScaledLinearFFNN", alias = "@dataset" }
 ```
 
-## Key Features
+Validation rules:
+- `schema_version` must be `3`.
+- `preconditioners` must be non-empty.
+- Neural preconditioners must use `model_ref`.
+- `general.model_store` is required if any neural preconditioner uses `model_ref`.
+- If any alias is `"@dataset"`, `general.data.dataset_alias` is required.
+- Unknown keys are rejected.
 
-### 1. Zero Duplication
-- One dataset config per unique dataset
-- One model config per unique architecture
-- One solver config per comparison scenario
-- Experiments just reference configs by name
+## Model Resolution
 
-### 2. Explicit Checkpoints
-- Every experiment specifies exact checkpoint path
-- No auto-resolution guessing
-- Full reproducibility
+Neural preconditioners resolve from MLflow via `model_ref`:
+- `source = "registered"`: resolve by model name + alias/version.
+- `source = "logged"`: resolve by run/model filters (or explicit `run_id`).
 
-### 3. Experiment References in Solver Configs
-- Neural solvers can reference experiments by ID
-- Checkpoints automatically resolved from `experiments.toml`
-- Easy to compare multiple neural preconditioners
+Checkpoint selection for comparison is deterministic:
+- resolve MLflow run from `model_ref`
+- download checkpoint artifact for that run
+- use downloaded checkpoint path in the preconditioner
 
-### 4. Neutral Test Datasets
-- Shared `neutral-test-*.toml` configs generate x=ones baselines
-- Consistent test data across all experiments
-- No training data bias in comparisons
+## CLI Usage
 
-### 5. Scale Metadata Persistence
-- All datasets save normalization metadata
-- Enables denormalization of predictions
-- Full auditability of normalization parameters
+Training:
 
-## Usage
-
-### Training a Model
 ```bash
-# Train using specific model and data configs
-uv run train-model configs/models/ffnn.toml --data-config configs/datasets/test-solutions.toml
-
-# Or run the full experiment matrix defined in experiments.toml
-uv run run-experiments --config configs/experiments.toml
+uv run train-multiple configs/experiments.toml
 ```
-- `train-model`: Trains a single neural network architecture on a specific dataset.
-- `run-experiments`: Automates dataset generation and training for all `[[experiment]]` entries in the master registry.
 
-### Generating a Dataset
+Comparison (standalone):
+
 ```bash
-# Generate neutral test dataset
-uv run process-data configs/datasets/neutral-test-45x15-displacements.toml
-
-# Generate training dataset
-uv run process-data configs/datasets/collect-504-solutions.toml
+uv run compare-preconditioners --comparison-config configs/comparison/linear.toml
 ```
-- `process-data`: Unified entry point for data collection and synthetic generation.
 
-### Comparing Solvers
+Comparison (pipeline tagging/grouping):
+
 ```bash
-# Compare neural preconditioners and baselines on a neutral test set
 uv run compare-preconditioners \
-  --solver-config configs/solvers/compare-all-on-neutral-test.toml \
-  --comparison-run output/training/comparison_run.json
+  --comparison-config configs/comparison/ffnn.toml \
+  --comparison-run /path/to/comparison_run.json
 ```
-- `compare-preconditioners`: Benchmarks various preconditioners (Jacobi, ILU, Neural) against each other.
-- `--comparison-run`: References the training batch metadata to resolve neural model checkpoints automatically.
-
-### Adding a New Experiment
-
-**Step 1**: Create/reuse configs (if needed):
-```bash
-# Create new model config (if needed)
-cp configs/models/ffnn.toml configs/models/my_new_model.toml
-# Edit my_new_model.toml...
-```
-
-**Step 2**: Add experiment entry to `experiments.toml`:
-```toml
-[[experiment]]
-id = "my_new_experiment"
-dataset = "test-solutions"  # Reuse existing dataset
-model = "my_new_model"      # Reference new model
-solver = "default"          # Reuse existing solver
-checkpoint_path = "/data/projects/graph-cg/data/output/checkpoints/test-solutions/my_new_model.ckpt"  # After training
-```
-
-**Step 3**: Train:
-```bash
-uv run python src/neuralls/cli/train_model.py my_new_experiment
-```
-
-## Migration from Old Format
-
-### Before (OLD):
-```
-configs/experiments/
-  ffnn_test_solutions/
-    model.toml
-    data.toml              -> pointer to datasets/test-solutions.toml
-    solver.toml            -> hardcoded checkpoint_path
-  gnn_test_solutions/
-    model.toml
-    data.toml              -> pointer to datasets/test-solutions.toml (DUPLICATE!)
-    solver.toml            -> hardcoded checkpoint_path (DUPLICATE!)
-```
-
-### After (NEW):
-```
-configs/
-  datasets/
-    test-solutions.toml    (ONE config, shared)
-  models/
-    ffnn.toml             (ONE config per model)
-    gnn.toml
-  solvers/
-    default.toml          (ONE config, shared)
-  experiments.toml        (All experiments in one file)
-```
-
-## What is Norm Scaling? ⭐
-
-The **NormScaledFFNN wrapper** provides input/output normalization:
-
-1. **Normalize input**: `b_scaled = b / ||b||`
-2. **Predict**: `x_scaled = model(b_scaled)`
-3. **Rescale output**: `x = x_scaled * ||b||`
-
-This enforces homogeneous scaling for the `Ax = b` problem and improves training stability.
-
-**Available wrappers:**
-- `NormScaledLinearFFNN` - Single linear layer
-- `NormScaledConstantWidthFFNN` - Multi-layer constant-width FFNN
-
-## Checkpoint Configuration
-
-DLKit uses **two separate checkpoint fields**:
-
-1. **`MODEL.checkpoint`** - For inference only (model weights)
-2. **`TRAINING.resume_from_checkpoint`** - For resuming training (full state)
-
-**Example**:
-```toml
-[MODEL]
-name = "NormScaledLinearFFNN"
-checkpoint = "/path/to/model.ckpt"  # For inference
-
-[TRAINING]
-# Uncomment to resume training
-# resume_from_checkpoint = "/path/to/model.ckpt"
-```
-
-## Advanced: Neutral Test Datasets
-
-Neutral test datasets provide unbiased baselines using `x=ones, b=A@x`:
-
-**Generate**:
-```bash
-uv run python src/neuralls/cli/process_data.py \
-  configs/datasets/neutral-test-45x15-displacements.toml
-```
-
-**Use in comparison**:
-```toml
-# configs/solvers/compare-all-on-neutral-test.toml
-[general]
-matrix_path = "/data/.../neutral-tests/.../normalized.npz"
-rhs_path = "/data/.../neutral-tests/.../normalized.npz"
-
-[[solvers]]
-name = "neural_ffnn"
-type = "neural"
-experiment = "ffnn_test_solutions"  # Auto-resolves checkpoint
-```
-
-**Benefits**:
-- Consistent across all experiments
-- No training data bias
-- Simple, known solution (x=ones)

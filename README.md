@@ -5,9 +5,10 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 ## Project Layout
 
 - `configs/` – Configuration directory containing:
-  - `experiments.toml` – Master experiment matrix linking model, data, and solver configs
-  - `experiments/` – Experiment-specific config bundles (each with `model.toml`, `data.toml`, optional `solver.toml`)
+  - `experiments.toml` – Master training matrix linking model + dataset IDs
+  - `comparison/` – Comparison configs (`schema_version = 3`) with solver params + preconditioners
   - `datasets/` – Dataset specifications (collection/generation parameters, test sets)
+  - `models/` – Model/training settings
 - `src/neuralls/` – Library code organized by functionality:
   - `cli/` – Command-line entry points for data processing, training, comparison, and orchestration
   - `configuration/` – Config loading, validation, and Pydantic models
@@ -19,11 +20,10 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 
 ## Experiment Configuration System
 
-Experiments are organized as config bundles that combine model, data, and solver settings. The system uses **typed Pydantic models** for validation at load time:
+Experiments are organized with separate training and comparison configs. The system uses **typed Pydantic models** for validation at load time:
 
 ```python
 from neuralls.configuration.loader import load_experiment
-from neuralls.configuration.solver import get_solver_params
 
 # Load experiment with model and data configs
 experiment = load_experiment(
@@ -32,7 +32,6 @@ experiment = load_experiment(
 )
 
 # Access validated settings and workspace paths
-params = get_solver_params(experiment.settings)
 workspace = experiment.workspace
 checkpoint_dir = workspace.checkpoint_dir  # Derived from MLflow artifact_uri
 
@@ -42,9 +41,9 @@ output_root = workspace.root_dir      # Master output directory (from MLflow)
 ```
 
 **Configuration structure:**
-- **Model configs:** Neural architecture and training hyperparameters (validated by `ModelConfigFile`)
+- **Model configs:** Neural architecture and training hyperparameters (DLKit settings model)
 - **Data configs:** Dataset sources and generation strategy (validated by `DataConfigFile`)
-- **Solver configs:** CG tolerances, iteration limits, and preconditioner specifications (validated by `SolverConfigFile`)
+- **Comparison configs:** Solver tolerances, matrix/RHS paths, model-store tracking, and `[[preconditioners]]` specs (`schema_version = 3`)
 
 All configs are validated using **Pydantic** at load time, catching configuration errors early with clear, actionable error messages.
 
@@ -55,11 +54,11 @@ The master `configs/experiments.toml` file orchestrates multiple experiment bund
 ### Configuration Loader (Breaking Changes)
 
 **Simplified `load_experiment()` signature:**
-- **Removed:** `solver_config_path` parameter - solver configs are now only used at comparison time, not during experiment loading
+- **Removed:** `solver_config_path` parameter - comparison configs are used only at comparison time, not during experiment loading
 - **Added:** `output_root` optional parameter for overriding the master output directory
 - **Before:**
   ```python
-  load_experiment(model_config, data_config, solver_config)  # solver config removed
+  load_experiment(model_config, data_config, solver_config)  # legacy signature
   ```
 - **After:**
   ```python
@@ -78,18 +77,17 @@ The master `configs/experiments.toml` file orchestrates multiple experiment bund
 
 ### Solver Module (Major Refactoring)
 
-**Modular architecture replacing monolithic files:**
-- **`core/`** - Abstract base classes (`ISolver`, `IterativeSolverBase`, `KrylovSolverBase`)
-- **`solvers/`** - Concrete implementations (`FlexibleCGSolver`, `PreconditionedCGSolver`)
-- **`models/`** - Immutable state hierarchy (`SolverState`, `KrylovState`, `CGState`, `SolverResult`)
+**Current architecture:**
+- **`conjugate_gradient.py`** - CG loop implementation and orchestration
+- **`factories.py`** - User-facing solver factory functions (`pcg`, `flexible_cg`)
+- **`models/`** - Immutable state/result hierarchy
 - **`monitoring/`** - Diagnostics (`IterationHistory`, `EventLog`, `ResidualHistoryTracker`)
-- **`strategies/`** - Strategy patterns (`OrthogonalizationStrategy`, `IConvergenceCriterion`)
+- **`strategies/`** - Norm, convergence, and direction strategy interfaces
 
-**Removed monolithic files:**
-- `fcg_solver.py`, `pcg_solver.py` → `solvers/` directory with focused implementations
-- `state.py`, `info.py` → `models/` directory with type-safe state containers
-- Monitoring refactored to `IterationHistory` (continuous) + `EventLog` (discrete events)
-- `helpers.py` → `utils/` and `strategies/orthogonalization.py`
+**Refactoring outcomes:**
+- Legacy monolithic solver internals were consolidated into focused modules
+- Monitoring was split into `IterationHistory` (continuous) + `EventLog` (discrete events)
+- State and result containers were migrated into typed models
 
 **Factory function updates:**
 - `flexible_cg()` - Now uses `FlexibleCGSolver` class internally
@@ -124,13 +122,13 @@ from neuralls.solver.preconditioners import create_preconditioner
 ### IO and Comparison
 
 **Moved functions:**
-- `load_solver_config()`: `io.comparison` → `io.toml_loader` (canonical location with other loaders)
+- `load_comparison_config()`: `io.comparison` → `io.toml_loader` (canonical location with other loaders)
 - `run_cg_comparison()`, `format_results_summary()`, `summarize_best_combinations()`: `solver/` → `workflows/` (architectural cleanup - comparison orchestration is a workflow concern, not core solver logic)
 
 **Import updates:**
 ```python
 # Config loading
-from neuralls.io.toml_loader import load_solver_config  # ✓ Canonical location
+from neuralls.io.toml_loader import load_comparison_config  # ✓ Canonical location
 
 # Comparison orchestration
 from neuralls.workflows import run_cg_comparison  # ✓ Moved from solver module
@@ -171,16 +169,16 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
 
 - **Compare preconditioners** (standalone mode):
   ```bash
-  uv run compare-preconditioners --solver-config configs/solvers/default.toml
+  uv run compare-preconditioners --comparison-config configs/comparison/linear.toml
   ```
-  - `--solver-config`: Path to solver parameters and preconditioner specs.
-  - *Note: In standalone mode, neural solvers must specify an explicit `checkpoint_path`.*
+  - `--comparison-config`: Path to comparison parameters and preconditioner specs.
+  - Include `[general.tracking]` in the comparison config.
 
 - **Compare preconditioners** (pipeline mode):
   ```bash
-  uv run compare-preconditioners --solver-config configs/solvers/default.toml --comparison-run output/training/comparison_run.json
+  uv run compare-preconditioners --comparison-config configs/comparison/ffnn.toml --comparison-run /path/to/comparison_run.json
   ```
-  - `--comparison-run`: Path to the `comparison_run.json` produced by `train-multiple`. Enables resolution of experiment IDs to their latest checkpoints.
+  - `--comparison-run`: Optional metadata file from `train-multiple` used for run grouping/tags only.
 
 - **Run full experiment matrix** (data + train):
   ```bash

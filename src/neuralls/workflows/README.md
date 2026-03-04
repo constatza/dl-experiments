@@ -53,7 +53,7 @@ results = run_cg_comparison(A, b, preconditioners=preconditioners)
 
 ### 2. Preconditioner Comparison (`compare.py`)
 
-**Purpose**: Orchestrate single comparison (matrix + RHS + solver configs → results + plots)
+**Purpose**: Orchestrate single comparison (matrix + RHS + comparison config → results + plots)
 
 **Key Function**: `compare_preconditioners()`
 
@@ -72,13 +72,24 @@ results = run_cg_comparison(A, b, preconditioners=preconditioners)
 **Usage**:
 ```python
 from neuralls.workflows.compare import compare_preconditioners
-from neuralls.configuration.comparison import GeneralSolverConfig
+from neuralls.configuration.comparison import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.configuration.preconditioner import StandardPreconditionerConfig
 
-general = GeneralSolverConfig(
-    matrix_path="data/matrix.txt",
-    rhs_path="data/rhs.txt",
-    output_root="output/comparison",
+general = ComparisonGeneral(
+    params=SolverParams(
+        rtol=1.0e-6,
+        atol=1.0e-14,
+        max_iterations=100,
+        stopping_criterion="residual_norm",
+        m_max=10,
+        breakdown_tol=None,
+    ),
+    data=ComparisonData(
+        matrix_path="data/matrix.txt",
+        rhs_path="data/rhs.txt",
+    ),
+    tracking=None,
+    model_store=None,
 )
 
 configs = [
@@ -114,11 +125,11 @@ neural_config = NeuralPreconditionerConfig(
 **Usage**:
 ```bash
 uv run compare-preconditioners \
-  --solver-config configs/solvers/default.toml \
-  --comparison-run output/training/comparison_run.json
+  --comparison-config configs/comparison/linear.toml \
+  --comparison-run /path/to/comparison_run.json
 ```
-- `--solver-config`: The solver configuration containing preconditioner specs.
-- `--comparison-run`: The metadata file from `train-multiple` used to resolve model checkpoints.
+- `--comparison-config`: The comparison configuration containing preconditioner specs.
+- `--comparison-run`: Optional metadata file from `train-multiple` for run grouping/tags.
 
 ### 4. Experiment Runner (`runner.py`)
 
@@ -195,19 +206,35 @@ results = run_cg_comparison(A, b, preconditioners={"neural": scheduled})
 
 **During Comparison**:
 ```toml
-# configs/solvers/default.toml - Solver parameters + preconditioner specs
-[[solvers]]
+# configs/comparison/linear.toml - Comparison parameters + preconditioner specs
+schema_version = 3
+
+[general]
+
+[general.params]
+rtol = 1.0e-6
+atol = 1.0e-14
+max_iterations = 200
+
+[general.data]
+matrix_path = "/path/to/matrix-or-dataset-dir"
+rhs_path = "/path/to/rhs-or-dataset-dir"
+
+[general.model_store]
+tracking_uri = "sqlite:////path/to/models/mlflow.db"
+
+[[preconditioners]]
 name = "neural"
 type = "neural"
-checkpoint_path = "path/to/model.pt"
+model_ref = { source = "registered", name = "NormScaledLinearFFNN", alias = "solutions" }
 limit_iters = 10
 fallback = "jacobi"
 ```
 
 **Why Separate**:
-- Experiments don't need solver configs (only generate data + train)
-- Solver configs specified at comparison time (flexible testing of checkpoints)
-- Single checkpoint can be tested with multiple solver configurations
+- Experiments don't need comparison configs (only generate data + train)
+- Comparison configs specified at comparison time (flexible testing of checkpoints)
+- Single checkpoint can be tested with multiple comparison configurations
 
 ## Common Patterns
 
@@ -219,7 +246,7 @@ from neuralls.solver.preconditioners import (
     create_scheduled_preconditioner,
 )
 
-# 1. Create base preconditioners from config
+# 1. Create base preconditioners from comparison config
 primary = create_preconditioner(matrix, primary_config)
 fallback = create_preconditioner(matrix, fallback_config)
 
@@ -250,14 +277,14 @@ results = run_cg_comparison(A, b, {"jacobi": jacobi})  # → uses pcg
 
 ## Migration Notes
 
-### Breaking Changes (v2.0)
+### Breaking Changes
 
 **Functions Moved** (import path changed):
 ```python
-# Before (v1.x)
+# Before
 from neuralls.solver import run_cg_comparison
 
-# After (v2.0)
+# After
 from neuralls.workflows import run_cg_comparison
 ```
 

@@ -151,6 +151,55 @@ def plot_residual_history(
         plt.close(fig)
 
 
+def _meta_value(meta: Any, key: str) -> Any:
+    """Extract a value from metadata by key, supporting both dicts and objects.
+
+    Args:
+        meta: Metadata as a ``Mapping`` or object with attributes.
+        key: Key/attribute name to look up.
+
+    Returns:
+        The value for ``key``, or ``None`` if not found.
+    """
+    if isinstance(meta, Mapping):
+        return meta.get(key)
+    return getattr(meta, key, None)
+
+
+def _build_convergence_label(method_name: str, meta: Any | None) -> str:
+    """Build a legend label for a convergence plot entry.
+
+    Adds trace training/applied iteration counts and neural limit metadata
+    when present. Non-neural methods never get a ``limit`` annotation.
+
+    Args:
+        method_name: Base method name used as the label prefix.
+        meta: Optional metadata mapping or object. Recognised keys:
+            - ``residual_iters``: Training iteration count.
+            - ``applied_iters``: Applied iteration count (falls back to
+              ``residual_iters`` when ``None``).
+            - ``preconditioner_type``: Preconditioner type string.
+            - ``limit_iters``: Iteration limit (shown for neural only).
+
+    Returns:
+        Human-readable legend label string.
+    """
+    if meta is None:
+        return method_name
+    details: list[str] = []
+    residual_iters = _meta_value(meta, "residual_iters")
+    applied_iters = _meta_value(meta, "applied_iters") or residual_iters
+    if residual_iters is not None:
+        details.extend([f"tr={residual_iters}", f"ap={applied_iters}"])
+    preconditioner_type = _meta_value(meta, "preconditioner_type")
+    limit_iters = _meta_value(meta, "limit_iters")
+    if str(preconditioner_type).lower() == "neural" and isinstance(limit_iters, int) and limit_iters >= 0:
+        details.append(f"limit={limit_iters}")
+    if not details:
+        return method_name
+    return f"{method_name} ({', '.join(details)})"
+
+
 def plot_convergence_comparison(
     results: Mapping[str, CGComparisonResult | Mapping[str, Any]],
     metadata: Mapping[str, Any] | None = None,
@@ -180,20 +229,7 @@ def plot_convergence_comparison(
         if residuals and len(residuals) > 0:
             iterations = range(len(residuals))
 
-            # Build label with metadata if available
-            label = method_name
-            if method_name in metadata and metadata[method_name] is not None:
-                meta = metadata[method_name]
-                # Access metadata attributes
-                if hasattr(meta, "residual_iters") and hasattr(meta, "applied_iters"):
-                    residual_iters = getattr(meta, "residual_iters", None)
-                    applied_iters = (
-                        getattr(meta, "applied_iters", None) or residual_iters
-                    )
-                    if residual_iters is not None:
-                        label = (
-                            f"{method_name} (tr={residual_iters}, ap={applied_iters})"
-                        )
+            label = _build_convergence_label(method_name, metadata.get(method_name))
 
             ax.semilogy(iterations, residuals, "o-", label=label, markersize=4)
         else:
@@ -728,7 +764,7 @@ def plot_data_norms(
     """Plot RHS and solution norm distributions for a dataset.
 
     Args:
-        data_dir: Path to dataset directory containing .npy files or normalized.npz
+        data_dir: Path to dataset directory containing dataset artifacts.
         save_path: Path to save figure (optional)
         show: Whether to display the plot
 
@@ -737,10 +773,10 @@ def plot_data_norms(
     """
     data_dir = Path(data_dir)
 
-    # Load data from normalized.npz
+    # Load data from dataset storage
     from neuralls.io.datasets import load_dataset
 
-    data = load_dataset(data_dir, variant="normalized")
+    data = load_dataset(data_dir, variant="dataset")
     rhs_samples = data["rhs"].astype(np.float64, copy=False)
     sol_samples = data["solutions"].astype(np.float64, copy=False)
 

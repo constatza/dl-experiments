@@ -409,5 +409,5 @@ history = history.add(1.0)  # Returns NEW instance
 
 ### Related Documentation
 
-- [Solver README](../solvers/README.md) - Solver implementations
+- [Solver README](../README.md) - Solver implementations
 - [CLAUDE.md](../../../../CLAUDE.md) - Project coding standards

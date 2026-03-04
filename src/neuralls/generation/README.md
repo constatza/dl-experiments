@@ -59,7 +59,7 @@ pₖ₊₁ = rₖ₊₁ + βₖpₖ                 # search direction update
 
 **Key relationship:** rₖ = b − Axₖ = A(x* − xₖ) = Aeₖ
 
-Implementation: `solver/solvers/scipy_cg_solver.py`
+Implementation: `src/neuralls/solver/scipy_wrapper.py`
 
 ---
 
@@ -504,7 +504,7 @@ For each strategy:
 Merge + shuffle
      │
      ▼
-Final Dataset (.npz)
+Final Dataset (manifest + split arrays)
 ```
 
 ## Adding New Strategies

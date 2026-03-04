@@ -1,6 +1,6 @@
 # Data Generation and Collection Configs
 
-This directory contains configuration files for data generation and collection. These configurations are handled by the local project's data generation module (`src/generation`), **not** by `dlkit`.
+This directory contains configuration files for data generation and collection. These configurations are handled by the local project's data generation module (`src/neuralls/generation`), **not** by `dlkit`.
 
 ## Directory Naming Convention
 
@@ -90,7 +90,7 @@ Generates data based on CG residual errors.
 
 ### [output]
 Output configuration.
-- **processed_dir**: `str`. Directory where processed datasets will be saved (separate from experiment artifacts). Optional. If not provided, defaults to `DEFAULT_PROCESSED_DATA_DIR` from constants.
+- **data_dir**: `str`. Directory where processed datasets will be saved (separate from experiment artifacts). Optional. If not provided, defaults to `DEFAULT_PROCESSED_DATA_DIR` from constants.
 - **output_root**: `str`. DEPRECATED (not used by data processing). Master output root for experiment artifacts is specified at experiment load time, not in data configs.
 
 ### [test]
