@@ -29,7 +29,12 @@ from neuralls.workflows.utils.paths import extract_model_name
 from neuralls.workflows.training import train_model
 from neuralls.validation import validate_data_exists
 from neuralls.io.checkpoints import get_latest_checkpoint
-from neuralls.constants import NORMALIZED_DATASET_FILENAME
+from neuralls.constants import (
+    DATASET_MANIFEST_FILENAME,
+    MATRIX_COO_DIRNAME,
+    RHS_ARRAY_FILENAME,
+    SOLUTIONS_ARRAY_FILENAME,
+)
 
 
 def run_experiment(
@@ -45,7 +50,7 @@ def run_experiment(
 
     This function orchestrates a complete experiment workflow:
     1. Load data configuration from TOML file
-    2. Generate/cache dataset (normalized.npz)
+    2. Generate/cache dataset artifacts (manifest + .npy + sparse pack)
     3. Check for existing checkpoint (skip training if found and force=False)
     4. Train model if needed (creates checkpoint)
     5. Return success/failure result
@@ -81,7 +86,15 @@ def run_experiment(
         # Step 1: Load data configuration and generate/cache dataset
         data_cfg = load_data_config(data_config_path)
         data_dir = process_config(data_cfg, config_path=data_config_path)
-        validate_data_exists(data_dir, [NORMALIZED_DATASET_FILENAME])
+        validate_data_exists(
+            data_dir,
+            [
+                DATASET_MANIFEST_FILENAME,
+                RHS_ARRAY_FILENAME,
+                SOLUTIONS_ARRAY_FILENAME,
+                MATRIX_COO_DIRNAME,
+            ],
+        )
 
         # Step 2: Check for existing checkpoint to avoid redundant training
         # Workspace structure: output_root/{dataset_id}/{model_name}/checkpoints/
@@ -143,7 +156,7 @@ def run_experiment_matrix(
     Note:
         For solver comparison after training, use comparison workflows:
         >>> from neuralls.workflows.comparison import run_batch_comparison
-        >>> run_batch_comparison(experiments_config_path, solver_config_path, params)
+        >>> run_batch_comparison(experiments_config_path, comparison_config_path, params)
 
     Example:
         >>> results = run_experiment_matrix(

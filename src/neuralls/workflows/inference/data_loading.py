@@ -2,7 +2,7 @@
 
 This module provides pure functions for loading inference data from various sources:
 - Standard data from feature/target files
-- Synthetic benchmark data from solver configurations
+- Synthetic benchmark data from comparison configurations
 """
 
 from __future__ import annotations
@@ -16,9 +16,9 @@ from dlkit.tools.io import load_array
 
 from neuralls.configuration.domain import ExperimentWorkspace
 from neuralls.diagnostics.synthetic import generate_synthetic_test_case
-from neuralls.io.toml_loader import load_solver_config
+from neuralls.io.toml_loader import load_comparison_config
 from neuralls.workflows.inference.config import InferenceData
-from neuralls.constants import NORMALIZED_DATASET_FILENAME
+from neuralls.constants import RHS_ARRAY_FILENAME, SOLUTIONS_ARRAY_FILENAME
 
 
 def validate_data_availability(
@@ -59,12 +59,12 @@ def resolve_standard_data_paths(
     feat_path = (
         Path(features_path)
         if features_path
-        else workspace.data_dir / NORMALIZED_DATASET_FILENAME
+        else workspace.data_dir / RHS_ARRAY_FILENAME
     )
     tgt_path = (
         Path(targets_path)
         if targets_path
-        else workspace.data_dir / NORMALIZED_DATASET_FILENAME
+        else workspace.data_dir / SOLUTIONS_ARRAY_FILENAME
     )
     return feat_path, tgt_path
 
@@ -85,8 +85,8 @@ def load_standard_data(
         InferenceData object or None if files don't exist
 
     Note:
-        - Defaults to workspace.data_dir/normalized.npz if paths not provided
-        - Auto-detects array keys ("rhs", "solutions") for normalized.npz
+        - Defaults to workspace.data_dir/rhs.npy and workspace.data_dir/solutions.npy
+        - Uses explicit array files under the dataset artifact layout
         - Returns None if files don't exist (allows fallback to synthetic)
     """
     feat_path, tgt_path = resolve_standard_data_paths(
@@ -101,12 +101,10 @@ def load_standard_data(
         return None
 
     logger.debug(f"Loading standard features from: {feat_path}")
-    feature_array_key = "rhs" if feat_path.name == NORMALIZED_DATASET_FILENAME else None
-    features = np.asarray(load_array(feat_path, array_key=feature_array_key))
+    features = np.asarray(load_array(feat_path))
 
     logger.debug(f"Loading standard targets from: {tgt_path}")
-    target_array_key = "solutions" if tgt_path.name == NORMALIZED_DATASET_FILENAME else None
-    targets = np.asarray(load_array(tgt_path, array_key=target_array_key))
+    targets = np.asarray(load_array(tgt_path))
 
     # Ensure targets are 1D if shape is (N, 1)
     if targets.ndim == 2 and targets.shape[1] == 1:
@@ -129,34 +127,29 @@ def load_standard_data(
 
 
 def load_synthetic_data(
-    solver_config_path: Path,
+    comparison_config_path: Path,
     workspace: ExperimentWorkspace,
 ) -> InferenceData:
-    """Generate synthetic benchmark data from solver configuration.
+    """Generate synthetic benchmark data from comparison configuration.
 
     Synthetic data uses a known solution (x_true = ones) to generate RHS: b = A @ x_true.
     This provides ground truth for evaluating prediction accuracy.
 
     Args:
-        solver_config_path: Path to solver configuration file
+        comparison_config_path: Path to comparison configuration file
         workspace: Experiment workspace (for metadata)
 
     Returns:
         InferenceData object with synthetic features and targets
 
     Raises:
-        ValueError: If solver config doesn't specify matrix_path
+        ValueError: If comparison config doesn't specify matrix_path
         FileNotFoundError: If matrix file doesn't exist
     """
     logger.info("Preparing SYNTHETIC benchmark data (x_true = ones).")
 
-    solver_cfg = load_solver_config(solver_config_path)
-    if solver_cfg.general.matrix_path is None:
-        raise ValueError(
-            f"Solver config {solver_config_path} must specify [general] matrix_path."
-        )
-
-    matrix_path = Path(solver_cfg.general.matrix_path)
+    comparison_cfg = load_comparison_config(comparison_config_path)
+    matrix_path = Path(comparison_cfg.general.data.matrix_path)
     if not matrix_path.exists():
         raise FileNotFoundError(f"Matrix file not found: {matrix_path}")
 
@@ -178,7 +171,7 @@ def load_synthetic_data(
         metadata={
             "source": "synthetic",
             "matrix_path": str(matrix_path),
-            "solver_config_path": str(solver_config_path),
+            "comparison_config_path": str(comparison_config_path),
             "num_samples": 1,
             "system_size": features.shape[1],
         },
@@ -190,13 +183,13 @@ def load_inference_data(
     features_path: Path | None = None,
     targets_path: Path | None = None,
     synthetic_benchmark: bool = False,
-    solver_config_path: Path | None = None,
+    comparison_config_path: Path | None = None,
 ) -> InferenceData:
     """Load inference data using appropriate strategy.
 
     Supports two loading strategies:
     1. Standard: Load from feature/target files
-    2. Synthetic: Generate from solver configuration
+    2. Synthetic: Generate from comparison configuration
 
     Priority:
     - If synthetic_benchmark=True, loads synthetic data
@@ -208,7 +201,7 @@ def load_inference_data(
         features_path: Path to features file (for standard)
         targets_path: Path to targets file (for standard)
         synthetic_benchmark: Whether to use synthetic data
-        solver_config_path: Path to solver config (for synthetic)
+        comparison_config_path: Path to comparison config (for synthetic)
 
     Returns:
         InferenceData object from appropriate source
@@ -225,11 +218,11 @@ def load_inference_data(
 
     # Load synthetic data if requested
     if synthetic_benchmark:
-        if solver_config_path is None:
+        if comparison_config_path is None:
             raise ValueError(
-                "Solver config path is required for synthetic benchmark."
+                "Comparison config path is required for synthetic benchmark."
             )
-        synthetic_data = load_synthetic_data(solver_config_path, workspace)
+        synthetic_data = load_synthetic_data(comparison_config_path, workspace)
 
     # Validate availability
     validate_data_availability(

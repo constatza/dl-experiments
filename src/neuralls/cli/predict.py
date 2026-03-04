@@ -49,9 +49,9 @@ def main(
         "--synthetic",
         help="Run synthetic benchmark (x_true=ones, b=Ax) instead of data loading",
     ),
-    solver_config: Path | None = typer.Option(
+    comparison_config: Path | None = typer.Option(
         None,
-        help="Path to solver config (used for matrix path in synthetic mode)",
+        help="Path to comparison config (used for matrix path in synthetic mode)",
     ),
 ) -> None:
     """Run inference using a DLKit configuration."""
@@ -73,7 +73,7 @@ def main(
         figures_dir=figures_dir,
         enable_mlflow=enable_mlflow,
         synthetic_benchmark=synthetic,
-        solver_config_path=solver_config,
+        comparison_config_path=comparison_config,
     )
 
     y_pred = results.get("y_pred")

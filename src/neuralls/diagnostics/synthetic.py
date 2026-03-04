@@ -7,17 +7,21 @@ import numpy as np
 from loguru import logger
 import pandas as pd
 
-from neuralls.io.comparison import load_npz_entry
+from neuralls.io.dataset_storage import load_matrix_dense_sample, load_dataset_manifest
 
 
 def load_matrix(path: Path) -> np.ndarray:
     """Load matrix A from various file formats."""
-    if path.suffix == ".npz":
-        return load_npz_entry(path, "matrix")
-    elif path.suffix == ".npy":
+    if path.is_dir():
+        load_dataset_manifest(path)
+        return load_matrix_dense_sample(path, sample_index=0)
+    if path.suffix == ".npy":
         return np.load(path)
-    else:
-        return np.loadtxt(path)
+    if path.suffix == ".npz":
+        raise ValueError(
+            f"NPZ files are no longer supported ({path}). Use dataset directories or .npy files."
+        )
+    return np.loadtxt(path)
 
 
 def generate_synthetic_test_case(

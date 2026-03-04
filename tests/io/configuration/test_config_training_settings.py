@@ -26,6 +26,7 @@ name = "ModelCheckpoint"
 name = "NormalizedVectorNormError"
 [DATASET]
 name = "FlexibleDataset"
+memmap_cache = true
 [MODEL]
 name = "NormScaledConstantWidthFFNN"
 module_path = "test.module"
@@ -44,6 +45,7 @@ max_epochs = 1
 name = "EarlyStopping"
 [DATASET]
 name = "FlexibleDataset"
+memmap_cache = true
 [MODEL]
 name = "LinearModel"
 module_path = "test.module"
@@ -111,9 +113,16 @@ def test_training_sections_round_trip(
     settings = experiment.settings
     training = settings.TRAINING
     assert training is not None, "TRAINING section missing"
+    assert settings.DATASET is not None, "DATASET section missing"
 
     actual_callback_names = tuple(cb.name for cb in training.trainer.callbacks)
     assert actual_callback_names == expected_callback_names
 
     actual_metric_names = tuple(metric.name for metric in training.metrics)
     assert actual_metric_names == expected_metric_names
+
+    dataset_name = raw_config.get("DATASET", {}).get("name")
+    if dataset_name == "FlexibleDataset":
+        assert settings.DATASET.memmap_cache is True
+    else:
+        assert settings.DATASET.memmap_cache is False

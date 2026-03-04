@@ -31,7 +31,7 @@ class InferenceConfig:
         enable_mlflow: Whether to log to MLflow
         output_root: Custom output root (optional)
         synthetic_benchmark: Whether to use synthetic benchmark data
-        solver_config_path: Path to solver configuration (required for synthetic)
+        comparison_config_path: Path to comparison configuration (required for synthetic)
     """
 
     config_path: Path
@@ -44,7 +44,7 @@ class InferenceConfig:
     enable_mlflow: bool = False
     output_root: Path | None = None
     synthetic_benchmark: bool = False
-    solver_config_path: Path | None = None
+    comparison_config_path: Path | None = None
 
 
 @dataclass(frozen=True)

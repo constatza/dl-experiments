@@ -8,6 +8,7 @@ from typing import Any
 from collections.abc import Iterable, Iterator
 
 import numpy as np
+import torch
 from loguru import logger
 
 from dlkit.tools.io import load_array
@@ -40,7 +41,7 @@ class InferenceConfig:
         enable_mlflow: Whether to log to MLflow
         output_root: Custom output root directory (optional)
         synthetic_benchmark: Use synthetic benchmark data
-        solver_config_path: Path to solver config (for synthetic)
+        comparison_config_path: Path to comparison config (for synthetic)
     """
 
     config_path: Path
@@ -53,7 +54,7 @@ class InferenceConfig:
     enable_mlflow: bool = False
     output_root: Path | None = None
     synthetic_benchmark: bool = False
-    solver_config_path: Path | None = None
+    comparison_config_path: Path | None = None
 
 
 # NOTE: Minimal dataset functions removed - no longer needed with InferenceWorkflowConfig
@@ -114,17 +115,17 @@ def _collect_predictions(
     predictor: Any,
     feature_arrays: dict[str, np.ndarray],
     batch_size: int,
-) -> tuple[list[Any], float]:
-    """Run inference for every feature batch while keeping cumulative duration."""
-    predictions: list[Any] = []
-    total_duration = 0.0
+) -> tuple[list[torch.Tensor], float]:
+    """Run inference for every feature batch."""
+    predictions: list[torch.Tensor] = []
     for batch in _iterate_feature_batches(feature_arrays, batch_size):
-        result = predictor.predict(batch)
-        predictions.append(result.predictions)
-        total_duration += getattr(result, "duration_seconds", 0.0)
+        tensor_batch = {k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()}
+        result = predictor.predict(**tensor_batch)
+        primary = result[0] if isinstance(result, tuple) else result
+        predictions.append(primary)
     if not predictions:
         raise ValueError("Predictor returned no predictions.")
-    return predictions, total_duration
+    return predictions, 0.0
 
 
 def _flatten_predictions(preds: Any) -> dict[str, Any]:
@@ -521,7 +522,7 @@ def _execute_inference_pipeline(
         features_path=config.features_path,
         targets_path=config.targets_path,
         synthetic_benchmark=config.synthetic_benchmark,
-        solver_config_path=config.solver_config_path,
+        comparison_config_path=config.comparison_config_path,
     )
 
     # Run prediction (transforms applied automatically from checkpoint)
@@ -590,7 +591,7 @@ def run_inference(
     enable_mlflow: bool = False,
     output_root: str | Path | None = None,
     synthetic_benchmark: bool = False,
-    solver_config_path: str | Path | None = None,
+    comparison_config_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run inference for parity plot generation.
 
@@ -608,7 +609,7 @@ def run_inference(
         enable_mlflow: Whether to log to MLflow
         output_root: Custom output root directory (optional)
         synthetic_benchmark: Use synthetic benchmark data
-        solver_config_path: Path to solver config (for synthetic)
+        comparison_config_path: Path to comparison config (for synthetic)
 
     Returns:
         Dictionary with prediction results for backward compatibility:
@@ -640,7 +641,7 @@ def run_inference(
         enable_mlflow=enable_mlflow,
         output_root=Path(output_root) if output_root else None,
         synthetic_benchmark=synthetic_benchmark,
-        solver_config_path=Path(solver_config_path) if solver_config_path else None,
+        comparison_config_path=Path(comparison_config_path) if comparison_config_path else None,
     )
 
     # 1. Validate configuration

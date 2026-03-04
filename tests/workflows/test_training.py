@@ -1,10 +1,11 @@
-"""Tests for training workflow and TrainingResult.stacked_predictions().
+"""Tests for TrainingResult.stacked and TrainingResult.to_numpy() API.
 
 Covers:
-- stacked_predictions() with predict_step dict format
-- stacked_predictions() with plain tensor batches
-- stacked_predictions() returns None when no predictions captured
-- Fast-dev-run integration: trainer.predict() returns expected dict structure
+- stacked is None when no predictions captured
+- to_numpy() returns None when no predictions captured
+- stacked is a TensorDict when TensorDict predictions are present
+- to_numpy() extracts predictions and targets correctly
+- fast-dev-run integration: trainer.predict() produces stacked/to_numpy output
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
+from tensordict import TensorDict
 
 from dlkit.interfaces.api.domain.models import TrainingResult
 
@@ -25,14 +27,27 @@ from dlkit.interfaces.api.domain.models import TrainingResult
 
 
 @pytest.fixture
-def predictions_as_dicts() -> list[dict[str, Any]]:
-    """Prediction batches in predict_step dict format.
+def predictions_as_dicts() -> list[TensorDict]:
+    """Prediction batches in TensorDict predict_step format.
 
-    Mirrors: {"predictions": {"output": tensor}, "targets": {...}, "latents": {}}
+    Mirrors the structure dlkit predict_step returns:
+    {"predictions": TensorDict({"output": tensor}), "targets": TensorDict({})}
     """
     return [
-        {"predictions": {"output": torch.tensor([1.0, 2.0, 3.0])}, "targets": {}, "latents": {}},
-        {"predictions": {"output": torch.tensor([4.0, 5.0])}, "targets": {}, "latents": {}},
+        TensorDict(
+            {
+                "predictions": TensorDict({"output": torch.tensor([1.0, 2.0, 3.0])}, batch_size=[3]),
+                "targets": TensorDict({}, batch_size=[3]),
+            },
+            batch_size=[3],
+        ),
+        TensorDict(
+            {
+                "predictions": TensorDict({"output": torch.tensor([4.0, 5.0])}, batch_size=[2]),
+                "targets": TensorDict({}, batch_size=[2]),
+            },
+            batch_size=[2],
+        ),
     ]
 
 
@@ -47,7 +62,7 @@ def predictions_as_tensors() -> list[torch.Tensor]:
 
 @pytest.fixture
 def training_result_no_predictions() -> TrainingResult:
-    """TrainingResult with no captured predictions."""
+    """TrainingResult with no captured predictions (None)."""
     return TrainingResult(
         model_state=None,
         metrics={},
@@ -70,8 +85,8 @@ def training_result_empty_predictions() -> TrainingResult:
 
 
 @pytest.fixture
-def training_result_dict_predictions(predictions_as_dicts: list[dict]) -> TrainingResult:
-    """TrainingResult with predict_step dict format predictions."""
+def training_result_dict_predictions(predictions_as_dicts: list[TensorDict]) -> TrainingResult:
+    """TrainingResult with TensorDict-format predictions (no targets)."""
     return TrainingResult(
         model_state=None,
         metrics={},
@@ -93,85 +108,29 @@ def training_result_tensor_predictions(predictions_as_tensors: list[torch.Tensor
     )
 
 
-# ---------------------------------------------------------------------------
-# stacked_predictions() unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_stacked_predictions_none_when_no_predictions(
-    training_result_no_predictions: TrainingResult,
-) -> None:
-    """Returns None when predictions field is None."""
-    assert training_result_no_predictions.stacked_predictions() is None
-
-
-def test_stacked_predictions_none_when_empty_list(
-    training_result_empty_predictions: TrainingResult,
-) -> None:
-    """Returns None when predictions is an empty list."""
-    assert training_result_empty_predictions.stacked_predictions() is None
-
-
-def test_stacked_predictions_from_dict_format(
-    training_result_dict_predictions: TrainingResult,
-) -> None:
-    """Correctly extracts and concatenates from predict_step dict format.
-
-    predict_step returns: {"predictions": {"output": tensor}, "targets": {}, "latents": {}}
-    stacked_predictions() should yield array of shape (5,) from two batches of 3+2.
-    """
-    result = training_result_dict_predictions.stacked_predictions()
-
-    assert result is not None
-    assert isinstance(result, np.ndarray)
-    assert result.shape == (5,)
-    np.testing.assert_allclose(result, [1.0, 2.0, 3.0, 4.0, 5.0])
-
-
-def test_stacked_predictions_from_tensor_format(
-    training_result_tensor_predictions: TrainingResult,
-) -> None:
-    """Correctly stacks plain tensor batches without dict wrapping.
-
-    Batches of shape (2, 2) + (1, 2) → (3, 2).
-    """
-    result = training_result_tensor_predictions.stacked_predictions()
-
-    assert result is not None
-    assert isinstance(result, np.ndarray)
-    assert result.shape == (3, 2)
-
-
-def test_stacked_predictions_returns_numpy_array(
-    training_result_dict_predictions: TrainingResult,
-) -> None:
-    """stacked_predictions() always returns numpy, not torch.Tensor."""
-    result = training_result_dict_predictions.stacked_predictions()
-
-    assert result is not None
-    assert not isinstance(result, torch.Tensor)
-    assert isinstance(result, np.ndarray)
-
-
 @pytest.fixture
-def predictions_with_targets() -> list[dict[str, Any]]:
-    """Prediction batches with matching targets in predict_step format."""
+def predictions_with_targets() -> list[TensorDict]:
+    """Prediction batches with matching targets in TensorDict format."""
     return [
-        {
-            "predictions": {"output": torch.tensor([1.0, 2.0])},
-            "targets": {"y": torch.tensor([1.1, 2.1])},
-            "latents": {},
-        },
-        {
-            "predictions": {"output": torch.tensor([3.0])},
-            "targets": {"y": torch.tensor([3.1])},
-            "latents": {},
-        },
+        TensorDict(
+            {
+                "predictions": TensorDict({"output": torch.tensor([1.0, 2.0])}, batch_size=[2]),
+                "targets": TensorDict({"y": torch.tensor([1.1, 2.1])}, batch_size=[2]),
+            },
+            batch_size=[2],
+        ),
+        TensorDict(
+            {
+                "predictions": TensorDict({"output": torch.tensor([3.0])}, batch_size=[1]),
+                "targets": TensorDict({"y": torch.tensor([3.1])}, batch_size=[1]),
+            },
+            batch_size=[1],
+        ),
     ]
 
 
 @pytest.fixture
-def training_result_with_targets(predictions_with_targets: list[dict]) -> TrainingResult:
+def training_result_with_targets(predictions_with_targets: list[TensorDict]) -> TrainingResult:
     """TrainingResult with both predictions and targets."""
     return TrainingResult(
         model_state=None,
@@ -182,48 +141,106 @@ def training_result_with_targets(predictions_with_targets: list[dict]) -> Traini
     )
 
 
-def test_stacked_targets_matches_predict_step_targets(
-    training_result_with_targets: TrainingResult,
+# ---------------------------------------------------------------------------
+# stacked property tests
+# ---------------------------------------------------------------------------
+
+
+def test_stacked_none_when_no_predictions(
+    training_result_no_predictions: TrainingResult,
 ) -> None:
-    """stacked_targets() extracts targets from predict_step dict format."""
-    targets = training_result_with_targets.stacked_targets()
-
-    assert targets is not None
-    assert isinstance(targets, np.ndarray)
-    assert targets.shape == (3,)
-    np.testing.assert_allclose(targets, [1.1, 2.1, 3.1], atol=1e-6)
+    """result.stacked is None when predictions field is None."""
+    assert training_result_no_predictions.stacked is None
 
 
-def test_stacked_targets_aligns_with_predictions(
-    training_result_with_targets: TrainingResult,
+def test_stacked_none_when_empty_predictions(
+    training_result_empty_predictions: TrainingResult,
 ) -> None:
-    """Predictions and targets have matching shapes (same data split)."""
-    preds = training_result_with_targets.stacked_predictions()
-    targets = training_result_with_targets.stacked_targets()
-
-    assert preds is not None
-    assert targets is not None
-    assert preds.shape == targets.shape
+    """result.stacked is None when predictions is an empty list."""
+    assert training_result_empty_predictions.stacked is None
 
 
-def test_stacked_targets_none_when_no_targets(
+def test_stacked_is_tensordict_for_tensordict_input(
     training_result_dict_predictions: TrainingResult,
 ) -> None:
-    """stacked_targets() returns None when targets dict is empty in all batches."""
-    targets = training_result_dict_predictions.stacked_targets()
-    # predictions_as_dicts has empty targets dicts — no values to extract
-    assert targets is None
+    """result.stacked is a TensorDict when TensorDict predictions are stored."""
+    assert isinstance(training_result_dict_predictions.stacked, TensorDict)
 
 
 # ---------------------------------------------------------------------------
-# fast_dev_run integration: verify trainer.predict() dict structure
+# to_numpy() tests
+# ---------------------------------------------------------------------------
+
+
+def test_to_numpy_returns_none_when_no_predictions(
+    training_result_no_predictions: TrainingResult,
+) -> None:
+    """to_numpy() returns None when no predictions were captured."""
+    assert training_result_no_predictions.to_numpy() is None
+
+
+def test_to_numpy_extracts_predictions_from_tensordict(
+    training_result_dict_predictions: TrainingResult,
+) -> None:
+    """to_numpy() extracts and concatenates output across TensorDict batches.
+
+    Two batches of size 3 and 2 → flat ndarray of shape (5,).
+    """
+    result = training_result_dict_predictions.to_numpy()
+
+    assert result is not None
+    output = result.get("predictions", {}).get("output")
+    assert output is not None
+    assert isinstance(output, np.ndarray)
+    assert output.shape == (5,)
+    np.testing.assert_allclose(output, [1.0, 2.0, 3.0, 4.0, 5.0])
+
+
+def test_to_numpy_extracts_targets_when_present(
+    training_result_with_targets: TrainingResult,
+) -> None:
+    """to_numpy() extracts targets from TensorDict predictions."""
+    result = training_result_with_targets.to_numpy()
+
+    assert result is not None
+    targets = result.get("targets", {})
+    assert "y" in targets
+    y = targets["y"]
+    assert isinstance(y, np.ndarray)
+    assert y.shape == (3,)
+    np.testing.assert_allclose(y, [1.1, 2.1, 3.1], atol=1e-6)
+
+
+def test_to_numpy_targets_empty_when_no_targets(
+    training_result_dict_predictions: TrainingResult,
+) -> None:
+    """to_numpy()['targets'] is empty when targets dicts are empty in all batches."""
+    result = training_result_dict_predictions.to_numpy()
+    assert result is not None
+    targets = result.get("targets", {})
+    assert targets == {}
+
+
+def test_to_numpy_predictions_shape_matches_targets(
+    training_result_with_targets: TrainingResult,
+) -> None:
+    """Predictions and targets arrays have matching shapes from to_numpy()."""
+    result = training_result_with_targets.to_numpy()
+    assert result is not None
+    output = result["predictions"]["output"]
+    y = result["targets"]["y"]
+    assert output.shape == y.shape
+
+
+# ---------------------------------------------------------------------------
+# fast_dev_run integration: verify trainer.predict() structure
 # ---------------------------------------------------------------------------
 
 
 def test_fast_dev_run_predict_returns_list_of_dicts(tmp_path: Path) -> None:
-    """trainer.predict() returns list[dict] matching predict_step output format.
+    """trainer.predict() produces stacked TensorDict and to_numpy() output.
 
-    This test documents the expected structure so stacked_predictions() can rely on it.
+    This test documents the expected API so _log_training_evaluation() can rely on it.
     Runs a single fast_dev_run training step using DLKit programmatic settings.
     """
     from dlkit.interfaces.api import execute
@@ -281,24 +298,23 @@ def test_fast_dev_run_predict_returns_list_of_dicts(tmp_path: Path) -> None:
     result = execute(settings)
 
     # Verify predictions were captured
-    assert result.predictions is not None, "trainer.predict() should have been called and captured"
+    assert result.predictions is not None, "trainer.predict() should have captured predictions"
     assert isinstance(result.predictions, list)
     assert len(result.predictions) > 0
 
-    # Verify each batch has the expected predict_step dict structure
-    first_batch = result.predictions[0]
-    assert isinstance(first_batch, dict), f"Expected dict, got {type(first_batch)}"
-    assert "predictions" in first_batch, f"Expected 'predictions' key, got {list(first_batch.keys())}"
+    # Verify stacked TensorDict is accessible
+    stacked = result.stacked
+    assert stacked is not None, "result.stacked should be a TensorDict after prediction"
 
-    # Verify stacked_predictions() produces a valid array
-    stacked = result.stacked_predictions()
-    assert stacked is not None
-    assert isinstance(stacked, np.ndarray)
-    assert stacked.ndim >= 1
-
-    # Verify stacked_targets() aligns with predictions (same split, same count)
-    targets = result.stacked_targets()
-    assert targets is not None, "Targets should be captured alongside predictions"
-    assert targets.shape == stacked.shape, (
-        f"Predictions shape {stacked.shape} must match targets shape {targets.shape}"
-    )
+    # Verify to_numpy() returns the expected dict structure
+    all_numpy = result.to_numpy()
+    assert all_numpy is not None, "to_numpy() should return a dict after prediction"
+    assert "predictions" in all_numpy, f"Expected 'predictions' key, got {list(all_numpy.keys())}"
+    preds = all_numpy["predictions"]
+    # predictions may be a numpy array directly or a dict with sub-keys
+    if isinstance(preds, dict):
+        output = next(iter(preds.values()))
+    else:
+        output = preds
+    assert isinstance(output, np.ndarray)
+    assert output.ndim >= 1

@@ -66,46 +66,43 @@ def collect_predictions(
     predictor: Any,
     feature_arrays: dict[str, np.ndarray],
     batch_size: int,
-) -> tuple[list[Any], float]:
+) -> tuple[list[torch.Tensor], float]:
     """Run inference for every feature batch.
 
     Args:
-        predictor: DLKit predictor instance
+        predictor: DLKit CheckpointPredictor instance
         feature_arrays: Feature arrays keyed by name
         batch_size: Number of samples per batch
 
     Returns:
-        Tuple of (predictions_list, total_duration_seconds)
+        Tuple of (predictions_list, 0.0) — duration not available in new API
 
     Raises:
         ValueError: If predictor returns no predictions
     """
-    predictions: list[Any] = []
-    total_duration = 0.0
+    predictions: list[torch.Tensor] = []
     for batch in iterate_feature_batches(feature_arrays, batch_size):
         tensor_batch = {k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()}
-        result = predictor.predict(tensor_batch)
-        predictions.append(result.predictions)
-        total_duration += getattr(result, "duration_seconds", 0.0)
+        result = predictor.predict(**tensor_batch)
+        primary = result[0] if isinstance(result, tuple) else result
+        predictions.append(primary)
     if not predictions:
         raise ValueError("Predictor returned no predictions.")
-    return predictions, total_duration
+    return predictions, 0.0
 
 
 def process_predictions(
-    raw_predictions: list[Any],
+    raw_predictions: list[torch.Tensor],
 ) -> np.ndarray:
     """Process raw prediction batches into single array.
 
     Args:
-        raw_predictions: List of prediction batches from predictor
+        raw_predictions: List of prediction tensors from predictor
 
     Returns:
         Flattened prediction array
     """
     stacked = stack_batches(raw_predictions, mode="stack")
-    if isinstance(stacked, dict):
-        return next(iter(stacked.values())).ravel()
     return stacked.ravel()
 
 
@@ -135,14 +132,6 @@ def create_predictor(
         apply_transforms=True,  # Enable checkpoint-based transforms
         precision=PrecisionStrategy.FULL_64,
     )
-
-    # Verify transforms loaded from checkpoint (DLKit stores state in _model_state)
-    model_state = getattr(predictor, "_model_state", None)
-    if model_state is not None:
-        if model_state.feature_transforms:
-            logger.info(f"Loaded {len(model_state.feature_transforms)} feature transform chain(s) from checkpoint")
-        if model_state.target_transforms:
-            logger.info(f"Loaded {len(model_state.target_transforms)} target transform chain(s) from checkpoint")
 
     return predictor
 

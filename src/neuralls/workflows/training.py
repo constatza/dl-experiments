@@ -1,13 +1,13 @@
 """Training orchestration helpers consumed by CLI scripts and workflows.
 
 This module provides functions for orchestrating model training with DLKit:
-- Data loading and preparation (features/targets from normalized.npz)
+- Data loading and preparation (features/targets from dataset artifacts)
 - Configuration transformations (dataset, paths, MLflow)
 - Training execution via DLKit execute()
 
 Architecture:
     The training pipeline applies sequential transformations to GeneralSettings:
-    1. Resolve dataset (inject features/targets from arrays)
+    1. Resolve dataset (inject features/targets from file-backed entries)
     2. Configure output paths (checkpoint directory, root dir)
     3. Configure MLflow (experiment name, run name)
     4. Execute training via DLKit
@@ -27,56 +27,55 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 from dlkit import GeneralSettings
 from dlkit.interfaces.api import execute
 from dlkit.tools.config.core.updater import update_settings
 from dlkit.tools.config.data_entries import (
+    Feature,
     FeatureType,
+    SparseFeature,
+    Target,
     TargetType,
-    ValueFeature,
-    ValueTarget,
 )
 from dlkit.tools.config.dataset_settings import DatasetSettings
+from dlkit.tools.io.sparse import PackFiles
 
 from neuralls.configuration import ExperimentWorkspace
 from neuralls.configuration.loader import load_experiment
 from neuralls.constants import DEFAULT_OUTPUT_DIR
+from neuralls.io.dataset_storage import (
+    load_dense_training_arrays,
+    resolve_dataset_paths,
+)
 from neuralls.io.checkpoints import get_latest_checkpoint
 from neuralls.workflows.diagnostics import compute_diagnostics
 from neuralls.workflows.inference.output import write_mlflow_sidecar
 
+GRAPH_DATASET_NAME: str = "GraphDataset"
+FLEXIBLE_DATASET_NAME: str = "FlexibleDataset"
+
 
 @dataclass(frozen=True)
 class TrainingArrays:
-    """Training data arrays from normalized dataset.
-
-    Immutable container for the three core arrays needed for training.
-    Supports two types of training pairs with identical structure:
-
-    1. **Base pairs** (A@x, x): Direct solution training
-       - rhs: A @ x (RHS vectors)
-       - solutions: x (solution vectors)
-
-    2. **Trace pairs** (r_k, e_k): Residual-error training from CG iterations
-       - rhs: r_k (residual vectors from CG, where r_k = A @ e_k)
-       - solutions: e_k (error corrections, where e_k = x* - x_k)
-
-    Mathematical relationship holds for both: rhs = matrix @ solutions
+    """Training data artifact paths from dataset storage.
 
     Attributes:
-        rhs: Shape (n_samples, n_dims) - Features (RHS or residuals)
-        solutions: Shape (n_samples, n_dims) - Targets (solutions or errors)
-        matrix: Shape (n_dims, n_dims) or (n_samples, n_dims, n_dims) - System matrix A
+        rhs: Path to rhs.npy
+        solutions: Path to solutions.npy
+        matrix_pack: Path to matrix_coo sparse pack directory
+        sample_count: Number of samples in rhs/solutions
     """
 
-    rhs: np.ndarray
-    solutions: np.ndarray
-    matrix: np.ndarray
+    rhs: Path
+    solutions: Path
+    matrix_pack: Path
+    sample_count: int
 
 
 @dataclass(frozen=True)
@@ -133,33 +132,19 @@ class TrainingResult:
     data_dir: Path
 
 
-def _load_training_arrays(data_path: Path) -> TrainingArrays:
-    """Load training arrays from normalized.npz file.
-
-    Loads either base pairs (A@x, x) or trace pairs (r_k, e_k) depending on
-    what the data generation strategy produced. Both use identical file structure.
-
-    Args:
-        data_path: Path to normalized.npz file (must contain rhs, solutions, matrix)
-
-    Returns:
-        TrainingArrays with:
-        - rhs: Either RHS vectors (A@x) or residuals (r_k)
-        - solutions: Either solutions (x) or error corrections (e_k)
-        - matrix: System matrix A
-
-    Raises:
-        FileNotFoundError: If normalized.npz doesn't exist
-        KeyError: If required keys missing from .npz file
-
-    Note:
-        No conditional logic needed - file structure is identical for both pair types.
-    """
-    dataset = np.load(data_path)
+def _load_training_arrays(data_dir: Path) -> TrainingArrays:
+    """Resolve training artifact paths from dataset directory."""
+    paths = resolve_dataset_paths(data_dir)
+    rhs, solutions = load_dense_training_arrays(data_dir)
+    if rhs.shape[0] != solutions.shape[0]:
+        raise ValueError(
+            f"RHS and solutions sample counts must match, got {rhs.shape[0]} and {solutions.shape[0]}"
+        )
     return TrainingArrays(
-        rhs=dataset["rhs"],
-        solutions=dataset["solutions"],
-        matrix=dataset["matrix"],
+        rhs=paths.rhs_path,
+        solutions=paths.solutions_path,
+        matrix_pack=paths.matrix_pack_dir,
+        sample_count=int(rhs.shape[0]),
     )
 
 
@@ -170,9 +155,9 @@ def _load_and_prepare_data(
     """Load training data and create Feature/Target configurations.
 
     This function:
-    1. Loads arrays from normalized.npz
-    2. Creates DLKit Feature configs (ValueFeature with arrays)
-    3. Creates DLKit Target configs (ValueTarget with arrays)
+    1. Resolves file-backed dataset artifacts
+    2. Creates DLKit feature entries from file paths
+    3. Creates DLKit target entries from file paths
 
     Args:
         settings: DLKit general settings (used to check dataset type)
@@ -180,13 +165,11 @@ def _load_and_prepare_data(
 
     Returns:
         Tuple of (arrays, features, targets) where:
-            - arrays: Loaded numpy arrays
-            - features: List of ValueFeature configs for DLKit
-            - targets: List of ValueTarget configs for DLKit
+            - arrays: Resolved data artifact paths
+            - features: List of path-based feature configs for DLKit
+            - targets: List of path-based target configs for DLKit
     """
-    from ..constants import NORMALIZED_DATASET_FILENAME
-
-    arrays = _load_training_arrays(workspace.data_dir / NORMALIZED_DATASET_FILENAME)
+    arrays = _load_training_arrays(workspace.data_dir)
     dataset_name = settings.DATASET.name if settings.DATASET else None
     features = _create_feature_configs(arrays, dataset_name)
     targets = _create_target_configs(arrays)
@@ -196,64 +179,57 @@ def _load_and_prepare_data(
 def _create_feature_configs(
     arrays: TrainingArrays, dataset_name: str | None
 ) -> list[FeatureType]:
-    """Create Feature configs from training arrays.
-
-    Different datasets require different features:
-    - GraphDataset: Includes both rhs and matrix as features
-    - FlexibleDataset: Only rhs as feature
+    """Create file-backed Feature configs from dataset artifacts.
 
     Args:
-        arrays: Training arrays (rhs, solutions, matrix)
+        arrays: Training data artifact paths
         dataset_name: Name from [DATASET].name in config
 
     Returns:
-        List of ValueFeature configs to inject into DATASET section
-
-    Raises:
-        ValueError: If matrix dimensions incompatible with samples
+        List of file-backed features to inject into DATASET section
     """
-    if dataset_name == "GraphDataset":
-        sample_count = arrays.rhs.shape[0]
-        matrix = arrays.matrix
-        if matrix.ndim == 3:
-            if matrix.shape[0] != sample_count:
-                raise ValueError("Matrix feature must match number of samples.")
-        elif matrix.ndim != 2:
-            raise ValueError(
-                f"Matrix feature must be 2D or 3D for GraphDataset, got {matrix.shape}."
-            )
-        return [
-            ValueFeature(
-                name="rhs",
-                value=arrays.rhs,
-            ),
-            ValueFeature(
-                name="matrix",
-                value=matrix,
-            ),
-        ]
-
+    _ = dataset_name
+    sparse_feature = SparseFeature(
+        name="matrix",
+        path=arrays.matrix_pack,
+        model_input=False,
+    )
+    # Bridge config-type mismatch between SparseFeature.files and current dlkit sparse reader.
+    object.__setattr__(
+        sparse_feature,
+        "files",
+        PackFiles(
+            indices=sparse_feature.files.indices,
+            values=sparse_feature.files.values,
+            nnz_ptr=sparse_feature.files.nnz_ptr,
+        ),
+    )
     return [
-        ValueFeature(
-            name="rhs",
-            value=arrays.rhs,
-        )
+        Feature(
+            name="x",
+            path=arrays.rhs,
+        ),
+        sparse_feature,
     ]
 
 
 def _create_target_configs(arrays: TrainingArrays) -> list[TargetType]:
-    """Create Target configs from training arrays.
+    """Create file-backed Target configs from dataset artifacts.
 
     Args:
-        arrays: Training arrays containing solutions
+        arrays: Training data artifact paths
 
     Returns:
-        List with single ValueTarget for solutions
+        Targets with both model-compatible and loss-compatible keys.
     """
     return [
-        ValueTarget(
+        Target(
+            name="y",
+            path=arrays.solutions,
+        ),
+        Target(
             name="solutions",
-            value=arrays.solutions,
+            path=arrays.solutions,
         )
     ]
 
@@ -313,9 +289,8 @@ def _resolve_dataset(
 ) -> GeneralSettings:
     """Resolve and apply dataset configurations to settings.
 
-    This is a pure transformation that injects features/targets into the
-    DATASET section. It preserves existing dataset configuration while
-    replacing features/targets with in-memory arrays.
+    This is a pure transformation that injects file-backed features/targets
+    into the DATASET section.
 
     Args:
         settings: Current DLKit settings
@@ -335,6 +310,8 @@ def _resolve_dataset(
             "features": features,
             "targets": targets,
             "name": base_dataset.name or "FlexibleDataset",
+            # SparseFeature entries are not compatible with current memmap cache path.
+            "memmap_cache": False,
         }
     )
     return settings.model_copy(update={"DATASET": dataset})
@@ -394,6 +371,27 @@ def _configure_output_paths(
     trainer_cfg = trainer_cfg.update_with({"callbacks": callbacks})
     training_cfg = training_cfg.update_with({"trainer": trainer_cfg})
     return settings.update_with({"TRAINING": training_cfg})
+
+
+def _configure_dataloader_runtime(settings: GeneralSettings) -> GeneralSettings:
+    """Configure dataloader for reliable sparse runtime execution.
+
+    Sparse pack readers and constrained runtime environments are currently
+    safer with single-process dataloading.
+    """
+    datamodule_cfg = settings.DATAMODULE
+    if datamodule_cfg is None or datamodule_cfg.dataloader is None:
+        return settings
+
+    dataloader_cfg = datamodule_cfg.dataloader.update_with(
+        {
+            "num_workers": 0,
+            "persistent_workers": False,
+            "pin_memory": False,
+        }
+    )
+    datamodule_cfg = datamodule_cfg.update_with({"dataloader": dataloader_cfg})
+    return settings.update_with({"DATAMODULE": datamodule_cfg})
 
 
 def _configure_mlflow(
@@ -460,8 +458,8 @@ def _configure_training_pipeline(
     Args:
         settings: Base DLKit settings from config file
         workspace: Experiment workspace with directory paths
-        features: Feature configs created from normalized.npz
-        targets: Target configs created from normalized.npz
+        features: Feature configs created from dataset artifacts
+        targets: Target configs created from dataset artifacts
         dataset_id: Dataset identifier for MLflow experiment naming
 
     Returns:
@@ -470,10 +468,39 @@ def _configure_training_pipeline(
     # Apply transformations sequentially
     # Each returns new GeneralSettings (immutable updates)
     settings = _resolve_dataset(settings, features, targets)
+    settings = _configure_dataloader_runtime(settings)
     settings = _configure_output_paths(settings, workspace.root_dir)
     settings = _configure_mlflow(settings, dataset_id)
 
     return settings, workspace
+
+
+@contextmanager
+def _parent_run_context(parent_run_id: str | None) -> Iterator[None]:
+    """Temporarily set MLFLOW_PARENT_RUN_ID for nested MLflow runs.
+
+    When ``parent_run_id`` is ``None`` this is a no-op context manager.
+
+    Args:
+        parent_run_id: Optional MLflow parent run UUID. When set, injects
+            ``MLFLOW_PARENT_RUN_ID`` into the environment for the duration
+            of the context and restores the previous value on exit.
+
+    Yields:
+        None
+    """
+    if parent_run_id is None:
+        yield
+        return
+    previous = os.environ.get("MLFLOW_PARENT_RUN_ID")
+    os.environ["MLFLOW_PARENT_RUN_ID"] = parent_run_id
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("MLFLOW_PARENT_RUN_ID", None)
+        else:
+            os.environ["MLFLOW_PARENT_RUN_ID"] = previous
 
 
 def _log_artifacts_to_mlflow(
@@ -520,7 +547,16 @@ def _log_artifacts_to_mlflow(
         experiment_ids=[experiment.experiment_id],
         filter_string=f"attributes.run_name = '{run_name}'",
         max_results=1,
+        order_by=["attributes.start_time DESC"],
     )
+    if not runs:
+        # DLKit can override the run name (for example with MODEL.name).
+        # Fall back to the latest run in the target experiment.
+        runs = client.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            max_results=1,
+            order_by=["attributes.start_time DESC"],
+        )
     if not runs:
         return None
 
@@ -544,6 +580,61 @@ def _log_artifacts_to_mlflow(
     return exp_id, run_id
 
 
+def _write_diagnostics_figure(
+    y_true: Any,
+    y_pred: Any,
+    diagnostics: Any,
+    figures_dir: Path,
+) -> Path:
+    """Write training diagnostics figure to disk.
+
+    Args:
+        y_true: True target values.
+        y_pred: Predicted values.
+        diagnostics: Diagnostics result with ``rel_error`` attribute.
+        figures_dir: Directory to write the figure into.
+
+    Returns:
+        Path to the saved figure file.
+    """
+    from neuralls.plotting import plot_parity_and_residuals
+
+    figure_path = figures_dir / "diagnostics_training.png"
+    plot_parity_and_residuals(
+        y_true.ravel(),
+        y_pred.ravel(),
+        rel_l2_error=diagnostics.rel_error,
+        save_path=figure_path,
+    )
+    return figure_path
+
+
+def _log_diagnostics_to_mlflow(
+    tracking_uri: str,
+    run_id: str,
+    exp_id: str,
+    artifacts_destination: str,
+    diagnostics: Any,
+    figure_path: Path,
+) -> None:
+    """Log diagnostics metrics and figure artifact to an existing MLflow run.
+
+    Args:
+        tracking_uri: SQLite tracking URI.
+        run_id: Existing MLflow run ID to reopen.
+        exp_id: MLflow experiment ID (unused, kept for API compatibility).
+        artifacts_destination: Local filesystem path for MLflow artifacts (unused).
+        diagnostics: Diagnostics result with ``metrics`` dict.
+        figure_path: Path to the figure file to log.
+    """
+    import mlflow
+
+    mlflow.set_tracking_uri(tracking_uri)
+    with mlflow.start_run(run_id=run_id):
+        mlflow.log_metrics(diagnostics.metrics)
+        mlflow.log_artifact(str(figure_path), artifact_path="figures")
+
+
 def _log_training_evaluation(
     tracking_uri: str,
     run_id: str,
@@ -554,13 +645,9 @@ def _log_training_evaluation(
 ) -> None:
     """Compute diagnostics from training predictions and log to existing MLflow run.
 
-    Uses the predictions and targets already captured by `trainer.predict()` during
-    training. No additional inference step is executed. Targets come from the same
-    data split as predictions, so shapes are guaranteed to align.
-
-    Also produces a 2-panel parity+residuals figure and copies it directly to the
-    MLflow artifact filesystem under ``figures/diagnostics_training.png``.
-    Direct filesystem copy avoids the MLflow HTTP server (already shut down by DLKit).
+    Uses the predictions and targets already captured by ``trainer.predict()``
+    during training. Delegates figure writing and MLflow logging to dedicated
+    helpers for testability.
 
     Args:
         tracking_uri: SQLite tracking URI.
@@ -570,38 +657,20 @@ def _log_training_evaluation(
         training_result: DLKit TrainingResult with captured predictions and targets.
         figures_dir: Directory to write the diagnostics figure.
     """
-    import shutil
-
-    import mlflow
-
-    from neuralls.plotting import plot_parity_and_residuals
-
-    y_pred = training_result.stacked_predictions()
-    y_true = training_result.stacked_targets()
-    if y_pred is None or y_true is None:
+    all_numpy = training_result.to_numpy()
+    if all_numpy is None:
         return
+    y_pred = all_numpy.get("predictions", {}).get("output")
+    targets = all_numpy.get("targets", {})
+    if y_pred is None or not targets:
+        return
+    y_true = next(iter(targets.values()))
 
     diagnostics = compute_diagnostics(y_pred, y_true)
-
-    figure_path = figures_dir / "diagnostics_training.png"
-    plot_parity_and_residuals(
-        y_true.ravel(),
-        y_pred.ravel(),
-        rel_l2_error=diagnostics.rel_error,
-        save_path=figure_path,
+    figure_path = _write_diagnostics_figure(y_true, y_pred, diagnostics, figures_dir)
+    _log_diagnostics_to_mlflow(
+        tracking_uri, run_id, exp_id, artifacts_destination, diagnostics, figure_path
     )
-
-    # Log metrics via SQLite (no HTTP server needed)
-    mlflow.set_tracking_uri(tracking_uri)
-    with mlflow.start_run(run_id=run_id):
-        mlflow.log_metrics(diagnostics.metrics)
-
-    # Copy figure directly to artifact filesystem (HTTP server is already shut down)
-    artifact_figures_dir = (
-        Path(artifacts_destination) / exp_id / run_id / "artifacts" / "figures"
-    )
-    artifact_figures_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(figure_path, artifact_figures_dir / figure_path.name)
 
 
 def train_model(
@@ -617,7 +686,7 @@ def train_model(
 
     This is the main entry point for model training. It orchestrates:
     1. Load experiment configuration (model + data configs) into a temp dir
-    2. Load training data from normalized.npz
+    2. Resolve dataset artifacts (rhs/solutions/matrix_coo)
     3. Configure DLKit settings (dataset, paths, MLflow)
     4. Execute training via DLKit
     5. Copy checkpoint to permanent location under output_root
@@ -666,7 +735,7 @@ def train_model(
         workspace = experiment.workspace
         dataset_id = experiment.spec.data_config_path.stem
 
-        # Step 2: Load training data from normalized.npz
+        # Step 2: Resolve training dataset artifacts
         _, features, targets = _load_and_prepare_data(settings, workspace)
 
         # Step 3: Configure DLKit settings (dataset, paths, MLflow)
@@ -681,17 +750,8 @@ def train_model(
         # Step 4: Execute training via DLKit
         if max_epochs is not None:
             settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
-        _prev_parent_run_id = os.environ.get("MLFLOW_PARENT_RUN_ID")
-        if parent_run_id is not None:
-            os.environ["MLFLOW_PARENT_RUN_ID"] = parent_run_id
-        try:
+        with _parent_run_context(parent_run_id):
             training_result = execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
-        finally:
-            if parent_run_id is not None:
-                if _prev_parent_run_id is None:
-                    os.environ.pop("MLFLOW_PARENT_RUN_ID", None)
-                else:
-                    os.environ["MLFLOW_PARENT_RUN_ID"] = _prev_parent_run_id
 
         # Step 5: Retrieve checkpoint from temp dir (before it is deleted)
         local_checkpoint = get_latest_checkpoint(workspace.checkpoint_dir)

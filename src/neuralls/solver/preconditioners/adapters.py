@@ -26,19 +26,18 @@ from .tensor_utils import (
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+    from dlkit.interfaces.inference import CheckpointPredictor
 
 
 class DLKitPredictor(PredictorPort):
     """DLKit-based predictor with lifecycle management.
 
-    Implements PredictorPort using DLKit framework. Manages model
-    lifecycle: load → apply (many times) → cleanup.
+    Implements PredictorPort using DLKit framework. Wraps CheckpointPredictor
+    and delegates lifecycle management to it via context manager.
 
-    Resource Management:
-        - Model loaded to GPU in __init__
-        - Multiple apply() calls reuse same model
-        - cleanup() frees GPU memory
-        - Context manager ensures cleanup
+    Lifecycle:
+        Use as a context manager — `__exit__` delegates to CheckpointPredictor,
+        which calls `unload()` automatically. Do NOT call `cleanup()` directly.
 
     Error Handling:
         - GPU OOM → RuntimeError with helpful message
@@ -46,19 +45,15 @@ class DLKitPredictor(PredictorPort):
         - Model failure → RuntimeError with context
     """
 
-    def __init__(self, model: torch.nn.Module, device: str) -> None:
-        """Initialize predictor with loaded model.
+    def __init__(self, predictor: CheckpointPredictor, device: str) -> None:
+        """Initialize predictor with loaded CheckpointPredictor.
 
         Args:
-            model: PyTorch model (already loaded, in eval mode)
+            predictor: DLKit CheckpointPredictor (already loaded, eval mode)
             device: Device string ("cpu", "cuda", "mps")
-
-        Note:
-            Model should already be in eval mode and on correct device.
         """
-        self._model: torch.nn.Module = model  # Never None
+        self._predictor: CheckpointPredictor = predictor
         self._device: str = device
-        self._cleaned_up: bool = False
 
     def apply(self, residual: NDArray) -> NDArray:
         """Apply neural network to residual.
@@ -71,24 +66,17 @@ class DLKitPredictor(PredictorPort):
 
         Raises:
             RuntimeError: If predictor unloaded or GPU error
-            ValueError: If residual shape incompatible
         """
-        if self._cleaned_up:
-            raise RuntimeError(
-                "Predictor has been unloaded. Create a new predictor or "
-                "ensure cleanup() is not called before inference completes."
-            )
-
         try:
             # Prepare input (pure function)
             input_tensor = prepare_model_input(residual, self._device)
 
-            # Forward pass (action - GPU computation)
-            with torch.no_grad():
-                output = self._model(input_tensor)
+            # Forward pass — predict() uses no_grad internally
+            output = self._predictor.predict(input_tensor)
+            primary = output[0] if isinstance(output, tuple) else output
 
             # Extract output (pure function)
-            result = extract_model_output(output)
+            result = extract_model_output(primary)
             return result
 
         except torch.cuda.OutOfMemoryError as e:
@@ -115,35 +103,12 @@ class DLKitPredictor(PredictorPort):
             ) from e
 
     def cleanup(self) -> None:
-        """Release GPU memory and model resources.
+        """No-op — use as context manager; __exit__ handles unload."""
+        pass
 
-        Idempotent - safe to call multiple times.
-        """
-        if self._cleaned_up:
-            return  # Already cleaned up
-
-        try:
-            # Move model to CPU to free GPU memory
-            if self._device != "cpu":
-                logger.debug(f"Moving model from {self._device} to CPU for cleanup")
-                self._model.cpu()
-
-            # Set cleanup flag (don't set model to None - keeps type safety)
-            self._cleaned_up = True
-
-            # Force garbage collection
-            import gc
-            gc.collect()
-
-            # Clear CUDA cache if available
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
-            logger.debug("Predictor cleanup complete")
-
-        except (RuntimeError, OSError, AttributeError) as e:
-            logger.warning(f"Error during predictor cleanup: {e}")
-            # Don't raise - cleanup should be best-effort
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        """Delegate lifecycle to CheckpointPredictor's context manager."""
+        self._predictor.__exit__(exc_type, exc_val, exc_tb)
 
 
 class DLKitAdapter(PredictorAdapter):
@@ -208,7 +173,7 @@ class DLKitAdapter(PredictorAdapter):
                 precision=PrecisionStrategy.FULL_64,
             )
 
-            # Extract model (uses public API, not private _model_state)
+            # Probe device for prepare_model_input (input tensor placement)
             model = dlkit_predictor.model
             if model is None:
                 raise RuntimeError(
@@ -216,25 +181,18 @@ class DLKitAdapter(PredictorAdapter):
                     "Checkpoint may be corrupted or incompatible."
                 )
 
-            # Get device through public property (avoiding _model_state access)
-            # Use the model's device directly
             device_param = next(model.parameters(), None)
             if device_param is not None:
                 device = str(device_param.device)
             else:
-                # Fallback to CPU if no parameters
                 device = "cpu"
                 logger.warning("Model has no parameters, defaulting to CPU")
-
-            # Ensure model is in eval mode
-            model.eval()
 
             logger.info(
                 f"Loaded model from {checkpoint_path} on device {device}"
             )
 
-            # Return wrapped predictor
-            return DLKitPredictor(model, device)
+            return DLKitPredictor(dlkit_predictor, device)
 
         except ImportError as e:
             raise ImportError(
