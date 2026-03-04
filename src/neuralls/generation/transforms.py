@@ -30,6 +30,7 @@ from abc import abstractmethod
 from typing import Any, Literal, Protocol, TypeVar
 
 import numpy as np
+from scipy.sparse.linalg import LinearOperator
 
 from .helpers import (
     _compute_eigendecomposition,
@@ -79,7 +80,7 @@ class ComputeRhsTransform:
         True
     """
 
-    def __init__(self, matrix: np.ndarray) -> None:
+    def __init__(self, matrix: np.ndarray | LinearOperator | Any) -> None:
         """Initialize forward transform.
 
         Args:
@@ -96,7 +97,7 @@ class ComputeRhsTransform:
         Returns:
             RHS vectors, shape (N, n)
         """
-        return np.array([self.matrix @ x for x in solutions], dtype=np.float64)
+        return np.asarray([self.matrix @ x for x in solutions], dtype=np.float64)
 
 
 class SolveTransform:
@@ -115,7 +116,7 @@ class SolveTransform:
 
     def __init__(
         self,
-        matrix: np.ndarray,
+        matrix: np.ndarray | LinearOperator | Any,
         method: Literal["direct", "cg"] = "cg",
         rtol: float = 1e-12,
         atol: float = 0.0,

@@ -10,6 +10,8 @@ from typing import Any, Literal
 import numpy as np
 from loguru import logger
 from scipy.linalg import eigh, norm
+from scipy.sparse import issparse, csc_matrix
+from scipy.sparse.linalg import LinearOperator
 
 from ..constants import (
     EIGENVECTOR_SELECT_SMALLEST,
@@ -112,7 +114,7 @@ def _normalize_matrix_for_generation(
     matrix: np.ndarray,
     normalize_type: Literal["none", "matrix", "diagonal", "spectral", "rhs"],
     spectral_radius_bound: float | None,
-) -> tuple[np.ndarray, Any]:
+) -> tuple[np.ndarray, Any, float]:
     """Normalize matrix for synthetic generation (pure function).
 
     This function prepares a matrix for synthetic data generation by applying
@@ -137,9 +139,11 @@ def _normalize_matrix_for_generation(
         spectral_radius_bound: For matrix normalization (computed if None)
 
     Returns:
-        Tuple of (normalized_matrix, scale_or_none):
+        Tuple of (normalized_matrix, scale_or_none, matrix_value_scale):
             - normalized_matrix: Matrix in normalized space
             - scale_or_none: IScale object for matrix/diagonal, None for spectral/none/rhs
+            - matrix_value_scale: Scalar that maps stored matrix values back to raw values
+              (A_raw = A_stored * matrix_value_scale). For non-scalar transforms this is 1.0.
 
     Notes:
         - For "none" or "rhs": Returns defensive copy and None
@@ -151,12 +155,14 @@ def _normalize_matrix_for_generation(
 
     Examples:
         >>> # Matrix normalization
-        >>> A_norm, scale = _normalize_matrix_for_generation(A, "matrix", None)
+        >>> A_norm, scale, value_scale = _normalize_matrix_for_generation(A, "matrix", None)
         >>> isinstance(scale, MatrixScale)
+        True
+        >>> value_scale > 0
         True
 
         >>> # Spectral normalization (deferred RHS norms)
-        >>> A_norm, scale = _normalize_matrix_for_generation(A, "spectral", None)
+        >>> A_norm, scale, value_scale = _normalize_matrix_for_generation(A, "spectral", None)
         >>> scale is None  # RHS norms not yet available
         True
     """
@@ -164,7 +170,7 @@ def _normalize_matrix_for_generation(
 
     # No normalization: return defensive copy
     if normalize_type in ("none", "rhs"):
-        return matrix.copy(), None
+        return matrix.copy(), None, 1.0
 
     # Spectral: Normalize matrix only (defer per-sample RHS norms)
     if normalize_type == "spectral":
@@ -177,7 +183,7 @@ def _normalize_matrix_for_generation(
         dimension_scale = compute_dim_scale(dimension)
         composite_scale = spectral_norm * dimension_scale
         matrix_norm = matrix / composite_scale
-        return matrix_norm, None
+        return matrix_norm, None, float(composite_scale)
 
     # Matrix or Diagonal: Create full scale and normalize matrix
     scale = create_scale_from_config(
@@ -190,7 +196,13 @@ def _normalize_matrix_for_generation(
         f"Expected single scale for {normalize_type}, got list"
     )
     matrix_norm = scale.scale_matrix(matrix)
-    return matrix_norm, scale
+    if normalize_type == "matrix":
+        scale_params = scale.to_dict()
+        matrix_value_scale = float(scale_params["spectral_radius_bound"]) * float(
+            scale_params["dimension_scale"]
+        )
+        return matrix_norm, scale, matrix_value_scale
+    return matrix_norm, scale, 1.0
 
 
 def _resolve_strategy_counts(
@@ -236,7 +248,7 @@ def _resolve_strategy_counts(
 
 
 def _solve_linear_systems(
-    A: np.ndarray,
+    A: np.ndarray | LinearOperator | Any,
     rhs_vectors: np.ndarray,
     method: Literal["direct", "cg"],
     rtol: float = 1e-12,
@@ -264,23 +276,35 @@ def _solve_linear_systems(
     Raises:
         ValueError: If method is invalid
     """
-    num_systems, n = rhs_vectors.shape
+    rhs_array = np.asarray(rhs_vectors, dtype=np.float64)
+    num_systems, n = rhs_array.shape
     solutions = np.zeros((num_systems, n), dtype=np.float64)
 
     match method:
         case "direct":
-            # Direct solve via Cholesky (O(n³) per system)
-            from scipy.linalg import solve
+            if isinstance(A, LinearOperator):
+                raise ValueError(
+                    "Direct solve requires a concrete matrix, got LinearOperator."
+                )
+            if issparse(A):
+                from scipy.sparse.linalg import factorized
 
-            assume_a = "pos" if assume_pos_def else "gen"
-            for idx, rhs in enumerate(rhs_vectors):
-                solutions[idx] = solve(A, rhs, assume_a=assume_a)
+                solve_fn = factorized(csc_matrix(A))
+                for idx, rhs in enumerate(rhs_array):
+                    solutions[idx] = np.asarray(solve_fn(rhs), dtype=np.float64)
+            else:
+                # Direct solve via Cholesky (O(n³) per system)
+                from scipy.linalg import solve
+
+                assume_a = "pos" if assume_pos_def else "gen"
+                for idx, rhs in enumerate(rhs_array):
+                    solutions[idx] = solve(A, rhs, assume_a=assume_a)
 
         case "cg":
             # Iterative CG solve (O(n² * iters) per system)
             from scipy.sparse.linalg import cg as scipy_cg
 
-            for idx, rhs in enumerate(rhs_vectors):
+            for idx, rhs in enumerate(rhs_array):
                 solution, exit_code = scipy_cg(
                     A,
                     rhs,
@@ -367,13 +391,16 @@ def _compute_eigendecomposition(A: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     Raises:
         ValueError: If matrix is not symmetric within tolerance
     """
-    if not np.allclose(A, A.T, rtol=1e-10, atol=1e-10):
-        max_asymmetry = np.max(np.abs(A - A.T))
+    if isinstance(A, LinearOperator):
+        raise ValueError("Eigenvector strategies require an explicit matrix, got LinearOperator.")
+    matrix = A.toarray() if issparse(A) else np.asarray(A, dtype=np.float64)
+    if not np.allclose(matrix, matrix.T, rtol=1e-10, atol=1e-10):
+        max_asymmetry = np.max(np.abs(matrix - matrix.T))
         raise ValueError(
             f"Eigenvector strategies require symmetric matrices. "
             f"Max asymmetry: {max_asymmetry:.2e}"
         )
-    eigenvalues, eigenvectors = eigh(A)
+    eigenvalues, eigenvectors = eigh(matrix)
     return eigenvalues, eigenvectors
 
 

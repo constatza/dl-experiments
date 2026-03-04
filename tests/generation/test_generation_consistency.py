@@ -17,6 +17,10 @@ import numpy as np
 import pytest
 
 from neuralls.generation.orchestration import build_dataset
+from neuralls.io.dataset_storage import (
+    load_dense_training_arrays,
+    load_matrix_dense_sample,
+)
 
 
 @pytest.fixture
@@ -62,10 +66,8 @@ def verify_dataset_consistency(dataset_dir: Path) -> tuple[bool, float]:
     Returns:
         Tuple of (is_consistent, max_relative_error).
     """
-    data = np.load(dataset_dir / "normalized.npz")
-    A = data["matrix"]
-    X_rhs = data["rhs"]
-    Y_sol = data["solutions"]
+    A = load_matrix_dense_sample(dataset_dir, sample_index=0)
+    X_rhs, Y_sol = load_dense_training_arrays(dataset_dir)
 
     max_error = 0.0
     for i in range(len(X_rhs)):
@@ -190,8 +192,8 @@ def test_mixed_strategies_consistency(
     assert is_consistent, f"mixed strategies: A @ x != b, max error = {max_error:.2e}"
 
     # Verify we got the expected total count
-    data = np.load(Path(dataset_dir) / "normalized.npz")
-    assert len(data["rhs"]) == 15, "Expected 15 total samples (5 + 5 + 5)"
+    rhs, _ = load_dense_training_arrays(Path(dataset_dir))
+    assert len(rhs) == 15, "Expected 15 total samples (5 + 5 + 5)"
 
 
 def test_mixed_archive_and_synthetic_strategies(
@@ -224,8 +226,8 @@ def test_mixed_archive_and_synthetic_strategies(
     assert is_consistent, f"archive+synthetic: A @ x != b, max error = {max_error:.2e}"
 
     # Verify total count
-    data = np.load(Path(dataset_dir) / "normalized.npz")
-    assert len(data["rhs"]) == 20, "Expected 20 total samples (10 + 10)"
+    rhs, _ = load_dense_training_arrays(Path(dataset_dir))
+    assert len(rhs) == 20, "Expected 20 total samples (10 + 10)"
 
 
 def test_large_mixed_dataset_consistency(
@@ -258,8 +260,8 @@ def test_large_mixed_dataset_consistency(
     )
 
     # Verify total count
-    data = np.load(Path(dataset_dir) / "normalized.npz")
-    assert len(data["rhs"]) == 100, "Expected 100 total samples (50 + 30 + 20)"
+    rhs, _ = load_dense_training_arrays(Path(dataset_dir))
+    assert len(rhs) == 100, "Expected 100 total samples (50 + 30 + 20)"
 
 
 def test_mixed_strategies_with_shuffling(
@@ -326,8 +328,7 @@ def test_diagonal_normalization_preserves_symmetry_with_mixed_strategies(
     )
 
     # Verify matrix symmetry is preserved
-    data = np.load(Path(dataset_dir) / "normalized.npz")
-    A = data["matrix"]
+    A = load_matrix_dense_sample(Path(dataset_dir), sample_index=0)
     max_asymmetry = np.max(np.abs(A - A.T))
     assert max_asymmetry < 1e-10, (
         f"Diagonal normalization did not preserve symmetry: max asymmetry = {max_asymmetry:.2e}"

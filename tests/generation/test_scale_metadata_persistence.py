@@ -5,7 +5,13 @@ import pytest
 from pathlib import Path
 
 from neuralls.generation.orchestration import build_dataset
+from neuralls.io.dataset_storage import (
+    load_dataset_manifest,
+    load_dense_training_arrays,
+    resolve_dataset_paths,
+)
 from neuralls.normalization import load_scale_from_metadata, MatrixScale
+from dlkit.tools.io.sparse import open_sparse_pack
 
 
 @pytest.fixture
@@ -40,34 +46,35 @@ def test_scale_metadata_saved_with_matrix_normalization(temp_matrix_file: Path, 
         strategy_overrides={"neutral_ones": {"samples": 1}},
     )
 
-    # Load the generated dataset
-    dataset_file = output_dir / "normalized.npz"
-    assert dataset_file.exists()
-
-    data = np.load(dataset_file)
+    # Load manifest and dense arrays
+    manifest = load_dataset_manifest(output_dir)
+    rhs, _ = load_dense_training_arrays(output_dir)
 
     # Check that metadata fields are present
-    assert "normalize_type" in data.files
-    assert "spectral_radius_bound" in data.files
-    assert "dimension_scale" in data.files
+    assert "normalization" in manifest
+    scale_metadata = manifest["normalization"]["scale"]
+    assert "spectral_radius_bound" in scale_metadata
+    assert "dimension_scale" in scale_metadata
 
     # Check metadata values
-    assert str(data["normalize_type"]) == "matrix"
-    assert isinstance(float(data["spectral_radius_bound"]), float)
-    assert float(data["spectral_radius_bound"]) > 0
-    assert isinstance(float(data["dimension_scale"]), float)
-    assert float(data["dimension_scale"]) > 0
+    assert str(manifest["normalization"]["type"]) == "matrix"
+    assert isinstance(float(scale_metadata["spectral_radius_bound"]), float)
+    assert float(scale_metadata["spectral_radius_bound"]) > 0
+    assert isinstance(float(scale_metadata["dimension_scale"]), float)
+    assert float(scale_metadata["dimension_scale"]) > 0
 
     # Test scale reconstruction
     metadata = {
-        "spectral_radius_bound": float(data["spectral_radius_bound"]),
-        "dimension_scale": float(data["dimension_scale"]),
+        "spectral_radius_bound": float(scale_metadata["spectral_radius_bound"]),
+        "dimension_scale": float(scale_metadata["dimension_scale"]),
     }
     scale = load_scale_from_metadata("matrix", metadata)
 
     assert isinstance(scale, MatrixScale)
     assert scale.spectral_radius_bound == metadata["spectral_radius_bound"]
     assert scale.dimension_scale == metadata["dimension_scale"]
+    pack = open_sparse_pack(resolve_dataset_paths(output_dir).matrix_pack_dir)
+    assert np.isclose(pack.value_scale, scale.composite_scale)
 
 
 def test_scale_metadata_not_saved_with_none_normalization(temp_matrix_file: Path, tmp_path: Path):
@@ -86,19 +93,16 @@ def test_scale_metadata_not_saved_with_none_normalization(temp_matrix_file: Path
         strategy_overrides={"neutral_ones": {"samples": 1}},
     )
 
-    # Load the generated dataset
-    dataset_file = output_dir / "normalized.npz"
-    assert dataset_file.exists()
-
-    data = np.load(dataset_file)
+    manifest = load_dataset_manifest(output_dir)
 
     # Check that normalize_type is present
-    assert "normalize_type" in data.files
-    assert str(data["normalize_type"]) == "none"
+    assert "normalization" in manifest
+    assert str(manifest["normalization"]["type"]) == "none"
 
     # Scale parameters should not be present for "none" normalization
-    assert "spectral_radius_bound" not in data.files
-    assert "dimension_scale" not in data.files
+    scale_metadata = manifest["normalization"]["scale"]
+    assert "spectral_radius_bound" not in scale_metadata
+    assert "dimension_scale" not in scale_metadata
 
 
 def test_denormalization_round_trip(temp_matrix_file: Path, tmp_path: Path):
@@ -117,19 +121,18 @@ def test_denormalization_round_trip(temp_matrix_file: Path, tmp_path: Path):
         strategy_overrides={"neutral_ones": {"samples": 1}},
     )
 
-    # Load the generated dataset
-    dataset_file = output_dir / "normalized.npz"
-    data = np.load(dataset_file)
+    manifest = load_dataset_manifest(output_dir)
+    rhs, _ = load_dense_training_arrays(output_dir)
 
     # Reconstruct scale from metadata
     metadata = {
-        "spectral_radius_bound": float(data["spectral_radius_bound"]),
-        "dimension_scale": float(data["dimension_scale"]),
+        "spectral_radius_bound": float(manifest["normalization"]["scale"]["spectral_radius_bound"]),
+        "dimension_scale": float(manifest["normalization"]["scale"]["dimension_scale"]),
     }
     scale = load_scale_from_metadata("matrix", metadata)
 
     # Get normalized RHS from dataset
-    normalized_rhs = data["rhs"][0]
+    normalized_rhs = rhs[0]
 
     # Denormalize
     denormalized_rhs = scale.denormalize_rhs(normalized_rhs)

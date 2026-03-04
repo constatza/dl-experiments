@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
 from loguru import logger
+from scipy.sparse import csc_matrix
 
 from .data_types import NormalizeType
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
@@ -18,6 +20,7 @@ from .trace_utils import (
 )
 from .interfaces import ArchiveData
 from ..constants import DEFAULT_RESIDUAL_TRACE_ITERS
+from .source_streams import bind_sources, open_matrix_stream, open_vector_stream
 
 
 def _shuffle_samples(
@@ -243,187 +246,215 @@ def build_dataset(
     mix: dict[str, float] | None = None,
     total: int | None = None,
     rhs_path: str | None = None,
+    solutions_path: str | None = None,
+    sample_id_regex: str | None = None,
     normalize: NormalizeType = "matrix",
     matrix_norm_type: str = "spectral",
     shuffle: bool = True,
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
 ) -> str:
-    """Unified dataset builder for all data sources (archives + synthetic).
-
-    This function replaces collect_case(), generate_case(), and solution_archive_case()
-    by treating archive collection as generation strategies that can be mixed freely
-    with synthetic strategies.
-
-    Args:
-        matrix_path: Path to system matrix file
-        dataset_dir: Output directory for dataset
-        counts: Explicit strategy counts (e.g., {"random": 100, "rhs_archive": 50})
-        mix: Strategy proportions (used with total)
-        total: Total samples (required if mix provided)
-        rhs_path: Path to single RHS file (optional, for single-RHS strategies like trace strategies)
-        normalize: Normalization type ("none", "matrix", "rhs", "spectral", "diagonal")
-        matrix_norm_type: Type of matrix norm to compute and save (default: "spectral").
-            Options: "spectral", "frobenius", "nuclear", "one", "inf"
-        shuffle: Whether to shuffle final samples
-        seed: Random seed for reproducibility
-        strategy_overrides: Per-strategy configuration overrides
-            For archive strategies:
-            - rhs_archive: {" rhs_glob": "/path/*.txt", "solve_systems": True, ...}
-            - solution_archive: {"solutions_glob": "/path/*.txt", ...}
-
-    Returns:
-        Path to created dataset directory
-
-    Examples:
-        >>> # Pure synthetic generation
-        >>> build_dataset(
-        ...     "matrix.txt",
-        ...     "output/",
-        ...     counts={"random": 100, "krylov": 50},
-        ...     rhs_path="rhs.txt",
-        ... )
-
-        >>> # Pure archive collection
-        >>> build_dataset(
-        ...     "matrix.txt",
-        ...     "output/",
-        ...     counts={"rhs_archive": 200},
-        ...     strategy_overrides={
-        ...         "rhs_archive": {"rhs_glob": "/data/rhs_*.txt"}
-        ...     },
-        ... )
-
-        >>> # Mixed archives + synthetic (THE KEY BENEFIT!)
-        >>> build_dataset(
-        ...     "matrix.txt",
-        ...     "output/",
-        ...     counts={
-        ...         "rhs_archive": 100,
-        ...         "solution_archive": 50,
-        ...         "random": 200,
-        ...         "krylov": 150,
-        ...     },
-        ...     rhs_path="rhs.txt",
-        ...     strategy_overrides={
-        ...         "rhs_archive": {"rhs_glob": "/data/rhs_*.txt"},
-        ...         "solution_archive": {"solutions_glob": "/data/sol_*.txt"},
-        ...     },
-        ... )
-
-    Raises:
-        ValueError: If arguments invalid or strategies unknown
-        FileNotFoundError: If matrix or RHS files not found
-    """
+    """Build dataset from streamed matrix sources without dense N-matrix materialization."""
     from pathlib import Path
-    from ..io.base import load_matrix
-    from .types import RawSamples
+    from ..math_utils import calculate_matrix_norm
+    from ..io.dataset_storage import (
+        SparsePackAccumulator,
+        save_dataset_from_sparse,
+    )
     from .helpers import _normalize_matrix_for_generation
 
     logger.info("Building dataset...")
     logger.info(f"  Matrix: {matrix_path}")
     logger.info(f"  Output: {dataset_dir}")
+    if solutions_path is not None:
+        logger.info(f"  Solutions source: {solutions_path}")
+    if rhs_path is not None:
+        logger.info(f"  RHS source: {rhs_path}")
 
-    # Step 1: Load matrix
-    matrix = load_matrix(Path(matrix_path))
-    dimension = matrix.shape[0]
-    logger.info(f"  Dimension: {dimension}")
+    matrix_stream = open_matrix_stream(
+        matrix_path_expr=matrix_path,
+        sample_id_regex=sample_id_regex,
+    )
+    rhs_stream = (
+        open_vector_stream(rhs_path, sample_id_regex=sample_id_regex)
+        if rhs_path is not None
+        else None
+    )
+    bindings = bind_sources(
+        matrix_ids=matrix_stream.sample_ids,
+        rhs_ids=rhs_stream.sample_ids if rhs_stream is not None else None,
+        solution_ids=None,
+    )
+    logger.info(
+        f"  Matrix samples: {len(matrix_stream.sample_ids)} | System bindings: {len(bindings)}"
+    )
 
-    # Step 2: Load single RHS if provided (for single-RHS strategies like trace strategies)
-    single_rhs: np.ndarray | None
-    if rhs_path:
-        single_rhs = np.loadtxt(rhs_path, dtype=np.float64)
-        if single_rhs.ndim > 1:
-            single_rhs = single_rhs.reshape(-1)
-    else:
-        # No single RHS - trace strategies will generate multiple RHS vectors
-        single_rhs = None
+    sparse_acc = SparsePackAccumulator()
+    single_matrix_mode = len(matrix_stream.sample_ids) == 1
+    single_matrix_written = False
+    rhs_blocks: list[np.ndarray] = []
+    solution_blocks: list[np.ndarray] = []
+    matrix_norm_values: list[float] = []
+    matrix_value_scale_values: list[float] = []
+    scale_metadata_values: list[dict[str, Any] | None] = []
+    matrix_cache: dict[
+        int, tuple[np.ndarray, Any, Any, float, float, dict[str, Any] | None]
+    ] = {}
 
-    # Step 3: Normalize matrix BEFORE strategy execution
     logger.info(f"  Normalization: {normalize}")
-    matrix_norm, scale = _normalize_matrix_for_generation(
-        matrix, normalize, spectral_radius_bound=None
-    )
+    for binding in bindings:
+        cached = matrix_cache.get(binding.matrix_sample_id)
+        if cached is None:
+            dense_sample = matrix_stream.load_dense_sample(binding.matrix_sample_id)
+            dense_matrix = np.asarray(dense_sample.matrix, dtype=np.float64)
+            if dense_matrix.shape[0] != dense_matrix.shape[1]:
+                raise ValueError(
+                    f"Matrix sample {binding.matrix_sample_id} must be square, got {dense_matrix.shape}"
+                )
+            matrix_norm, scale, matrix_value_scale = _normalize_matrix_for_generation(
+                dense_matrix,
+                normalize,
+                spectral_radius_bound=None,
+            )
+            matrix_for_generation = csc_matrix(matrix_norm)
+            matrix_norm_value = calculate_matrix_norm(
+                matrix_norm,
+                norm_type=matrix_norm_type,
+            )
+            scale_params = scale.to_dict() if scale is not None else None
+            cached = (
+                matrix_norm,
+                matrix_for_generation,
+                scale,
+                matrix_norm_value,
+                matrix_value_scale,
+                scale_params,
+            )
+            matrix_cache[binding.matrix_sample_id] = cached
+        (
+            matrix_norm,
+            matrix_for_generation,
+            scale,
+            matrix_norm_value,
+            matrix_value_scale,
+            scale_params,
+        ) = cached
 
-    # Step 4: Normalize single RHS (if provided and scale exists)
-    single_rhs_norm: np.ndarray | None
-    if single_rhs is not None and scale is not None:
-        single_rhs_norm = scale.scale_rhs(single_rhs)
-    else:
-        single_rhs_norm = single_rhs
+        single_rhs: np.ndarray | None = None
+        if rhs_stream is not None and binding.rhs_sample_id is not None:
+            rhs_sample = rhs_stream.load_sample(binding.rhs_sample_id)
+            single_rhs = np.asarray(rhs_sample.vector, dtype=np.float64)
+            if single_rhs.shape[0] != matrix_norm.shape[0]:
+                raise ValueError(
+                    f"RHS sample {binding.rhs_sample_id} length {single_rhs.shape[0]} "
+                    f"doesn't match matrix size {matrix_norm.shape[0]}"
+                )
+            if scale is not None:
+                single_rhs = scale.scale_rhs(single_rhs)
 
-    # Step 5: Call generate_mixture() with ALL strategies (archives + synthetic)
-    # Note: krylov_iters and cg_iters are now passed via strategy_overrides
-    logger.info("Generating/loading samples...")
-    X, Y, residual_traces, error_traces = generate_mixture(
-        matrix_norm,
-        counts=counts,
-        mix=mix,
-        total=total,
-        seed=seed,
-        shuffle=shuffle,
-        strategy_overrides=strategy_overrides,
-        single_rhs=single_rhs_norm,
-    )
+        logger.info(
+            f"Generating/loading samples for binding sample_id={binding.sample_id} "
+            f"(matrix_id={binding.matrix_sample_id})..."
+        )
+        X, Y, _, error_traces = generate_mixture(
+            matrix_for_generation,
+            counts=counts,
+            mix=mix,
+            total=total,
+            seed=seed,
+            shuffle=shuffle,
+            strategy_overrides=strategy_overrides,
+            single_rhs=single_rhs,
+        )
 
-    logger.info(f"  Generated {X.shape[0]} samples")
+        if error_traces is not None:
+            X_final = error_traces.residuals
+            Y_final = error_traces.errors
+        else:
+            X_final = X
+            Y_final = Y
 
-    # Step 6: Use error trace pairs if available, otherwise use base pairs
-    # Error trace pairs (r_k, e_k) include the original (A@x, x) pairs at iteration 0
-    # since r_0 = b when x_0 = 0
-    if error_traces is not None:
-        logger.info("Using error trace pairs (r_k, e_k) for training")
-        X_final = error_traces.residuals
-        Y_final = error_traces.errors
-    else:
-        logger.info("Using base pairs (A@x, x) for training")
-        X_final = X
-        Y_final = Y
+        if X_final.shape != Y_final.shape:
+            raise ValueError(
+                f"Generated RHS/solution shape mismatch: {X_final.shape} vs {Y_final.shape}"
+            )
+        if X_final.shape[0] == 0:
+            continue
 
-    # Step 7: Package into RawSamples (only essential data - no strategy internals)
-    raw_samples = RawSamples(
-        matrix=matrix_norm,
-        rhs=X_final,
-        solutions=Y_final,
-    )
+        rhs_blocks.append(np.asarray(X_final, dtype=np.float64))
+        solution_blocks.append(np.asarray(Y_final, dtype=np.float64))
+        if single_matrix_mode:
+            if not single_matrix_written:
+                # Persist single source matrix once; dlkit reader broadcasts n_samples=1 at runtime.
+                sparse_acc.append_dense_matrix(matrix_norm, repeats=1)
+                single_matrix_written = True
+        else:
+            sparse_acc.append_dense_matrix(matrix_norm, repeats=int(X_final.shape[0]))
+        matrix_norm_values.append(float(matrix_norm_value))
+        matrix_value_scale_values.append(float(matrix_value_scale))
+        scale_metadata_values.append(scale_params)
 
-    # Step 8: Persist dataset
-    from pathlib import Path
-    from ..math_utils import calculate_matrix_norm
-    from ..constants import NORMALIZED_DATASET_FILENAME
+    if not rhs_blocks or not solution_blocks:
+        raise ValueError("No samples were generated for dataset persistence.")
+
+    rhs_all = np.vstack(rhs_blocks)
+    solutions_all = np.vstack(solution_blocks)
+    indices, values, nnz_ptr, matrix_size = sparse_acc.build_arrays()
 
     dataset_dir_path = Path(dataset_dir)
     dataset_dir_path.mkdir(parents=True, exist_ok=True)
-
-    # Persist normalized samples WITH scale metadata for denormalization
     logger.info(f"Saving to: {dataset_dir}")
-    normalized_file = dataset_dir_path / NORMALIZED_DATASET_FILENAME
 
-    # Compute matrix norm of normalized matrix using specified norm type
-    # StrEnum handles validation internally - users just pass strings
-    matrix_norm_value = calculate_matrix_norm(raw_samples.matrix, norm_type=matrix_norm_type)
-    logger.info(f"  Normalized matrix {matrix_norm_type} norm: {matrix_norm_value:.6f}")
+    matrix_norm_value = float(matrix_norm_values[0])
+    if not all(np.isclose(v, matrix_norm_value, rtol=1e-10, atol=1e-12) for v in matrix_norm_values):
+        logger.warning(
+            "Multiple normalized matrix norms detected across bindings; "
+            "persisting first value in manifest metadata."
+        )
+    matrix_value_scale = float(matrix_value_scale_values[0])
+    if not all(
+        np.isclose(v, matrix_value_scale, rtol=1e-10, atol=1e-12)
+        for v in matrix_value_scale_values
+    ):
+        logger.warning(
+            "Multiple matrix value scales detected across bindings; "
+            "persisting sparse pack with value_scale=1.0."
+        )
+        matrix_value_scale = 1.0
 
-    # Build save dict with normalized data
-    # Note: Structure is identical for both trace and base pairs
-    save_dict = {
-        "matrix": raw_samples.matrix,
-        "rhs": raw_samples.rhs,          # Either residuals (r_k) or RHS (A@x)
-        "solutions": raw_samples.solutions,  # Either errors (e_k) or solutions (x)
-        "normalize_type": normalize,  # Save normalization type for reconstruction
-        "matrix_norm": matrix_norm_value,  # Matrix norm of normalized matrix
-        "matrix_norm_type": matrix_norm_type,  # Which norm was computed
+    unique_scale_payloads = {
+        json.dumps(payload, sort_keys=True) if payload is not None else "null"
+        for payload in scale_metadata_values
     }
+    scale_metadata: dict[str, Any] | None = None
+    if len(unique_scale_payloads) == 1:
+        scale_metadata = scale_metadata_values[0]
+    else:
+        logger.warning(
+            "Multiple scale metadata payloads detected across bindings; "
+            "persisting empty scale metadata in manifest."
+        )
+        scale_metadata = {}
 
-    # Add scale parameters using IScale.to_dict() (for denormalization)
-    if scale is not None:
-        scale_params = scale.to_dict()
-        save_dict.update(scale_params)  # Merge scale parameters into save dict
-        logger.debug(f"  Saved scale metadata: {list(scale_params.keys())}")
+    save_dataset_from_sparse(
+        dataset_dir=dataset_dir_path,
+        rhs=rhs_all,
+        solutions=solutions_all,
+        indices=indices,
+        values=values,
+        nnz_ptr=nnz_ptr,
+        size=matrix_size,
+        normalization_type=str(normalize),
+        matrix_norm=matrix_norm_value,
+        matrix_norm_type=matrix_norm_type,
+        matrix_value_scale=matrix_value_scale,
+        scale_metadata=scale_metadata,
+    )
 
-    np.savez(normalized_file, **save_dict)
-
-    logger.info(f"Dataset built successfully: {dataset_dir}")
+    logger.info(
+        f"Dataset built successfully: {dataset_dir} "
+        f"(samples={rhs_all.shape[0]}, matrix_samples={len(bindings)})"
+    )
     return dataset_dir
 
 

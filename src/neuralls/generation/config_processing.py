@@ -31,6 +31,8 @@ class DataGenerationContext:
 
     matrix_path: str
     rhs_path: str | None
+    solutions_path: str | None
+    sample_id_regex: str | None
     dataset_dir: Path
     normalize: str
     source_cfg: Mapping[str, Any]
@@ -68,7 +70,7 @@ def _build_context(
         dataset_id = flow_section.get("dataset", "default")
 
     # Resolve processed data directory
-    processed_dir_str = output_cfg.get(ConfigKeys.PROCESSED_DIR)
+    processed_dir_str = output_cfg.get("data_dir")
     if processed_dir_str:
         processed_root = Path(processed_dir_str)
     else:
@@ -83,6 +85,8 @@ def _build_context(
         )
 
     rhs_path = _coerce_optional_str(source_cfg.get(ConfigKeys.RHS_PATH))
+    solutions_path = _coerce_optional_str(source_cfg.get(ConfigKeys.SOLUTIONS_PATH))
+    sample_id_regex = _coerce_optional_str(source_cfg.get("sample_id_regex"))
     normalize_value = generation_cfg.get(ConfigKeys.NORMALIZE, DEFAULT_NORMALIZE)
     if isinstance(normalize_value, bool):
         raise ValueError(
@@ -97,6 +101,8 @@ def _build_context(
     return DataGenerationContext(
         matrix_path=matrix_path,
         rhs_path=rhs_path,
+        solutions_path=solutions_path,
+        sample_id_regex=sample_id_regex,
         dataset_dir=dataset_dir,
         normalize=normalize,
         source_cfg=source_cfg,
@@ -282,6 +288,8 @@ def _execute_solution_archive(
         matrix_path=context.matrix_path,
         dataset_dir=str(context.dataset_dir),
         counts={"solution_archive": strategy.samples},
+        solutions_path=context.solutions_path,
+        sample_id_regex=context.sample_id_regex,
         normalize=cast(NormalizeType, context.normalize),
         shuffle=bool(shuffle_value),
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
@@ -374,6 +382,8 @@ def _execute_synthetic_generation(
         dataset_dir=str(context.dataset_dir),
         counts=counts,
         rhs_path=rhs_source_path,
+        solutions_path=context.solutions_path,
+        sample_id_regex=context.sample_id_regex,
         normalize=cast(NormalizeType, context.normalize),
         shuffle=bool(shuffle_value),
         seed=seed,
@@ -406,6 +416,7 @@ def _execute_rhs_archive_only(
         matrix_path=context.matrix_path,
         dataset_dir=str(context.dataset_dir),
         counts={"rhs_archive": strategy.samples},
+        sample_id_regex=context.sample_id_regex,
         normalize=cast(NormalizeType, context.normalize),
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
         strategy_overrides={
@@ -452,8 +463,8 @@ def process_config(
 ) -> Path:
     """Process a data config and execute the declared generation plan.
 
-    After generating the main dataset, this also checks for a [test] section
-    and generates comparison.npz if test solutions are specified.
+    After generating the main dataset, this checks for a [test] section.
+    Dedicated comparison split generation is currently skipped for now.
     """
     context, plan = _build_context(config=config, config_path=config_path)
     dataset_dir = _execute_plan(context, plan)
@@ -463,7 +474,7 @@ def process_config(
     if test_config:
         solutions_glob = test_config.get("solutions_glob")
         if solutions_glob:
-            print("\n=== Skipping comparison.npz generation (not yet migrated) ===")
+            print("\n=== Skipping comparison split generation (not yet migrated) ===")
             # persist_comparison_samples(
             #     dataset_dir=dataset_dir,
             #     test_solutions_glob=solutions_glob,
