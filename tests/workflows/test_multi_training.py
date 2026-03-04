@@ -29,6 +29,7 @@ from neuralls.workflows.multi_training import (
     _make_label_map,
     _read_sidecar,
     _resolve_config_paths,
+    _train_single,
     train_batch,
 )
 
@@ -314,6 +315,85 @@ class TestResolveConfigPaths:
 
 
 # ---------------------------------------------------------------------------
+# _train_single()
+# ---------------------------------------------------------------------------
+
+
+class TestTrainSingle:
+    """Tests for single-run training orchestration helper."""
+
+    def test_assigns_dataset_alias_when_run_metadata_available(self, tmp_path: Path) -> None:
+        """Alias assignment is attempted when run_id + tracking_uri are available."""
+        model_cfg = tmp_path / "model.toml"
+        model_cfg.write_text("[MODEL]\nname = 'NormScaledLinearFFNN'\n")
+        data_cfg = tmp_path / "dataset-a.toml"
+        data_cfg.write_text("id = 'dataset-a'\n")
+        ckpt_dir = tmp_path / "ckpt"
+        ckpt_dir.mkdir()
+        ckpt = ckpt_dir / "model.ckpt"
+        ckpt.touch()
+        sidecar = {
+            "run_id": "run-123",
+            "tracking_uri": "sqlite:////tmp/mlflow.db",
+        }
+        (ckpt_dir / "mlflow_run.json").write_text(json.dumps(sidecar))
+
+        with (
+            patch("neuralls.workflows.multi_training.train_model", return_value=ckpt),
+            patch("neuralls.workflows.multi_training.assign_dataset_alias_to_registered_model", return_value=5) as mock_assign,
+            patch("neuralls.workflows.multi_training._fetch_mlflow_metrics", return_value={}),
+            patch("neuralls.workflows.multi_training.MlflowClient"),
+        ):
+            result = _train_single(
+                experiment_id="exp-1",
+                model_config_path=model_cfg,
+                data_config_path=data_cfg,
+                label="1",
+                output_root=None,
+            )
+
+        assert result.mlflow_run_id == "run-123"
+        mock_assign.assert_called_once_with(
+            tracking_uri="sqlite:////tmp/mlflow.db",
+            registered_model_name="NormScaledLinearFFNN",
+            run_id="run-123",
+            dataset_alias="dataset-a",
+        )
+
+    def test_skips_alias_assignment_when_model_name_missing(self, tmp_path: Path) -> None:
+        """No alias assignment when model config has no [MODEL].name."""
+        model_cfg = tmp_path / "model.toml"
+        model_cfg.write_text("[SESSION]\nname = 'NoModelName'\n")
+        data_cfg = tmp_path / "dataset-b.toml"
+        data_cfg.write_text("id = 'dataset-b'\n")
+        ckpt_dir = tmp_path / "ckpt"
+        ckpt_dir.mkdir()
+        ckpt = ckpt_dir / "model.ckpt"
+        ckpt.touch()
+        sidecar = {
+            "run_id": "run-456",
+            "tracking_uri": "sqlite:////tmp/mlflow.db",
+        }
+        (ckpt_dir / "mlflow_run.json").write_text(json.dumps(sidecar))
+
+        with (
+            patch("neuralls.workflows.multi_training.train_model", return_value=ckpt),
+            patch("neuralls.workflows.multi_training.assign_dataset_alias_to_registered_model") as mock_assign,
+            patch("neuralls.workflows.multi_training._fetch_mlflow_metrics", return_value={}),
+            patch("neuralls.workflows.multi_training.MlflowClient"),
+        ):
+            _train_single(
+                experiment_id="exp-2",
+                model_config_path=model_cfg,
+                data_config_path=data_cfg,
+                label="1",
+                output_root=None,
+            )
+
+        mock_assign.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # train_batch()
 # ---------------------------------------------------------------------------
 
@@ -344,7 +424,7 @@ class TestTrainBatch:
         self, minimal_experiments_toml: Path
     ) -> None:
         """Raises ValueError when TOML has no [[experiment]] entries."""
-        with pytest.raises(ValueError, match="No \\[\\[experiment\\]\\] entries found"):
+        with pytest.raises(ValueError, match="No .* entries found"):
             train_batch(minimal_experiments_toml)
 
     def test_calls_train_model_for_each_experiment(

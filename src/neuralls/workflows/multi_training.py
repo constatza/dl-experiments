@@ -30,13 +30,15 @@ import mlflow
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
-from neuralls.configuration.experiments import ExperimentsConfig
+from neuralls.configuration.comparison import ComparisonsTrackingConfig
+from neuralls.configuration.experiments import ExperimentsConfig, RunEntry
 from neuralls.io.toml_loader import load_raw_toml
 from neuralls.workflows.comparison_run import (
     ComparisonRun,
     _artifact_uri_to_local_path,
     setup_comparison_tracking,
 )
+from neuralls.workflows.model_catalog import assign_dataset_alias_to_registered_model
 from neuralls.workflows.training import train_model
 
 
@@ -136,24 +138,32 @@ def _resolve_config_paths(
     experiment: Any,
     configs_dir: Path,
 ) -> tuple[Path, Path]:
-    """Resolve model and dataset config paths from an experiment entry.
+    """Resolve model and dataset config paths from an experiment or run entry.
+
+    Supports two formats:
+    - ``ExperimentEntry``: uses short names → ``models/{model}.toml``, ``datasets/{dataset}.toml``
+    - ``RunEntry``: uses direct relative paths → ``{model_config}``, ``{data_config}``
 
     Args:
-        experiment: Single ``[[experiment]]`` entry (dict or ExperimentEntry).
+        experiment: Single ``[[experiment]]`` or ``[[run]]`` entry.
         configs_dir: Parent directory of the experiments TOML.
 
     Returns:
         Tuple of ``(model_config_path, data_config_path)``.
 
     Raises:
-        KeyError: If ``model`` or ``dataset`` keys are missing.
+        KeyError: If required keys are missing.
         FileNotFoundError: If either resolved config path does not exist.
     """
-    model_name = experiment["model"] if isinstance(experiment, dict) else experiment.model
-    dataset_name = experiment["dataset"] if isinstance(experiment, dict) else experiment.dataset
-
-    model_path = configs_dir / "models" / f"{model_name}.toml"
-    dataset_path = configs_dir / "datasets" / f"{dataset_name}.toml"
+    if isinstance(experiment, RunEntry):
+        model_path = configs_dir / experiment.model
+        dataset_path = configs_dir / experiment.data
+    elif isinstance(experiment, dict):
+        model_path = configs_dir / "models" / f"{experiment['model']}.toml"
+        dataset_path = configs_dir / "datasets" / f"{experiment['dataset']}.toml"
+    else:
+        model_path = configs_dir / "models" / f"{experiment.model}.toml"
+        dataset_path = configs_dir / "datasets" / f"{experiment.dataset}.toml"
 
     if not model_path.exists():
         raise FileNotFoundError(f"Model config not found: {model_path}")
@@ -161,6 +171,22 @@ def _resolve_config_paths(
         raise FileNotFoundError(f"Dataset config not found: {dataset_path}")
 
     return model_path, dataset_path
+
+
+def _read_registered_model_name(model_config_path: Path) -> str | None:
+    """Read model registry name from model config ([MODEL].name)."""
+    try:
+        raw = load_raw_toml(model_config_path)
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+    model_section = raw.get("MODEL")
+    if not isinstance(model_section, dict):
+        return None
+    model_name = model_section.get("name")
+    if not isinstance(model_name, str):
+        return None
+    model_name = model_name.strip()
+    return model_name or None
 
 
 _BATCH_METRIC_PREFIXES = ("eval/", "val/", "test/")
@@ -250,6 +276,41 @@ def _train_single(
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"[{label}] Could not log params to MLflow: {exc}")
 
+    if run_id and tracking_uri:
+        dataset_alias = data_config_path.stem
+        model_name = _read_registered_model_name(model_config_path)
+        if model_name is None:
+            logger.warning(
+                "[{}] Could not determine [MODEL].name from {}. "
+                "Skipping dataset alias assignment.",
+                label,
+                model_config_path,
+            )
+        else:
+            try:
+                assigned = assign_dataset_alias_to_registered_model(
+                    tracking_uri=tracking_uri,
+                    registered_model_name=model_name,
+                    run_id=run_id,
+                    dataset_alias=dataset_alias,
+                )
+                if assigned is not None:
+                    logger.info(
+                        "[{}] Assigned alias '{}' -> {} v{}",
+                        label,
+                        dataset_alias,
+                        model_name,
+                        assigned,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "[{}] Could not assign dataset alias '{}' for run {}: {}",
+                    label,
+                    dataset_alias,
+                    run_id,
+                    exc,
+                )
+
     logger.info(
         f"[{label}] Done. checkpoint={checkpoint_path}, run_id={run_id}, "
         f"metrics={list(metrics.keys())}"
@@ -287,15 +348,36 @@ def train_batch(
     raw = load_raw_toml(experiments_config_path)
 
     cfg = ExperimentsConfig.model_validate(raw)
-    experiments = cfg.experiment
 
-    if not experiments:
+    # Support both [[run]] and [[experiment]] entry formats
+    run_entries: list[Any] = list(cfg.run) or list(cfg.experiment)
+    if not run_entries:
         raise ValueError(
-            f"No [[experiment]] entries found in {experiments_config_path}"
+            f"No [[run]] or [[experiment]] entries found in {experiments_config_path}"
         )
 
-    base_output = Path(output_root) if output_root else cfg.output_dir
-    comp = cfg.comparisons
+    # Derive output_dir from mlflow tracking_uri when not explicitly configured
+    tracking_uri = cfg.mlflow.client.tracking_uri
+    if output_root is not None:
+        base_output = Path(output_root)
+    elif cfg.output_dir is not None:
+        base_output = cfg.output_dir
+    else:
+        db_path = Path(tracking_uri.removeprefix("sqlite:///"))
+        base_output = db_path.parent.parent
+
+    # Derive comparisons tracking config from mlflow when not explicitly configured
+    if cfg.comparisons is not None:
+        comp = cfg.comparisons
+    else:
+        db_path = Path(tracking_uri.removeprefix("sqlite:///"))
+        artifact_location = str(db_path.parent.parent / "mlartifacts")
+        comp = ComparisonsTrackingConfig(
+            tracking_uri=tracking_uri,
+            artifact_location=artifact_location,
+        )
+
+    experiments = run_entries
 
     # ------------------------------------------------------------------
     # Phase 1: Train — dlkit manages all individual MLflow runs independently
