@@ -19,6 +19,14 @@ from neuralls.workflows.model_catalog import assign_dataset_alias_to_registered_
 from neuralls.workflows.model_resolution import resolve_model_ref
 
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.filterwarnings(
+        "ignore:codecs\\.open\\(\\) is deprecated.*:DeprecationWarning"
+    ),
+]
+
+
 def _tracking_uri(tmp_path: Path) -> str:
     return f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
 
@@ -39,15 +47,29 @@ def _assert_path_within(path: Path, root: Path) -> None:
         raise AssertionError(f"Path {resolved_path} is not under {resolved_root}")
 
 
-class _IdentityPyFuncModel(mlflow.pyfunc.PythonModel):
-    """Minimal model used only for registry wiring in tests."""
+def _write_identity_model(path: Path) -> Path:
+    """Write a minimal models-from-code pyfunc model script."""
+    path.write_text(
+        "\n".join(
+            [
+                "import mlflow",
+                "from typing import Dict, List",
+                "",
+                "class _IdentityModel(mlflow.pyfunc.PythonModel):",
+                "    def predict(self, context, model_input: List[Dict[str, str]], params=None) -> List[Dict[str, str]]:",
+                "        _ = context",
+                "        _ = params",
+                "        return model_input",
+                "",
+                "mlflow.models.set_model(_IdentityModel())",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return path
 
-    def predict(self, context, model_input):  # type: ignore[override]
-        _ = context
-        return model_input
 
-
-@pytest.mark.integration
 def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) -> None:
     """Assign dataset alias to a registered run and resolve it via model_ref."""
     tracking_uri = _tracking_uri(tmp_path)
@@ -66,6 +88,7 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
 
     checkpoint_file = tmp_path / "dummy.ckpt"
     checkpoint_file.write_text("dummy-checkpoint")
+    model_code = _write_identity_model(tmp_path / "identity_model.py")
 
     with mlflow.start_run(run_name="tiny-model-run") as run:
         run_id = run.info.run_id
@@ -73,7 +96,7 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
         _assert_path_within(run_artifact_path, artifacts_dir)
         mlflow.pyfunc.log_model(
             artifact_path="model",
-            python_model=_IdentityPyFuncModel(),
+            python_model=model_code,
         )
         mlflow.log_artifact(str(checkpoint_file), artifact_path="model")
 
