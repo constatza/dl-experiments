@@ -38,9 +38,6 @@ name = "FlexibleDataset"
 
 [MLFLOW]
 enabled = true
-
-[MLFLOW.client]
-tracking_uri = "http://localhost:5000"
 """
     config_path.write_text(config_content)
     return config_path
@@ -104,26 +101,23 @@ class TestBuildSettings:
         # Check workspace root injected
         assert Path(settings.TRAINING.trainer.default_root_dir) == workspace.root_dir
 
-        # Check MLflow server paths are NOT overridden — they come from model config unchanged
-        # (sample_model_config has no [MLFLOW.server] backend_store_uri/artifacts_destination)
-        assert settings.MLFLOW.server.backend_store_uri is None
-        assert settings.MLFLOW.server.artifacts_destination is None
-
-        # Check MLflow client experiment/run names injected
-        assert settings.MLFLOW.client.experiment_name == workspace.dataset_id
-        assert settings.MLFLOW.client.run_name == workspace.run_id
+        # Check flat MLflow fields injected
+        assert settings.MLFLOW.experiment_name == workspace.dataset_id
+        assert settings.MLFLOW.run_name == workspace.run_id
+        assert not hasattr(settings.MLFLOW, "client")
+        assert not hasattr(settings.MLFLOW, "server")
 
         # Check PATHS injected
         assert settings.PATHS.project_root == str(path_ctx.project_root)
         assert settings.PATHS.processed_dir == str(path_ctx.processed_root)
         assert settings.PATHS.output_dir == str(path_ctx.output_root)
 
-    def test_mlflow_tracking_uri_not_overridden(
+    def test_mlflow_runtime_fields_are_env_only(
         self,
         sample_model_config: Path,
         tmp_path: Path,
     ):
-        """Test that client.tracking_uri from config is preserved."""
+        """Runtime MLflow infrastructure should not be stored in settings."""
         from neuralls.configuration.domain import ExperimentWorkspace
         from neuralls.configuration.paths import PathContext
 
@@ -146,12 +140,9 @@ class TestBuildSettings:
             path_context=path_ctx,
         )
 
-        # Client tracking_uri should come from config (http URL)
-        assert settings.MLFLOW.client.tracking_uri.startswith("http://")
-
-        # Server backend_store_uri is NOT overridden — comes from model config unchanged
-        # (sample_model_config has no backend_store_uri configured, so it stays None)
-        assert settings.MLFLOW.server.backend_store_uri is None
+        assert settings.MLFLOW.enabled is True
+        assert not hasattr(settings.MLFLOW, "tracking_uri")
+        assert not hasattr(settings.MLFLOW, "artifacts_destination")
 
 
 class TestLoadExperiment:
@@ -245,13 +236,10 @@ class TestLoadExperiment:
         assert Path(experiment.settings.TRAINING.trainer.default_root_dir) == experiment.workspace.root_dir
 
         # Check MLflow configuration
-        assert experiment.settings.MLFLOW.client.experiment_name == "data"
-        assert experiment.settings.MLFLOW.client.run_name.startswith("test-model")
-
-        # MLflow server URIs: sample_model_config has no [MLFLOW.server] section,
-        # so these are not set (they come from model config unchanged)
-        assert experiment.settings.MLFLOW.server.backend_store_uri is None
-        assert experiment.settings.MLFLOW.server.artifacts_destination is None
+        assert experiment.settings.MLFLOW.experiment_name == "data"
+        assert experiment.settings.MLFLOW.run_name.startswith("test-model")
+        assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
+        assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 
     def test_load_with_default_output_root(
         self,
@@ -291,8 +279,6 @@ name = "FlexibleDataset"
 
 [MLFLOW]
 enabled = true
-[MLFLOW.client]
-tracking_uri = "http://localhost:5000"
 """)
 
         experiment = load_experiment(
@@ -326,8 +312,6 @@ name = "FlexibleDataset"
 
 [MLFLOW]
 enabled = true
-[MLFLOW.client]
-tracking_uri = "http://localhost:5000"
 """)
 
         experiment = load_experiment(
@@ -345,7 +329,7 @@ tracking_uri = "http://localhost:5000"
         sample_data_config: Path,
         tmp_path: Path,
     ):
-        """Test that output_root is the single source of truth for MLflow paths."""
+        """Test that output_root remains the single source of truth for runtime paths."""
         output_root = tmp_path / "master_output"
         output_root.mkdir()
 
@@ -355,10 +339,8 @@ tracking_uri = "http://localhost:5000"
             output_root=output_root,
         )
 
-        # sample_model_config has no [MLFLOW.server] section — paths come from model config
-        # unchanged, so backend_store_uri and artifacts_destination are None
-        assert experiment.settings.MLFLOW.server.backend_store_uri is None
-        assert experiment.settings.MLFLOW.server.artifacts_destination is None
+        assert experiment.settings.PATHS.output_dir == str(output_root)
+        assert experiment.workspace.root_dir.parent.parent == output_root
 
     def test_different_experiments_different_paths(
         self,

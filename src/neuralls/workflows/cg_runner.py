@@ -10,8 +10,6 @@ concerns, not core solver algorithms.
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 from scipy.linalg import norm
 
@@ -19,6 +17,7 @@ from ..constants import DEFAULT_ATOL, DEFAULT_M_MAX, DEFAULT_RTOL
 from ..solver.factories import flexible_cg, pcg
 from ..solver.models.result import CGComparisonResult, SolverResult
 from ..solver.preconditioners.base import ContextualPreconditioner, Preconditioner
+from .results import ComparisonRecommendations, RankedRecommendation
 
 
 def run_cg_comparison(
@@ -213,33 +212,33 @@ def format_results_summary(results: dict[str, CGComparisonResult]) -> str:
 
 def summarize_best_combinations(
     results: dict[str, CGComparisonResult],
-) -> dict[str, Any]:
+) -> ComparisonRecommendations:
     """Summarize best-performing CG combinations by preconditioner and overall.
 
     Args:
         results: CG comparison results
 
     Returns:
-        Dictionary with "ranked" list and "overall_best" entry
+        Typed ranked recommendations with an overall best entry.
     """
-    ranked: list[dict[str, Any]] = []
+    ranked: list[RankedRecommendation] = []
     for label, info in results.items():
         if not info.converged:
             continue
         ranked.append(
-            {
-                "label": label,
-                "iterations": info.iterations,
-                "residual": info.residual,
-                "residual_abs": info.residual_abs,
-                "breakdown": info.breakdown,
-            }
+            RankedRecommendation(
+                label=label,
+                iterations=info.iterations,
+                residual=info.residual,
+                residual_abs=info.residual_abs,
+                breakdown=info.breakdown,
+            )
         )
 
-    ranked = sorted(ranked, key=lambda entry: entry["residual"])
+    ranked = sorted(ranked, key=lambda entry: entry.residual)
     overall_best = ranked[0] if ranked else None
 
-    return {
-        "ranked": ranked,
-        "overall_best": overall_best,
-    }
+    return ComparisonRecommendations(
+        ranked=tuple(ranked),
+        overall_best=overall_best,
+    )

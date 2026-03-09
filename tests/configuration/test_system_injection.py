@@ -41,9 +41,7 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
 
     experiments_config = {
         "mlflow": {
-            "client": {
-                "tracking_uri": tracking_uri,
-            },
+            "tracking_uri": tracking_uri,
         },
         "names": {
             "training": "neuralls-training",
@@ -60,9 +58,7 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
     )
 
     assert experiment.settings.MLFLOW.enabled is True
-    assert (
-        experiment.settings.MLFLOW.client.tracking_uri.rstrip("/")
-        == tracking_uri
-    )
-    assert experiment.settings.MLFLOW.client.experiment_name == "neuralls-training"
-    assert experiment.settings.MLFLOW.client.run_name is None
+    assert experiment.settings.MLFLOW.experiment_name == "neuralls-training"
+    assert experiment.settings.MLFLOW.run_name.startswith("SystemInjected-")
+    assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
+    assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")

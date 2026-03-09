@@ -64,10 +64,10 @@ class TestTrainingPipelineWithMLflow:
 
         Note: This test verifies the configuration is correct for MLflow but
         does not run actual training (which would be slow). It verifies that:
-        - Experiment name matches dataset name
-        - Run name equals model name (with timestamp)
+        - Experiment name defaults to dataset name
+        - Run name equals model/session name (with timestamp)
         - Workspace directories are created
-        - MLflow paths are configured correctly
+        - Output paths are rooted under the requested output directory
         """
         from neuralls.configuration.loader import load_experiment
 
@@ -98,10 +98,8 @@ class TestTrainingPipelineWithMLflow:
         with open(data_config_path, "wb") as f:
             tomli_w.dump(data_config, f)
 
-        # Create model config with MLflow ENABLED
+        # Create model config with MLflow enabled but no infrastructure fields.
         output_root = data_dir / "output"
-        mlflow_db = output_root / "mlruns" / "mlflow.db"
-        mlflow_artifacts = output_root / "mlartifacts"
 
         model_config_path = models_dir / "mlflow_test_model.toml"
         model_config = {
@@ -147,10 +145,6 @@ class TestTrainingPipelineWithMLflow:
             },
             "MLFLOW": {
                 "enabled": True,
-                "server": {
-                    "backend_store_uri": f"sqlite:///{mlflow_db.as_posix()}",
-                    "artifacts_destination": mlflow_artifacts.as_posix(),
-                },
             },
             "OPTUNA": {"enabled": False},
         }
@@ -166,9 +160,9 @@ class TestTrainingPipelineWithMLflow:
 
         # VERIFICATION: Experiment configuration
         assert experiment.settings.MLFLOW.enabled is True
-        assert experiment.settings.MLFLOW.client.experiment_name == "mlflow_test_data"
+        assert experiment.settings.MLFLOW.experiment_name == "mlflow_test_data"
 
-        run_name = experiment.settings.MLFLOW.client.run_name
+        run_name = experiment.settings.MLFLOW.run_name
         assert run_name.startswith("MLflowTestModel")
 
         # VERIFICATION: Workspace directories created
@@ -176,13 +170,10 @@ class TestTrainingPipelineWithMLflow:
         assert experiment.workspace.figures_dir.exists()
         assert experiment.workspace.predictions_dir.exists()
 
-        # VERIFICATION: MLflow paths configured correctly
-        tracking_uri = experiment.settings.MLFLOW.server.backend_store_uri
-        assert "mlruns/mlflow.db" in tracking_uri
-        assert "sqlite:///" in tracking_uri
-
-        artifacts_dest = experiment.settings.MLFLOW.server.artifacts_destination
-        assert "mlartifacts" in artifacts_dest
+        # VERIFICATION: Output paths are resolved from output_root, not model TOML.
+        assert experiment.settings.PATHS.output_dir == str(output_root)
+        assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
+        assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 
     def test_mlflow_nested_structure_ready(self, training_setup: dict) -> None:
         """Verify MLflow is configured for nested runs structure.
@@ -222,8 +213,6 @@ class TestTrainingPipelineWithMLflow:
 
         # Create model config
         output_root = data_dir / "output"
-        mlflow_db = output_root / "mlruns" / "mlflow.db"
-        mlflow_artifacts = output_root / "mlartifacts"
 
         model_config_path = models_dir / "nested_test_model.toml"
         model_config = {
@@ -240,13 +229,7 @@ class TestTrainingPipelineWithMLflow:
             },
             "DATASET": {"name": "FlexibleDataset"},
             "DATAMODULE": {"name": "InMemoryModule"},
-            "MLFLOW": {
-                "enabled": True,
-                "server": {
-                    "backend_store_uri": f"sqlite:///{mlflow_db.as_posix()}",
-                    "artifacts_destination": mlflow_artifacts.as_posix(),
-                },
-            },
+            "MLFLOW": {"enabled": True},
             "OPTUNA": {"enabled": False},
         }
         with open(model_config_path, "wb") as f:
@@ -267,19 +250,17 @@ class TestTrainingPipelineWithMLflow:
         expected_workspace_root = output_root / dataset_id / run_id
         assert experiment.workspace.root_dir == expected_workspace_root
 
-        # MLflow artifacts will be at: mlartifacts/{exp_id}/{run_id}/
-        # (exp_id is UUID, but we can verify the base path)
-        assert "mlartifacts" in experiment.settings.MLFLOW.server.artifacts_destination
+        # Experiment name defaults to dataset.
+        assert experiment.settings.MLFLOW.experiment_name == dataset_id
 
-        # Experiment name = dataset
-        assert experiment.settings.MLFLOW.client.experiment_name == dataset_id
-
-        assert experiment.settings.MLFLOW.client.run_name.startswith("NestedTestSession")
+        assert experiment.settings.MLFLOW.run_name.startswith("NestedTestSession")
+        assert experiment.settings.PATHS.output_dir == str(output_root)
 
     def test_mlflow_configuration_injection(self, training_setup: dict) -> None:
-        """Verify MLflow configuration is properly injected from path context."""
+        """Verify experiments topology injects flat training MLflow settings."""
         from neuralls.configuration.loader import load_experiment
 
+        tmp_path = training_setup["tmp_path"]
         data_dir = training_setup["data_dir"]
         datasets_dir = training_setup["datasets_dir"]
         models_dir = training_setup["models_dir"]
@@ -313,28 +294,42 @@ class TestTrainingPipelineWithMLflow:
             "TRAINING": {"trainer": {"max_epochs": 1, "accelerator": "cpu"}},
             "DATASET": {"name": "FlexibleDataset"},
             "DATAMODULE": {"name": "InMemoryModule"},
-            "MLFLOW": {"enabled": True},  # Minimal config, paths will be injected
             "OPTUNA": {"enabled": False},
         }
         with open(model_config_path, "wb") as f:
             tomli_w.dump(model_config, f)
 
-        # Load experiment with custom output_root
+        experiments_config_path = tmp_path / "experiments.toml"
         custom_output_root = data_dir / "custom_output"
+        experiments_config = {
+            "output_dir": str(custom_output_root),
+            "mlflow": {
+                "tracking_uri": f"sqlite:///{(custom_output_root / 'mlruns' / 'mlflow.db').as_posix()}",
+            },
+            "names": {
+                "training": "neuralls-training",
+                "comparison": "neuralls-comparisons",
+            },
+            "experiment": [
+                {
+                    "id": "ignored",
+                    "dataset": "injection_test",
+                    "model": "injection_model",
+                }
+            ],
+        }
+        with open(experiments_config_path, "wb") as f:
+            tomli_w.dump(experiments_config, f)
 
         experiment = load_experiment(
             model_config_path,
             data_config_path,
-            output_root=custom_output_root,
+            experiments_config_path=experiments_config_path,
         )
 
-        # Model config has no [MLFLOW.server] section — paths are not injected
-        tracking_uri = experiment.settings.MLFLOW.server.backend_store_uri
-        artifacts_dest = experiment.settings.MLFLOW.server.artifacts_destination
-
-        assert tracking_uri is None
-        assert artifacts_dest is None
-
-        # Experiment and run names should be injected
-        assert experiment.settings.MLFLOW.client.experiment_name == "injection_test"
-        assert experiment.settings.MLFLOW.client.run_name.startswith("TestModel")
+        assert experiment.settings.MLFLOW.enabled is True
+        assert experiment.settings.MLFLOW.experiment_name == "neuralls-training"
+        assert experiment.settings.MLFLOW.run_name.startswith("TestModel")
+        assert experiment.settings.PATHS.output_dir == str(custom_output_root)
+        assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
+        assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")

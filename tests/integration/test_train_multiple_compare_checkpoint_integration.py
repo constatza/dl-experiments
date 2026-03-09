@@ -180,7 +180,7 @@ def runs_config_path(
     path.write_text(
         "\n".join(
             [
-                "[mlflow.client]",
+                "[mlflow]",
                 f'tracking_uri = "{tracking_uri}"',
                 "",
                 "[names]",

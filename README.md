@@ -49,6 +49,28 @@ All configs are validated using **Pydantic** at load time, catching configuratio
 
 The master `configs/experiments.toml` file orchestrates multiple experiment bundles for batch workflows.
 
+### MLflow Config Surface
+
+MLflow config is split between model intent and runtime topology:
+
+```toml
+[MLFLOW]
+enabled = true
+experiment_name = "optional-user-override"
+run_name = "optional-user-override"
+```
+
+```toml
+[mlflow]
+tracking_uri = "sqlite:////abs/path/mlflow.db"
+# optional; defaults to sibling mlartifacts dir for sqlite
+# artifacts_destination = "/abs/path/mlartifacts"
+```
+
+Model configs must not define `tracking_uri` or `artifacts_destination`.
+Nested `client/server` subsections are removed from user-facing config files.
+Training topology belongs in `experiments.toml` or runtime environment.
+
 ## Recent API Changes
 
 ### Configuration Loader (Breaking Changes)

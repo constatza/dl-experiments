@@ -327,23 +327,19 @@ def test_summarize_best_combinations(
     """Test summarize_best_combinations ranks results correctly."""
     summary = summarize_best_combinations(mock_comparison_results)
 
-    # Verify structure
-    assert "ranked" in summary
-    assert "overall_best" in summary
-
     # Verify ranking (only converged results)
-    ranked = summary["ranked"]
+    ranked = summary.ranked
     assert len(ranked) == 2  # Only jacobi and identity converged
 
     # Verify sorted by residual (jacobi has lower residual: 1e-8 < 1e-7)
-    assert ranked[0]["label"] == "jacobi"
-    assert ranked[1]["label"] == "identity"
+    assert ranked[0].label == "jacobi"
+    assert ranked[1].label == "identity"
 
     # Verify overall_best
-    best = summary["overall_best"]
+    best = summary.overall_best
     assert best is not None
-    assert best["label"] == "jacobi"
-    assert best["residual"] == 1e-8
+    assert best.label == "jacobi"
+    assert best.residual == 1e-8
 
 
 def test_summarize_best_combinations_empty_results() -> None:
@@ -369,8 +365,8 @@ def test_summarize_best_combinations_empty_results() -> None:
     summary = summarize_best_combinations(non_converged_results)
 
     # Verify empty ranking
-    assert summary["ranked"] == []
-    assert summary["overall_best"] is None
+    assert summary.ranked == ()
+    assert summary.overall_best is None
 
 
 def test_summarize_best_combinations_single_converged() -> None:
@@ -395,5 +391,6 @@ def test_summarize_best_combinations_single_converged() -> None:
     summary = summarize_best_combinations(single_result)
 
     # Verify single entry
-    assert len(summary["ranked"]) == 1
-    assert summary["overall_best"]["label"] == "jacobi"
+    assert len(summary.ranked) == 1
+    assert summary.overall_best is not None
+    assert summary.overall_best.label == "jacobi"

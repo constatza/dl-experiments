@@ -6,43 +6,103 @@ All path resolution is delegated to the paths module.
 
 from __future__ import annotations
 
-import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
-
-from dlkit.tools.config.core.updater import update_settings
 
 from neuralls.configuration.domain import (
     ExperimentBatch,
     ExperimentSpec,
     RunnableExperiment,
 )
+from neuralls.configuration.experiments import ExperimentsConfig
 from neuralls.configuration.paths import build_path_context
 from neuralls.configuration.services import WorkspaceFactory
 from neuralls.configuration.settings import build_inference_settings, build_settings
+from neuralls.configuration.mlflow_normalization import (
+    build_mlflow_environment,
+    derive_output_root_from_tracking_uri,
+    derive_sqlite_artifacts_destination,
+    scoped_mlflow_environment,
+)
 from neuralls.io.toml_loader import load_data_config, load_model_config, load_raw_toml
 
 
-def _read_output_root_from_model_config(model_config_path: Path) -> Path | None:
-    """Extract output root from model config's MLFLOW.server.artifacts_destination.
+@dataclass(frozen=True)
+class MlflowTopology:
+    """Runtime MLflow topology for a training or inference workflow."""
 
-    Reads the raw TOML to avoid double-loading dlkit settings.
-    Returns the parent of artifacts_destination so workspace paths land in
-    the same base directory as MLflow artifacts.
+    env: dict[str, str]
+    experiment_name: str | None = None
+    force_enabled: bool = False
 
-    Args:
-        model_config_path: Path to model config TOML.
 
-    Returns:
-        Resolved output root (parent of artifacts_destination), or None if not configured.
-    """
-    with open(model_config_path, "rb") as f:
-        raw = tomllib.load(f)
-    dest = raw.get("MLFLOW", {}).get("server", {}).get("artifacts_destination")
-    if dest:
-        return Path(dest).parent
-    return None
+def _resolve_relative_path(path: Path | None, base_dir: Path) -> Path | None:
+    """Resolve an optional path relative to a config directory."""
+    if path is None:
+        return None
+    if path.is_absolute():
+        return path.resolve()
+    return (base_dir / path).resolve()
+
+
+def _load_experiments_config(
+    experiments_config_path: Path | None,
+) -> ExperimentsConfig | None:
+    """Load experiments topology when provided."""
+    if experiments_config_path is None:
+        return None
+    raw = load_raw_toml(Path(experiments_config_path))
+    return ExperimentsConfig.model_validate(raw)
+
+
+def _resolve_output_override(
+    *,
+    output_root: Path | None,
+    experiments_cfg: ExperimentsConfig | None,
+    experiments_config_path: Path | None,
+) -> Path | None:
+    """Resolve output root from explicit override, experiments config, or defaults."""
+    if output_root is not None:
+        return output_root.resolve()
+    if experiments_cfg is None or experiments_config_path is None:
+        return None
+
+    config_dir = Path(experiments_config_path).resolve().parent
+    resolved_output = _resolve_relative_path(experiments_cfg.output_dir, config_dir)
+    if resolved_output is not None:
+        return resolved_output
+    return derive_output_root_from_tracking_uri(
+        experiments_cfg.mlflow.tracking_uri,
+        config_path=Path(experiments_config_path),
+    )
+
+
+def _build_default_mlflow_topology(path_ctx_output_root: Path) -> MlflowTopology:
+    """Build default MLflow env rooted under the output directory."""
+    env = build_mlflow_environment(
+        tracking_uri=f"sqlite:///{(path_ctx_output_root / 'mlruns' / 'mlflow.db').as_posix()}",
+        artifacts_destination=str((path_ctx_output_root / "mlartifacts").resolve()),
+    )
+    return MlflowTopology(env=env)
+
+
+def _build_experiments_mlflow_topology(
+    experiments_cfg: ExperimentsConfig,
+    experiments_config_path: Path,
+) -> MlflowTopology:
+    """Build MLflow env from experiments.toml."""
+    env = build_mlflow_environment(
+        tracking_uri=experiments_cfg.mlflow.tracking_uri,
+        artifacts_destination=experiments_cfg.mlflow.artifacts_destination,
+        config_path=experiments_config_path,
+    )
+    return MlflowTopology(
+        env=env,
+        experiment_name=experiments_cfg.names.training,
+        force_enabled=True,
+    )
 
 
 def load_experiment(
@@ -78,22 +138,44 @@ def load_experiment(
         raise ValueError(
             f"Invalid mode: {mode!r}. Expected 'training' or 'inference'."
         )
+    experiments_cfg = _load_experiments_config(experiments_config_path)
+
     # 1. Load and validate configs (using existing loaders)
-    model_cfg = load_model_config(model_config_path)
     data_cfg = load_data_config(data_config_path)
 
     # 2. Resolve base paths (SINGLE SOURCE OF TRUTH)
-    # Derive output_root from model config's MLFLOW.server.artifacts_destination if not overridden
-    if output_root is None:
-        output_root = _read_output_root_from_model_config(Path(model_config_path))
+    resolved_output_root = _resolve_output_override(
+        output_root=output_root,
+        experiments_cfg=experiments_cfg,
+        experiments_config_path=Path(experiments_config_path) if experiments_config_path else None,
+    )
+    project_override = None
+    if experiments_cfg is not None and experiments_config_path is not None:
+        project_override = _resolve_relative_path(
+            experiments_cfg.project_root,
+            Path(experiments_config_path).resolve().parent,
+        )
     path_ctx = build_path_context(
         data_cfg,
-        output_override=output_root,
+        output_override=resolved_output_root,
+        project_override=project_override,
     )
+    mlflow_topology = (
+        _build_experiments_mlflow_topology(
+            experiments_cfg,
+            Path(experiments_config_path),
+        )
+        if experiments_cfg is not None and experiments_config_path is not None
+        else _build_default_mlflow_topology(path_ctx.output_root)
+    )
+
+    with scoped_mlflow_environment(mlflow_topology.env):
+        model_cfg = load_model_config(model_config_path)
 
     # 3. Extract identifiers
     dataset_id = data_config_path.stem
-    session_name = model_cfg.SESSION.name
+    session = getattr(model_cfg, "SESSION", None)
+    session_name = getattr(session, "name", None)
     # Treat dlkit's default "dlkit-session" as unset, prefer MODEL.name for clarity
     if session_name and session_name != "dlkit-session":
         base_name = session_name
@@ -132,6 +214,8 @@ def load_experiment(
             workspace=workspace,
             path_context=path_ctx,
             mlflow_run_name=mlflow_run_name,
+            mlflow_experiment_name=mlflow_topology.experiment_name,
+            force_mlflow_enabled=mlflow_topology.force_enabled,
         )
         logger.debug(f"Loaded inference settings (DATASET/DATAMODULE optional)")
     else:
@@ -141,26 +225,11 @@ def load_experiment(
             workspace=workspace,
             path_context=path_ctx,
             mlflow_run_name=mlflow_run_name,
+            mlflow_experiment_name=mlflow_topology.experiment_name,
+            force_mlflow_enabled=mlflow_topology.force_enabled,
+            base_settings=model_cfg,
         )
         logger.debug(f"Loaded training settings (DATASET/DATAMODULE required)")
-
-    if experiments_config_path is not None:
-        sys_raw = load_raw_toml(Path(experiments_config_path))
-        tracking_uri = sys_raw["mlflow"]["client"]["tracking_uri"]
-        exp_name = sys_raw.get("names", {}).get("training", "neuralls-training")
-        settings = update_settings(
-            settings,
-            {
-                "MLFLOW": {
-                    "enabled": True,
-                    "client": {
-                        "tracking_uri": tracking_uri,
-                        "experiment_name": exp_name,
-                        "run_name": None,
-                    },
-                }
-            },
-        )
 
     return RunnableExperiment(
         spec=spec,

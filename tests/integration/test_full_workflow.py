@@ -21,12 +21,23 @@ from neuralls.cli.compare_preconditioners import main as compare_main
 from neuralls.cli.train_multiple import main as train_multiple_main
 from neuralls.io.dataset_storage import save_dataset
 from neuralls.workflows.comparison_run import ComparisonRun
+from neuralls.workflows.results import ComparisonRecommendations, ComparisonResult
 from neuralls.workflows.specs import ComparisonOutcome
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+def _comparison_payload() -> ComparisonResult:
+    return ComparisonResult(
+        results={},
+        summary="ok",
+        solver_params=object(),
+        preconditioners=("neural",),
+        recommendations=ComparisonRecommendations(),
+    )
 
 
 @pytest.fixture
@@ -222,7 +233,7 @@ def test_compare_preconditioners_loads_comparison_run(
     success_outcome = ComparisonOutcome(
         name=comparison_config.stem,
         success=True,
-        payload=MagicMock(summary="ok", preconditioners=["neural"], recommendations={}),
+        payload=_comparison_payload(),
     )
 
     with patch(
@@ -291,7 +302,7 @@ def test_full_workflow_integration(
     success_outcome = ComparisonOutcome(
         name=comparison_config.stem,
         success=True,
-        payload=MagicMock(summary="ok", preconditioners=["neural"], recommendations={}),
+        payload=_comparison_payload(),
     )
     with patch(
         "neuralls.cli.compare_preconditioners.run_comparison",

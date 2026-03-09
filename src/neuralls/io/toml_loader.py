@@ -5,16 +5,19 @@ using Pydantic models, providing clear error messages on validation failures.
 """
 
 from __future__ import annotations
-from dlkit.tools.config import TrainingWorkflowSettings
-from dlkit.tools.io import load_settings
 
-
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any
 
-from neuralls.configuration.data_models import DataConfigFile
+import tomli_w
+from dlkit.tools.config import TrainingWorkflowSettings
+from dlkit.tools.io import load_settings
+
 from neuralls.configuration.comparison import ComparisonConfig, parse_comparison_config
+from neuralls.configuration.data_models import DataConfigFile
+from neuralls.configuration.mlflow_normalization import normalize_model_mlflow
 
 
 def load_model_config(path: Path) -> TrainingWorkflowSettings:
@@ -29,7 +32,12 @@ def load_model_config(path: Path) -> TrainingWorkflowSettings:
     Raises:
         ConfigLoadError: If file cannot be read or validation fails.
     """
-    return load_settings(path)
+    raw = load_raw_toml(path)
+    normalized = normalize_model_mlflow(raw, path)
+    with tempfile.NamedTemporaryFile(mode="wb", suffix=".toml", delete=True) as tmp:
+        tomli_w.dump(normalized, tmp)
+        tmp.flush()
+        return load_settings(Path(tmp.name))
 
 
 def load_data_config(path: Path) -> DataConfigFile:

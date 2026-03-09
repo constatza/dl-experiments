@@ -1,16 +1,14 @@
-"""Typed result models for workflow outputs.
-
-This module provides Pydantic models and dataclasses for workflow return values,
-replacing untyped dict[str, Any] returns with structured, validated types.
-"""
+"""Typed dataclass models for workflow outputs."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, ConfigDict, Field
+if TYPE_CHECKING:
+    from neuralls.configuration.comparison import ComparisonGeneral
+    from neuralls.solver.models.result import CGComparisonResult
 
 
 @dataclass(frozen=True)
@@ -22,70 +20,103 @@ class PlotPaths:
     parity: Path | None = None
     residuals: Path | None = None
 
+    @classmethod
+    def from_mapping(cls, mapping: dict[str, Path] | None) -> PlotPaths:
+        """Build typed plot paths from a loose mapping."""
+        if mapping is None:
+            return cls()
+        return cls(
+            convergence=mapping.get("convergence"),
+            condition_numbers=mapping.get("condition_numbers"),
+            parity=mapping.get("parity"),
+            residuals=mapping.get("residuals"),
+        )
 
-class SolverRecommendations(BaseModel):
-    """Best solver/preconditioner recommendations.
-
-    Structure matches output from summarize_best_combinations().
-    """
-
-    best_overall: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Best overall solver/preconditioner combination",
-    )
-    best_by_metric: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Best combinations grouped by metric",
-    )
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
+    def to_mapping(self) -> dict[str, Path]:
+        """Return only populated plot paths."""
+        values = {
+            "convergence": self.convergence,
+            "condition_numbers": self.condition_numbers,
+            "parity": self.parity,
+            "residuals": self.residuals,
+        }
+        return {key: path for key, path in values.items() if path is not None}
 
 
-class ComparisonResult(BaseModel):
-    """Typed result from compare_preconditioners workflow.
+@dataclass(frozen=True)
+class RankedRecommendation:
+    """Typed recommendation entry for a solver/preconditioner combination."""
 
-    Replaces the untyped dict[str, Any] return value with a structured model.
-    """
+    label: str
+    iterations: int
+    residual: float
+    residual_abs: float
+    breakdown: bool
 
-    results: dict[str, Any] = Field(
-        ...,
-        description="Raw solver results from run_cg_comparison",
-    )
-    summary: str = Field(
-        ...,
-        description="Formatted summary text of results",
-    )
-    plot_paths: dict[str, Path] = Field(
-        default_factory=dict,
-        description="Paths to generated plot files",
-    )
-    preconditioners: list[str] = Field(
-        default_factory=list,
-        description="List of preconditioner names tested",
-    )
-    condition_numbers: dict[str, float] = Field(
-        default_factory=dict,
-        description="Condition numbers of preconditioned matrices",
-    )
-    solver_params: Any = Field(
-        ...,
-        description="Solver parameters used (GeneralSolverParams)",
-    )
-    recommendations: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Best solver recommendations",
-    )
-    output_dir: Path | None = Field(
-        default=None,
-        description="Output directory where comparison artefacts were saved",
-    )
 
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,  # Allow GeneralSolverParams
-        frozen=True,
-    )
+@dataclass(frozen=True)
+class ComparisonRecommendations:
+    """Typed comparison recommendations."""
+
+    ranked: tuple[RankedRecommendation, ...] = ()
+    overall_best: RankedRecommendation | None = None
+
+
+@dataclass(frozen=True)
+class ArrayArtifact:
+    """Reference to a persisted numpy array artifact."""
+
+    path: Path
+    shape: tuple[int, ...]
+    dtype: str
+
+
+@dataclass(frozen=True)
+class ComparisonArtifactManifest:
+    """Manifest of files emitted by comparison artifact writing."""
+
+    comparison_toml: Path
+    comparison_json: Path
+    recommendations_json: Path
+    summary_txt: Path
+    config_copy: Path
+    arrays: tuple[ArrayArtifact, ...] = ()
+
+
+@dataclass(frozen=True)
+class FallbackComparisonResultEntry:
+    """Minimal typed fallback for artifact writing in tests."""
+
+    iterations: int
+    residual: float
+    residual_abs: float | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class ComparisonArtifactFallback:
+    """Typed fallback source for artifact writing when tests patch the workflow."""
+
+    summary: str = ""
+    preconditioners: tuple[str, ...] = ()
+    condition_numbers: dict[str, float] = field(default_factory=dict)
+    plot_paths: PlotPaths = field(default_factory=PlotPaths)
+    recommendations: ComparisonRecommendations = field(default_factory=ComparisonRecommendations)
+    results: dict[str, FallbackComparisonResultEntry] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ComparisonResult:
+    """Typed result from compare_preconditioners workflow."""
+
+    results: dict[str, CGComparisonResult]
+    summary: str
+    solver_params: ComparisonGeneral
+    plot_paths: PlotPaths = field(default_factory=PlotPaths)
+    preconditioners: tuple[str, ...] = ()
+    condition_numbers: dict[str, float] = field(default_factory=dict)
+    recommendations: ComparisonRecommendations = field(default_factory=ComparisonRecommendations)
+    output_dir: Path | None = None
 
 
 @dataclass(frozen=True)

@@ -72,7 +72,8 @@ from .cg_runner import (
     summarize_best_combinations,
 )
 from ..validation import validate_matrix, validate_rhs_vector
-from .results import ComparisonResult
+from ..solver.models.result import CGComparisonResult
+from .results import ComparisonResult, PlotPaths
 
 
 StoppingCriterion = Literal["tolerance", "fixed_iterations"]
@@ -427,10 +428,10 @@ def _create_scheduled_preconditioners(
 
 
 def _generate_comparison_plots(
-    results: dict[str, Any],
+    results: dict[str, CGComparisonResult],
     cond_numbers: dict[str, float],
     paths: ComparisonPaths,
-) -> dict[str, Path]:
+) -> PlotPaths:
     """Generate diagnostic plots for comparison.
 
     Args:
@@ -439,7 +440,7 @@ def _generate_comparison_plots(
         paths: Comparison paths
 
     Returns:
-        Dictionary mapping plot types to paths
+        Typed plot paths.
     """
     suffix = paths.matrix.stem or "comparison"
     cond_path = plot_condition_numbers(cond_numbers, save_dir=paths.figures, suffix=suffix)
@@ -447,11 +448,10 @@ def _generate_comparison_plots(
     convergence_path = paths.figures / f"preconditioner_convergence_{suffix}.png"
     plot_convergence_comparison(results, metadata=None, save_path=convergence_path)
 
-    plot_paths = {"convergence": convergence_path}
-    if cond_path:
-        plot_paths["condition_numbers"] = cond_path
-
-    return plot_paths
+    return PlotPaths(
+        convergence=convergence_path,
+        condition_numbers=cond_path,
+    )
 
 
 def compare_preconditioners(
@@ -589,7 +589,7 @@ def compare_preconditioners(
         results=results,
         summary=format_results_summary(results),
         plot_paths=plot_paths,
-        preconditioners=list(preconditioners.keys()),
+        preconditioners=tuple(preconditioners.keys()),
         condition_numbers=cond_numbers,
         solver_params=general_params,
         recommendations=recommendations,

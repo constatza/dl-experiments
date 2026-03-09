@@ -9,7 +9,6 @@ import matplotlib
 
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
-from matplotlib import cm
 import numpy as np
 from loguru import logger
 
@@ -54,7 +53,7 @@ def plot_parity_and_residuals(
     y_max = float(np.max([y_true.max(), y_pred.max()]))
     pad = 0.02 * (y_max - y_min) if y_max > y_min else 1.0
 
-    set1 = cm.get_cmap("Set1")
+    set1 = matplotlib.colormaps["Set1"]
     ax.scatter(y_true, y_pred, s=10, alpha=0.7, color=set1(0.0))
     ax.plot(
         [y_min - pad, y_max + pad],
@@ -275,7 +274,7 @@ def plot_noise_robustness(
     methods = sorted(methods)
 
     # Use matplotlib Set1 colormap for consistent colors
-    colormap = cm.get_cmap("Set1")
+    colormap = matplotlib.colormaps["Set1"]
     colors = colormap(np.linspace(0, 1, max(len(methods), 3)))
     method_colors = {
         method: colors[i % len(colors)] for i, method in enumerate(methods)
@@ -719,7 +718,7 @@ def plot_metric_comparison(
     fig, ax = plt.subplots(figsize=(max(6, len(labels) * 1.2), 5))
 
     x_pos = np.arange(len(labels))
-    colormap = cm.get_cmap("Set1")
+    colormap = matplotlib.colormaps["Set1"]
     colors = colormap(np.linspace(0, 0.9, max(len(labels), 1)))
 
     ax.bar(x_pos, values, color=colors, alpha=0.85, edgecolor="black", linewidth=0.7)

@@ -16,9 +16,20 @@ import typer
 from typer.testing import CliRunner
 
 from neuralls.cli.compare_preconditioners import main
+from neuralls.workflows.results import ComparisonRecommendations, ComparisonResult
 from neuralls.workflows.specs import ComparisonOutcome
 
 runner = CliRunner()
+
+
+def _payload() -> ComparisonResult:
+    return ComparisonResult(
+        results={},
+        summary="ok",
+        solver_params=object(),
+        preconditioners=("none",),
+        recommendations=ComparisonRecommendations(),
+    )
 
 
 @pytest.fixture
@@ -107,7 +118,7 @@ def test_pipeline_mode_with_comparison_run(
     outcome = ComparisonOutcome(
         name="solver",
         success=True,
-        payload=MagicMock(summary="ok", preconditioners=["none"], recommendations={}),
+        payload=_payload(),
     )
     mock_run.return_value = [outcome]
 
@@ -145,7 +156,7 @@ def test_standalone_mode_without_comparison_run(
     outcome = ComparisonOutcome(
         name="solver",
         success=True,
-        payload=MagicMock(summary="ok", preconditioners=["none"], recommendations={}),
+        payload=_payload(),
     )
     mock_run.return_value = [outcome]
 
@@ -202,7 +213,7 @@ def test_invalid_comparison_run_falls_back_to_standalone(
     outcome = ComparisonOutcome(
         name="solver",
         success=True,
-        payload=MagicMock(summary="ok", preconditioners=["none"], recommendations={}),
+        payload=_payload(),
     )
     mock_run.return_value = [outcome]
 

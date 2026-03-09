@@ -1,0 +1,121 @@
+"""Unit tests for MLflow hard-cut validation and runtime helpers."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+from neuralls.configuration.mlflow_normalization import (
+    build_mlflow_environment,
+    derive_output_root_from_tracking_uri,
+    derive_sqlite_artifacts_destination,
+    normalize_artifacts_destination,
+    normalize_model_mlflow,
+    normalize_tracking_uri,
+    scoped_mlflow_environment,
+)
+
+
+def test_normalize_model_mlflow_rejects_legacy_nested_sections(tmp_path: Path) -> None:
+    config_path = tmp_path / "model.toml"
+    raw = {"MLFLOW": {"enabled": True, "client": {"run_name": "legacy"}}}
+
+    with pytest.raises(ValueError, match="Legacy MLFLOW client/server sections"):
+        normalize_model_mlflow(raw, config_path)
+
+
+def test_normalize_model_mlflow_rejects_tracking_uri_in_model_config(tmp_path: Path) -> None:
+    config_path = tmp_path / "model.toml"
+    raw = {"MLFLOW": {"enabled": True, "tracking_uri": "http://127.0.0.1:5000"}}
+
+    with pytest.raises(ValueError, match="must not define infrastructure fields: tracking_uri"):
+        normalize_model_mlflow(raw, config_path)
+
+
+def test_normalize_model_mlflow_rejects_artifacts_destination_in_model_config(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "model.toml"
+    raw = {"MLFLOW": {"enabled": True, "artifacts_destination": "mlartifacts"}}
+
+    with pytest.raises(
+        ValueError,
+        match="must not define infrastructure fields: artifacts_destination",
+    ):
+        normalize_model_mlflow(raw, config_path)
+
+
+def test_normalize_tracking_uri_resolves_relative_sqlite_path(tmp_path: Path) -> None:
+    config_path = tmp_path / "configs" / "model.toml"
+    config_path.parent.mkdir(parents=True)
+
+    normalized = normalize_tracking_uri(
+        "sqlite:///../output/mlruns/mlflow.db",
+        config_path=config_path,
+    )
+
+    expected_db = (config_path.parent / "../output/mlruns/mlflow.db").resolve()
+    assert normalized == f"sqlite:///{expected_db.as_posix()}"
+
+
+def test_normalize_tracking_uri_rejects_invalid_scheme() -> None:
+    with pytest.raises(ValueError, match="MLflow tracking_uri must use one of"):
+        normalize_tracking_uri("file:///tmp/mlflow.db")
+
+
+def test_normalize_artifacts_destination_resolves_relative_path(tmp_path: Path) -> None:
+    config_path = tmp_path / "configs" / "experiments.toml"
+    config_path.parent.mkdir(parents=True)
+
+    normalized = normalize_artifacts_destination(
+        "../output/mlartifacts",
+        config_path=config_path,
+    )
+
+    expected = (config_path.parent / "../output/mlartifacts").resolve()
+    assert normalized == str(expected)
+
+
+def test_build_mlflow_environment_derives_sqlite_artifact_uri(tmp_path: Path) -> None:
+    tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
+
+    env = build_mlflow_environment(tracking_uri=tracking_uri)
+
+    assert env["MLFLOW_TRACKING_URI"] == tracking_uri
+    assert env["MLFLOW_ARTIFACT_URI"].endswith("/mlartifacts")
+    assert env["MLFLOW_ARTIFACT_URI"] == derive_sqlite_artifacts_destination(tracking_uri)
+
+
+def test_build_mlflow_environment_keeps_remote_tracking_without_artifact_uri() -> None:
+    env = build_mlflow_environment(tracking_uri="http://127.0.0.1:5000")
+
+    assert env == {"MLFLOW_TRACKING_URI": "http://127.0.0.1:5000"}
+
+
+def test_derive_output_root_from_tracking_uri_uses_sqlite_parent(tmp_path: Path) -> None:
+    tracking_uri = f"sqlite:///{(tmp_path / 'output' / 'mlruns' / 'mlflow.db').as_posix()}"
+
+    output_root = derive_output_root_from_tracking_uri(tracking_uri)
+
+    assert output_root == (tmp_path / "output" / "mlruns").resolve()
+
+
+def test_scoped_mlflow_environment_restores_previous_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://old-server")
+    monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
+
+    with scoped_mlflow_environment(
+        {
+            "MLFLOW_TRACKING_URI": "http://new-server",
+            "MLFLOW_ARTIFACT_URI": "/tmp/mlartifacts",
+        }
+    ):
+        assert os.environ["MLFLOW_TRACKING_URI"] == "http://new-server"
+        assert os.environ["MLFLOW_ARTIFACT_URI"] == "/tmp/mlartifacts"
+
+    assert os.environ["MLFLOW_TRACKING_URI"] == "http://old-server"
+    assert "MLFLOW_ARTIFACT_URI" not in os.environ

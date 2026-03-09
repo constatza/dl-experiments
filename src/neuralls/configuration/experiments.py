@@ -13,25 +13,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from neuralls.configuration.comparison import ComparisonsTrackingConfig
 
 
-class MlflowClientTopologyConfig(BaseModel):
-    """MLflow client connection settings.
-
-    Attributes:
-        tracking_uri: MLflow tracking server URI.
-    """
-
-    tracking_uri: str = Field(default="http://127.0.0.1:5000", min_length=1)
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
 class MlflowTopologyConfig(BaseModel):
     """MLflow topology configuration.
 
     Attributes:
-        client: Client connection settings.
+        tracking_uri: MLflow tracking URI.
+        artifacts_destination: Optional artifacts root for local sqlite tracking.
     """
 
-    client: MlflowClientTopologyConfig = Field(default_factory=MlflowClientTopologyConfig)
+    tracking_uri: str = Field(default="http://127.0.0.1:5000", min_length=1)
+    artifacts_destination: str | None = None
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 

@@ -52,11 +52,11 @@ def _log_comparison_results(result: ComparisonResult) -> None:
         logger.info(summary)
         logger.info("=" * 60)
 
-    best = recommendations.get("best_overall") if isinstance(recommendations, dict) else None
+    best = recommendations.overall_best
     if best:
         logger.info(
-            f"Best preconditioner: method={best.get('label')} "
-            f"iterations={best.get('iterations')} residual={best.get('residual')}"
+            f"Best preconditioner: method={best.label} "
+            f"iterations={best.iterations} residual={best.residual}"
         )
 
 

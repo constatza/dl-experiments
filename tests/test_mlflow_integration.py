@@ -36,8 +36,6 @@ def output_root(tmp_path: Path) -> Path:
 def minimal_model_config(tmp_path: Path, output_root: Path) -> Path:
     """Create a minimal model config with MLflow enabled."""
     config_path = tmp_path / "minimal_model.toml"
-    mlflow_db = output_root / "mlruns" / "mlflow.db"
-    mlflow_artifacts = output_root / "mlartifacts"
 
     config_content = f"""
 [SESSION]
@@ -59,14 +57,6 @@ name = "FlexibleDataset"
 
 [MLFLOW]
 enabled = true
-
-[MLFLOW.server]
-backend_store_uri = "sqlite:///{mlflow_db.as_posix()}"
-artifacts_destination = "{mlflow_artifacts.as_posix()}"
-
-[MLFLOW.client]
-experiment_name = "test-experiment"
-run_name = "test-run"
 """
     config_path.write_text(config_content)
     return config_path
@@ -110,7 +100,7 @@ class TestMLflowExperimentCreation:
 
         # Verify experiment name in settings matches dataset name
         dataset_name = minimal_data_config.stem  # "test-dataset"
-        assert experiment.settings.MLFLOW.client.experiment_name == dataset_name
+        assert experiment.settings.MLFLOW.experiment_name == dataset_name
 
     def test_mlflow_run_creation_with_timestamp(
         self,
@@ -129,7 +119,7 @@ class TestMLflowExperimentCreation:
         )
 
         # Verify run name in settings matches pattern
-        run_name = experiment.settings.MLFLOW.client.run_name
+        run_name = experiment.settings.MLFLOW.run_name
 
         # Should match: TestSession-YYYY-MM-DDTHH:MM:SS
         pattern = r"^TestSession-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$"
@@ -156,10 +146,7 @@ class TestMLflowArtifactStorage:
             output_root=output_root,
         )
 
-        # Verify artifact destination is set correctly
-        artifacts_dest = experiment.settings.MLFLOW.server.artifacts_destination
-        assert "mlartifacts" in artifacts_dest
-        assert str(output_root) in artifacts_dest
+        assert experiment.settings.PATHS.output_dir == str(output_root)
 
     def test_mlflow_workspace_artifact_alignment(
         self,
@@ -203,11 +190,9 @@ class TestMLflowArtifactStorage:
             output_root=output_root,
         )
 
-        # Verify tracking URI points to SQLite database
-        tracking_uri = experiment.settings.MLFLOW.server.backend_store_uri
-        assert tracking_uri.startswith("sqlite:///")
-        assert "mlruns/mlflow.db" in tracking_uri
-        assert str(output_root) in tracking_uri
+        assert experiment.settings.MLFLOW.enabled is True
+        assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
+        assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 
 
 class TestCustomArtifacts:
@@ -337,14 +322,8 @@ class TestMLflowPathResolution:
         )
 
         # All MLflow paths should contain output_root
-        tracking_uri = experiment.settings.MLFLOW.server.backend_store_uri
-        artifacts_dest = experiment.settings.MLFLOW.server.artifacts_destination
-
-        # Extract path from sqlite:///path
-        tracking_path = tracking_uri.replace("sqlite:///", "")
-
-        assert str(output_root) in tracking_path
-        assert str(output_root) in artifacts_dest
+        assert experiment.settings.PATHS.output_dir == str(output_root)
+        assert experiment.workspace.root_dir.parent.parent == output_root
 
     def test_multiple_experiments_isolated_by_dataset(
         self,
@@ -394,8 +373,8 @@ normalize = "matrix"
         )
 
         # Verify experiments have different names (dataset names)
-        assert exp1.settings.MLFLOW.client.experiment_name == "dataset-A"
-        assert exp2.settings.MLFLOW.client.experiment_name == "dataset-B"
+        assert exp1.settings.MLFLOW.experiment_name == "dataset-A"
+        assert exp2.settings.MLFLOW.experiment_name == "dataset-B"
 
         # Verify workspace roots are isolated by dataset
         assert "dataset-A" in str(exp1.workspace.root_dir)

@@ -32,6 +32,10 @@ from mlflow.tracking import MlflowClient
 
 from neuralls.configuration.comparison import ComparisonsTrackingConfig
 from neuralls.configuration.experiments import ExperimentsConfig, RunEntry
+from neuralls.configuration.mlflow_normalization import (
+    derive_sqlite_artifacts_destination,
+    is_sqlite_tracking_uri,
+)
 from neuralls.io.toml_loader import load_raw_toml
 from neuralls.workflows.comparison_run import (
     ComparisonRun,
@@ -357,21 +361,35 @@ def train_batch(
         )
 
     # Derive output_dir from mlflow tracking_uri when not explicitly configured
-    tracking_uri = cfg.mlflow.client.tracking_uri
+    tracking_uri = cfg.mlflow.tracking_uri
     if output_root is not None:
         base_output = Path(output_root)
     elif cfg.output_dir is not None:
         base_output = cfg.output_dir
-    else:
+    elif is_sqlite_tracking_uri(tracking_uri):
         db_path = Path(tracking_uri.removeprefix("sqlite:///"))
-        base_output = db_path.parent.parent
+        base_output = db_path.parent
+    else:
+        raise ValueError(
+            "experiments.toml must set output_dir when mlflow.tracking_uri is remote."
+        )
 
     # Derive comparisons tracking config from mlflow when not explicitly configured
     if cfg.comparisons is not None:
         comp = cfg.comparisons
     else:
-        db_path = Path(tracking_uri.removeprefix("sqlite:///"))
-        artifact_location = str(db_path.parent.parent / "mlartifacts")
+        if is_sqlite_tracking_uri(tracking_uri):
+            artifact_location = cfg.mlflow.artifacts_destination
+            if artifact_location is None:
+                try:
+                    artifact_location = derive_sqlite_artifacts_destination(tracking_uri)
+                except ValueError:
+                    db_path = Path(tracking_uri.removeprefix("sqlite:///"))
+                    artifact_location = str((db_path.parent / "mlartifacts").resolve())
+        else:
+            raise ValueError(
+                "experiments.toml must set [comparisons] when mlflow.tracking_uri is remote."
+            )
         comp = ComparisonsTrackingConfig(
             tracking_uri=tracking_uri,
             artifact_location=artifact_location,

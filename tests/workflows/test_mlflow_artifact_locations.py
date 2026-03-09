@@ -95,9 +95,7 @@ def _write_experiments_config(path: Path, output_root: Path) -> str:
     tracking_uri = _sqlite_tracking_uri(output_root / "mlruns" / "mlflow.db")
     payload = {
         "mlflow": {
-            "client": {
-                "tracking_uri": tracking_uri,
-            },
+            "tracking_uri": tracking_uri,
         },
         "names": {
             "training": "neuralls-training",

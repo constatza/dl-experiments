@@ -94,9 +94,6 @@ class TestOptunaNestedRuns:
 
         # Create model config with OPTUNA enabled
         output_root = data_dir / "output"
-        mlflow_db = output_root / "mlruns" / "mlflow.db"
-        mlflow_artifacts = output_root / "mlartifacts"
-
         model_config_path = models_dir / "optuna_model.toml"
         model_config = {
             "SESSION": {
@@ -131,10 +128,6 @@ class TestOptunaNestedRuns:
             },
             "MLFLOW": {
                 "enabled": True,
-                "server": {
-                    "backend_store_uri": f"sqlite:///{mlflow_db.as_posix()}",
-                    "artifacts_destination": mlflow_artifacts.as_posix(),
-                },
             },
             "OPTUNA": {
                 "enabled": True,
@@ -167,10 +160,10 @@ class TestOptunaNestedRuns:
         assert experiment.settings.MLFLOW.enabled is True
 
         # VERIFICATION: Experiment name is dataset name (parent level)
-        assert experiment.settings.MLFLOW.client.experiment_name == "optuna_test_data"
+        assert experiment.settings.MLFLOW.experiment_name == "optuna_test_data"
 
         # VERIFICATION: Run name includes timestamp (outer run)
-        run_name = experiment.settings.MLFLOW.client.run_name
+        run_name = experiment.settings.MLFLOW.run_name
         assert run_name.startswith("OptunaTestSession-")
 
     def test_nested_runs_hierarchy_structure(self, optuna_training_setup: dict):
@@ -222,7 +215,9 @@ class TestOptunaNestedRuns:
             },
             "DATASET": {"name": "FlexibleDataset"},
             "DATAMODULE": {"name": "InMemoryModule"},
-            "MLFLOW": {"enabled": True},
+            "MLFLOW": {
+                "enabled": True,
+            },
             "OPTUNA": {
                 "enabled": True,
                 "n_trials": 2,
@@ -243,11 +238,11 @@ class TestOptunaNestedRuns:
 
         # VERIFICATION: Three-level hierarchy is configured
         # Level 1: Experiment (dataset name)
-        experiment_name = experiment.settings.MLFLOW.client.experiment_name
+        experiment_name = experiment.settings.MLFLOW.experiment_name
         assert experiment_name == "hierarchy_test"
 
         # Level 2: Outer run (model-timestamp)
-        outer_run_name = experiment.settings.MLFLOW.client.run_name
+        outer_run_name = experiment.settings.MLFLOW.run_name
         assert outer_run_name.startswith("HierarchyModel-")
         assert "T" in outer_run_name  # ISO timestamp
 
@@ -302,7 +297,9 @@ class TestOptunaNestedRuns:
             "TRAINING": {"trainer": {"max_epochs": 1}, "optimizer": {"lr": 1e-3, "name": "AdamW"}},
             "DATASET": {"name": "FlexibleDataset"},
             "DATAMODULE": {"name": "InMemoryModule"},
-            "MLFLOW": {"enabled": True},
+            "MLFLOW": {
+                "enabled": True,
+            },
             "OPTUNA": {
                 "enabled": True,
                 "n_trials": 2,
@@ -375,7 +372,9 @@ class TestOptunaWorkflowReadiness:
             "TRAINING": {"trainer": {"max_epochs": 1}, "optimizer": {"lr": 1e-3, "name": "AdamW"}},
             "DATASET": {"name": "FlexibleDataset"},
             "DATAMODULE": {"name": "InMemoryModule"},
-            "MLFLOW": {"enabled": True},
+            "MLFLOW": {
+                "enabled": True,
+            },
             "OPTUNA": {"enabled": True, "n_trials": 2},
         }
         with open(model_config_path, "wb") as f:
@@ -387,10 +386,8 @@ class TestOptunaWorkflowReadiness:
             output_root=output_root,
         )
 
-        # VERIFICATION: MLflow artifact destination is not set (no [MLFLOW.server] in model config)
-        # dlkit handles nested artifact isolation automatically per trial
-        artifacts_dest = experiment.settings.MLFLOW.server.artifacts_destination
-        assert artifacts_dest is None
+        assert experiment.settings.MLFLOW.enabled is True
+        assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 
         # dlkit will create separate artifact directories for each trial:
         # - mlartifacts/{exp_id}/{parent_run_id}/

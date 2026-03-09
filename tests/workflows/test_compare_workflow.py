@@ -140,7 +140,7 @@ def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
         preconditioner_configs=comparison_cfg_model.preconditioners,
     )
 
-    # Access results from ComparisonResult Pydantic model
+    # Access typed solver results from ComparisonResult
     comparison_results = results.results
     assert set(comparison_results.keys()) == {"none", "jacobi"}
     for name, info in comparison_results.items():

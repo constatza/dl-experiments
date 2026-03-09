@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence, TYPE_CHECKING
@@ -95,20 +96,16 @@ def build_run_config(
     mlflow_cfg = getattr(settings, "MLFLOW", None)
     if not enabled or mlflow_cfg is None or not getattr(mlflow_cfg, "enabled", False):
         return None
-    server_cfg = getattr(mlflow_cfg, "server", None)
-    client_cfg = getattr(mlflow_cfg, "client", None)
-    tracking_uri = getattr(client_cfg, "tracking_uri", None) or getattr(
-        server_cfg, "backend_store_uri", None
-    )
-    artifact_uri = getattr(server_cfg, "artifacts_destination", None)
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    artifact_uri = os.getenv("MLFLOW_ARTIFACT_URI")
     paths = resolve_mlflow_paths(
         tracking_uri,
         artifact_uri,
         Path(getattr(getattr(settings, "PATHS", None), "project_root", DEFAULT_PROJECT_ROOT)),
         workspace_root,
     )
-    experiment_name = getattr(client_cfg, "experiment_name", None) or dataset_id
-    run_name = getattr(client_cfg, "run_name", None) or model_name
+    experiment_name = getattr(mlflow_cfg, "experiment_name", None) or dataset_id
+    run_name = getattr(mlflow_cfg, "run_name", None) or model_name
     tags = make_run_tags(dataset_id, model_name, session_name)
     return MlflowRunConfig(
         experiment_name=experiment_name,

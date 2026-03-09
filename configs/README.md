@@ -27,6 +27,11 @@ Example (`[[experiment]]` form):
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
 
+[mlflow]
+tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
+# optional; if omitted for sqlite URIs, defaults to sibling `mlartifacts/`
+# artifacts_destination = "/data/projects/graph-cg/data/output/mlartifacts"
+
 [comparisons]
 tracking_uri = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
 artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
@@ -41,6 +46,21 @@ Notes:
 - `dataset` and `model` are IDs, not file paths.
 - The loader resolves actual config files from the active config root.
 - Checkpoints are training outputs; they are not declared in `experiments.toml`.
+
+### MLflow Configuration (Flat Only)
+
+Model configs now use a flat MLflow section:
+
+```toml
+[MLFLOW]
+enabled = true
+experiment_name = "optional-user-override"
+run_name = "optional-user-override"
+```
+
+Nested `[MLFLOW.client]` / `[MLFLOW.server]` keys are no longer supported.
+Model configs must not define `tracking_uri` or `artifacts_destination`.
+Those infrastructure values come from `experiments.toml` or runtime env.
 
 ## Comparison Protocol (Strict)
 

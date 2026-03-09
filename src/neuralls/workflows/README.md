@@ -202,6 +202,9 @@ results = run_cg_comparison(A, b, preconditioners={"neural": scheduled})
 ```toml
 # configs/models/linear.toml - Neural architecture
 # configs/datasets/collect-504.toml - Dataset generation
+
+[MLFLOW]
+enabled = true
 ```
 
 **During Comparison**:
@@ -235,6 +238,7 @@ fallback = "jacobi"
 - Experiments don't need comparison configs (only generate data + train)
 - Comparison configs specified at comparison time (flexible testing of checkpoints)
 - Single checkpoint can be tested with multiple comparison configurations
+- Training MLflow infrastructure is injected from `experiments.toml` or runtime env, not model TOML
 
 ## Common Patterns
 

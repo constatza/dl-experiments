@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -17,7 +18,9 @@ from dlkit.tools.io.sparse import save_sparse_pack
 from neuralls.workflows.training import (
     _configure_dataloader_runtime,
     _create_feature_configs,
+    _extract_evaluation_arrays,
     _parent_run_context,
+    _resolve_mlflow_logging_config,
     _validate_dataset_section,
     TrainingArrays,
     GRAPH_DATASET_NAME,
@@ -194,3 +197,64 @@ def test_log_training_evaluation_orchestration(
     mock_compute.assert_called_once()
     mock_write.assert_called_once()
     mock_mlflow_log.assert_called_once()
+
+
+def test_extract_evaluation_arrays_with_array_predictions() -> None:
+    """Extraction supports numpy prediction arrays with dict targets."""
+    selected = _extract_evaluation_arrays(
+        {
+            "predictions": np.array([[1.0], [2.0], [3.0]]),
+            "targets": {"y": np.array([[1.1], [1.9], [3.2]])},
+        }
+    )
+    assert selected is not None
+    y_pred, y_true = selected
+    np.testing.assert_allclose(y_pred.ravel(), [1.0, 2.0, 3.0])
+    np.testing.assert_allclose(y_true.ravel(), [1.1, 1.9, 3.2])
+
+
+def test_extract_evaluation_arrays_with_non_output_prediction_key() -> None:
+    """Extraction falls back to target-matching prediction keys."""
+    selected = _extract_evaluation_arrays(
+        {
+            "predictions": {"solutions": np.array([[1.0], [2.0]])},
+            "targets": {"solutions": np.array([[0.8], [2.2]])},
+        }
+    )
+    assert selected is not None
+    y_pred, y_true = selected
+    np.testing.assert_allclose(y_pred.ravel(), [1.0, 2.0])
+    np.testing.assert_allclose(y_true.ravel(), [0.8, 2.2])
+
+
+def test_extract_evaluation_arrays_returns_none_when_missing_keys() -> None:
+    """Extraction returns None when predictions/targets are unavailable."""
+    assert _extract_evaluation_arrays({"predictions": np.array([1.0, 2.0])}) is None
+
+
+def test_resolve_mlflow_logging_config_reads_runtime_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MLflow logging now resolves infra from runtime env only."""
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://mlflow.company.net:5000")
+    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", "/tmp/mlartifacts")
+
+    tracking_uri, artifacts_destination = _resolve_mlflow_logging_config(
+        MagicMock(spec=GeneralSettings)
+    )
+    assert tracking_uri == "http://mlflow.company.net:5000"
+    assert artifacts_destination == "/tmp/mlartifacts"
+
+
+def test_resolve_mlflow_logging_config_handles_missing_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing runtime env returns an empty MLflow infra payload."""
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
+
+    tracking_uri, artifacts_destination = _resolve_mlflow_logging_config(
+        MagicMock(spec=GeneralSettings)
+    )
+    assert tracking_uri is None
+    assert artifacts_destination == ""

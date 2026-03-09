@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from neuralls.workflows.reporting import ExperimentResult
     from neuralls.solver.models.result import CGComparisonResult
+    from neuralls.workflows.results import ComparisonRecommendations
 
 __all__ = [
     "run_experiment_matrix",
@@ -48,7 +49,7 @@ def format_results_summary(*args: Any, **kwargs: Any) -> str:
     return _format(*args, **kwargs)
 
 
-def summarize_best_combinations(*args: Any, **kwargs: Any) -> dict[str, Any]:
+def summarize_best_combinations(*args: Any, **kwargs: Any) -> "ComparisonRecommendations":
     """Summarize best-performing CG combinations."""
     from neuralls.workflows.cg_runner import summarize_best_combinations as _summarize
 

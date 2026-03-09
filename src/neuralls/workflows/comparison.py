@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import mlflow
-import tomli_w
 from loguru import logger
 
 from neuralls.configuration.comparison import ComparisonConfig
@@ -16,6 +15,10 @@ from neuralls.configuration.preconditioner import (
     PreconditionerConfig,
 )
 from neuralls.io.toml_loader import load_comparison_config
+from neuralls.workflows.comparison_artifacts import (
+    coerce_comparison_result_payload,
+    write_comparison_artifacts,
+)
 from neuralls.workflows.comparison_run import (
     ComparisonRun,
     _artifact_uri_to_local_path,
@@ -59,25 +62,6 @@ def _resolve_neural_preconditioners(
     return [_resolve_preconditioner(spec, comparison_run) for spec in solver_specs]
 
 
-def _save_comparison_toml(result: ComparisonResult, output_path: Path) -> None:
-    """Save comparison diagnostics to a TOML file."""
-    data: dict[str, Any] = {
-        "condition_number": result.condition_numbers,
-    }
-
-    iterations: dict[str, int] = {}
-    residuals: dict[str, float] = {}
-    for name, res in result.results.items():
-        iterations[name] = res.iterations
-        residuals[name] = res.residual
-
-    data["iterations"] = iterations
-    data["final_residual"] = residuals
-
-    with open(output_path, "wb") as f:
-        tomli_w.dump(data, f)
-
-
 def _needs_model_resolution(specs: tuple[PreconditionerConfig, ...]) -> bool:
     """Return True when any neural preconditioner needs model_ref lookup."""
     for spec in specs:
@@ -94,9 +78,7 @@ def _resolve_tracking(
 ) -> tuple[str, str, str, dict[str, str]]:
     """Resolve comparison tracking coordinates and run tags."""
     if cfg.general.tracking is None:
-        raise ValueError(
-            "general.tracking is required for comparison runs."
-        )
+        raise ValueError("general.tracking is required for comparison runs.")
     tags: dict[str, str] = {"phase": "comparison"}
     if comparison_run is not None:
         tags["batch_run_id"] = comparison_run.mlflow_run_id
@@ -162,27 +144,28 @@ def run_comparison(
             with tempfile.TemporaryDirectory() as _tmp:
                 work_root = Path(_tmp)
                 resolved_specs = _resolve_specs(cfg, work_root)
-
-                result = compare_preconditioners(
+                raw_result = compare_preconditioners(
                     general_params=cfg.general,
                     preconditioner_configs=resolved_specs,
                     output_root=work_root,
                     save_plots=params.save_plots,
                 )
-
-                toml_path = work_root / "comparison.toml"
-                _save_comparison_toml(result, toml_path)
+                artifact_source = coerce_comparison_result_payload(raw_result)
+                write_comparison_artifacts(
+                    result=artifact_source,
+                    work_root=work_root,
+                    comparison_config=comparison_config,
+                )
                 mlflow.log_artifacts(str(work_root))
 
-            mlflow.log_artifact(str(comparison_config), artifact_path="config")
             mlflow.log_param("comparison_config", comparison_config.stem)
             mlflow.log_param("comp_run_id", comp_run_id)
-            best = (result.recommendations or {}).get("best_overall")
-            if best:
+            best = artifact_source.recommendations.overall_best
+            if best is not None:
                 mlflow.log_metrics(
                     {
-                        "best_iterations": float(best.get("iterations", 0)),
-                        "best_residual": float(best.get("residual", 0)),
+                        "best_iterations": float(best.iterations),
+                        "best_residual": float(best.residual),
                     }
                 )
 
@@ -194,4 +177,5 @@ def run_comparison(
             )
         ]
 
-    return [ComparisonOutcome(name=comparison_config.stem, success=True, payload=result)]
+    payload = raw_result if isinstance(raw_result, ComparisonResult) else None
+    return [ComparisonOutcome(name=comparison_config.stem, success=True, payload=payload)]

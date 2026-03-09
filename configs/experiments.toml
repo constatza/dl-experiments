@@ -6,6 +6,9 @@
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
 
+[mlflow]
+tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
+
 [comparisons]
 tracking_uri      = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
 artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"

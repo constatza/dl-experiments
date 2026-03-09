@@ -258,9 +258,6 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
     # 3. Create Model Config with MLflow ENABLED
     exp_name = "mlflow_experiment"
     output_root = data_dir / "output"
-    mlflow_db = output_root / "mlruns" / "mlflow.db"
-    mlflow_artifacts = output_root / "mlartifacts"
-
     model_config_path = models_dir / f"{exp_name}_model.toml"
     model_config = {
         "SESSION": {
@@ -320,10 +317,6 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
         },
         "MLFLOW": {
             "enabled": True,
-            "server": {
-                "backend_store_uri": f"sqlite:///{mlflow_db.as_posix()}",
-                "artifacts_destination": mlflow_artifacts.as_posix(),
-            },
         },
         "OPTUNA": {"enabled": False},
         "PATHS": {

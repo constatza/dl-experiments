@@ -79,10 +79,6 @@ shuffle = true
 [MLFLOW]
 enabled = true
 
-[MLFLOW.server]
-backend_store_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
-artifacts_destination = "/data/projects/graph-cg/data/output/mlartifacts"
-
 
 [OPTUNA]
 enabled = false
