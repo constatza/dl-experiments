@@ -30,6 +30,8 @@ EXPECTED_STRATEGIES = {
     "constant_forward",
     "constant_inverse",
     "validated_archive",
+    "scaled_solutions",
+    "sparse_rhs",
 }
 
 

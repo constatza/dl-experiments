@@ -14,6 +14,8 @@ from . import (
     neutral_ones,
     uniform_strategies,
     validated_archive,
+    scaled_solutions,
+    sparse_rhs,
 )
 
 __all__ = [
@@ -30,4 +32,6 @@ __all__ = [
     "neutral_ones",
     "uniform_strategies",
     "validated_archive",
+    "scaled_solutions",
+    "sparse_rhs",
 ]

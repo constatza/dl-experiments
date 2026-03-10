@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..constants import (
     DEFAULT_KRYLOV_ITERATIONS,
@@ -305,6 +305,59 @@ class ValidatedArchiveConfig(BaseStrategyConfig):
         True,
         description="Whether to raise error if any pair fails verification.",
     )
+
+
+class ScaledSolutionsConfig(BaseStrategyConfig):
+    """Configuration for ScaledSolutionsStrategy.
+
+    Loads solution vectors from archive, computes b = A @ x, then scales
+    both sides by a fixed scalar: returns (scale * b, scale * x).
+
+    Attributes:
+        solutions_glob: Glob pattern for solution files.
+        scale: Fixed scalar multiplier applied to all (x, b) pairs.
+    """
+
+    solutions_glob: str = Field(..., description="Glob pattern for solution files.")
+    scale: float = Field(
+        5.0,
+        description="Fixed scalar multiplier applied to all (x, b) pairs.",
+        gt=0.0,
+    )
+
+
+class SparseRhsConfig(BaseStrategyConfig):
+    """Configuration for SparseRhsStrategy.
+
+    Generates sparse RHS vectors with nonzero entries at specified indices,
+    then solves x = A^-1 @ b for each system.
+
+    Attributes:
+        indices: Positions of nonzero entries (negative indices supported, e.g. [-1]).
+        values: Values at the specified positions. Must match len(indices).
+        solve_config: Configuration for solving the linear system.
+    """
+
+    indices: list[int] = Field(
+        ..., description="Positions of nonzero entries (negative indices supported)."
+    )
+    values: list[float] = Field(
+        ..., description="Values at the specified positions. Must match len(indices)."
+    )
+    solve_config: SolveConfig = Field(
+        default_factory=lambda: SolveConfig(),  # pyright: ignore[reportCallIssue]
+        description="Configuration for solving linear systems x = A^-1 @ b",
+    )
+
+    @model_validator(mode="after")
+    def _validate_lengths(self) -> SparseRhsConfig:
+        """Validate that indices and values have the same length."""
+        if len(self.indices) != len(self.values):
+            raise ValueError(
+                f"indices and values must have the same length, "
+                f"got {len(self.indices)} indices and {len(self.values)} values"
+            )
+        return self
 
 
 class MixedStrategyConfig(BaseModel):

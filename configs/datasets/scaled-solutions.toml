@@ -1,0 +1,23 @@
+# Scaled solutions dataset: existing (A, b, x) pairs multiplied by a fixed scalar.
+# Identity preserved: A @ (scale * x) = scale * b
+# Useful for testing preconditioner generalization across different RHS magnitudes.
+#
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/scaled-solutions.toml
+# Output: scaled-solutions-{normalization}/
+
+[source]
+matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "scaled_solutions"
+samples = -1
+scale = 5.0
+solutions_glob = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[output]
+data_dir = "/data/projects/graph-cg/processed"
