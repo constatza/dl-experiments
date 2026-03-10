@@ -16,7 +16,11 @@ from neuralls.configuration.domain import (
     ExperimentSpec,
     RunnableExperiment,
 )
-from neuralls.configuration.experiments import ExperimentsConfig
+from neuralls.configuration.experiments import ExperimentsConfig, resolve_display_name
+from neuralls.configuration.master_registry import (
+    list_experiment_bindings,
+    load_validated_master_config,
+)
 from neuralls.configuration.paths import build_path_context
 from neuralls.configuration.services import WorkspaceFactory
 from neuralls.configuration.settings import build_inference_settings, build_settings
@@ -53,8 +57,8 @@ def _load_experiments_config(
     """Load experiments topology when provided."""
     if experiments_config_path is None:
         return None
-    raw = load_raw_toml(Path(experiments_config_path))
-    return ExperimentsConfig.model_validate(raw)
+    cfg, _ = load_validated_master_config(Path(experiments_config_path))
+    return cfg
 
 
 def _resolve_output_override(
@@ -111,6 +115,12 @@ def load_experiment(
     output_root: Path | None = None,
     mode: str = "training",
     experiments_config_path: Path | None = None,
+    experiment_id: str | None = None,
+    experiment_display_name: str | None = None,
+    dataset_registry_id: str | None = None,
+    dataset_display_name: str | None = None,
+    model_registry_id: str | None = None,
+    model_display_name: str | None = None,
 ) -> RunnableExperiment:
     """Load a single experiment configuration.
 
@@ -173,7 +183,11 @@ def load_experiment(
         model_cfg = load_model_config(model_config_path)
 
     # 3. Extract identifiers
-    dataset_id = data_config_path.stem
+    if dataset_registry_id is None:
+        raise ValueError(
+            "dataset_registry_id is required. Pass it from experiments.toml via load_batch()."
+        )
+    dataset_id = dataset_registry_id
     session = getattr(model_cfg, "SESSION", None)
     session_name = getattr(session, "name", None)
     # Treat dlkit's default "dlkit-session" as unset, prefer MODEL.name for clarity
@@ -195,8 +209,18 @@ def load_experiment(
     workspace_run_id = base_name
 
     # 4. Build experiment spec (use base_name for logical ID)
+    resolved_experiment_id = experiment_id or base_name
+    resolved_experiment_display_name = resolve_display_name(
+        resolved_experiment_id,
+        experiment_display_name,
+    )
     spec = ExperimentSpec(
-        id=base_name,
+        experiment_id=resolved_experiment_id,
+        experiment_display_name=resolved_experiment_display_name,
+        dataset_registry_id=dataset_registry_id,
+        dataset_display_name=dataset_display_name,
+        model_registry_id=model_registry_id,
+        model_display_name=model_display_name,
         model_config_path=model_config_path,
         data_config_path=data_config_path,
     )
@@ -243,8 +267,8 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
 
     Supports format with [[experiment]] entries containing:
     - id: Experiment identifier
-    - dataset: Dataset ID (references configs/datasets/{dataset}.toml)
-    - model: Model ID (references configs/models/{model}.toml)
+    - dataset: Dataset registry id (references configs/datasets/{dataset}.toml)
+    - model: Model registry id (references configs/models/{model}.toml)
     - checkpoint_path: Optional explicit checkpoint path
 
     Args:
@@ -260,48 +284,33 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
     if not master_config_path.exists():
         raise FileNotFoundError(f"Master config not found: {master_config_path}")
 
-    config_dir = master_config_path.parent
-    master_config = load_raw_toml(master_config_path)
+    cfg, config_dir = load_validated_master_config(master_config_path)
 
     # Resolve global output root
-    output_root_str = master_config.get("output_dir")
-    output_root = Path(output_root_str) if output_root_str else None
-
-    # Load experiment entries
-    experiments_list = master_config.get("experiment", [])
-    if not experiments_list:
+    output_root = cfg.output_dir
+    bindings = list_experiment_bindings(cfg, config_dir)
+    if not bindings:
         raise ValueError(
-            "No experiments defined. Expected [[experiment]] entries with "
+            "No experiments defined. Expected [[experiments]] entries with "
             "id, dataset, model fields."
         )
 
     resolved_experiments = []
 
-    for exp_entry in experiments_list:
-        # Extract experiment definition
-        exp_id = exp_entry.get("id")
-        dataset_id = exp_entry.get("dataset")
-        model_id = exp_entry.get("model")
-        checkpoint_path_str = exp_entry.get("checkpoint_path")
-
-        if not all([exp_id, dataset_id, model_id]):
-            raise ValueError(
-                f"Experiment entry missing required fields. Got: {exp_entry}. "
-                "Required: id, dataset, model."
-            )
-
-        # Resolve config paths
-        data_path = (config_dir / "datasets" / f"{dataset_id}.toml").resolve()
-        model_path = (config_dir / "models" / f"{model_id}.toml").resolve()
+    for binding in bindings:
+        experiment_id = binding.experiment_id
+        data_path = binding.data_config_path
+        model_path = binding.model_config_path
+        checkpoint_path = binding.checkpoint_path
 
         # Validate paths exist
         if not data_path.exists():
             raise FileNotFoundError(
-                f"Experiment '{exp_id}': Dataset config not found: {data_path}"
+                f"Experiment '{experiment_id}': Dataset config not found: {data_path}"
             )
         if not model_path.exists():
             raise FileNotFoundError(
-                f"Experiment '{exp_id}': Model config not found: {model_path}"
+                f"Experiment '{experiment_id}': Model config not found: {model_path}"
             )
 
         # Load experiment using main entry point
@@ -309,19 +318,27 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
             model_path,
             data_path,
             output_root=output_root,
+            experiment_id=experiment_id,
+            experiment_display_name=binding.experiment_display_name,
+            dataset_registry_id=binding.dataset_registry_id,
+            dataset_display_name=binding.dataset_display_name,
+            model_registry_id=binding.model_registry_id,
+            model_display_name=binding.model_display_name,
         )
 
-        # Optionally override checkpoint path
-        if checkpoint_path_str:
-            checkpoint_path = Path(checkpoint_path_str).resolve()
+        if checkpoint_path is not None:
             if not checkpoint_path.exists():
                 logger.warning(
-                    f"Experiment '{exp_id}': Checkpoint not found: {checkpoint_path}"
+                    f"Experiment '{experiment_id}': Checkpoint not found: {checkpoint_path}"
                 )
-            # Update spec with explicit checkpoint
             experiment = RunnableExperiment(
                 spec=ExperimentSpec(
-                    id=experiment.spec.id,
+                    experiment_id=experiment.spec.experiment_id,
+                    experiment_display_name=experiment.spec.experiment_display_name,
+                    dataset_registry_id=experiment.spec.dataset_registry_id,
+                    dataset_display_name=experiment.spec.dataset_display_name,
+                    model_registry_id=experiment.spec.model_registry_id,
+                    model_display_name=experiment.spec.model_display_name,
                     model_config_path=experiment.spec.model_config_path,
                     data_config_path=experiment.spec.data_config_path,
                     checkpoint_path=checkpoint_path,

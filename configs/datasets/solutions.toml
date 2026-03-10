@@ -2,10 +2,9 @@
 # Uses 45x15-displacements UaVectors with pure collection - no synthetic generation
 # Pure solution-to-RHS mapping: b = A @ x for each solution vector
 #
-# Usage: uv run python src/neuralls/cli/process_data.py data-configs/solutions.toml
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/solutions.toml
 # Output: solutions-{normalization}/
 
-id = "solutions"
 
 [source]
 matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"

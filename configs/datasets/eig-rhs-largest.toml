@@ -5,7 +5,6 @@
 # Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/eigenvector-rhs-largest.toml
 # Output: eigenvector-rhs-largest-{normalization}/
 
-id = "eigenvector-rhs-largest"
 
 [source]
 matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"

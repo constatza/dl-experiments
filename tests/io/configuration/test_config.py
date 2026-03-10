@@ -69,11 +69,12 @@ def test_load_experiment_success(temp_config_structure: Path, monkeypatch: pytes
         model_config_path=model_path,
         data_config_path=data_path,
         output_root=temp_config_structure / "output",
+        dataset_registry_id=data_path.stem,
     )
 
     assert isinstance(experiment, RunnableExperiment)
     assert isinstance(experiment.workspace, ExperimentWorkspace)
-    assert experiment.spec.id == "exp1_model"
+    assert experiment.spec.experiment_id == "exp1_model"
     assert experiment.spec.model_config_path == model_path
     assert experiment.spec.data_config_path == data_path
 

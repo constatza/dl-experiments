@@ -1,7 +1,4 @@
-# Master configuration file for all FFNN experiments.
-# Format: [[experiment]] entries with dataset + model refs.
-# Checkpoint paths are no longer stored here — they are resolved
-# via ComparisonRun produced by train-multiple.
+# Master registry for all FFNN experiments.
 
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
@@ -9,31 +6,58 @@ output_dir = "/data/projects/graph-cg/data/output"
 [mlflow]
 tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
 
-[comparisons]
-tracking_uri      = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
-artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
+[names]
+comparison = "Comparisons"
 
-[[experiment]]
+[[datasets]]
+id = "solutions"
+path = "datasets/solutions.toml"
+
+[[datasets]]
+id = "eigenvector-solutions-largest"
+path = "datasets/eigenvector-solutions-largest.toml"
+
+[[datasets]]
+id = "eigenvector-solutions-smallest"
+path = "datasets/eigenvector-solutions-smallest.toml"
+
+[[datasets]]
+id = "eigenvector-rhs-largest"
+path = "datasets/eigenvector-rhs-largest.toml"
+
+[[datasets]]
+id = "eigenvector-rhs-smallest"
+path = "datasets/eigenvector-rhs-smallest.toml"
+
+[[models]]
+id = "ffnn"
+path = "models/ffnn.toml"
+
+[[comparisons]]
+id = "ffnn"
+path = "comparison/ffnn.toml"
+
+[[experiments]]
 id = "ffnn_test_solutions"
 dataset = "solutions"
 model = "ffnn"
 
-[[experiment]]
+[[experiments]]
 id = "ffnn_test_eigenvector_solutions_largest"
 dataset = "eigenvector-solutions-largest"
 model = "ffnn"
 
-[[experiment]]
+[[experiments]]
 id = "ffnn_test_eigenvector_solutions_smallest"
 dataset = "eigenvector-solutions-smallest"
 model = "ffnn"
 
-[[experiment]]
+[[experiments]]
 id = "ffnn_test_eigenvector_rhs_largest"
 dataset = "eigenvector-rhs-largest"
 model = "ffnn"
 
-[[experiment]]
+[[experiments]]
 id = "ffnn_test_eigenvector_rhs_smallest"
 dataset = "eigenvector-rhs-smallest"
 model = "ffnn"

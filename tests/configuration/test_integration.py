@@ -47,12 +47,13 @@ enabled = true
 def sample_data_config(tmp_path: Path) -> Path:
     """Create a minimal data config TOML."""
     config_path = tmp_path / "data.toml"
-    config_content = """
+    matrix_path = tmp_path / "test_matrix.txt"
+    config_content = f"""
 [flow]
 dataset = "test-data"
 
 [source]
-matrix_path = "/tmp/test_matrix.txt"
+matrix_path = "{matrix_path}"
 
 [generation]
 normalize = "matrix"
@@ -162,6 +163,7 @@ class TestLoadExperiment:
             model_config_path=sample_model_config,
             data_config_path=sample_data_config,
             output_root=output_root,
+            dataset_registry_id=sample_data_config.stem,
         )
 
         # Check types
@@ -180,9 +182,10 @@ class TestLoadExperiment:
             sample_model_config,
             sample_data_config,
             output_root=tmp_path,
+            dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.spec.id == "test-model"  # From SESSION.name
+        assert experiment.spec.experiment_id == "test-model"  # From SESSION.name
         assert experiment.spec.model_config_path == sample_model_config
         assert experiment.spec.data_config_path == sample_data_config
         assert experiment.spec.checkpoint_path is None
@@ -201,6 +204,7 @@ class TestLoadExperiment:
             sample_model_config,
             sample_data_config,
             output_root=output_root,
+            dataset_registry_id=sample_data_config.stem,
         )
 
         # Check identifiers
@@ -230,6 +234,7 @@ class TestLoadExperiment:
             sample_model_config,
             sample_data_config,
             output_root=output_root,
+            dataset_registry_id=sample_data_config.stem,
         )
 
         # Check workspace paths injected
@@ -250,6 +255,7 @@ class TestLoadExperiment:
         experiment = load_experiment(
             sample_model_config,
             sample_data_config,
+            dataset_registry_id=sample_data_config.stem,
         )
 
         # Should use DEFAULT_OUTPUT_DIR from constants
@@ -285,9 +291,10 @@ enabled = true
             model_config,
             sample_data_config,
             output_root=tmp_path,
+            dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.spec.id == "OnlyModelName"
+        assert experiment.spec.experiment_id == "OnlyModelName"
         assert experiment.workspace.run_id == "OnlyModelName"
 
     def test_load_missing_session_name_uses_model_name(
@@ -318,10 +325,11 @@ enabled = true
             model_config,
             sample_data_config,
             output_root=tmp_path,
+            dataset_registry_id=sample_data_config.stem,
         )
 
         # Should use MODEL.name when SESSION.name is missing
-        assert experiment.spec.id == "JustModelName"
+        assert experiment.spec.experiment_id == "JustModelName"
 
     def test_path_context_single_source_of_truth(
         self,
@@ -337,6 +345,7 @@ enabled = true
             sample_model_config,
             sample_data_config,
             output_root=output_root,
+            dataset_registry_id=sample_data_config.stem,
         )
 
         assert experiment.settings.PATHS.output_dir == str(output_root)
@@ -349,25 +358,26 @@ enabled = true
     ):
         """Test that different datasets create different paths."""
         # Create two different data configs
+        matrix_path = tmp_path / "test.txt"
         data_config_1 = tmp_path / "data1.toml"
-        data_config_1.write_text("""
+        data_config_1.write_text(f"""
 [flow]
 dataset = "dataset-1"
 
 [source]
-matrix_path = "/tmp/test.txt"
+matrix_path = "{matrix_path}"
 
 [generation]
 normalize = "matrix"
 """)
 
         data_config_2 = tmp_path / "data2.toml"
-        data_config_2.write_text("""
+        data_config_2.write_text(f"""
 [flow]
 dataset = "dataset-2"
 
 [source]
-matrix_path = "/tmp/test.txt"
+matrix_path = "{matrix_path}"
 
 [generation]
 normalize = "matrix"
@@ -376,8 +386,8 @@ normalize = "matrix"
         output_root = tmp_path / "output"
         output_root.mkdir()
 
-        exp1 = load_experiment(sample_model_config, data_config_1, output_root)
-        exp2 = load_experiment(sample_model_config, data_config_2, output_root)
+        exp1 = load_experiment(sample_model_config, data_config_1, output_root, dataset_registry_id=data_config_1.stem)
+        exp2 = load_experiment(sample_model_config, data_config_2, output_root, dataset_registry_id=data_config_2.stem)
 
         # Different data directories
         assert exp1.workspace.data_dir != exp2.workspace.data_dir

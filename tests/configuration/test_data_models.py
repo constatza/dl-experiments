@@ -35,12 +35,12 @@ class TestSourceConfig:
         """Test SourceConfig with custom values."""
         config = SourceConfig(
             type="solution_archive",
-            matrix_path="/path/to/matrix.txt",
-            solutions_path="/path/to/solutions/*.txt",
+            matrix_path="tests/fixtures/data/matrix.txt",
+            solutions_path="tests/fixtures/data/solutions/*.txt",
         )
         assert config.type == "solution_archive"
-        assert config.matrix_path == "/path/to/matrix.txt"
-        assert config.solutions_path == "/path/to/solutions/*.txt"
+        assert config.matrix_path == "tests/fixtures/data/matrix.txt"
+        assert config.solutions_path == "tests/fixtures/data/solutions/*.txt"
 
 
 class TestStrategyConfig:
@@ -58,12 +58,12 @@ class TestStrategyConfig:
             name="cg_residual_error",
             samples=10000,
             residual_iters=50,
-            solutions_glob="/path/to/solutions/*.txt",
+            solutions_glob="tests/fixtures/data/solutions/*.txt",
         )
         assert config.name == "cg_residual_error"
         assert config.samples == 10000
         assert config.residual_iters == 50
-        assert config.solutions_glob == "/path/to/solutions/*.txt"
+        assert config.solutions_glob == "tests/fixtures/data/solutions/*.txt"
 
     def test_strategy_config_validation(self):
         """Test StrategyConfig field validation."""
@@ -118,11 +118,11 @@ class TestDataTestConfig:
     def test_test_config_with_values(self):
         """Test DataTestConfig with custom values."""
         config = DataTestConfig(
-            solutions_path="/path/to/test/solutions.txt",
-            rhs_path="/path/to/test/rhs.txt",
+            solutions_path="tests/fixtures/data/test_solutions.txt",
+            rhs_path="tests/fixtures/data/test_rhs.txt",
         )
-        assert config.solutions_path == "/path/to/test/solutions.txt"
-        assert config.rhs_path == "/path/to/test/rhs.txt"
+        assert config.solutions_path == "tests/fixtures/data/test_solutions.txt"
+        assert config.rhs_path == "tests/fixtures/data/test_rhs.txt"
 
 
 class TestDataConfigFile:
@@ -131,7 +131,7 @@ class TestDataConfigFile:
     def test_data_config_file_minimal(self):
         """Test DataConfigFile with minimal fields (all defaults)."""
         config = DataConfigFile()
-        assert config.flow.id is None
+        assert config.flow.dataset is None
         assert config.source.matrix_path is None
         assert config.generation.normalize == "matrix"
         assert config.output.data_dir is None
@@ -140,11 +140,11 @@ class TestDataConfigFile:
     def test_data_config_file_full(self):
         """Test DataConfigFile with all sections."""
         config = DataConfigFile(
-            flow=FlowConfig(id="test_flow", dataset="test_dataset"),
+            flow=FlowConfig(dataset="test_dataset"),
             source=SourceConfig(
                 type="solution_archive",
-                matrix_path="/path/to/matrix.txt",
-                solutions_path="/path/to/solutions/*.txt",
+                matrix_path="tests/fixtures/data/matrix.txt",
+                solutions_path="tests/fixtures/data/solutions/*.txt",
             ),
             generation=GenerationConfig(
                 normalize="matrix",
@@ -156,14 +156,14 @@ class TestDataConfigFile:
                     )
                 ],
             ),
-            output=OutputConfig(data_dir="/data/processed"),
-            test=DataTestConfig(solutions_path="/data/test/solutions.txt"),
+            output=OutputConfig(data_dir="tests/fixtures/data/processed"),
+            test=DataTestConfig(solutions_path="tests/fixtures/data/test_solutions.txt"),
         )
-        assert config.flow.id == "test_flow"
+        assert config.flow.dataset == "test_dataset"
         assert config.source.type == "solution_archive"
         assert config.generation.strategy[0].name == "solution_archive"
-        assert config.output.data_dir == Path("/data/processed")
-        assert config.test.solutions_path == "/data/test/solutions.txt"
+        assert config.output.data_dir == Path("tests/fixtures/data/processed")
+        assert config.test.solutions_path == "tests/fixtures/data/test_solutions.txt"
 
     def test_data_config_file_immutable(self):
         """Test that DataConfigFile is frozen."""
@@ -171,8 +171,7 @@ class TestDataConfigFile:
         with pytest.raises((ValidationError, AttributeError)):
             config.generation.seed = 999  # type: ignore
 
-    def test_data_config_file_allows_extra_fields(self):
-        """Test DataConfigFile allows extra fields for extensibility."""
-        config = DataConfigFile(custom_field="custom_value")  # type: ignore
-        # Should not raise ValidationError
-        assert config.flow.id is None  # Defaults still work
+    def test_data_config_file_forbids_extra_fields(self):
+        """Test DataConfigFile rejects unknown extra fields."""
+        with pytest.raises(ValidationError):
+            DataConfigFile(custom_field="custom_value")  # type: ignore

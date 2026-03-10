@@ -19,10 +19,6 @@ class FlowConfig(BaseModel):
     Usually empty but kept for future extensibility.
     """
 
-    id: str | None = Field(
-        default=None,
-        description="Flow identifier",
-    )
     dataset: str | None = Field(
         default=None,
         description="Dataset name or identifier",
@@ -215,6 +211,4 @@ class DataConfigFile(BaseModel):
         description="Test data configuration",
     )
 
-    model_config = ConfigDict(
-        extra="allow", frozen=True
-    )  # Allow additional sections for future extension
+    model_config = ConfigDict(extra="forbid", frozen=True)

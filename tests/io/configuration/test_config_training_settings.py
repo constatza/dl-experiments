@@ -109,6 +109,7 @@ def test_training_sections_round_trip(
         config_path,
         data_config_path=data_path,
         output_root=tmp_path / "output",
+        dataset_registry_id=data_path.stem,
     )
     settings = experiment.settings
     training = settings.TRAINING

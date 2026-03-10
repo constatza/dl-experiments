@@ -156,6 +156,7 @@ class TestTrainingPipelineWithMLflow:
             model_config_path,
             data_config_path,
             output_root=output_root,
+            dataset_registry_id=data_config_path.stem,
         )
 
         # VERIFICATION: Experiment configuration
@@ -240,6 +241,7 @@ class TestTrainingPipelineWithMLflow:
             model_config_path,
             data_config_path,
             output_root=output_root,
+            dataset_registry_id=data_config_path.stem,
         )
 
         # Verify hierarchical structure is set up
@@ -308,9 +310,11 @@ class TestTrainingPipelineWithMLflow:
             },
             "names": {
                 "training": "neuralls-training",
-                "comparison": "neuralls-comparisons",
+                "comparison": "Comparisons",
             },
-            "experiment": [
+            "datasets": [{"id": "injection_test", "path": "datasets/injection_test.toml"}],
+            "models": [{"id": "injection_model", "path": "models/injection_model.toml"}],
+            "experiments": [
                 {
                     "id": "ignored",
                     "dataset": "injection_test",
@@ -325,6 +329,7 @@ class TestTrainingPipelineWithMLflow:
             model_config_path,
             data_config_path,
             experiments_config_path=experiments_config_path,
+            dataset_registry_id=data_config_path.stem,
         )
 
         assert experiment.settings.MLFLOW.enabled is True

@@ -31,7 +31,6 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
         tomli_w.dump(model_config, fh)
 
     data_config = {
-        "id": "system-injected-data",
         "source": {},
         "generation": {},
         "output": {"data_dir": str(tmp_path / "processed/system-injected-data")},
@@ -45,7 +44,7 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
         },
         "names": {
             "training": "neuralls-training",
-            "comparison": "neuralls-comparisons",
+            "comparison": "Comparisons",
         },
     }
     with open(experiments_path, "wb") as fh:
@@ -55,6 +54,7 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
         model_config_path=model_path,
         data_config_path=data_path,
         experiments_config_path=experiments_path,
+        dataset_registry_id=data_path.stem,
     )
 
     assert experiment.settings.MLFLOW.enabled is True

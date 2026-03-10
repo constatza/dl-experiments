@@ -49,14 +49,31 @@ def normalize_registry_alias(alias: str) -> str:
     return normalized
 
 
-def _require_dataset_name(configured_dataset: str | None) -> str:
-    """Require explicit dataset name from top-level id."""
-    if configured_dataset is None:
-        raise ValueError(
-            "Missing required top-level 'id' in data config. "
-            "Dataset name must be explicitly defined."
-        )
-    return configured_dataset
+def _read_legacy_dataset_name(value: Any) -> str | None:
+    """Read a legacy [dataset].name fallback when present."""
+    if not isinstance(value, Mapping):
+        return None
+    return _coerce_non_empty_str(value.get("name"))
+
+
+def _require_dataset_name(
+    configured_dataset: str | None,
+    *,
+    config_path: Path | str | None,
+    legacy_dataset: Any = None,
+) -> str:
+    """Resolve dataset identity from top-level id, legacy section, or filename."""
+    if configured_dataset is not None:
+        return configured_dataset
+    legacy_name = _read_legacy_dataset_name(legacy_dataset)
+    if legacy_name is not None:
+        return legacy_name
+    if config_path is not None:
+        return Path(config_path).stem
+    raise ValueError(
+        "Missing required top-level 'id' in data config. "
+        "Dataset name must be explicitly defined."
+    )
 
 
 def resolve_dataset_identity(
@@ -65,9 +82,12 @@ def resolve_dataset_identity(
     config_path: Path | str | None = None,
 ) -> DatasetIdentity:
     """Resolve dataset identity from validated data config + config path."""
-    _ = config_path
-    configured = _coerce_non_empty_str(data_cfg.id)
-    dataset_name = _require_dataset_name(configured)
+    configured = _coerce_non_empty_str(getattr(data_cfg, "id", None))
+    dataset_name = _require_dataset_name(
+        configured,
+        config_path=config_path,
+        legacy_dataset=getattr(data_cfg, "dataset", None),
+    )
     return DatasetIdentity(
         name=dataset_name,
         registry_alias=normalize_registry_alias(dataset_name),
@@ -80,10 +100,13 @@ def resolve_dataset_identity_from_mapping(
     config: Mapping[str, Any],
     config_path: Path | str | None = None,
 ) -> DatasetIdentity:
-    """Resolve dataset identity from raw config mapping + config path."""
+    """Resolve dataset identity from a raw config mapping.
+
+    Raw mappings stay strict: callers must provide an explicit top-level ``id``.
+    """
     _ = config_path
     configured = _coerce_non_empty_str(config.get("id"))
-    dataset_name = _require_dataset_name(configured)
+    dataset_name = _require_dataset_name(configured, config_path=None)
     return DatasetIdentity(
         name=dataset_name,
         registry_alias=normalize_registry_alias(dataset_name),

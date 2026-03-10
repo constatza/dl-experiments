@@ -93,12 +93,13 @@ enabled = false
 def sample_data_config(tmp_path: Path) -> Path:
     """Create a minimal data config TOML."""
     config_path = tmp_path / "test-dataset.toml"
-    config_content = """
+    matrix_path = tmp_path / "test_matrix.txt"
+    config_content = f"""
 [flow]
 dataset = "test-data"
 
 [source]
-matrix_path = "/tmp/test_matrix.txt"
+matrix_path = "{matrix_path}"
 
 [generation]
 normalize = "matrix"
@@ -121,6 +122,7 @@ class TestRunNaming:
             model_config_without_session,
             sample_data_config,
             output_root=tmp_path / "output",
+            dataset_registry_id=sample_data_config.stem,
         )
 
         assert experiment.workspace.run_id == "NormScaledLinearFFNN"
@@ -136,6 +138,7 @@ class TestRunNaming:
             model_config_with_session,
             sample_data_config,
             output_root=tmp_path / "output",
+            dataset_registry_id=sample_data_config.stem,
         )
 
         assert experiment.workspace.run_id == "MyCustomSession"
@@ -151,6 +154,7 @@ class TestRunNaming:
             model_config_with_dlkit_default_session,
             sample_data_config,
             output_root=tmp_path / "output",
+            dataset_registry_id=sample_data_config.stem,
         )
 
         assert experiment.workspace.run_id == "GNNModel"
@@ -166,11 +170,13 @@ class TestRunNaming:
             model_config_without_session,
             sample_data_config,
             output_root=tmp_path / "output1",
+            dataset_registry_id=sample_data_config.stem,
         )
         exp2 = load_experiment(
             model_config_without_session,
             sample_data_config,
             output_root=tmp_path / "output2",
+            dataset_registry_id=sample_data_config.stem,
         )
 
         assert exp1.workspace.run_id == exp2.workspace.run_id == "NormScaledLinearFFNN"
@@ -186,11 +192,12 @@ class TestRunNaming:
             model_config_without_session,
             sample_data_config,
             output_root=tmp_path / "output",
+            dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.spec.id == "NormScaledLinearFFNN"
+        assert experiment.spec.experiment_id == "NormScaledLinearFFNN"
         assert experiment.workspace.run_id == "NormScaledLinearFFNN"
-        assert experiment.spec.id == experiment.workspace.run_id
+        assert experiment.spec.experiment_id == experiment.workspace.run_id
 
     def test_workspace_directories_use_run_id(
         self,
@@ -205,6 +212,7 @@ class TestRunNaming:
             model_config_without_session,
             sample_data_config,
             output_root=output_root,
+            dataset_registry_id=sample_data_config.stem,
         )
 
         run_id = experiment.workspace.run_id
@@ -250,6 +258,7 @@ enabled = false
                 bad_config,
                 sample_data_config,
                 output_root=tmp_path / "output",
+                dataset_registry_id=sample_data_config.stem,
             )
 
     def test_run_id_handles_special_characters_in_model_name(
@@ -284,6 +293,7 @@ enabled = false
             special_config,
             sample_data_config,
             output_root=tmp_path / "output",
+            dataset_registry_id=sample_data_config.stem,
         )
 
         assert experiment.workspace.run_id == "Model_release-alpha"

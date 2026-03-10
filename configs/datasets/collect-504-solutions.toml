@@ -13,6 +13,7 @@
 # Training pairs: (r_k, e_k) where r_k is input, e_k is target
 # Network learns: e_k ≈ A^-1 @ r_k (preconditioner application)
 
+
 [flow]
 
 [source]
@@ -25,9 +26,9 @@ seed = 42
 
 [[generation.strategy]]
 name = "cg_residual_error"
-samples = 200            # Base systems (solution files to load)
-                         # Total pairs = 200 × 50 = 10000
+samples = 200            # Desired trace-row budget
 cg_iters = 50            # CG iterations per base system
+                         # rows_per_system = 51, so integer-division sizing may ignore remainders
 solutions_glob = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 #[[generation.strategy]]
@@ -38,4 +39,3 @@ solutions_glob = "/data/projects/graph-cg/data/raw/SpectralData/45x15-displaceme
 
 [output]
 data_dir = "/data/projects/graph-cg/processed"
-

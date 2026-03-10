@@ -1,39 +1,107 @@
-# Master configuration file for all experiments.
-# Format: [[experiment]] entries with dataset + model refs.
-# Checkpoint paths are no longer stored here — they are resolved
-# via ComparisonRun produced by train-multiple.
+# Master registry for datasets, models, comparisons, and experiments.
 
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
 
 [mlflow]
-tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
+tracking_uri = "http://127.0.0.1:5000"
 
-[comparisons]
-tracking_uri      = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
-artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
+[names]
+comparison = "Comparisons"
 
-[[experiment]]
-id = "linear_test_solutions"
+# -------
+# Datasets
+# -------
+
+[[datasets]]
+id = "solutions"
+path = "datasets/solutions.toml"
+display_name = "Solutions"
+
+[[datasets]]
+id = "residuals-100"
+path = "datasets/residuals-100.toml"
+display_name = "Solutions Residual 100"
+
+[[datasets]]
+id = "eig-rhs-largest"
+path = "datasets/eig-rhs-largest.toml"
+display_name = "Eig RHS Largest"
+
+[[datasets]]
+id = "eig-rhs-smallest"
+path = "datasets/eig-rhs-smallest.toml"
+display_name = "Eig RHS Smallest"
+
+[[datasets]]
+id = "eig-solutions-smallest"
+path = "datasets/eig-solutions-smallest.toml"
+display_name = "Eig Solutions Smallest"
+
+[[datasets]]
+id = "eig-solutions-largest"
+path = "datasets/eig-solutions-largest.toml"
+display_name = "Eig Solutions Largest"
+
+[[datasets]]
+id = "gaussian"
+path = "datasets/gaussian-rhs.toml"
+display_name = "gaussian-rhs"
+
+# ------
+# Models
+# ------
+
+[[models]]
+id = "linear"
+path = "models/linear.toml"
+display_name = "NormScaledLinearFFNN"
+
+[[models]]
+id = "linear-l2"
+path = "models/linear-l2.toml"
+display_name = "NormScaledLinearFFNN L2"
+
+# -----------
+# Experiments
+# -----------
+
+[[experiments]]
+id = "solutions"
 dataset = "solutions"
-model = "linear"
+model = "linear-l2"
+display_name = "Solutions"
 
-[[experiment]]
-id = "linear_test_eigenvector_solutions_largest"
-dataset = "eigenvector-solutions-largest"
-model = "linear"
+# [[experiments]]
+# id = "eig-rhs-largest"
+# dataset = "eig-rhs-largest"
+# model = "linear"
+# display_name = "Eig RHS Largest"
 
-[[experiment]]
-id = "linear_test_eigenvector_solutions_smallest"
-dataset = "eigenvector-solutions-smallest"
-model = "linear"
+# [[experiments]]
+# id = "eig-rhs-smallest"
+# dataset = "eig-rhs-smallest"
+# model = "linear"
+# display_name = "Eig RHS Smallest"
 
-[[experiment]]
-id = "linear_test_eigenvector_rhs_largest"
-dataset = "eigenvector-rhs-largest"
+[[experiments]]
+id = "eig-solutions-largest"
+dataset = "eig-solutions-largest"
 model = "linear"
+display_name = "Eig Sol Largest"
 
-[[experiment]]
-id = "linear_test_eigenvector_rhs_smallest"
-dataset = "eigenvector-rhs-smallest"
-model = "linear"
+# [[experiments]]
+# id = "residuals"
+# dataset = "residuals-100"
+# model = "linear"
+# display_name = "Residuals"
+
+
+# -----------
+# Comparisons
+# -----------
+
+[[comparisons]]
+id = "linear"
+path = "comparison/linear.toml"
+display_name = "Linear Comparison"

@@ -25,13 +25,16 @@ class TestLoadDataConfig:
     def test_load_valid_data_config(self, tmp_path: Path):
         """Test loading a valid data config."""
         config_file = tmp_path / "data.toml"
+        matrix_path = tmp_path / "matrix.txt"
+        processed_dir = tmp_path / "processed"
+        solutions_path = tmp_path / "test" / "solutions.txt"
         config_file.write_text(
-            """
+            f"""
 [flow]
-id = "test_flow"
+dataset = "test_dataset"
 
 [source]
-matrix_path = "/path/to/matrix.txt"
+matrix_path = "{matrix_path}"
 
 [generation]
 normalize = "matrix"
@@ -43,21 +46,21 @@ name = "solution_archive"
 samples = 1000
 
 [output]
-data_dir = "/data/processed"
+data_dir = "{processed_dir}"
 
 [test]
-solutions_path = "/data/test/solutions.txt"
+solutions_path = "{solutions_path}"
 """
         )
 
         config = load_data_config(config_file)
-        assert config.flow.id == "test_flow"
-        assert config.source.matrix_path == "/path/to/matrix.txt"
+        assert config.flow.dataset == "test_dataset"
+        assert config.source.matrix_path == str(matrix_path)
         assert config.generation.normalize == "matrix"
         assert len(config.generation.strategy) == 1
         assert config.generation.strategy[0].name == "solution_archive"
-        assert config.output.data_dir == Path("/data/processed")
-        assert config.test.solutions_path == "/data/test/solutions.txt"
+        assert config.output.data_dir == processed_dir
+        assert config.test.solutions_path == str(solutions_path)
 
     def test_load_data_config_with_defaults(self, tmp_path: Path):
         """Test loading data config with mostly defaults."""
@@ -104,8 +107,6 @@ class TestLoadComparisonConfig:
         config_file = tmp_path / "comparison.toml"
         config_file.write_text(
             f"""
-schema_version = 3
-
 [general]
 
 [general.params]
@@ -118,13 +119,6 @@ matrix_path = "{tmp_path / "matrix.npy"}"
 rhs_path = "{tmp_path / "rhs.npy"}"
 normalize_system = "matrix"
 
-[general.tracking]
-tracking_uri = "sqlite:///{(tmp_path / "comparisons.db").as_posix()}"
-artifact_location = "{(tmp_path / "mlartifacts").as_posix()}"
-
-[general.model_store]
-tracking_uri = "sqlite:///{(tmp_path / "models.db").as_posix()}"
-
 [[preconditioners]]
 name = "test_solver"
 type = "jacobi"
@@ -132,7 +126,6 @@ type = "jacobi"
         )
 
         config = load_comparison_config(config_file)
-        assert config.schema_version == 3
         assert config.general.params.rtol == 1e-6
         assert config.general.params.atol == 1e-12
         assert len(config.preconditioners) == 1
@@ -156,13 +149,11 @@ type = "none"
         with pytest.raises(ValidationError):
             load_comparison_config(config_file)
 
-    def test_neural_model_ref_requires_model_store(self, tmp_path: Path) -> None:
-        """Neural model_ref configs must define general.model_store."""
+    def test_neural_model_ref_loads_without_embedded_model_store(self, tmp_path: Path) -> None:
+        """Neural model_ref configs no longer embed MLflow topology."""
         config_file = tmp_path / "comparison.toml"
         config_file.write_text(
             f"""
-schema_version = 3
-
 [general]
 
 [general.params]
@@ -173,10 +164,6 @@ max_iterations = 100
 [general.data]
 matrix_path = "{tmp_path / "matrix.npy"}"
 rhs_path = "{tmp_path / "rhs.npy"}"
-
-[general.tracking]
-tracking_uri = "sqlite:///{(tmp_path / "comparisons.db").as_posix()}"
-artifact_location = "{(tmp_path / "mlartifacts").as_posix()}"
 
 [[preconditioners]]
 name = "neural"
@@ -184,16 +171,14 @@ type = "neural"
 model_ref = {{ source = "registered", name = "NormScaledLinearFFNN", alias = "solutions" }}
 """
         )
-        with pytest.raises(ValidationError, match="general.model_store"):
-            load_comparison_config(config_file)
+        config = load_comparison_config(config_file)
+        assert config.preconditioners[0].name == "neural"
 
     def test_dataset_alias_required_for_at_dataset(self, tmp_path: Path) -> None:
         """@dataset requires general.data.dataset_alias."""
         config_file = tmp_path / "comparison.toml"
         config_file.write_text(
             f"""
-schema_version = 3
-
 [general]
 
 [general.params]
@@ -204,13 +189,6 @@ max_iterations = 100
 [general.data]
 matrix_path = "{tmp_path / "matrix.npy"}"
 rhs_path = "{tmp_path / "rhs.npy"}"
-
-[general.tracking]
-tracking_uri = "sqlite:///{(tmp_path / "comparisons.db").as_posix()}"
-artifact_location = "{(tmp_path / "mlartifacts").as_posix()}"
-
-[general.model_store]
-tracking_uri = "sqlite:///{(tmp_path / "models.db").as_posix()}"
 
 [[preconditioners]]
 name = "neural"
@@ -222,19 +200,71 @@ model_ref = {{ source = "registered", name = "NormScaledLinearFFNN", alias = "@d
             load_comparison_config(config_file)
 
     def test_project_comparison_configs_load(self) -> None:
-        """Project comparison configs (linear/ffnn) load successfully."""
-        project_root = Path(__file__).resolve().parents[3]
-        comparison_dir = project_root / "configs" / "comparison"
+        """Test-scoped comparison configs (linear/ffnn) load successfully."""
+        comparison_dir = Path(__file__).resolve().parents[2] / "fixtures" / "configs" / "comparison"
         linear_cfg = comparison_dir / "linear.toml"
         ffnn_cfg = comparison_dir / "ffnn.toml"
 
         linear = load_comparison_config(linear_cfg)
         ffnn = load_comparison_config(ffnn_cfg)
 
-        assert linear.schema_version == 3
-        assert ffnn.schema_version == 3
         assert len(linear.preconditioners) > 0
         assert len(ffnn.preconditioners) > 0
+
+    def test_comparison_profile_rejects_embedded_tracking(self, tmp_path: Path) -> None:
+        """Comparison profiles must not define runtime MLflow topology."""
+        config_file = tmp_path / "comparison.toml"
+        config_file.write_text(
+            f"""
+[general]
+
+[general.params]
+rtol = 1e-6
+atol = 1e-12
+max_iterations = 100
+
+[general.data]
+matrix_path = "{tmp_path / "matrix.npy"}"
+rhs_path = "{tmp_path / "rhs.npy"}"
+
+[general.tracking]
+tracking_uri = "sqlite:///{(tmp_path / "comparisons.db").as_posix()}"
+
+[[preconditioners]]
+name = "test_solver"
+type = "jacobi"
+"""
+        )
+
+        with pytest.raises(ValidationError, match="tracking"):
+            load_comparison_config(config_file)
+
+    def test_comparison_config_rejects_schema_marker(self, tmp_path: Path) -> None:
+        """Comparison configs must not declare a schema marker."""
+        config_file = tmp_path / "comparison.toml"
+        config_file.write_text(
+            f"""
+schema_version = 3
+
+[general]
+
+[general.params]
+rtol = 1e-6
+atol = 1e-12
+max_iterations = 100
+
+[general.data]
+matrix_path = "{tmp_path / "matrix.npy"}"
+rhs_path = "{tmp_path / "rhs.npy"}"
+
+[[preconditioners]]
+name = "test_solver"
+type = "jacobi"
+"""
+        )
+
+        with pytest.raises(ValidationError, match="schema_version"):
+            load_comparison_config(config_file)
 
 
 class TestLoadRawToml:

@@ -42,16 +42,14 @@ threshold = 1e-2
 min_lr = 1e-7
 
 [TRAINING.loss_function]
-name = "relative_energy_norm_loss"
+name = "normalized_vector_norm_loss"
 module_path = "dlkit.core.training.functional"
 target_key = "targets.solutions"
-extra_inputs = [{ key = "features.matrix", arg = "matrix" }]
 
 [[TRAINING.metrics]]
-name = "NormalizedVectorNormError"
+name = "RelativeEnergyNormError"
 module_path = "dlkit.core.training.metrics"
-norm_ord = 2
-vector_dim = -1
+extra_inputs = [{ key = "features.matrix", arg = "matrix" }]
 
 [DATASET]
 # Dataset uses PRE-NORMALIZED data from the data generation pipeline.

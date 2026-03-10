@@ -17,18 +17,21 @@ from neuralls.configuration.dataset_identity import (
 def test_resolve_dataset_identity_requires_top_level_id_in_mapping() -> None:
     with pytest.raises(ValueError, match="top-level 'id'"):
         resolve_dataset_identity_from_mapping(
-            config={"source": {}, "generation": {}, "output": {"data_dir": "/tmp/ds"}},
+            config={
+                "source": {},
+                "generation": {},
+                "output": {"data_dir": "tests/fixtures/data/datasets"},
+            },
             config_path=Path("datasets/solutions.toml"),
         )
 
 
-def test_resolve_dataset_identity_uses_top_level_id() -> None:
+def test_resolve_dataset_identity_falls_back_to_path_stem() -> None:
     data_cfg = DataConfigFile.model_validate(
         {
-            "id": "solutions",
             "source": {},
             "generation": {},
-            "output": {"data_dir": "/tmp/processed/solutions"},
+            "output": {"data_dir": "tests/fixtures/data/processed/solutions"},
             "test": {},
         }
     )

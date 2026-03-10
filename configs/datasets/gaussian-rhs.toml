@@ -2,7 +2,6 @@
 #
 # Usage: uv run process-data configs/datasets/gaussian-rhs.toml
 
-id = "gaussian-rhs"
 
 [source]
 matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
