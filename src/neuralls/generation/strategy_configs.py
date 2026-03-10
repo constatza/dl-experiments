@@ -140,6 +140,75 @@ class RandomNormalConfig(BaseStrategyConfig):
     )
 
 
+class GaussianForwardConfig(BaseStrategyConfig):
+    """Configuration for GaussianForwardStrategy."""
+
+    mu: float = Field(0.0, description="Mean of the Gaussian distribution.")
+    sigma: float = Field(
+        1.0,
+        description="Standard deviation of the Gaussian distribution.",
+        gt=0.0,
+    )
+
+
+class GaussianInverseConfig(GaussianForwardConfig):
+    """Configuration for GaussianInverseStrategy."""
+
+    solve_config: SolveConfig = Field(
+        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
+            method="direct",
+            rtol=MIN_TOLERANCE,
+            atol=0.0,
+            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
+            assume_pos_def=True,
+        ),
+        description="Configuration for solving linear systems x = A^-1 @ b",
+    )
+
+
+class UniformForwardConfig(BaseStrategyConfig):
+    """Configuration for UniformForwardStrategy."""
+
+    a: float = Field(0.0, description="Lower bound of the uniform distribution.")
+    b: float = Field(1.0, description="Upper bound of the uniform distribution.")
+
+
+class UniformInverseConfig(UniformForwardConfig):
+    """Configuration for UniformInverseStrategy."""
+
+    solve_config: SolveConfig = Field(
+        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
+            method="direct",
+            rtol=MIN_TOLERANCE,
+            atol=0.0,
+            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
+            assume_pos_def=True,
+        ),
+        description="Configuration for solving linear systems x = A^-1 @ b",
+    )
+
+
+class ConstantForwardConfig(BaseStrategyConfig):
+    """Configuration for ConstantForwardStrategy."""
+
+    c: float = Field(1.0, description="Constant value for all generated entries.")
+
+
+class ConstantInverseConfig(ConstantForwardConfig):
+    """Configuration for ConstantInverseStrategy."""
+
+    solve_config: SolveConfig = Field(
+        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
+            method="direct",
+            rtol=MIN_TOLERANCE,
+            atol=0.0,
+            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
+            assume_pos_def=True,
+        ),
+        description="Configuration for solving linear systems x = A^-1 @ b",
+    )
+
+
 class BaseTraceConfig(BaseStrategyConfig):
     """Shared configuration for CG trace-collection strategies."""
 

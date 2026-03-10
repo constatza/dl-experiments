@@ -356,6 +356,49 @@ def _build_trace_indices(
     )
 
 
+def trace_rows_per_system(
+    cg_iters: int,
+    *,
+    every_n: int = 1,
+) -> int:
+    """Return the number of kept trace rows produced by one base system."""
+    return (cg_iters // every_n) + 1
+
+
+def required_trace_systems(
+    samples: int,
+    *,
+    cg_iters: int,
+    every_n: int = 1,
+) -> int:
+    """Return the base-system count for a desired trace-row budget."""
+    rows_per_system = trace_rows_per_system(cg_iters, every_n=every_n)
+    return max(1, samples // rows_per_system)
+
+
+def resolve_trace_generation_counts(
+    samples: int,
+    *,
+    cg_iters: int,
+    every_n: int,
+    available_systems: int | None,
+    strategy_name: str,
+) -> tuple[int, int | None]:
+    """Resolve base-system count for trace strategies."""
+    if samples == -1:
+        if available_systems is None:
+            raise ValueError(
+                f"Strategy '{strategy_name}' does not support samples=-1 without "
+                "a finite archive-backed source."
+            )
+        return available_systems, None
+    return required_trace_systems(
+        samples,
+        cg_iters=cg_iters,
+        every_n=every_n,
+    ), None
+
+
 def _merge_strategy_outputs(
     features_list: list[np.ndarray],
     targets_list: list[np.ndarray],

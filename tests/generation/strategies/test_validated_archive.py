@@ -202,12 +202,15 @@ def test_validated_archive_all_files(
     assert samples.rhs.shape[0] == 5  # All 5 files
 
 
-def test_validated_archive_missing_glob(sample_matrix: np.ndarray) -> None:
+def test_validated_archive_missing_glob(
+    sample_matrix: np.ndarray,
+    tmp_path: Path,
+) -> None:
     """Test that missing glob pattern raises error."""
     cfg = {
         "samples": 5,
-        "solutions_glob": "/nonexistent/sol_*.txt",
-        "rhs_glob": "/nonexistent/rhs_*.txt",
+        "solutions_glob": str(tmp_path / "missing" / "sol_*.txt"),
+        "rhs_glob": str(tmp_path / "missing" / "rhs_*.txt"),
         "verification_tolerance": 1e-10,
         "fail_on_invalid": True,
         "seed": 42,

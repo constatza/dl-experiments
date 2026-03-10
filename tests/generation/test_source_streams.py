@@ -118,3 +118,58 @@ def test_single_matrix_not_broadcasted_in_sparse_pack(tmp_path: Path) -> None:
     assert pack.n_samples == 1
     dense_last = pack.build_torch_sparse(sample_index=2).to_dense().numpy()
     np.testing.assert_allclose(dense_last, matrix)
+
+
+def test_build_dataset_persists_residual_trace_pairs(tmp_path: Path) -> None:
+    matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
+    matrix_path = tmp_path / "matrix.npy"
+    np.save(matrix_path, matrix)
+
+    rhs = np.array([[1.0, 2.0]], dtype=np.float64)
+    rhs_path = tmp_path / "rhs.npy"
+    np.save(rhs_path, rhs)
+
+    out_dir = tmp_path / "residual_dataset"
+    build_dataset(
+        matrix_path=str(matrix_path),
+        dataset_dir=str(out_dir),
+        counts={"cg_residual": 4},
+        rhs_path=str(rhs_path),
+        normalize="none",
+        shuffle=False,
+        seed=7,
+        strategy_overrides={"cg_residual": {"cg_iters": 1}},
+    )
+
+    saved_rhs, saved_solutions = load_dense_training_arrays(out_dir)
+    assert saved_rhs.shape == (4, 2)
+    assert saved_solutions.shape == (4, 2)
+
+
+def test_build_dataset_persists_residual_error_pairs(tmp_path: Path) -> None:
+    matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
+    matrix_path = tmp_path / "matrix.npy"
+    np.save(matrix_path, matrix)
+
+    for idx in range(3):
+        np.savetxt(tmp_path / f"sol_{idx:03d}.txt", np.array([1.0 + idx, 0.5 + idx]))
+
+    out_dir = tmp_path / "residual_error_dataset"
+    build_dataset(
+        matrix_path=str(matrix_path),
+        dataset_dir=str(out_dir),
+        counts={"cg_residual_error": 4},
+        normalize="none",
+        shuffle=False,
+        seed=7,
+        strategy_overrides={
+            "cg_residual_error": {
+                "cg_iters": 1,
+                "solutions_glob": str(tmp_path / "sol_*.txt"),
+            }
+        },
+    )
+
+    saved_rhs, saved_solutions = load_dense_training_arrays(out_dir)
+    assert saved_rhs.shape == (4, 2)
+    assert saved_solutions.shape == (4, 2)

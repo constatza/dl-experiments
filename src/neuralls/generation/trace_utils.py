@@ -143,9 +143,65 @@ def _merge_error_traces(
     )
 
 
+def _trim_residual_traces(
+    traces: ResidualTraceSamples,
+    final_rows: int | None,
+) -> ResidualTraceSamples:
+    """Trim residual trace rows to an exact final count."""
+    if final_rows is None or traces.residuals.shape[0] <= final_rows:
+        return traces
+
+    slc = slice(0, final_rows)
+    return ResidualTraceSamples(
+        residuals=traces.residuals[slc],
+        solutions=traces.solutions[slc],
+        sample_indices=traces.sample_indices[slc],
+        iteration_indices=traces.iteration_indices[slc],
+        search_directions=(
+            None
+            if traces.search_directions is None
+            else traces.search_directions[slc]
+        ),
+        search_direction_products=(
+            None
+            if traces.search_direction_products is None
+            else traces.search_direction_products[slc]
+        ),
+    )
+
+
+def _trim_error_traces(
+    traces: ErrorTraceSamples,
+    final_rows: int | None,
+) -> ErrorTraceSamples:
+    """Trim error trace rows to an exact final count."""
+    if final_rows is None or traces.residuals.shape[0] <= final_rows:
+        return traces
+
+    slc = slice(0, final_rows)
+    return ErrorTraceSamples(
+        residuals=traces.residuals[slc],
+        solutions_current=traces.solutions_current[slc],
+        errors=traces.errors[slc],
+        true_solutions=traces.true_solutions,
+        sample_indices=traces.sample_indices[slc],
+        iteration_indices=traces.iteration_indices[slc],
+    )
+
+
+def _referenced_sample_count(sample_indices: np.ndarray) -> int:
+    """Return the number of base systems still referenced by trace rows."""
+    if sample_indices.size == 0:
+        return 0
+    return int(sample_indices.max()) + 1
+
+
 __all__ = [
     "_offset_residual_traces",
     "_merge_residual_traces",
     "_offset_error_traces",
     "_merge_error_traces",
+    "_trim_residual_traces",
+    "_trim_error_traces",
+    "_referenced_sample_count",
 ]

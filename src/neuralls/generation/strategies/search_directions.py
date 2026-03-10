@@ -17,10 +17,11 @@ import numpy as np
 from ..interfaces import GeneratedSamples, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import SearchDirectionsConfig
-from ..helpers import _build_trace_indices
+from ..helpers import _build_trace_indices, resolve_trace_generation_counts
 from ..providers import HybridInputProvider
 from ..transforms import ComputeRhsTransform
-from ...normalization import SearchDirectionsSamples
+from ...normalization import ResidualTraceSamples
+from ..trace_utils import _referenced_sample_count, _trim_residual_traces
 
 
 @register_strategy
@@ -70,10 +71,23 @@ class SearchDirectionsStrategy:
         # Validate and convert to typed config
         config = SearchDirectionsConfig(**cfg)
 
-        # config.samples represents number of base systems to generate
-        num_base_systems = config.samples
         cg_iters = config.cg_iters
         rng = np.random.default_rng(config.seed)
+        available_systems: int | None = None
+
+        if single_rhs is None and archive is not None:
+            if archive.solutions is not None:
+                available_systems = int(archive.solutions.shape[0])
+            elif archive.rhs_vectors is not None:
+                available_systems = int(archive.rhs_vectors.shape[0])
+
+        num_base_systems, final_rows = resolve_trace_generation_counts(
+            config.samples,
+            cg_iters=cg_iters,
+            every_n=config.every_n,
+            available_systems=available_systems,
+            strategy_name="search_directions",
+        )
 
         n = matrix.shape[0]
 
@@ -174,17 +188,24 @@ class SearchDirectionsStrategy:
             sample_indices.append(sidx)
             iteration_indices.append(iidx)
 
-        # Build search directions traces: (A @ p_k, p_k) pairs
-        search_directions_traces = SearchDirectionsSamples(
-            search_direction_products=np.vstack(product_blocks),  # A @ p_k (inputs)
-            search_directions=np.vstack(direction_blocks),  # p_k (targets)
+        residual_traces = ResidualTraceSamples(
+            residuals=np.vstack(product_blocks),
+            solutions=np.vstack(direction_blocks),
             sample_indices=np.concatenate(sample_indices),
             iteration_indices=np.concatenate(iteration_indices),
+            search_directions=np.vstack(direction_blocks),
+            search_direction_products=np.vstack(product_blocks),
         )
+        residual_traces = _trim_residual_traces(residual_traces, final_rows)
+        referenced_samples = _referenced_sample_count(residual_traces.sample_indices)
 
         return GeneratedSamples(
             matrix=matrix,
-            rhs=rhs_samples,
-            solutions=sols,
-            search_directions_traces=search_directions_traces,
+            rhs=rhs_samples[:referenced_samples],
+            solutions=(
+                None
+                if sols is None
+                else sols[:referenced_samples]
+            ),
+            residual_traces=residual_traces,
         )

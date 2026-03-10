@@ -90,8 +90,8 @@ def generate_mixture(
         counts: Optional explicit strategy counts
         mix: Optional strategy proportions (used with total)
         total: Total samples (required if mix provided)
-        counts_represent_final_pairs: If True, counts refer to final iteration pairs
-            (used for trace strategies to compute number of solver runs needed)
+        counts_represent_final_pairs: Deprecated compatibility flag. Trace strategies
+            now interpret counts as final output rows directly.
         seed: Random seed for reproducibility
         shuffle: Whether to shuffle final samples
         strategy_overrides: Per-strategy configuration overrides. Use this to configure
@@ -173,25 +173,7 @@ def generate_mixture(
         if archive_solutions is not None:
             archive_data = ArchiveData(solutions=archive_solutions, rhs_vectors=archive_rhs)
 
-        # For counts_represent_final_pairs mode, we need to read cg_iters from config
-        adjusted_count = count
-        if counts_represent_final_pairs and strategy_name in {
-            "cg_residual",
-            "residual",
-            "cg_residual_error",
-            "residual_error",
-            "search_directions",
-        }:
-            # Get cg_iters and every_n from strategy override or use defaults
-            strategy_cg_iters = cfg.get("cg_iters", DEFAULT_RESIDUAL_TRACE_ITERS)
-            every_n = cfg.get("every_n", 1)
-            # Pairs per base system = ceil((cg_iters + 1) / every_n)
-            # The +1 accounts for the initial residual recorded before any CG step
-            pairs_per_system = (strategy_cg_iters + every_n) // every_n
-            adjusted_count = max(
-                1, (count + pairs_per_system - 1) // pairs_per_system
-            )
-            cfg["samples"] = adjusted_count
+        cfg["samples"] = count
 
         # Run generation (all strategies now use unified interface)
         # Single-RHS strategies (trace strategies) will receive single_rhs if provided
@@ -224,13 +206,17 @@ def generate_mixture(
         if generated.rhs is not None:
             sample_offset += generated.rhs.shape[0]
 
-    X, Y = _merge_strategy_outputs(all_features, all_targets)
+    if all_features and all_targets:
+        X, Y = _merge_strategy_outputs(all_features, all_targets)
+    else:
+        X = np.empty((0, A.shape[0]), dtype=np.float64)
+        Y = np.empty((0, A.shape[0]), dtype=np.float64)
     residual_traces = (
         _merge_residual_traces(residual_blocks) if residual_blocks else None
     )
     error_traces = _merge_error_traces(error_blocks) if error_blocks else None
 
-    if shuffle:
+    if shuffle and X.shape[0] > 0:
         X, Y, residual_traces, error_traces = _shuffle_samples(
             X, Y, residual_traces, error_traces, rng
         )
@@ -356,7 +342,7 @@ def build_dataset(
             f"Generating/loading samples for binding sample_id={binding.sample_id} "
             f"(matrix_id={binding.matrix_sample_id})..."
         )
-        X, Y, _, error_traces = generate_mixture(
+        X, Y, residual_traces, error_traces = generate_mixture(
             matrix_for_generation,
             counts=counts,
             mix=mix,
@@ -370,6 +356,9 @@ def build_dataset(
         if error_traces is not None:
             X_final = error_traces.residuals
             Y_final = error_traces.errors
+        elif residual_traces is not None:
+            X_final = residual_traces.residuals
+            Y_final = residual_traces.solutions
         else:
             X_final = X
             Y_final = Y

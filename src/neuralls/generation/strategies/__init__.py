@@ -1,6 +1,8 @@
 """Data generation strategies."""
 
 from . import (
+    constant_strategies,
+    gaussian_strategies,
     random_normal,
     krylov,
     residual_traces,
@@ -10,9 +12,13 @@ from . import (
     rhs_archive,
     solution_archive,
     neutral_ones,
+    uniform_strategies,
+    validated_archive,
 )
 
 __all__ = [
+    "constant_strategies",
+    "gaussian_strategies",
     "random_normal",
     "krylov",
     "residual_traces",
@@ -22,4 +28,6 @@ __all__ = [
     "rhs_archive",
     "solution_archive",
     "neutral_ones",
+    "uniform_strategies",
+    "validated_archive",
 ]

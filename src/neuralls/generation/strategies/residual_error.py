@@ -17,10 +17,11 @@ import numpy as np
 from ..interfaces import GeneratedSamples, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import ResidualErrorConfig
-from ..helpers import _build_trace_indices
+from ..helpers import _build_trace_indices, resolve_trace_generation_counts
 from ..providers import provide_solutions, HybridInputProvider
 from ..transforms import ComputeRhsTransform
 from ...normalization import ErrorTraceSamples
+from ..trace_utils import _referenced_sample_count, _trim_error_traces
 
 
 @register_strategy
@@ -55,11 +56,34 @@ class ResidualErrorStrategy:
         # Validate and convert to typed config
         config = ResidualErrorConfig(**cfg)
 
-        # config.samples represents number of base systems to generate
-        # (orchestration layer handles counts_represent_final_pairs conversion)
-        num_base_systems = config.samples
         cg_iters = config.cg_iters
         rng = np.random.default_rng(config.seed)
+        available_systems: int | None = None
+
+        if single_rhs is None:
+            if config.solutions_glob is not None:
+                available_systems = len(
+                    provide_solutions(
+                        matrix,
+                        -1,
+                        rng,
+                        solutions_glob=config.solutions_glob,
+                        archive=archive,
+                        shuffle=config.shuffle,
+                        seed=config.seed,
+                        strategy_name="cg_residual_error",
+                    )
+                )
+            elif archive is not None and archive.solutions is not None:
+                available_systems = int(archive.solutions.shape[0])
+
+        num_base_systems, final_rows = resolve_trace_generation_counts(
+            config.samples,
+            cg_iters=cg_iters,
+            every_n=config.every_n,
+            available_systems=available_systems,
+            strategy_name="cg_residual_error",
+        )
 
         n = matrix.shape[0]
 
@@ -169,11 +193,13 @@ class ResidualErrorStrategy:
             sample_indices=np.concatenate(sample_indices),
             iteration_indices=np.concatenate(iteration_indices),
         )
+        error_traces = _trim_error_traces(error_traces, final_rows)
+        referenced_samples = _referenced_sample_count(error_traces.sample_indices)
 
         return GeneratedSamples(
             matrix=matrix,
-            rhs=rhs_samples,
-            solutions=sols,
+            rhs=rhs_samples[:referenced_samples],
+            solutions=sols[:referenced_samples],
             error_traces=error_traces,
         )
 

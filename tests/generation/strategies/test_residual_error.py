@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from neuralls.generation import run_generation
+from neuralls.generation.helpers import trace_rows_per_system
 
 
 @pytest.fixture
@@ -69,25 +70,28 @@ def test_residual_error_single_rhs_shapes(
 ) -> None:
     """Single-RHS mode: all output arrays have the correct shapes."""
     n = spd_matrix.shape[0]
-    num_systems = 2
+    requested_rows = 10
     cg_iters = 4
-    cfg = {"samples": num_systems, "cg_iters": cg_iters, "seed": 0}
+    cfg = {"samples": requested_rows, "cg_iters": cg_iters, "seed": 0}
 
     result = run_generation("cg_residual_error", spd_matrix, cfg=cfg, single_rhs=single_rhs)
 
+    rows_per_system = trace_rows_per_system(cg_iters)
+    expected_systems = max(1, requested_rows // rows_per_system)
+    total = expected_systems * rows_per_system
+
     assert result.rhs is not None
-    assert result.rhs.shape == (num_systems, n)
+    assert result.rhs.shape == (expected_systems, n)
     assert result.solutions is not None
-    assert result.solutions.shape == (num_systems, n)
+    assert result.solutions.shape == (expected_systems, n)
 
     et = result.error_traces
     assert et is not None
 
-    total = num_systems * (cg_iters + 1)
     assert et.residuals.shape == (total, n)
     assert et.solutions_current.shape == (total, n)
     assert et.errors.shape == (total, n)
-    assert et.true_solutions.shape == (num_systems, n)
+    assert et.true_solutions.shape == (expected_systems, n)
     assert et.sample_indices.shape == (total,)
     assert et.iteration_indices.shape == (total,)
 
@@ -104,10 +108,10 @@ def test_residual_error_multi_rhs_shapes(
     """Multiple-RHS mode: all output arrays have correct shapes."""
     files, glob_pattern = solution_files
     n = spd_matrix.shape[0]
-    num_systems = len(files)
+    requested_rows = 8
     cg_iters = 3
     cfg = {
-        "samples": num_systems,
+        "samples": requested_rows,
         "cg_iters": cg_iters,
         "seed": 0,
         "solutions_glob": glob_pattern,
@@ -115,17 +119,20 @@ def test_residual_error_multi_rhs_shapes(
 
     result = run_generation("cg_residual_error", spd_matrix, cfg=cfg)
 
+    rows_per_system = trace_rows_per_system(cg_iters)
+    expected_systems = max(1, requested_rows // rows_per_system)
+    total = expected_systems * rows_per_system
+
     assert result.rhs is not None
-    assert result.rhs.shape == (num_systems, n)
+    assert result.rhs.shape == (expected_systems, n)
 
     et = result.error_traces
     assert et is not None
 
-    total = num_systems * (cg_iters + 1)
     assert et.residuals.shape == (total, n)
     assert et.solutions_current.shape == (total, n)
     assert et.errors.shape == (total, n)
-    assert et.true_solutions.shape == (num_systems, n)
+    assert et.true_solutions.shape == (expected_systems, n)
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +147,7 @@ def test_error_equals_true_minus_current(
     """e_k = x_true - x_k holds for every recorded trace pair."""
     files, glob_pattern = solution_files
     cfg = {
-        "samples": len(files),
+        "samples": 10,
         "cg_iters": 4,
         "seed": 0,
         "solutions_glob": glob_pattern,
@@ -164,7 +171,7 @@ def test_residual_equals_b_minus_ax(
     """r_k = b - A @ x_k: CG residual matches b - A @ current iterate."""
     files, glob_pattern = solution_files
     cfg = {
-        "samples": len(files),
+        "samples": 10,
         "cg_iters": 4,
         "seed": 0,
         "solutions_glob": glob_pattern,
@@ -191,7 +198,7 @@ def test_residual_equals_a_times_error(
     """r_k = A @ e_k: holds exactly because b = A @ x_true in archive mode."""
     files, glob_pattern = solution_files
     cfg = {
-        "samples": len(files),
+        "samples": 10,
         "cg_iters": 4,
         "seed": 0,
         "solutions_glob": glob_pattern,
@@ -216,32 +223,35 @@ def test_residual_error_trace_count(
     spd_matrix: np.ndarray, single_rhs: np.ndarray
 ) -> None:
     """Total trace entries = num_systems × (cg_iters + 1) when every_n=1."""
-    num_systems = 3
+    requested_rows = 10
     cg_iters = 4
-    cfg = {"samples": num_systems, "cg_iters": cg_iters, "seed": 0}
+    cfg = {"samples": requested_rows, "cg_iters": cg_iters, "seed": 0}
 
     result = run_generation("cg_residual_error", spd_matrix, cfg=cfg, single_rhs=single_rhs)
 
     et = result.error_traces
     assert et is not None
-    assert et.residuals.shape[0] == num_systems * (cg_iters + 1)
+    rows_per_system = trace_rows_per_system(cg_iters)
+    expected_systems = max(1, requested_rows // rows_per_system)
+    assert et.residuals.shape[0] == expected_systems * rows_per_system
 
 
 def test_residual_error_sample_indices(
     spd_matrix: np.ndarray, single_rhs: np.ndarray
 ) -> None:
     """sample_indices correctly identifies which base system each trace pair belongs to."""
-    num_systems = 3
+    requested_rows = 15
     cg_iters = 4
-    cfg = {"samples": num_systems, "cg_iters": cg_iters, "seed": 0}
+    cfg = {"samples": requested_rows, "cg_iters": cg_iters, "seed": 0}
 
     result = run_generation("cg_residual_error", spd_matrix, cfg=cfg, single_rhs=single_rhs)
 
     et = result.error_traces
     assert et is not None
 
-    entries_per_system = cg_iters + 1
-    for s in range(num_systems):
+    entries_per_system = trace_rows_per_system(cg_iters)
+    expected_systems = max(1, requested_rows // entries_per_system)
+    for s in range(expected_systems):
         start = s * entries_per_system
         end = start + entries_per_system
         np.testing.assert_array_equal(et.sample_indices[start:end], s)
@@ -251,18 +261,19 @@ def test_residual_error_iteration_indices(
     spd_matrix: np.ndarray, single_rhs: np.ndarray
 ) -> None:
     """iteration_indices run 0..cg_iters for each system when every_n=1."""
-    num_systems = 2
+    requested_rows = 10
     cg_iters = 4
-    cfg = {"samples": num_systems, "cg_iters": cg_iters, "seed": 0}
+    cfg = {"samples": requested_rows, "cg_iters": cg_iters, "seed": 0}
 
     result = run_generation("cg_residual_error", spd_matrix, cfg=cfg, single_rhs=single_rhs)
 
     et = result.error_traces
     assert et is not None
 
-    entries_per_system = cg_iters + 1
+    entries_per_system = trace_rows_per_system(cg_iters)
     expected_iters = np.arange(entries_per_system, dtype=np.int64)
-    for s in range(num_systems):
+    expected_systems = max(1, requested_rows // entries_per_system)
+    for s in range(expected_systems):
         start = s * entries_per_system
         end = start + entries_per_system
         np.testing.assert_array_equal(et.iteration_indices[start:end], expected_iters)
@@ -278,8 +289,8 @@ def test_residual_error_every_n_reduces_count(
 ) -> None:
     """every_n=2 yields half the trace entries (cg_iters=5 → 6 residuals, divisible by 2)."""
     cg_iters = 5  # 6 residuals per sample (0..5)
-    cfg_full = {"samples": 2, "cg_iters": cg_iters, "seed": 0, "every_n": 1}
-    cfg_half = {"samples": 2, "cg_iters": cg_iters, "seed": 0, "every_n": 2}
+    cfg_full = {"samples": 12, "cg_iters": cg_iters, "seed": 0, "every_n": 1}
+    cfg_half = {"samples": 6, "cg_iters": cg_iters, "seed": 0, "every_n": 2}
 
     r_full = run_generation("cg_residual_error", spd_matrix, cfg=cfg_full, single_rhs=single_rhs)
     r_half = run_generation("cg_residual_error", spd_matrix, cfg=cfg_half, single_rhs=single_rhs)
@@ -309,7 +320,7 @@ def test_residual_error_every_n_math_still_holds(
     """e_k = x_true - x_k and r_k = A @ e_k hold even after every_n downsampling."""
     files, glob_pattern = solution_files
     cfg = {
-        "samples": len(files),
+        "samples": 6,
         "cg_iters": 5,
         "seed": 0,
         "solutions_glob": glob_pattern,
@@ -328,4 +339,17 @@ def test_residual_error_every_n_math_still_holds(
         np.testing.assert_allclose(et.errors[i], x_true - x_k, rtol=1e-12)
         np.testing.assert_allclose(
             et.residuals[i], spd_matrix @ et.errors[i], rtol=1e-9, atol=1e-9
+        )
+
+
+def test_residual_error_samples_minus_one_requires_finite_source(
+    spd_matrix: np.ndarray, single_rhs: np.ndarray
+) -> None:
+    """samples=-1 is rejected for single-RHS mode because the source is unbounded."""
+    with pytest.raises(ValueError, match="samples=-1"):
+        run_generation(
+            "cg_residual_error",
+            spd_matrix,
+            cfg={"samples": -1, "cg_iters": 4, "seed": 0},
+            single_rhs=single_rhs,
         )

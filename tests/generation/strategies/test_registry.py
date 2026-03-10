@@ -1,0 +1,56 @@
+"""Regression tests for package-level strategy registration."""
+
+from __future__ import annotations
+
+import numpy as np
+
+import neuralls.generation
+from neuralls.generation import run_generation
+from neuralls.generation.runner import _registry
+
+
+EXPECTED_STRATEGIES = {
+    "random",
+    "normal",
+    "krylov",
+    "cg_residual",
+    "residual",
+    "cg_residual_error",
+    "residual_error",
+    "search_directions",
+    "eigenvector_forward",
+    "eigenvector_inverse",
+    "rhs_archive",
+    "solution_archive",
+    "neutral_ones",
+    "gaussian_forward",
+    "gaussian_inverse",
+    "uniform_forward",
+    "uniform_inverse",
+    "constant_forward",
+    "constant_inverse",
+    "validated_archive",
+}
+
+
+def test_all_strategy_modules_register_on_package_import() -> None:
+    """All strategy names are available after importing neuralls.generation."""
+    assert neuralls.generation.strategies is not None
+    assert set(_registry._strategies) == EXPECTED_STRATEGIES
+
+
+def test_gaussian_inverse_runs_after_package_import(
+    spd_matrix: np.ndarray,
+) -> None:
+    """Gaussian inverse is reachable through the public dispatcher."""
+    sample_count = 3
+    result = run_generation(
+        "gaussian_inverse",
+        spd_matrix,
+        cfg={"samples": sample_count, "seed": 0, "mu": 0.0, "sigma": 1.0},
+    )
+
+    assert result.rhs is not None
+    assert result.solutions is not None
+    assert result.rhs.shape == (sample_count, spd_matrix.shape[0])
+    assert result.solutions.shape == (sample_count, spd_matrix.shape[0])

@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from neuralls.generation import run_generation
+from neuralls.generation.helpers import trace_rows_per_system
 
 
 @pytest.fixture
@@ -54,24 +55,24 @@ def test_residual_trace_shapes(spd_matrix: np.ndarray, single_rhs: np.ndarray) -
     result = run_generation("cg_residual", spd_matrix, cfg=cfg, single_rhs=single_rhs)
 
     assert result.rhs is not None
-    assert result.rhs.shape == (2, n)
+    expected_systems = max(1, 2 // trace_rows_per_system(4))
+    assert result.rhs.shape == (expected_systems, n)
     assert result.residual_traces is not None
 
 
 def test_residual_trace_trace_count(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
-    """Total trace entries = num_base_systems × (cg_iters + 1) when every_n=1.
-
-    The +1 accounts for the initial residual recorded before any CG step.
-    """
-    num_systems = 3
+    """Trace strategies size systems from the requested row budget using integer division."""
+    requested_rows = 12
     cg_iters = 5
-    cfg = {"samples": num_systems, "cg_iters": cg_iters, "seed": 0}
+    cfg = {"samples": requested_rows, "cg_iters": cg_iters, "seed": 0}
 
     result = run_generation("cg_residual", spd_matrix, cfg=cfg, single_rhs=single_rhs)
 
     assert result.residual_traces is not None
     total = result.residual_traces.residuals.shape[0]
-    assert total == num_systems * (cg_iters + 1)
+    rows_per_system = trace_rows_per_system(cg_iters)
+    expected_systems = max(1, requested_rows // rows_per_system)
+    assert total == expected_systems * rows_per_system
 
 
 def test_residual_trace_every_n_basic(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
@@ -80,8 +81,8 @@ def test_residual_trace_every_n_basic(spd_matrix: np.ndarray, single_rhs: np.nda
     Uses cg_iters=5 so each sample has 6 residuals (divisible by 2).
     """
     cg_iters = 5  # 6 total residuals per sample (0..5), divisible by 2
-    cfg_full = {"samples": 2, "cg_iters": cg_iters, "seed": 0, "every_n": 1}
-    cfg_half = {"samples": 2, "cg_iters": cg_iters, "seed": 0, "every_n": 2}
+    cfg_full = {"samples": 12, "cg_iters": cg_iters, "seed": 0, "every_n": 1}
+    cfg_half = {"samples": 6, "cg_iters": cg_iters, "seed": 0, "every_n": 2}
 
     result_full = run_generation("cg_residual", spd_matrix, cfg=cfg_full, single_rhs=single_rhs)
     result_half = run_generation("cg_residual", spd_matrix, cfg=cfg_half, single_rhs=single_rhs)
@@ -121,9 +122,9 @@ def test_residual_trace_multi_rhs_shapes(
     """Multiple-RHS mode: shapes are correct when solutions are loaded from files."""
     n = spd_matrix.shape[0]
     files, glob_pattern = solution_files
-    num_systems = len(files)
+    requested_rows = 8
     cfg = {
-        "samples": num_systems,
+        "samples": requested_rows,
         "cg_iters": 4,
         "seed": 0,
         "solutions_glob": glob_pattern,
@@ -132,7 +133,8 @@ def test_residual_trace_multi_rhs_shapes(
     result = run_generation("cg_residual", spd_matrix, cfg=cfg)
 
     assert result.rhs is not None
-    assert result.rhs.shape == (num_systems, n)
+    expected_systems = max(1, requested_rows // trace_rows_per_system(4))
+    assert result.rhs.shape == (expected_systems, n)
     assert result.residual_traces is not None
 
 
@@ -142,10 +144,10 @@ def test_residual_trace_multi_rhs_trace_count(
 ) -> None:
     """Multiple-RHS mode: total trace entries = num_systems × (cg_iters + 1)."""
     files, glob_pattern = solution_files
-    num_systems = len(files)
+    requested_rows = 8
     cg_iters = 3
     cfg = {
-        "samples": num_systems,
+        "samples": requested_rows,
         "cg_iters": cg_iters,
         "seed": 0,
         "solutions_glob": glob_pattern,
@@ -155,7 +157,9 @@ def test_residual_trace_multi_rhs_trace_count(
 
     assert result.residual_traces is not None
     total = result.residual_traces.residuals.shape[0]
-    assert total == num_systems * (cg_iters + 1)
+    rows_per_system = trace_rows_per_system(cg_iters)
+    expected_systems = max(1, requested_rows // rows_per_system)
+    assert total == expected_systems * rows_per_system
 
 
 def test_residual_trace_multi_rhs_every_n(
@@ -164,17 +168,16 @@ def test_residual_trace_multi_rhs_every_n(
 ) -> None:
     """Multiple-RHS mode: every_n downsampling works for archive-loaded solutions."""
     files, glob_pattern = solution_files
-    num_systems = len(files)
     cg_iters = 5  # 6 residuals per sample (0..5), divisible by 2
     cfg_full = {
-        "samples": num_systems,
+        "samples": 12,
         "cg_iters": cg_iters,
         "seed": 0,
         "solutions_glob": glob_pattern,
         "every_n": 1,
     }
     cfg_half = {
-        "samples": num_systems,
+        "samples": 6,
         "cg_iters": cg_iters,
         "seed": 0,
         "solutions_glob": glob_pattern,
@@ -189,3 +192,14 @@ def test_residual_trace_multi_rhs_every_n(
     assert result_half.residual_traces.residuals.shape[0] == result_full.residual_traces.residuals.shape[0] // 2
 
 
+def test_residual_trace_samples_minus_one_requires_finite_source(
+    spd_matrix: np.ndarray, single_rhs: np.ndarray
+) -> None:
+    """samples=-1 is rejected for single-RHS mode because the source is unbounded."""
+    with pytest.raises(ValueError, match="samples=-1"):
+        run_generation(
+            "cg_residual",
+            spd_matrix,
+            cfg={"samples": -1, "cg_iters": 4, "seed": 0},
+            single_rhs=single_rhs,
+        )

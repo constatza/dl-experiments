@@ -256,12 +256,12 @@ class TestParsing:
                 {
                     "name": "solution_archive",
                     "samples": 500,
-                    "solutions_glob": "/a/*.txt",
+                    "solutions_glob": "tests/fixtures/data/a/*.txt",
                 },
                 {
                     "name": "solution_archive",
                     "samples": -1,
-                    "solutions_glob": "/b/*.txt",
+                    "solutions_glob": "tests/fixtures/data/b/*.txt",
                 },
             ]
         }
@@ -274,12 +274,12 @@ class TestParsing:
                 {
                     "name": "solution_archive",
                     "samples": -1,
-                    "solutions_glob": "/a/*.txt",
+                    "solutions_glob": "tests/fixtures/data/a/*.txt",
                 },
                 {
                     "name": "solution_archive",
                     "samples": 500,
-                    "solutions_glob": "/b/*.txt",
+                    "solutions_glob": "tests/fixtures/data/b/*.txt",
                 },
             ]
         }
@@ -314,14 +314,14 @@ class TestParsing:
                     "name": "cg_residual_error",
                     "samples": 10000,
                     "cg_iters": 50,
-                    "solutions_glob": "/path/*.txt",
+                    "solutions_glob": "tests/fixtures/data/path/*.txt",
                 }
             ]
         }
         plan = parse_generation_plan(config)
         spec = plan.strategies["cg_residual_error"]
         assert spec.options["cg_iters"] == 50
-        assert spec.options["solutions_glob"] == "/path/*.txt"
+        assert spec.options["solutions_glob"] == "tests/fixtures/data/path/*.txt"
         assert "samples" not in spec.options
         assert "name" not in spec.options
 
@@ -375,7 +375,7 @@ class TestIntegration:
                     "name": "cg_residual_error",
                     "samples": 10000,
                     "cg_iters": 50,
-                    "solutions_glob": "/data/solutions/*.txt",
+                    "solutions_glob": "tests/fixtures/data/solutions/*.txt",
                 },
                 {
                     "name": "random",
@@ -399,7 +399,7 @@ class TestIntegration:
                 {
                     "name": "solution_archive",
                     "samples": -1,
-                    "solutions_glob": "/data/ua_vectors/*.txt",
+                    "solutions_glob": "tests/fixtures/data/ua_vectors/*.txt",
                 }
             ]
         }

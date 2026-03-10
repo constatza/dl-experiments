@@ -146,6 +146,46 @@ class ConstantInputProvider:
         return np.full((count, n), self.value, dtype=np.float64)
 
 
+class GaussianInputProvider:
+    """Generate Gaussian-distributed vectors."""
+
+    def __init__(self, mu: float = 0.0, sigma: float = 1.0) -> None:
+        self.mu = mu
+        self.sigma = sigma
+
+    def provide(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Generate Gaussian-distributed vectors."""
+        n = matrix.shape[0]
+        return rng.normal(loc=self.mu, scale=self.sigma, size=(count, n)).astype(
+            np.float64, copy=False
+        )
+
+
+class UniformInputProvider:
+    """Generate uniformly distributed vectors."""
+
+    def __init__(self, a: float = 0.0, b: float = 1.0) -> None:
+        self.a = a
+        self.b = b
+
+    def provide(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Generate uniformly distributed vectors."""
+        n = matrix.shape[0]
+        return rng.uniform(self.a, self.b, size=(count, n)).astype(
+            np.float64, copy=False
+        )
+
+
 class FileInputProvider:
     """Load vectors from files matching glob pattern.
 
@@ -268,6 +308,8 @@ class HybridInputProvider:
         if self.archive is not None:
             data = getattr(self.archive, self.field, None)
             if data is not None:
+                if count == -1:
+                    return data.astype(np.float64, copy=True)
                 if data.shape[0] < count:
                     raise ValueError(
                         f"Not enough archive {self.field}: "
@@ -276,6 +318,10 @@ class HybridInputProvider:
                 return data[:count].astype(np.float64, copy=True)
 
         # Fallback to random
+        if count == -1:
+            raise ValueError(
+                f"Cannot use count=-1 for field '{self.field}' without archive data."
+            )
         n = matrix.shape[0]
         return rng.normal(size=(count, n), scale=self.scale).astype(
             np.float64, copy=False
@@ -384,6 +430,8 @@ __all__ = [
     "InputProvider",
     "RandomInputProvider",
     "ConstantInputProvider",
+    "GaussianInputProvider",
+    "UniformInputProvider",
     "FileInputProvider",
     "HybridInputProvider",
     "PairedFileInputProvider",

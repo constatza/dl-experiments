@@ -8,7 +8,10 @@ import pytest
 from scipy.linalg import eigh
 
 from neuralls.generation import generate_mixture
-from neuralls.generation.helpers import _generate_eigenvector_combinations
+from neuralls.generation.helpers import (
+    _generate_eigenvector_combinations,
+    trace_rows_per_system,
+)
 from neuralls.normalization import (
     ErrorTraceSamples,
     ResidualTraceSamples,
@@ -17,6 +20,9 @@ from neuralls.normalization import (
 
 
 
+
+def _expected_trace_systems(samples: int, cg_iters: int, every_n: int = 1) -> int:
+    return max(1, samples // trace_rows_per_system(cg_iters, every_n=every_n))
 
 
 def test_residual_strategy_with_archive() -> None:
@@ -43,9 +49,9 @@ def test_residual_strategy_with_archive() -> None:
         archive_rhs=archive_rhs,
     )
 
-    # Verify we got the archive solutions (first 2)
-    assert np.allclose(solutions, archive_sols[:2])
-    assert np.allclose(rhs, archive_rhs[:2])
+    expected_systems = _expected_trace_systems(2, 3)
+    assert np.allclose(solutions, archive_sols[:expected_systems])
+    assert np.allclose(rhs, archive_rhs[:expected_systems])
 
     # Verify residuals were collected
     assert residuals is not None
@@ -57,14 +63,14 @@ def test_residual_strategy_archive_validation() -> None:
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
     b = np.array([1.0, 0.0], dtype=np.float64)
 
-    # Archive with only 1 solution, but we need 2
+    # Archive with only 1 solution, but we need 2 base systems after integer division
     archive_sols = np.array([[0.5, 0.3]], dtype=np.float64)
 
     try:
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=A,
             mix={"cg_residual": 1.0},
-            total=2,  # Request more than archive has
+            total=8,
             strategy_overrides={"cg_residual": {"cg_iters": 3}},
             seed=7,
             shuffle=False,
@@ -201,9 +207,9 @@ def test_error_strategy_with_random(
         archive_rhs=archive_rhs,
     )
 
-    # Verify basic shapes
-    assert rhs.shape == (2, 2), "RHS should have 2 samples of dimension 2"
-    assert solutions.shape == (2, 2), "Solutions should have 2 samples of dimension 2"
+    expected_systems = _expected_trace_systems(2, 3)
+    assert rhs.shape == (expected_systems, 2)
+    assert solutions.shape == (expected_systems, 2)
 
     # Verify error traces are populated
     assert error_traces is not None, "Error traces should be populated"
@@ -263,12 +269,12 @@ def test_error_strategy_with_archive(
         archive_rhs=archive_rhs,
     )
 
-    # Verify we got the archive solutions (first 2)
-    assert np.allclose(solutions, archive_solutions[:2]), (
-        "Solutions should match first 2 archive solutions"
+    expected_systems = _expected_trace_systems(2, 3)
+    assert np.allclose(solutions, archive_solutions[:expected_systems]), (
+        "Solutions should match the archive solutions used for trace generation"
     )
-    assert np.allclose(rhs, archive_rhs[:2]), (
-        "RHS should match first 2 archive RHS vectors"
+    assert np.allclose(rhs, archive_rhs[:expected_systems]), (
+        "RHS should match the archive RHS vectors used for trace generation"
     )
 
     # Verify error traces were collected
@@ -276,7 +282,7 @@ def test_error_strategy_with_archive(
     assert error_traces.residuals.shape[1] == small_spd_matrix.shape[0]
 
     # Verify true_solutions matches archive solutions
-    assert np.allclose(error_traces.true_solutions, archive_solutions[:2]), (
+    assert np.allclose(error_traces.true_solutions, archive_solutions[:expected_systems]), (
         "True solutions should match archive solutions"
     )
 
@@ -388,15 +394,15 @@ def test_error_strategy_validation(
         small_rhs: Test RHS vector fixture
         test_seed: Random seed fixture
     """
-    # Archive with only 1 solution, but we need 3
+    # Archive with only 1 solution, but we need 2 base systems after integer division
     insufficient_archive = np.array([[0.5, 0.3]], dtype=np.float64)
 
     try:
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=small_spd_matrix,
             mix={"residual_error": 1.0},
-            total=3,  # Request more than archive has
-            strategy_overrides={"residual_error": {"cg_iters": 3}},
+                total=8,
+                strategy_overrides={"residual_error": {"cg_iters": 3}},
             seed=test_seed,
             shuffle=False,
             archive_solutions=insufficient_archive,
@@ -438,9 +444,10 @@ def test_error_strategy_in_generate_mixture(
         archive_rhs=archive_rhs,
     )
 
-    # Verify both strategies contributed
-    assert rhs.shape == (4, 2), "Should have 4 total samples"
-    assert solutions.shape == (4, 2)
+    expected_normal = 2
+    expected_trace = _expected_trace_systems(2, 3)
+    assert rhs.shape == (expected_normal + expected_trace, 2)
+    assert solutions.shape == (expected_normal + expected_trace, 2)
 
     # Verify error traces are present (from residual_error strategy)
     assert error_traces is not None, "Error traces should be populated"
@@ -490,7 +497,7 @@ def test_error_strategy_traces_structure(
     assert error_traces is not None, "Error traces should be populated"
 
     # Verify each sample has multiple traces (CG iterations)
-    for sample_idx in range(3):
+    for sample_idx in range(solutions.shape[0]):
         mask = error_traces.sample_indices == sample_idx
         sample_traces = error_traces.iteration_indices[mask]
 
