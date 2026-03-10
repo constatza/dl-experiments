@@ -19,12 +19,13 @@ dependencies = [
 ]
 
 [project.scripts]
-compare-preconditioners = "neuralls.cli.compare_preconditioners:run"
+compare-all = "neuralls.cli.compare_preconditioners:run"
+generate-all     = "neuralls.cli.generate_multiple:run"
 predict                 = "neuralls.cli.predict:run"
 process-data            = "neuralls.cli.process_data:run"
 run-experiments         = "neuralls.cli.run_experiments:run"
 train-model             = "neuralls.cli.train_model:run"
-train-multiple          = "neuralls.cli.train_multiple:run"
+train-all          = "neuralls.cli.train_multiple:run"
 
 #[build-system]
 #requires = ["setuptools>=61.0"]
@@ -64,6 +65,9 @@ markers = [
     "benchmark: numerical algorithm benchmarks and exactness tests",
     "integration: integration tests that test full workflows",
 ]
+
+[tool.uv]
+package = true
 
 [tool.uv.sources]
 dlkit = { path = "../dlkit", editable = true }

@@ -1,15 +1,16 @@
 # Configuration System
 
 This project now uses a strict split between:
-- training configs (`experiments.toml` + `models/*` + `datasets/*`)
-- comparison configs (`comparison/*`, `schema_version = 3`)
+- a master registry (`experiments.toml`)
+- training configs (`models/*` + `datasets/*`)
+- comparison configs (`comparison/*`)
 
 ## Directory Layout
 
 ```text
 configs/
-  experiments.toml          # Training experiment matrix
-  experiments-ffnn.toml     # Alternate training matrix
+  experiments.toml          # Master registry for datasets/models/comparisons/experiments
+  experiments-ffnn.toml     # Alternate master registry
   models/                   # Model/training settings
   datasets/                 # Dataset generation settings
   comparison/
@@ -19,9 +20,9 @@ configs/
 
 ## Training Protocol
 
-`experiments.toml` defines training runs via `[[experiment]]` (or `[[run]]` in direct-path mode).
+`experiments.toml` is the discoverability layer. It defines explicit registries for datasets, models, comparisons, and experiment bindings.
 
-Example (`[[experiment]]` form):
+Example:
 
 ```toml
 project_root = ".."
@@ -32,20 +33,30 @@ tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
 # optional; if omitted for sqlite URIs, defaults to sibling `mlartifacts/`
 # artifacts_destination = "/data/projects/graph-cg/data/output/mlartifacts"
 
-[comparisons]
-tracking_uri = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
-artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
+[[datasets]]
+id = "solutions"
+path = "datasets/solutions.toml"
 
-[[experiment]]
+[[models]]
+id = "linear"
+path = "models/linear.toml"
+
+[[comparisons]]
+id = "linear"
+path = "comparison/linear.toml"
+
+[[experiments]]
 id = "linear_test_solutions"
 dataset = "solutions"
 model = "linear"
 ```
 
 Notes:
-- `dataset` and `model` are IDs, not file paths.
-- The loader resolves actual config files from the active config root.
-- Checkpoints are training outputs; they are not declared in `experiments.toml`.
+- Registry `id` values are stable lookup handles, not runtime dataset identity.
+- Dataset runtime identity comes from the dataset config top-level `id`.
+- The loader resolves actual config files from the registry path entries.
+- `[[run]]` direct-path mode is still supported for ad hoc execution.
+- Checkpoints are training outputs; optional `checkpoint_path` overrides remain experiment-local metadata.
 
 ### MLflow Configuration (Flat Only)
 
@@ -64,12 +75,9 @@ Those infrastructure values come from `experiments.toml` or runtime env.
 
 ## Comparison Protocol (Strict)
 
-Comparison configs must use `schema_version = 3` and `[[preconditioners]]`.
+Comparison configs use `[[preconditioners]]`.
 
 ```toml
-schema_version = 3
-run_name = "comparison-default"
-
 [general]
 
 [general.params]
@@ -84,16 +92,7 @@ breakdown_tol = 1e-14
 matrix_path = "/data/processed/solutions"
 rhs_path = "/data/processed/gaussian-rhs"
 rhs_index = 0
-dataset_alias = "solutions"
 normalize_system = "matrix"
-
-[general.tracking]
-tracking_uri = "sqlite:////data/projects/graph-cg/data/comparisons/mlflow.db"
-artifact_location = "/data/projects/graph-cg/data/comparisons/mlartifacts"
-experiment_name = "neuralls-comparisons"
-
-[general.model_store]
-tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
 
 [[preconditioners]]
 name = "jacobi"
@@ -102,17 +101,24 @@ type = "jacobi"
 [[preconditioners]]
 name = "neural_linear"
 type = "neural"
+experiment = "linear_test_solutions"
 fallback = "identity"
-model_ref = { source = "registered", name = "NormScaledLinearFFNN", alias = "@dataset" }
+model_ref = { source = "registered", alias = "@dataset" }
 ```
 
 Validation rules:
-- `schema_version` must be `3`.
 - `preconditioners` must be non-empty.
 - Neural preconditioners must use `model_ref`.
-- `general.model_store` is required if any neural preconditioner uses `model_ref`.
-- If any alias is `"@dataset"`, `general.data.dataset_alias` is required.
+- Neural preconditioner names must be unique.
+- If a registered `model_ref` omits `name`, the neural preconditioner must define `experiment`.
+- If any alias is `"@dataset"`, the dataset alias must come from either:
+  - `general.data.dataset_alias`, or
+  - the neural preconditioner `experiment` binding resolved from `experiments.toml`
 - Unknown keys are rejected.
+
+Runtime behavior:
+- If a neural preconditioner cannot be resolved from MLflow, comparison logs a warning and skips that preconditioner.
+- If every configured preconditioner is skipped, the comparison run fails.
 
 ## Model Resolution
 
@@ -120,29 +126,30 @@ Neural preconditioners resolve from MLflow via `model_ref`:
 - `source = "registered"`: resolve by model name + alias/version.
 - `source = "logged"`: resolve by run/model filters (or explicit `run_id`).
 
-Checkpoint selection for comparison is deterministic:
+Experiment-bound neural resolution is deterministic:
+- resolve the explicit `experiment` id
+- derive dataset identity from the referenced dataset config `id`
+- derive registered model name from the referenced model config when `model_ref.name` is omitted
 - resolve MLflow run from `model_ref`
 - download checkpoint artifact for that run
 - use downloaded checkpoint path in the preconditioner
 
 ## CLI Usage
 
+Dataset generation:
+
+```bash
+uv run generate-all configs/experiments.toml
+```
+
 Training:
 
 ```bash
-uv run train-multiple configs/experiments.toml
+uv run train-all configs/experiments.toml
 ```
 
 Comparison (standalone):
 
 ```bash
-uv run compare-preconditioners --comparison-config configs/comparison/linear.toml
-```
-
-Comparison (pipeline tagging/grouping):
-
-```bash
-uv run compare-preconditioners \
-  --comparison-config configs/comparison/ffnn.toml \
-  --comparison-run /path/to/comparison_run.json
+uv run compare-all configs/experiments.toml
 ```

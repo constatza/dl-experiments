@@ -5,8 +5,8 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 ## Project Layout
 
 - `configs/` – Configuration directory containing:
-  - `experiments.toml` – Master training matrix linking model + dataset IDs
-  - `comparison/` – Comparison configs (`schema_version = 3`) with solver params + preconditioners
+  - `experiments.toml` – Master registry for datasets, models, comparisons, and experiment bindings
+  - `comparison/` – Comparison profiles (`schema_version = 3`) with solver/data params + explicit preconditioners
   - `datasets/` – Dataset specifications (collection/generation parameters, test sets)
   - `models/` – Model/training settings
 - `src/neuralls/` – Library code organized by functionality:
@@ -20,7 +20,7 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 
 ## Experiment Configuration System
 
-Experiments are organized with separate training and comparison configs. The system uses **typed Pydantic models** for validation at load time:
+Experiments are organized with separate master-registry, dataset, model, and comparison configs. The system uses **typed Pydantic models** for validation at load time:
 
 ```python
 from neuralls.configuration.loader import load_experiment
@@ -41,13 +41,40 @@ output_root = workspace.root_dir      # Master output directory (from MLflow)
 ```
 
 **Configuration structure:**
+- **Master registry:** Explicit registries for datasets, models, comparisons, and experiment bindings
 - **Model configs:** Neural architecture and training hyperparameters (DLKit settings model)
 - **Data configs:** Dataset sources and generation strategy (validated by `DataConfigFile`)
-- **Comparison configs:** Solver tolerances, matrix/RHS paths, model-store tracking, and `[[preconditioners]]` specs (`schema_version = 3`)
+- **Comparison configs:** Solver tolerances, matrix/RHS paths, and explicit `[[preconditioners]]` specs (`schema_version = 3`)
 
 All configs are validated using **Pydantic** at load time, catching configuration errors early with clear, actionable error messages.
 
-The master `configs/experiments.toml` file orchestrates multiple experiment bundles for batch workflows.
+The master `configs/experiments.toml` file is now the single discoverability layer for:
+- datasets
+- models
+- comparisons
+- experiment bindings between model and dataset keys
+
+Example:
+```toml
+[[datasets]]
+id = "solutions"
+path = "datasets/solutions.toml"
+
+[[models]]
+id = "linear"
+path = "models/linear.toml"
+
+[[comparisons]]
+id = "linear"
+path = "comparison/linear.toml"
+
+[[experiments]]
+id = "linear_test_solutions"
+dataset = "solutions"
+model = "linear"
+```
+
+Runtime identity is derived from the loaded config content, not from filename stems. In particular, dataset identity comes from the dataset config top-level `id`.
 
 ### MLflow Config Surface
 
@@ -69,7 +96,7 @@ tracking_uri = "sqlite:////abs/path/mlflow.db"
 
 Model configs must not define `tracking_uri` or `artifacts_destination`.
 Nested `client/server` subsections are removed from user-facing config files.
-Training topology belongs in `experiments.toml` or runtime environment.
+Training and comparison topology both belong in `experiments.toml` or runtime environment.
 
 ## Recent API Changes
 
@@ -173,6 +200,12 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
   ```
   - `config`: Path to data configuration TOML.
 
+- **Generate every dataset in the master registry**:
+  ```bash
+  uv run generate-all configs/experiments.toml
+  ```
+  - `config`: Path to the master experiments registry.
+
 - **Train a model**:
   ```bash
   uv run train-model configs/models/linear.toml --data-config configs/datasets/collect-504-solutions.toml
@@ -189,18 +222,13 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
   - `--data-config`: Path to the data configuration.
   - `--synthetic`: Run a synthetic benchmark (using $x=ones$, $b=Ax$) instead of loading data.
 
-- **Compare preconditioners** (standalone mode):
+- **Compare preconditioners**:
   ```bash
-  uv run compare-preconditioners --comparison-config configs/comparison/linear.toml
+  uv run compare-all configs/experiments.toml
   ```
-  - `--comparison-config`: Path to comparison parameters and preconditioner specs.
-  - Include `[general.tracking]` in the comparison config.
-
-- **Compare preconditioners** (pipeline mode):
-  ```bash
-  uv run compare-preconditioners --comparison-config configs/comparison/ffnn.toml --comparison-run /path/to/comparison_run.json
-  ```
-  - `--comparison-run`: Optional metadata file from `train-multiple` used for run grouping/tags only.
+  - `config`: Path to the master experiments registry.
+  - Runs every `[[comparisons]]` entry in declared order.
+  - MLflow topology is injected from `[mlflow]` and `[names]` in `experiments.toml`.
 
 - **Run full experiment matrix** (data + train):
   ```bash
@@ -211,17 +239,16 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
 
 - **Batch training with aggregate metrics**:
   ```bash
-  uv run train-multiple configs/experiments.toml --metric eval/rel_error
+  uv run train-all configs/experiments.toml --metric eval/rel_error
   ```
   - `config`: Path to the master experiments registry.
   - `--metric`: The MLflow metric to compare and plot across experiments.
 
 ### Comparison Workflows
 
-The repository uses **`compare-preconditioners`** as the unified tool for evaluating solver performance. It supports two modes:
+The repository uses **`compare-all`** as the unified tool for evaluating solver performance. Comparison is batch-driven from `experiments.toml`: each `[[comparisons]]` entry points at a comparison profile, and the CLI runs the full batch in order.
 
-1.  **Standalone**: Benchmarks specific checkpoints against classical baselines (Jacobi, ILU).
-2.  **Pipeline**: Automates the comparison of all experiments defined in a training batch, using the metadata generated during the `train-multiple` phase.
+Comparison profiles keep one explicit `[[preconditioners]]` list plus the solver/data settings they need. Neural entries can bind to an experiment id and resolve `model_ref.alias = "@dataset"` from that experiment's dataset identity, while MLflow topology stays centralized in `experiments.toml`.
 
 - **Optional MLflow logging**:
   ```bash

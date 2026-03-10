@@ -24,7 +24,17 @@ Data processing is configured via TOML files with the following sections:
 
 ### [flow]
 Optional flow identification.
-- **id**: `str`. Flow identifier. Defaults to the dataset name if not provided.
+- **id**: `str`. Flow identifier for generation internals. Optional.
+
+### Top-level `id`
+Canonical dataset identity.
+- **id**: `str`. Required for registry-driven training/comparison workflows.
+- This value is the canonical dataset identity used across:
+  - processed dataset lookup
+  - training workspace layout
+  - MLflow dataset tags/aliases
+  - experiment-bound comparison resolution
+- Do not rely on the filename stem as the dataset identity.
 
 ### [source]
 Defines input data paths.
@@ -46,6 +56,9 @@ Defines a specific data generation strategy. You can have multiple blocks to mix
     - `> 0`: Exact number of samples.
     - `-1`: Use all available samples (for archives).
     - `0`: Skip this strategy.
+- For trace strategies (`cg_residual`, `cg_residual_error`, `search_directions`), `samples`
+  is the desired trace-row budget. The implementation derives a base-system count
+  with integer division using the rows produced per CG run.
 - **seed**: `int`. Strategy-specific random seed. Default: `42`.
 - **shuffle**: `bool`. Strategy-specific shuffle. Default: `True`.
 
@@ -84,7 +97,8 @@ Uses eigenvectors as RHS ($b = v_i$), solves for $x = A^{-1}v_i$.
 
 #### `cg_residual_error`
 Generates data based on CG residual errors.
-- **residual_iters**: `int`. Number of residual iterations. Default: `15`.
+- **cg_iters**: `int`. Number of CG iterations per base system. Default: `8`.
+- **every_n**: `int`. Keep one trace row every `N` iterations. Default: `1`.
 - **archive_solutions**: `bool`. Archive intermediate solutions. Default: `False`.
 - **archive_rhs**: `bool`. Archive intermediate RHS. Default: `False`.
 

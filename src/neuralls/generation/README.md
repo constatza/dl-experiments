@@ -229,7 +229,7 @@ Same eigenvector selection as `eigenvector_forward`, but:
 
 Collects (residual, solution) pairs from CG iterations.
 
-1. **Generate N base systems:**
+1. **Generate enough base systems to satisfy the trace budget:**
    - If archive provided: load xᵢ* from archive, compute bᵢ = Axᵢ*
    - Otherwise: sample xᵢ* ~ N(0, I), compute bᵢ = Axᵢ*
 
@@ -247,7 +247,7 @@ Collects (residual, solution) pairs from CG iterations.
 - `iteration_indices`: which CG iteration
 
 **Parameters:**
-- `samples`: N (number of base systems)
+- `samples`: desired final trace-row budget
 - `cg_iters`: K (iterations per system)
 
 **Training mapping:** NN(rₖ) → xₖ
@@ -264,7 +264,7 @@ Collects (residual, solution) pairs from CG iterations.
 
 Collects (residual, error) pairs from CG iterations for error correction training.
 
-1. **Generate N base systems** with known true solutions xᵢ*:
+1. **Generate enough base systems** with known true solutions xᵢ*:
    - Preferably from solution archive (warning issued if random)
    - Compute bᵢ = Axᵢ*
 
@@ -292,7 +292,7 @@ making them valid training data for learning A⁻¹.
 - `true_solutions`: x* per base system
 
 **Parameters:**
-- `samples`: N (number of base systems)
+- `samples`: desired final trace-row budget
 - `cg_iters`: K (iterations per system)
 
 **Training mapping:** NN(rₖ) → eₖ, learning NN ≈ A⁻¹
@@ -309,7 +309,7 @@ making them valid training data for learning A⁻¹.
 
 Collects (Apₖ, pₖ) pairs from CG **without requiring true solutions**.
 
-1. **Generate N base systems** (random or from archive)
+1. **Generate enough base systems** (random or from archive)
 
 2. **For each system**, run CG for K iterations collecting search directions:
    ```
@@ -325,13 +325,13 @@ NN(Apₖ) ≈ pₖ  ⟹  NN ≈ A⁻¹
 
 Unlike residual/error strategies, this doesn't require known solutions.
 
-**Output:** `SearchDirectionsSamples` containing:
+**Output:** search-direction fields inside `ResidualTraceSamples`:
 - `search_direction_products`: Apₖ vectors (network inputs)
 - `search_directions`: pₖ vectors (network targets)
 - `sample_indices`, `iteration_indices`: trace indexing
 
 **Parameters:**
-- `samples`: N (number of base systems)
+- `samples`: desired final trace-row budget
 - `cg_iters`: K (iterations per system)
 
 **Training mapping:** NN(Apₖ) → pₖ, learning NN ≈ A⁻¹
@@ -464,12 +464,16 @@ mix={"random": 1.0, "krylov": 1.0}, total=1000  # 500 each
 
 ### Trace Strategy Counts
 
-For CG-based strategies, `counts_represent_final_pairs=True` specifies output pairs
-rather than base systems. The orchestrator computes:
+For CG-based strategies, `samples` already refers to the desired trace-row budget.
+Internally each strategy computes:
 
+```python
+rows_per_system = (cg_iters // every_n) + 1
+num_base_systems = max(1, samples // rows_per_system)
 ```
-num_base_systems = ⌈desired_pairs / cg_iters⌉
-```
+
+Any remainder is ignored. `counts_represent_final_pairs` is now a deprecated
+compatibility flag and does not change this behavior.
 
 ### Strategy Overrides
 

@@ -1806,7 +1806,7 @@ wheels = [
 [[package]]
 name = "neuralls"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "dlkit" },
     { name = "loguru" },

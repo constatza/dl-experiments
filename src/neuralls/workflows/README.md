@@ -118,18 +118,16 @@ neural_config = NeuralPreconditionerConfig(
 
 ### 3. Batch Comparison (`comparison.py`)
 
-**Purpose**: Run comparisons across multiple experiments from `experiments.toml`
+**Purpose**: Run all configured comparisons from the master registry
 
-**Key Function**: `run_batch_comparison()`
+**Key Function**: `run_comparison_batch()`
 
 **Usage**:
 ```bash
-uv run compare-preconditioners \
-  --comparison-config configs/comparison/linear.toml \
-  --comparison-run /path/to/comparison_run.json
+uv run compare-all configs/experiments.toml
 ```
-- `--comparison-config`: The comparison configuration containing preconditioner specs.
-- `--comparison-run`: Optional metadata file from `train-multiple` for run grouping/tags.
+- `experiments.toml` provides MLflow topology, experiment bindings, and the ordered `[[comparisons]]` batch.
+- Each comparison profile file contains only solver/data/preconditioner settings.
 
 ### 4. Experiment Runner (`runner.py`)
 
@@ -138,7 +136,7 @@ uv run compare-preconditioners \
 **Key Function**: `run_experiment_matrix()`
 
 **Workflow**:
-1. Load experiment definitions from `experiments.toml`
+1. Load experiment bindings from the master registry
 2. Compute source code hash for cache invalidation
 3. For each experiment:
    - Generate/cache dataset
@@ -196,7 +194,27 @@ results = run_cg_comparison(A, b, preconditioners={"neural": scheduled})
 
 ## Configuration Flow
 
-### Two-Config System
+### Registry + Config System
+
+**Master Registry**:
+```toml
+[[datasets]]
+id = "solutions"
+path = "datasets/solutions.toml"
+
+[[models]]
+id = "linear"
+path = "models/linear.toml"
+
+[[comparisons]]
+id = "linear"
+path = "comparison/linear.toml"
+
+[[experiments]]
+id = "linear_test_solutions"
+dataset = "solutions"
+model = "linear"
+```
 
 **During Training**:
 ```toml
@@ -210,8 +228,6 @@ enabled = true
 **During Comparison**:
 ```toml
 # configs/comparison/linear.toml - Comparison parameters + preconditioner specs
-schema_version = 3
-
 [general]
 
 [general.params]
@@ -223,22 +239,21 @@ max_iterations = 200
 matrix_path = "/path/to/matrix-or-dataset-dir"
 rhs_path = "/path/to/rhs-or-dataset-dir"
 
-[general.model_store]
-tracking_uri = "sqlite:////path/to/models/mlflow.db"
-
 [[preconditioners]]
 name = "neural"
 type = "neural"
-model_ref = { source = "registered", name = "NormScaledLinearFFNN", alias = "solutions" }
+experiment = "linear_test_solutions"
+model_ref = { source = "registered", alias = "@dataset" }
 limit_iters = 10
 fallback = "jacobi"
 ```
 
 **Why Separate**:
-- Experiments don't need comparison configs (only generate data + train)
-- Comparison configs specified at comparison time (flexible testing of checkpoints)
-- Single checkpoint can be tested with multiple comparison configurations
-- Training MLflow infrastructure is injected from `experiments.toml` or runtime env, not model TOML
+- The master registry is the only orchestration input for datasets, models, comparisons, and experiment bindings.
+- Comparison profiles stay reusable without becoming a second source of truth for MLflow topology.
+- Neural preconditioners stay explicit peers of classical baselines.
+- Training and comparison MLflow infrastructure both come from `experiments.toml`.
+- Dataset identity comes from dataset config `id`, not filename stems.
 
 ## Common Patterns
 
