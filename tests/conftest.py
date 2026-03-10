@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import sys
-from types import ModuleType
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pytest
 from loguru import logger
 
+from tests.scope_policy import new_root_artifact_dirs, root_artifact_dirs
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def _patch_default_paths_for_loaded_modules(
     path_values: dict[str, Path],
@@ -33,19 +37,71 @@ def _patch_default_paths_for_loaded_modules(
                 monkeypatch.setattr(module, name, value, raising=False)
 
 
+@pytest.fixture(scope="session")
+def repo_root() -> Path:
+    """Repository root for leak detection."""
+    return REPO_ROOT
+
+
+@pytest.fixture(scope="session")
+def root_artifact_baseline(repo_root: Path) -> frozenset[str]:
+    """Existing root-level artifact directories before the suite runs."""
+    return frozenset(root_artifact_dirs(repo_root))
+
+
+@pytest.fixture
+def runtime_root(tmp_path: Path) -> Path:
+    """Per-test runtime root for all generated artifacts."""
+    return (tmp_path / "runtime").resolve()
+
+
+@pytest.fixture
+def output_root(runtime_root: Path) -> Path:
+    """Per-test output root."""
+    return runtime_root / "output"
+
+
+@pytest.fixture
+def processed_root(runtime_root: Path) -> Path:
+    """Per-test processed data root."""
+    return runtime_root / "processed"
+
+
+@pytest.fixture
+def figures_root(runtime_root: Path) -> Path:
+    """Per-test figures root."""
+    return runtime_root / "figures"
+
+
+@pytest.fixture
+def mlflow_tracking_dir(runtime_root: Path) -> Path:
+    """Per-test MLflow tracking root."""
+    return runtime_root / "mlruns"
+
+
+@pytest.fixture
+def mlflow_artifact_dir(runtime_root: Path) -> Path:
+    """Per-test MLflow artifact root."""
+    return runtime_root / "mlartifacts"
+
+
 @pytest.fixture(autouse=True)
 def isolate_default_paths_with_tmp_path(
-    tmp_path: Path,
+    runtime_root: Path,
+    output_root: Path,
+    processed_root: Path,
+    figures_root: Path,
+    mlflow_tracking_dir: Path,
+    mlflow_artifact_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Force all default artifact paths into pytest temp storage."""
-    runtime_root = tmp_path / "runtime"
     env_map = {
-        "GRAPH_CG_OUTPUT_DIR": str(runtime_root / "output"),
-        "GRAPH_CG_PROCESSED_DIR": str(runtime_root / "processed"),
-        "GRAPH_CG_FIGURES_DIR": str(runtime_root / "figures"),
-        "GRAPH_CG_MLRUNS_DIR": str(runtime_root / "mlruns"),
-        "GRAPH_CG_MLARTIFACTS_DIR": str(runtime_root / "mlartifacts"),
+        "GRAPH_CG_OUTPUT_DIR": str(output_root),
+        "GRAPH_CG_PROCESSED_DIR": str(processed_root),
+        "GRAPH_CG_FIGURES_DIR": str(figures_root),
+        "GRAPH_CG_MLRUNS_DIR": str(mlflow_tracking_dir),
+        "GRAPH_CG_MLARTIFACTS_DIR": str(mlflow_artifact_dir),
         # Force DLKit test artifacts away from repository-level tests/artifacts/.
         "DLKIT_TEST_MODE": "1",
         "DLKIT_TEST_ARTIFACT_ROOT": str(runtime_root / "dlkit_artifacts"),
@@ -69,6 +125,23 @@ def isolate_default_paths_with_tmp_path(
         monkeypatch.setattr(neuralls_constants, name, value, raising=False)
 
     _patch_default_paths_for_loaded_modules(path_values, monkeypatch)
+
+
+@pytest.fixture(autouse=True)
+def guard_repo_root_artifact_leaks(
+    repo_root: Path,
+    root_artifact_baseline: frozenset[str],
+) -> None:
+    """Fail if a test creates new root-level artifact directories."""
+    before = root_artifact_dirs(repo_root)
+    yield
+    leaked = new_root_artifact_dirs(repo_root, before | set(root_artifact_baseline))
+    if leaked:
+        leaked_list = ", ".join(sorted(leaked))
+        pytest.fail(
+            "Tests must not create root-level artifact directories outside tests/: "
+            f"{leaked_list}"
+        )
 
 
 @pytest.fixture(scope="session", autouse=True)

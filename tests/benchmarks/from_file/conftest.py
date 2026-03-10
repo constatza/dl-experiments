@@ -1,6 +1,7 @@
 """Fixtures for from-file benchmarks."""
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -8,15 +9,22 @@ from neuralls.io.base import load_matrix
 from scipy import linalg
 
 
-# List of files to benchmark.
-# Default is empty, user must supply valid paths either here or via env var.
-MATRIX_PATHS = (r"/data/projects/graph-cg/data/raw/SpectralData/benchmarks/Ktilde.txt",)
-RHS_PATHS = (r"/data/projects/graph-cg/data/raw/SpectralData/benchmarks/ftilde.txt",)
-L_PATH = r"/data/projects/graph-cg/data/raw/SpectralData/benchmarks/L.txt"
+DATA_DIR = Path(__file__).with_name("data")
+DEFAULT_MATRIX_PATHS = (DATA_DIR / "Ktilde.txt",)
+DEFAULT_RHS_PATHS = (DATA_DIR / "ftilde.txt",)
+DEFAULT_L_PATH = DATA_DIR / "L.txt"
 
-# Allow overriding/extending via env var BENCHMARK_MATRIX_PATHS
-if "BENCHMARK_MATRIX_PATHS" in os.environ:
-    paths = os.environ["BENCHMARK_MATRIX_PATHS"].split(",")
+
+def _paths_from_env(var_name: str, default_paths: tuple[Path, ...]) -> tuple[Path, ...]:
+    value = os.environ.get(var_name)
+    if value is None:
+        return default_paths
+    return tuple(Path(item).expanduser().resolve() for item in value.split(",") if item)
+
+
+MATRIX_PATHS = _paths_from_env("BENCHMARK_MATRIX_PATHS", DEFAULT_MATRIX_PATHS)
+RHS_PATHS = _paths_from_env("BENCHMARK_RHS_PATHS", DEFAULT_RHS_PATHS)
+L_PATH = Path(os.environ.get("BENCHMARK_L_PATH", str(DEFAULT_L_PATH))).expanduser().resolve()
 
 
 # Use [None] if empty to ensure at least one test is collected and then skipped with a message
@@ -49,12 +57,12 @@ def system(matrix_path, rhs_path):
     Returns:
         tuple: (A, b, x_exact, L) where x_exact is computed solution.
     """
-    A = load_matrix(matrix_path, delimiter=",")
-    L = load_matrix(L_PATH, delimiter=",")
+    A = load_matrix(str(matrix_path), delimiter=",")
+    L = load_matrix(str(L_PATH), delimiter=",")
     # Zero out near-zero entries using centralized threshold
     A[np.absolute(A) <= SPARSITY_THRESHOLD] = 0
     n = A.shape[0]
-    b = load_matrix(rhs_path, delimiter=",")
+    b = load_matrix(str(rhs_path), delimiter=",")
     x_exact = linalg.solve(A, b)
     return A, b, x_exact, L
 
@@ -84,6 +92,6 @@ IC0_THRESHOLD = 0.0  # Use no thresholding to match reference
 # Note: Integer metrics (sparsity counts, iteration counts) use exact equality (zero tolerance)
 
 
-def check_existence(path):
-    if not os.path.exists(path) or path is None:
+def check_existence(path: Path | None) -> None:
+    if path is None or not path.exists():
         pytest.skip(f"Matrix file not found: {path}")
