@@ -1,0 +1,23 @@
+# Few-eigenvector solutions dataset (largest eigenvalues, N=5).
+# Uses a small number of eigenvectors as solutions: b = A @ x (forward mode).
+# Tests preconditioner generalization to low-dimensional eigenvector subspaces.
+#
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/eig-few-solutions-largest.toml
+# Output: eig-few-solutions-largest-{normalization}/
+
+[source]
+matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "eigenvector_forward"
+which = "largest"
+num_eigenvectors = 5
+samples = 6000
+
+[output]
+data_dir = "/data/projects/graph-cg/processed"

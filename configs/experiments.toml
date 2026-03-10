@@ -48,6 +48,36 @@ id = "gaussian"
 path = "datasets/gaussian-rhs.toml"
 display_name = "gaussian-rhs"
 
+[[datasets]]
+id = "scaled-solutions"
+path = "datasets/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[datasets]]
+id = "sparse-rhs"
+path = "datasets/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[datasets]]
+id = "eig-few-solutions-largest"
+path = "datasets/eig-few-solutions-largest.toml"
+display_name = "Eig Few Solutions Largest"
+
+[[datasets]]
+id = "eig-few-solutions-smallest"
+path = "datasets/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[datasets]]
+id = "eig-few-rhs-largest"
+path = "datasets/eig-few-rhs-largest.toml"
+display_name = "Eig Few RHS Largest"
+
+[[datasets]]
+id = "eig-few-rhs-smallest"
+path = "datasets/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"
+
 # ------
 # Models
 # ------
@@ -72,17 +102,17 @@ dataset = "solutions"
 model = "linear-l2"
 display_name = "Solutions"
 
-# [[experiments]]
-# id = "eig-rhs-largest"
-# dataset = "eig-rhs-largest"
-# model = "linear"
-# display_name = "Eig RHS Largest"
+[[experiments]]
+id = "eig-rhs-largest"
+dataset = "eig-rhs-largest"
+model = "linear"
+display_name = "Eig RHS Largest"
 
-# [[experiments]]
-# id = "eig-rhs-smallest"
-# dataset = "eig-rhs-smallest"
-# model = "linear"
-# display_name = "Eig RHS Smallest"
+[[experiments]]
+id = "eig-rhs-smallest"
+dataset = "eig-rhs-smallest"
+model = "linear"
+display_name = "Eig RHS Smallest"
 
 [[experiments]]
 id = "eig-solutions-largest"
@@ -90,11 +120,13 @@ dataset = "eig-solutions-largest"
 model = "linear"
 display_name = "Eig Sol Largest"
 
-# [[experiments]]
-# id = "residuals"
-# dataset = "residuals-100"
-# model = "linear"
-# display_name = "Residuals"
+[[experiments]]
+id = "residuals"
+dataset = "residuals-100"
+model = "linear"
+display_name = "Residuals"
+
+
 
 
 # -----------
@@ -105,3 +137,33 @@ display_name = "Eig Sol Largest"
 id = "linear"
 path = "comparison/linear.toml"
 display_name = "Linear Comparison"
+
+[[comparisons]]
+id = "scaled-solutions"
+path = "comparison/scaled-solutions.toml"
+display_name = "Scaled Solutions Comparison"
+
+[[comparisons]]
+id = "sparse-rhs"
+path = "comparison/sparse-rhs.toml"
+display_name = "Sparse RHS Comparison"
+
+[[comparisons]]
+id = "eig-few-solutions-largest"
+path = "comparison/eig-few-solutions-largest.toml"
+display_name = "Eig Few Sol Largest Comparison"
+
+[[comparisons]]
+id = "eig-few-solutions-smallest"
+path = "comparison/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Sol Smallest Comparison"
+
+[[comparisons]]
+id = "eig-few-rhs-largest"
+path = "comparison/eig-few-rhs-largest.toml"
+display_name = "Eig Few RHS Largest Comparison"
+
+[[comparisons]]
+id = "eig-few-rhs-smallest"
+path = "comparison/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest Comparison"

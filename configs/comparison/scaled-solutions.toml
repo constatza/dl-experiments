@@ -10,8 +10,8 @@ m_max = 10
 
 [general.data]
 matrix_path = "/data/projects/graph-cg/processed/solutions"
-rhs_path = "/data/projects/graph-cg/processed/gaussian-rhs"
-# rhs_index = 0   # Which RHS sample to use (0 = first)
+rhs_path = "/data/projects/graph-cg/processed/scaled-solutions"
+normalize_system = "matrix"
 
 [[preconditioners]]
 name = "none"

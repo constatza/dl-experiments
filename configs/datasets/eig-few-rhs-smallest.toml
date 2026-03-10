@@ -1,0 +1,23 @@
+# Few-eigenvector RHS dataset (smallest eigenvalues, N=5).
+# Generates b from eigenvector combinations, then solves x = A^-1 @ b (inverse mode).
+# Tests preconditioner performance on RHS vectors aligned with low-frequency modes.
+#
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/eig-few-rhs-smallest.toml
+# Output: eig-few-rhs-smallest-{normalization}/
+
+[source]
+matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "eigenvector_inverse"
+which = "smallest"
+num_eigenvectors = 5
+samples = 6000
+
+[output]
+data_dir = "/data/projects/graph-cg/processed"
