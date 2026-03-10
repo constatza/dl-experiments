@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Mapping
+from pathlib import Path
 
 import mlflow
 from loguru import logger
@@ -148,3 +149,30 @@ def assign_dataset_alias_to_registered_model(
             f"expected version {version_str}, got {resolved.version}."
         )
     return resolved_version
+
+
+def read_registered_model_name(model_config_path: Path) -> str | None:
+    """Read the registered model name from a model config TOML.
+
+    Reads ``[MODEL].name`` which is used for MLflow model registry lookup.
+
+    Args:
+        model_config_path: Path to the model configuration TOML file.
+
+    Returns:
+        Model name string, or ``None`` if missing or unreadable.
+    """
+    import tomllib
+
+    try:
+        with open(model_config_path, "rb") as fh:
+            raw = tomllib.load(fh)
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+    model_section = raw.get("MODEL")
+    if not isinstance(model_section, dict):
+        return None
+    model_name = model_section.get("name")
+    if not isinstance(model_name, str):
+        return None
+    return model_name.strip() or None

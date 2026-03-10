@@ -14,6 +14,8 @@ from mlflow.tracking import MlflowClient
 
 from neuralls.io.dataset_storage import save_dataset
 from neuralls.workflows.comparison import run_comparison
+from neuralls.workflows.diagnostics import compute_diagnostics
+from neuralls.workflows.mlflow_client import log_diagnostics_to_mlflow
 from neuralls.workflows.specs import ComparisonParams
 from neuralls.workflows.training import _log_training_evaluation
 
@@ -70,16 +72,51 @@ def test_training_logs_diagnostics_artifact_to_mlflow_with_sqlite(tmp_path: Path
 
     with mlflow.start_run(experiment_id=experiment_id, run_name="diag-train") as run:
         run_id = run.info.run_id
-        exp_id = run.info.experiment_id
 
     _log_training_evaluation(
         tracking_uri=tracking_uri,
         run_id=run_id,
-        exp_id=exp_id,
-        artifacts_destination=str(artifact_root),
         training_result=fake_training_result,
         figures_dir=tmp_path / "tmp-figures",
     )
+
+    run_data = client.get_run(run_id).data
+    assert "eval/rel_error" in run_data.metrics
+    assert "eval/mae" in run_data.metrics
+    assert "eval/mse" in run_data.metrics
+
+    figures = client.list_artifacts(run_id, path="figures")
+    assert any(item.path.endswith("diagnostics_training.png") for item in figures)
+
+
+def test_log_diagnostics_to_mlflow_reopens_sqlite_run_without_active_context(
+    tmp_path: Path,
+) -> None:
+    """Diagnostics helper logs directly to an existing SQLite-backed run."""
+    output_root = tmp_path / "output"
+    tracking_uri = _sqlite_tracking_uri(output_root / "mlruns" / "mlflow.db")
+    artifact_root = output_root / "mlartifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+
+    client = MlflowClient(tracking_uri=tracking_uri)
+    experiment_id = _ensure_experiment(
+        client=client,
+        name="training-diagnostics-direct-sqlite",
+        artifact_root=artifact_root,
+    )
+
+    mlflow.set_tracking_uri(tracking_uri)
+    with mlflow.start_run(experiment_id=experiment_id, run_name="diag-direct") as run:
+        run_id = run.info.run_id
+
+    diagnostics = compute_diagnostics(
+        np.array([[1.0], [2.0]], dtype=np.float64),
+        np.array([[1.1], [1.9]], dtype=np.float64),
+    )
+    figure_path = tmp_path / "diagnostics_training.png"
+    figure_path.write_text("placeholder", encoding="utf-8")
+
+    log_diagnostics_to_mlflow(tracking_uri, run_id, diagnostics, figure_path)
 
     run_data = client.get_run(run_id).data
     assert "eval/rel_error" in run_data.metrics
@@ -97,10 +134,10 @@ def _write_experiments_config(path: Path, output_root: Path) -> str:
         "mlflow": {
             "tracking_uri": tracking_uri,
         },
-        "names": {
-            "training": "neuralls-training",
-            "comparison": "neuralls-comparisons",
-        },
+            "names": {
+                "training": "neuralls-training",
+                "comparison": "Comparisons",
+            },
     }
     with path.open("wb") as fh:
         tomli_w.dump(payload, fh)
@@ -112,8 +149,6 @@ def _write_comparison_config(path: Path, dataset_dir: Path, tracking_uri: str) -
     path.write_text(
         "\n".join(
             [
-                "schema_version = 3",
-                "",
                 "[general]",
                 "",
                 "[general.params]",
@@ -127,14 +162,6 @@ def _write_comparison_config(path: Path, dataset_dir: Path, tracking_uri: str) -
                 f'matrix_path = "{dataset_dir}"',
                 f'rhs_path = "{dataset_dir}"',
                 'normalize_system = "matrix"',
-                "",
-                "[general.tracking]",
-                f'tracking_uri = "{tracking_uri}"',
-                f'artifact_location = "{(dataset_dir.parent / "mlartifacts").as_posix()}"',
-                'experiment_name = "neuralls-comparisons"',
-                "",
-                "[general.model_store]",
-                f'tracking_uri = "{tracking_uri}"',
                 "",
                 "[[preconditioners]]",
                 'name = "none"',
@@ -158,7 +185,7 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
     client = MlflowClient(tracking_uri=tracking_uri)
     experiment_id = _ensure_experiment(
         client=client,
-        name="neuralls-comparisons",
+        name="Comparisons",
         artifact_root=artifact_root,
     )
 
@@ -196,7 +223,8 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
     ):
         outcomes = run_comparison(
             comparison_config=comparison_config,
-            params=ComparisonParams(save_plots=False),
+            params=ComparisonParams(),
+            experiments_config_path=experiments_config,
         )
 
     assert outcomes and outcomes[0].success is True

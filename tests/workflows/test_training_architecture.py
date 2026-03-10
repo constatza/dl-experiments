@@ -15,14 +15,14 @@ import pytest
 from dlkit import GeneralSettings
 from dlkit.tools.io.sparse import save_sparse_pack
 
+from neuralls.workflows.artifact_io import TrainingArrays
+from neuralls.workflows.mlflow_client import parent_run_context
 from neuralls.workflows.training import (
     _configure_dataloader_runtime,
     _create_feature_configs,
     _extract_evaluation_arrays,
-    _parent_run_context,
     _resolve_mlflow_logging_config,
     _validate_dataset_section,
-    TrainingArrays,
     GRAPH_DATASET_NAME,
     FLEXIBLE_DATASET_NAME,
 )
@@ -121,13 +121,13 @@ def test_parent_run_context_manager() -> None:
     
     try:
         test_id = "test-parent-id"
-        with _parent_run_context(test_id):
+        with parent_run_context(test_id):
             assert os.environ.get(var_name) == test_id
-            
+
         assert os.environ.get(var_name) == original_val
-        
+
         # Test with None (should do nothing)
-        with _parent_run_context(None):
+        with parent_run_context(None):
             assert os.environ.get(var_name) == original_val
             
     finally:
@@ -166,12 +166,13 @@ def test_configure_dataloader_runtime_forces_single_process() -> None:
 
 
 @patch("neuralls.workflows.training.compute_diagnostics")
-@patch("neuralls.workflows.training._write_diagnostics_figure")
-@patch("neuralls.workflows.training._log_diagnostics_to_mlflow")
+@patch("neuralls.workflows.training.write_diagnostics_figure")
+@patch("neuralls.workflows.training.log_diagnostics_to_mlflow")
 def test_log_training_evaluation_orchestration(
     mock_mlflow_log: MagicMock,
     mock_write: MagicMock,
     mock_compute: MagicMock,
+    tmp_path: Path,
 ) -> None:
     """_log_training_evaluation delegates to diagnostics and figure helpers."""
     from neuralls.workflows.training import _log_training_evaluation
@@ -184,14 +185,13 @@ def test_log_training_evaluation_orchestration(
     
     mock_compute.return_value = MagicMock()
     mock_write.return_value = Path("dummy.png")
+    tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
     
     _log_training_evaluation(
-        tracking_uri="sqlite:///test.db",
+        tracking_uri=tracking_uri,
         run_id="run123",
-        exp_id="exp456",
-        artifacts_destination="/tmp/art",
         training_result=mock_result,
-        figures_dir=Path("/tmp/figs"),
+        figures_dir=tmp_path / "figures",
     )
     
     mock_compute.assert_called_once()
@@ -234,16 +234,17 @@ def test_extract_evaluation_arrays_returns_none_when_missing_keys() -> None:
 
 def test_resolve_mlflow_logging_config_reads_runtime_env(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """MLflow logging now resolves infra from runtime env only."""
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://mlflow.company.net:5000")
-    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", "/tmp/mlartifacts")
+    expected_tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
+    artifact_uri = str(tmp_path / "mlartifacts")
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", expected_tracking_uri)
+    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", artifact_uri)
 
-    tracking_uri, artifacts_destination = _resolve_mlflow_logging_config(
-        MagicMock(spec=GeneralSettings)
-    )
-    assert tracking_uri == "http://mlflow.company.net:5000"
-    assert artifacts_destination == "/tmp/mlartifacts"
+    tracking_uri, artifacts_destination = _resolve_mlflow_logging_config()
+    assert tracking_uri == expected_tracking_uri
+    assert artifacts_destination == artifact_uri
 
 
 def test_resolve_mlflow_logging_config_handles_missing_env(
@@ -253,8 +254,6 @@ def test_resolve_mlflow_logging_config_handles_missing_env(
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
 
-    tracking_uri, artifacts_destination = _resolve_mlflow_logging_config(
-        MagicMock(spec=GeneralSettings)
-    )
+    tracking_uri, artifacts_destination = _resolve_mlflow_logging_config()
     assert tracking_uri is None
     assert artifacts_destination == ""

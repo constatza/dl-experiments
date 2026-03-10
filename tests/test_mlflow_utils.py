@@ -90,7 +90,7 @@ def test_resolve_mlflow_paths_normalizes_relative_uris(tmp_path: Path) -> None:
     workspace.mkdir()
 
     paths = resolve_mlflow_paths(
-        "sqlite:///mlruns.db",
+        f"sqlite:///{(tmp_path / 'mlruns.db').as_posix()}",
         "mlartifacts",
         project_root,
         workspace,
@@ -115,7 +115,7 @@ def test_collect_artifacts_filters_missing(tmp_path: Path) -> None:
 
 def test_start_run_and_logging(dummy_mlflow: DummyMlflow, tmp_path: Path) -> None:
     paths = MlflowPaths(
-        tracking_uri="sqlite:////tmp/db",
+        tracking_uri=f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}",
         artifact_uri=str(tmp_path / "mlartifacts"),
     )
     exp_id = ensure_experiment("demo", paths)

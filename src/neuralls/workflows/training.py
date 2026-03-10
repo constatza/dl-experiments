@@ -28,8 +28,7 @@ import json
 import os
 import shutil
 import tempfile
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +46,7 @@ from dlkit.tools.config.data_entries import (
 from dlkit.tools.config.dataset_settings import DatasetSettings
 from dlkit.tools.io.sparse import PackFiles
 from loguru import logger
+from mlflow.tracking import MlflowClient
 import numpy as np
 
 from neuralls.configuration import ExperimentWorkspace
@@ -56,72 +56,24 @@ from neuralls.configuration.mlflow_normalization import (
 )
 from neuralls.configuration.loader import load_experiment
 from neuralls.constants import DEFAULT_OUTPUT_DIR
-from neuralls.io.dataset_storage import (
-    load_dense_training_arrays,
-    resolve_dataset_paths,
-)
 from neuralls.io.checkpoints import get_latest_checkpoint
-from neuralls.workflows.diagnostics import compute_diagnostics
+from neuralls.workflows.artifact_io import (
+    TrainingArrays,
+    coerce_jsonable,
+    load_training_arrays,
+    save_training_predictions,
+)
+from neuralls.workflows.diagnostics import compute_diagnostics, write_diagnostics_figure
 from neuralls.workflows.inference.output import write_mlflow_sidecar
+from neuralls.workflows.mlflow_client import (
+    find_mlflow_run,
+    log_artifacts_to_mlflow,
+    log_diagnostics_to_mlflow,
+    parent_run_context,
+)
 
 GRAPH_DATASET_NAME: str = "GraphDataset"
 FLEXIBLE_DATASET_NAME: str = "FlexibleDataset"
-
-
-@dataclass(frozen=True)
-class TrainingArrays:
-    """Training data artifact paths from dataset storage.
-
-    Attributes:
-        rhs: Path to rhs.npy
-        solutions: Path to solutions.npy
-        matrix_pack: Path to matrix_coo sparse pack directory
-        sample_count: Number of samples in rhs/solutions
-    """
-
-    rhs: Path
-    solutions: Path
-    matrix_pack: Path
-    sample_count: int
-
-
-@dataclass(frozen=True)
-class DatasetConfig:
-    """Immutable dataset configuration.
-
-    Attributes:
-        features_path: Optional path to features file (for file-based datasets)
-        targets_path: Optional path to targets file (for file-based datasets)
-    """
-
-    features_path: Path | None
-    targets_path: Path | None
-
-
-@dataclass(frozen=True)
-class SessionConfig:
-    """Immutable session configuration.
-
-    Attributes:
-        session_name: Optional session name for MLflow tracking
-    """
-
-    session_name: str | None
-
-
-@dataclass(frozen=True)
-class OutputConfig:
-    """Immutable output configuration.
-
-    Attributes:
-        output_dir: Root directory for training outputs
-        accelerator: Hardware accelerator type (cpu/gpu/tpu)
-        checkpoint_filename: Custom checkpoint filename pattern
-    """
-
-    output_dir: Path | None
-    accelerator: str | None
-    checkpoint_filename: str | None
 
 
 @dataclass(frozen=True)
@@ -137,22 +89,6 @@ class TrainingResult:
     checkpoint_path: Path
     experiment_dir: Path
     data_dir: Path
-
-
-def _load_training_arrays(data_dir: Path) -> TrainingArrays:
-    """Resolve training artifact paths from dataset directory."""
-    paths = resolve_dataset_paths(data_dir)
-    rhs, solutions = load_dense_training_arrays(data_dir)
-    if rhs.shape[0] != solutions.shape[0]:
-        raise ValueError(
-            f"RHS and solutions sample counts must match, got {rhs.shape[0]} and {solutions.shape[0]}"
-        )
-    return TrainingArrays(
-        rhs=paths.rhs_path,
-        solutions=paths.solutions_path,
-        matrix_pack=paths.matrix_pack_dir,
-        sample_count=int(rhs.shape[0]),
-    )
 
 
 def _load_and_prepare_data(
@@ -176,7 +112,7 @@ def _load_and_prepare_data(
             - features: List of path-based feature configs for DLKit
             - targets: List of path-based target configs for DLKit
     """
-    arrays = _load_training_arrays(workspace.data_dir)
+    arrays = load_training_arrays(workspace.data_dir)
     dataset_name = settings.DATASET.name if settings.DATASET else None
     features = _create_feature_configs(arrays, dataset_name)
     targets = _create_target_configs(arrays)
@@ -254,41 +190,6 @@ def _validate_dataset_section(settings: GeneralSettings) -> None:
         raise ValueError("Config is missing [DATASET] section")
 
 
-def _build_dataset_config(
-    features: list[FeatureType],
-    targets: list[TargetType],
-) -> dict[str, Any]:
-    """Build dataset configuration dict from features and targets.
-
-    Args:
-        features: Feature configurations (ValueFeature)
-        targets: Target configurations (ValueTarget)
-
-    Returns:
-        Dictionary ready for model_copy update
-    """
-    return {"features": features, "targets": targets}
-
-
-def _update_settings_with_dataset(
-    settings: GeneralSettings,
-    dataset_updates: dict[str, Any],
-) -> GeneralSettings:
-    """Update settings with new dataset configuration.
-
-    Args:
-        settings: Current settings to update
-        dataset_updates: Dict with features/targets to inject
-
-    Returns:
-        New GeneralSettings with updated DATASET section
-    """
-    base_dataset = settings.DATASET or DatasetSettings()
-    dataset_cfg = base_dataset.model_copy(update={"features": [], "targets": []})
-    dataset_cfg = dataset_cfg.model_copy(update=dataset_updates)
-    return settings.model_copy(update={"DATASET": dataset_cfg})
-
-
 def _resolve_dataset(
     settings: GeneralSettings,
     features: list[FeatureType],
@@ -322,33 +223,6 @@ def _resolve_dataset(
         }
     )
     return settings.model_copy(update={"DATASET": dataset})
-
-
-def _configure_callbacks(
-    callbacks: list[Any],
-    output_dir: Path,
-) -> list[Any]:
-    """Configure checkpoint callbacks with output directory.
-
-    Updates ModelCheckpoint callback to save to correct checkpoint directory.
-
-    Args:
-        callbacks: List of trainer callbacks from config
-        output_dir: Root output directory (checkpoints/ will be subdirectory)
-
-    Returns:
-        Updated callbacks list with correct dirpath
-    """
-    checkpoint_dir = output_dir / "checkpoints"
-    updated_callbacks = []
-
-    for cb in callbacks:
-        if getattr(cb, "name", None) == "ModelCheckpoint":
-            updates: dict[str, Any] = {"dirpath": str(checkpoint_dir)}
-            cb = cb.model_copy(update=updates)
-        updated_callbacks.append(cb)
-
-    return updated_callbacks
 
 
 def _configure_output_paths(
@@ -403,17 +277,20 @@ def _configure_dataloader_runtime(settings: GeneralSettings) -> GeneralSettings:
 
 def _configure_mlflow(
     settings: GeneralSettings,
-    dataset_id: str,
+    *,
+    mlflow_experiment_name: str,
+    mlflow_run_name: str,
 ) -> GeneralSettings:
     """Configure MLflow experiment tracking.
 
     This transformation sets:
-    - experiment_name: Dataset ID (groups runs by dataset)
-    - run_name: Model name (identifies specific model architecture)
+    - experiment_name: Dataset display name (groups runs by dataset)
+    - run_name: Model display name (identifies specific model architecture)
 
     Args:
         settings: Current DLKit settings
-        dataset_id: Dataset identifier from data config filename
+        mlflow_experiment_name: Human-facing MLflow experiment name.
+        mlflow_run_name: Human-facing MLflow run name.
 
     Returns:
         New GeneralSettings with updated MLFLOW section
@@ -424,19 +301,12 @@ def _configure_mlflow(
     if not settings.MLFLOW:
         return settings
 
-    model_cfg = settings.MODEL
-    model_name = getattr(model_cfg, "name", None) if model_cfg is not None else None
-    if not isinstance(model_name, str) or not model_name:
-        raise ValueError(
-            "Config is missing [MODEL].name required for MLflow run naming"
-        )
-
     updated = update_settings(
         settings,
         {
             "MLFLOW": {
-                "experiment_name": dataset_id,
-                "run_name": model_name,
+                "experiment_name": mlflow_experiment_name,
+                "run_name": mlflow_run_name,
             }
         },
     )
@@ -448,7 +318,8 @@ def _configure_training_pipeline(
     workspace: ExperimentWorkspace,
     features: list[FeatureType],
     targets: list[TargetType],
-    dataset_id: str,
+    mlflow_experiment_name: str,
+    mlflow_run_name: str,
 ) -> tuple[GeneralSettings, ExperimentWorkspace]:
     """Apply all configuration transformations to settings.
 
@@ -465,7 +336,8 @@ def _configure_training_pipeline(
         workspace: Experiment workspace with directory paths
         features: Feature configs created from dataset artifacts
         targets: Target configs created from dataset artifacts
-        dataset_id: Dataset identifier for MLflow experiment naming
+        mlflow_experiment_name: Human-facing MLflow experiment name.
+        mlflow_run_name: Human-facing MLflow run name.
 
     Returns:
         Tuple of (updated_settings, workspace) ready for DLKit execute()
@@ -475,120 +347,25 @@ def _configure_training_pipeline(
     settings = _resolve_dataset(settings, features, targets)
     settings = _configure_dataloader_runtime(settings)
     settings = _configure_output_paths(settings, workspace.root_dir)
-    settings = _configure_mlflow(settings, dataset_id)
+    settings = _configure_mlflow(
+        settings,
+        mlflow_experiment_name=mlflow_experiment_name,
+        mlflow_run_name=mlflow_run_name,
+    )
 
     return settings, workspace
 
 
-@contextmanager
-def _parent_run_context(parent_run_id: str | None) -> Iterator[None]:
-    """Temporarily set MLFLOW_PARENT_RUN_ID for nested MLflow runs.
-
-    When ``parent_run_id`` is ``None`` this is a no-op context manager.
-
-    Args:
-        parent_run_id: Optional MLflow parent run UUID. When set, injects
-            ``MLFLOW_PARENT_RUN_ID`` into the environment for the duration
-            of the context and restores the previous value on exit.
-
-    Yields:
-        None
-    """
-    if parent_run_id is None:
-        yield
-        return
-    previous = os.environ.get("MLFLOW_PARENT_RUN_ID")
-    os.environ["MLFLOW_PARENT_RUN_ID"] = parent_run_id
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop("MLFLOW_PARENT_RUN_ID", None)
-        else:
-            os.environ["MLFLOW_PARENT_RUN_ID"] = previous
-
-
-def _log_artifacts_to_mlflow(
-    tracking_uri: str,
-    run_id: str,
-    workspace_root: Path,
-) -> None:
-    """Upload the staged workspace artifacts to an existing MLflow run."""
-    import mlflow
-
-    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
-    client.log_artifacts(run_id, str(workspace_root))
-
-
-def _resolve_mlflow_logging_config(
-    settings: GeneralSettings,
-) -> tuple[str | None, str]:
+def _resolve_mlflow_logging_config() -> tuple[str | None, str]:
     """Resolve tracking URI and artifact destination from runtime env."""
-    _ = settings
     return os.environ.get("MLFLOW_TRACKING_URI"), os.environ.get("MLFLOW_ARTIFACT_URI", "")
 
 
-def _write_diagnostics_figure(
-    y_true: Any,
-    y_pred: Any,
-    diagnostics: Any,
-    figures_dir: Path,
-) -> Path:
-    """Write training diagnostics figure to disk.
-
-    Args:
-        y_true: True target values.
-        y_pred: Predicted values.
-        diagnostics: Diagnostics result with ``rel_error`` attribute.
-        figures_dir: Directory to write the figure into.
-
-    Returns:
-        Path to the saved figure file.
-    """
-    from neuralls.plotting import plot_parity_and_residuals
-
-    figure_path = figures_dir / "diagnostics_training.png"
-    plot_parity_and_residuals(
-        y_true.ravel(),
-        y_pred.ravel(),
-        rel_l2_error=diagnostics.rel_error,
-        save_path=figure_path,
-    )
-    return figure_path
-
-
-def _log_diagnostics_to_mlflow(
-    tracking_uri: str,
-    run_id: str,
-    exp_id: str,
-    artifacts_destination: str,
-    diagnostics: Any,
-    figure_path: Path,
-) -> None:
-    """Log diagnostics metrics and figure to an existing MLflow run.
-
-    Args:
-        tracking_uri: MLflow tracking URI (HTTP or SQLite).
-        run_id: Existing MLflow run ID to reopen.
-        exp_id: MLflow experiment ID (unused, kept for API compatibility).
-        artifacts_destination: Local filesystem path for MLflow artifacts (unused).
-        diagnostics: Diagnostics result with ``metrics`` dict.
-        figure_path: Path to the figure file already staged in the workspace.
-    """
-    import mlflow
-
-    mlflow.set_tracking_uri(tracking_uri)
-    with mlflow.start_run(run_id=run_id):
-        mlflow.log_metrics(diagnostics.metrics)
-        if figure_path.exists():
-            mlflow.log_artifact(str(figure_path), artifact_path="figures")
 
 
 def _log_training_evaluation(
     tracking_uri: str,
     run_id: str,
-    exp_id: str,
-    artifacts_destination: str,
     training_result: Any,
     figures_dir: Path,
 ) -> None:
@@ -601,8 +378,6 @@ def _log_training_evaluation(
     Args:
         tracking_uri: MLflow tracking URI (HTTP or SQLite).
         run_id: Existing MLflow run ID to reopen.
-        exp_id: MLflow experiment ID (for filesystem artifact path).
-        artifacts_destination: Local filesystem path for MLflow artifacts.
         training_result: DLKit TrainingResult with captured predictions and targets.
         figures_dir: Directory to write the diagnostics figure.
     """
@@ -617,15 +392,8 @@ def _log_training_evaluation(
     y_pred, y_true = selected
     try:
         diagnostics = compute_diagnostics(y_pred, y_true)
-        figure_path = _write_diagnostics_figure(y_true, y_pred, diagnostics, figures_dir)
-        _log_diagnostics_to_mlflow(
-            tracking_uri,
-            run_id,
-            exp_id,
-            artifacts_destination,
-            diagnostics,
-            figure_path,
-        )
+        figure_path = write_diagnostics_figure(y_true, y_pred, diagnostics, figures_dir)
+        log_diagnostics_to_mlflow(tracking_uri, run_id, diagnostics, figure_path)
         metrics_dir = figures_dir.parent / "metrics"
         metrics_dir.mkdir(parents=True, exist_ok=True)
         (metrics_dir / "training_diagnostics.json").write_text(
@@ -638,66 +406,6 @@ def _log_training_evaluation(
             run_id,
             exc,
         )
-
-
-def _coerce_jsonable(value: Any) -> Any:
-    """Convert runtime values to JSON-compatible primitives."""
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, dict):
-        return {str(key): _coerce_jsonable(val) for key, val in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_coerce_jsonable(item) for item in value]
-    return value
-
-
-def _flatten_numpy_payload(
-    payload: Any,
-    prefix: str = "",
-) -> dict[str, np.ndarray]:
-    """Flatten nested numpy payloads into a stable dict of arrays."""
-    if isinstance(payload, Mapping):
-        flattened: dict[str, np.ndarray] = {}
-        for key, value in payload.items():
-            next_prefix = f"{prefix}.{key}" if prefix else str(key)
-            flattened.update(_flatten_numpy_payload(value, next_prefix))
-        return flattened
-
-    array = np.asarray(payload)
-    if array.size == 0:
-        return {}
-    key = prefix or "value"
-    return {key: array}
-
-
-def _save_training_predictions(
-    training_result: Any,
-    predictions_dir: Path,
-) -> None:
-    """Persist training predictions/targets captured by dlkit."""
-    all_numpy = training_result.to_numpy()
-    if not isinstance(all_numpy, Mapping):
-        return
-
-    flattened = _flatten_numpy_payload(all_numpy)
-    if not flattened:
-        return
-
-    predictions_dir.mkdir(parents=True, exist_ok=True)
-    manifest: dict[str, str] = {}
-    for index, (key, value) in enumerate(sorted(flattened.items())):
-        filename = f"{index:02d}_{key.replace('.', '__')}.npy"
-        np.save(predictions_dir / filename, value)
-        manifest[key] = filename
-
-    (predictions_dir / "training_predictions_manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
 
 
 def _stage_training_artifacts(
@@ -719,39 +427,11 @@ def _stage_training_artifacts(
 
     metrics_payload = getattr(training_result, "metrics", {}) or {}
     (metrics_dir / "training_result_metrics.json").write_text(
-        json.dumps(_coerce_jsonable(metrics_payload), indent=2, sort_keys=True),
+        json.dumps(coerce_jsonable(metrics_payload), indent=2, sort_keys=True),
         encoding="utf-8",
     )
 
-    _save_training_predictions(training_result, workspace.predictions_dir)
-
-
-def _find_mlflow_run(
-    *,
-    tracking_uri: str,
-    experiment_name: str,
-    run_name: str | None,
-) -> tuple[str, str] | None:
-    """Look up the training run when dlkit metadata is missing."""
-    import mlflow
-
-    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
-    experiment = client.get_experiment_by_name(experiment_name)
-    if experiment is None:
-        return None
-
-    filter_string = (
-        f"attributes.run_name = '{run_name}'" if run_name else None
-    )
-    runs = client.search_runs(
-        experiment_ids=[experiment.experiment_id],
-        filter_string=filter_string,
-        max_results=1,
-        order_by=["attributes.start_time DESC"],
-    )
-    if not runs:
-        return None
-    return experiment.experiment_id, runs[0].info.run_id
+    save_training_predictions(training_result, workspace.predictions_dir)
 
 
 def _resolve_mlflow_run_ids(
@@ -777,7 +457,7 @@ def _resolve_mlflow_run_ids(
     if not isinstance(experiment_name, str) or not experiment_name:
         return None
 
-    found = _find_mlflow_run(
+    found = find_mlflow_run(
         tracking_uri=tracking_uri,
         experiment_name=experiment_name,
         run_name=run_name if isinstance(run_name, str) else None,
@@ -861,14 +541,74 @@ def _extract_evaluation_arrays(
     return y_pred, y_true
 
 
+def _resolve_runtime_mlflow_env(output_root: Path | str | None) -> dict[str, str]:
+    """Return the MLflow env vars to activate for this training run.
+
+    If the caller already set ``MLFLOW_TRACKING_URI`` in the environment (e.g.
+    via ``scoped_mlflow_environment`` in ``train_batch``), honour it verbatim.
+    Otherwise fall back to a local SQLite database under ``output_root``.
+
+    Args:
+        output_root: Permanent output root; used only for the sqlite fall-back.
+
+    Returns:
+        Dict suitable for ``scoped_mlflow_environment``.
+    """
+    existing_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    if existing_uri:
+        return build_mlflow_environment(tracking_uri=existing_uri)
+
+    permanent_root = Path(output_root).resolve() if output_root else DEFAULT_OUTPUT_DIR
+    return build_mlflow_environment(
+        tracking_uri=f"sqlite:///{(permanent_root / 'mlruns' / 'mlflow.db').as_posix()}",
+        artifacts_destination=str((permanent_root / "mlartifacts").resolve()),
+    )
+
+
+def _log_training_context(
+    *,
+    tracking_uri: str,
+    run_id: str,
+    experiment_id: str | None,
+    experiment_display_name: str | None,
+    dataset_id: str,
+    dataset_display_name: str,
+    dataset_registry_id: str | None,
+    model_registry_id: str | None,
+    model_display_name: str,
+) -> None:
+    """Log stable ids and display names to the training MLflow run."""
+    client = MlflowClient(tracking_uri=tracking_uri)
+    params: dict[str, str] = {
+        "dataset_id": dataset_id,
+        "dataset_display_name": dataset_display_name,
+        "model_display_name": model_display_name,
+    }
+    if experiment_id is not None:
+        params["experiment_id"] = experiment_id
+    if experiment_display_name is not None:
+        params["experiment_display_name"] = experiment_display_name
+    if dataset_registry_id is not None:
+        params["dataset_registry_id"] = dataset_registry_id
+    if model_registry_id is not None:
+        params["model_registry_id"] = model_registry_id
+    for key, value in params.items():
+        client.log_param(run_id, key, value)
+
+
 def train_model(
     *,
     config_path: str | Path,
     data_config_path: str | Path | None = None,
-    session_name: str | None = None,
     output_root: Path | str | None = None,
     max_epochs: int | None = None,
     parent_run_id: str | None = None,
+    experiment_id: str | None = None,
+    experiment_display_name: str | None = None,
+    dataset_registry_id: str | None = None,
+    dataset_display_name: str | None = None,
+    model_registry_id: str | None = None,
+    model_display_name: str | None = None,
 ) -> Path:
     """Train a DLKit model using resolved data+config context.
 
@@ -889,7 +629,6 @@ def train_model(
     Args:
         config_path: Path to model configuration TOML (e.g., configs/linear.toml)
         data_config_path: Path to data configuration TOML (e.g., data-configs/collect-504.toml)
-        session_name: Optional session name for MLflow (unused, for compatibility)
         output_root: Root directory for the permanent checkpoint. Defaults to
             ``DEFAULT_OUTPUT_DIR`` from constants.
         parent_run_id: Optional MLflow parent run UUID. When set, the training run is
@@ -911,10 +650,7 @@ def train_model(
         Path('output/checkpoints/collect-504/linear.ckpt')
     """
     permanent_root = Path(output_root).resolve() if output_root else DEFAULT_OUTPUT_DIR
-    runtime_mlflow_env = build_mlflow_environment(
-        tracking_uri=f"sqlite:///{(permanent_root / 'mlruns' / 'mlflow.db').as_posix()}",
-        artifacts_destination=str((permanent_root / "mlartifacts").resolve()),
-    )
+    runtime_mlflow_env = _resolve_runtime_mlflow_env(output_root)
 
     with tempfile.TemporaryDirectory(prefix="neuralls_train_") as _tmp:
         tmp_path = Path(_tmp)
@@ -924,10 +660,23 @@ def train_model(
             config_path,
             data_config_path,
             output_root=tmp_path,
+            experiment_id=experiment_id,
+            experiment_display_name=experiment_display_name,
+            dataset_registry_id=dataset_registry_id,
+            dataset_display_name=dataset_display_name,
+            model_registry_id=model_registry_id,
+            model_display_name=model_display_name,
         )
         settings = experiment.settings
         workspace = experiment.workspace
-        dataset_id = experiment.spec.data_config_path.stem
+        dataset_id = workspace.dataset_id
+        resolved_experiment_display_name = experiment.spec.experiment_display_name
+        resolved_dataset_display_name = (
+            experiment.spec.dataset_display_name or dataset_id
+        )
+        resolved_model_display_name = (
+            experiment.spec.model_display_name or workspace.run_id
+        )
 
         # Step 2: Resolve training dataset artifacts
         _, features, targets = _load_and_prepare_data(settings, workspace)
@@ -938,15 +687,16 @@ def train_model(
             workspace,
             features,
             targets,
-            dataset_id,
+            resolved_dataset_display_name,
+            resolved_model_display_name,
         )
 
         # Step 4: Execute training via DLKit
         if max_epochs is not None:
             settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
         with scoped_mlflow_environment(runtime_mlflow_env):
-            with _parent_run_context(parent_run_id):
-                training_result = execute(settings, run_name=workspace.run_id)  # type: ignore[arg-type]
+            with parent_run_context(parent_run_id):
+                training_result = execute(settings, run_name=resolved_model_display_name)  # type: ignore[arg-type]
 
             # Step 5: Retrieve checkpoint from temp dir (before it is deleted)
             local_checkpoint = get_latest_checkpoint(workspace.checkpoint_dir)
@@ -954,7 +704,7 @@ def train_model(
                 raise RuntimeError(f"No checkpoint found in {workspace.checkpoint_dir}")
 
             # Step 6: Stage artifacts and upload them to MLflow while temp files still exist
-            tracking_uri, artifacts_destination = _resolve_mlflow_logging_config(settings)
+            tracking_uri, artifacts_destination = _resolve_mlflow_logging_config()
             mlflow_coords = _resolve_mlflow_run_ids(
                 training_result=training_result,
                 settings=settings,
@@ -963,6 +713,17 @@ def train_model(
 
             if mlflow_coords is not None:
                 tracking_uri, exp_id, run_id = mlflow_coords
+                _log_training_context(
+                    tracking_uri=tracking_uri,
+                    run_id=run_id,
+                    experiment_id=experiment.spec.experiment_id,
+                    experiment_display_name=resolved_experiment_display_name,
+                    dataset_id=dataset_id,
+                    dataset_display_name=resolved_dataset_display_name,
+                    dataset_registry_id=experiment.spec.dataset_registry_id,
+                    model_registry_id=experiment.spec.model_registry_id,
+                    model_display_name=resolved_model_display_name,
+                )
                 write_mlflow_sidecar(
                     path=workspace.root_dir / "mlflow_run.json",
                     run_id=run_id,
@@ -979,12 +740,10 @@ def train_model(
                 _log_training_evaluation(
                     tracking_uri,
                     run_id,
-                    exp_id,
-                    artifacts_destination,
                     training_result,
                     workspace.figures_dir,
                 )
-                _log_artifacts_to_mlflow(
+                log_artifacts_to_mlflow(
                     tracking_uri=tracking_uri,
                     run_id=run_id,
                     workspace_root=workspace.root_dir,

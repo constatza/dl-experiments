@@ -28,7 +28,12 @@ def test_normalize_model_mlflow_rejects_legacy_nested_sections(tmp_path: Path) -
 
 def test_normalize_model_mlflow_rejects_tracking_uri_in_model_config(tmp_path: Path) -> None:
     config_path = tmp_path / "model.toml"
-    raw = {"MLFLOW": {"enabled": True, "tracking_uri": "http://127.0.0.1:5000"}}
+    raw = {
+        "MLFLOW": {
+            "enabled": True,
+            "tracking_uri": f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}",
+        }
+    }
 
     with pytest.raises(ValueError, match="must not define infrastructure fields: tracking_uri"):
         normalize_model_mlflow(raw, config_path)
@@ -62,7 +67,7 @@ def test_normalize_tracking_uri_resolves_relative_sqlite_path(tmp_path: Path) ->
 
 def test_normalize_tracking_uri_rejects_invalid_scheme() -> None:
     with pytest.raises(ValueError, match="MLflow tracking_uri must use one of"):
-        normalize_tracking_uri("file:///tmp/mlflow.db")
+        normalize_tracking_uri("file:///tests/fixtures/mlflow.db")
 
 
 def test_normalize_artifacts_destination_resolves_relative_path(tmp_path: Path) -> None:
@@ -89,9 +94,10 @@ def test_build_mlflow_environment_derives_sqlite_artifact_uri(tmp_path: Path) ->
 
 
 def test_build_mlflow_environment_keeps_remote_tracking_without_artifact_uri() -> None:
-    env = build_mlflow_environment(tracking_uri="http://127.0.0.1:5000")
+    tracking_uri = "https://tests.invalid/mlflow"
+    env = build_mlflow_environment(tracking_uri=tracking_uri)
 
-    assert env == {"MLFLOW_TRACKING_URI": "http://127.0.0.1:5000"}
+    assert env == {"MLFLOW_TRACKING_URI": tracking_uri}
 
 
 def test_derive_output_root_from_tracking_uri_uses_sqlite_parent(tmp_path: Path) -> None:
@@ -104,18 +110,22 @@ def test_derive_output_root_from_tracking_uri_uses_sqlite_parent(tmp_path: Path)
 
 def test_scoped_mlflow_environment_restores_previous_values(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://old-server")
+    old_tracking = "https://previous.invalid/mlflow"
+    new_tracking = "https://current.invalid/mlflow"
+    artifact_uri = str(tmp_path / "mlartifacts")
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", old_tracking)
     monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
 
     with scoped_mlflow_environment(
         {
-            "MLFLOW_TRACKING_URI": "http://new-server",
-            "MLFLOW_ARTIFACT_URI": "/tmp/mlartifacts",
+            "MLFLOW_TRACKING_URI": new_tracking,
+            "MLFLOW_ARTIFACT_URI": artifact_uri,
         }
     ):
-        assert os.environ["MLFLOW_TRACKING_URI"] == "http://new-server"
-        assert os.environ["MLFLOW_ARTIFACT_URI"] == "/tmp/mlartifacts"
+        assert os.environ["MLFLOW_TRACKING_URI"] == new_tracking
+        assert os.environ["MLFLOW_ARTIFACT_URI"] == artifact_uri
 
-    assert os.environ["MLFLOW_TRACKING_URI"] == "http://old-server"
+    assert os.environ["MLFLOW_TRACKING_URI"] == old_tracking
     assert "MLFLOW_ARTIFACT_URI" not in os.environ

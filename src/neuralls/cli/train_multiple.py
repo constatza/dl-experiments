@@ -16,9 +16,9 @@ from pathlib import Path
 import typer
 
 from neuralls.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
+from neuralls.configuration.master_registry import load_validated_master_config
 from neuralls.plotting import plot_metric_comparison
 from neuralls.workflows.multi_training import train_batch
-from neuralls.workflows.utils.reproducibility import capture_batch_context
 
 
 def main(
@@ -40,23 +40,17 @@ def main(
 ) -> None:
     """Train all experiments from config and plot aggregate metrics.
 
-    Sequentially trains each ``[[experiment]]`` entry, reads MLflow metrics
+    Sequentially trains each registry-backed ``[[experiments]]`` entry, reads MLflow metrics
     from each run's sidecar JSON, generates a barplot comparing ``--metric``
     across experiments, and saves a ``batch_training_labels.json`` mapping
     short numeric labels to full experiment identities.
     """
     try:
-        batch = train_batch(experiments_config_path=config, output_root=output_dir)
-        # Distribute reproducible configuration snapshot
-        capture_batch_context(batch_result=batch, original_config_path=config)
+        cfg, _ = load_validated_master_config(config)
+        batch = train_batch(cfg=cfg, configs_dir=config.resolve().parent, output_root=output_dir)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         typer.echo(f"Error during batch training: {exc}", err=True)
         raise typer.Exit(code=EXIT_FAILURE)
-
-    # comparison_run.json was logged to MLflow inside train_batch().
-    comparison_run_path = batch.output_dir / "comparison_run.json"
-    typer.echo(f"comparison_run_id = {batch.comparison_run.mlflow_run_id}")
-    typer.echo(f"Comparison run artifact: {comparison_run_path}")
 
     plot_output_dir = output_dir if output_dir is not None else batch.output_dir
     plot_output_dir.mkdir(parents=True, exist_ok=True)
@@ -71,7 +65,7 @@ def main(
             labels.append(result.label)
             values.append(result.metrics[metric])
         else:
-            missing.append(f"{result.label} ({result.experiment_id})")
+            missing.append(f"{result.label} ({result.experiment_display_name})")
 
     if missing:
         typer.echo(
@@ -79,12 +73,12 @@ def main(
             err=True,
         )
 
-    # Build legend: label → "experiment_id (run: run_id)"
+    # Build legend: label → "experiment_display_name (run: run_id)"
     legend = {
         r.label: (
-            f"{r.experiment_id} (run: {r.mlflow_run_id})"
+            f"{r.experiment_display_name} (run: {r.mlflow_run_id})"
             if r.mlflow_run_id
-            else r.experiment_id
+            else r.experiment_display_name
         )
         for r in batch.results
         if r.label in labels

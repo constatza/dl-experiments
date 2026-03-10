@@ -20,6 +20,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from neuralls.configuration.dataset_identity import resolve_dataset_identity
 from neuralls.configuration.loader import load_batch
 from neuralls.workflows.reporting import ExperimentResult
 from neuralls.workflows.utils.hashing import compute_directory_hash
@@ -45,6 +46,12 @@ def run_experiment(
     force: bool,
     src_hash: str,
     max_epochs: int | None = None,
+    experiment_id: str,
+    experiment_display_name: str,
+    dataset_registry_id: str | None = None,
+    dataset_display_name: str | None = None,
+    model_registry_id: str | None = None,
+    model_display_name: str | None = None,
 ) -> ExperimentResult:
     """Run data generation and model training for a single experiment.
 
@@ -85,6 +92,10 @@ def run_experiment(
     try:
         # Step 1: Load data configuration and generate/cache dataset
         data_cfg = load_data_config(data_config_path)
+        dataset_id = resolve_dataset_identity(
+            data_cfg=data_cfg,
+            config_path=data_config_path,
+        ).name
         data_dir = process_config(data_cfg, config_path=data_config_path)
         validate_data_exists(
             data_dir,
@@ -98,9 +109,7 @@ def run_experiment(
 
         # Step 2: Check for existing checkpoint to avoid redundant training
         # Workspace structure: output_root/{dataset_id}/{model_name}/checkpoints/
-        checkpoint_dir = (
-            output_root / data_config_path.stem / model_name / "checkpoints"
-        )
+        checkpoint_dir = output_root / dataset_id / model_name / "checkpoints"
         checkpoint = get_latest_checkpoint(checkpoint_dir)
 
         # Step 3: Train model if no checkpoint exists or force=True
@@ -110,6 +119,12 @@ def run_experiment(
                 data_config_path=data_config_path,
                 output_root=output_root,
                 max_epochs=max_epochs,
+                experiment_id=experiment_id,
+                experiment_display_name=experiment_display_name,
+                dataset_registry_id=dataset_registry_id,
+                dataset_display_name=dataset_display_name,
+                model_registry_id=model_registry_id,
+                model_display_name=model_display_name,
             )
             logger.info(f"Training complete: {checkpoint}")
         else:
@@ -117,14 +132,18 @@ def run_experiment(
 
         # Step 4: Return success result
         return ExperimentResult(
-            experiment_id=model_name,
+            experiment_id=experiment_id,
+            experiment_display_name=experiment_display_name,
             status="Success",
         )
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         # Catch expected exceptions to ensure batch runs continue even if one experiment fails
-        logger.error(f"Experiment {model_name} failed: {exc}")
+        logger.error(f"Experiment {experiment_id} failed: {exc}")
         return ExperimentResult(
-            experiment_id=model_name, status="Failed", error=str(exc)
+            experiment_id=experiment_id,
+            experiment_display_name=experiment_display_name,
+            status="Failed",
+            error=str(exc),
         )
 
 
@@ -189,9 +208,13 @@ def run_experiment_matrix(
     for exp in experiments:
         # Log experiment details for progress tracking
         logger.info(f"\n{'='*60}")
-        logger.info(f"Experiment: {exp.spec.id}")
-        logger.info(f"  Model: {exp.spec.model_config_path.stem}")
-        logger.info(f"  Dataset: {exp.spec.data_config_path.stem}")
+        logger.info(f"Experiment: {exp.spec.experiment_display_name}")
+        logger.info(
+            f"  Model: {exp.spec.model_display_name or exp.spec.model_config_path.stem}"
+        )
+        logger.info(
+            f"  Dataset: {exp.spec.dataset_display_name or exp.workspace.dataset_id}"
+        )
         logger.info(f"{'='*60}")
 
         # Run single experiment (catches exceptions internally)
@@ -202,6 +225,12 @@ def run_experiment_matrix(
             force=force,
             src_hash=src_hash,
             max_epochs=max_epochs,
+            experiment_id=exp.spec.experiment_id,
+            experiment_display_name=exp.spec.experiment_display_name,
+            dataset_registry_id=exp.spec.dataset_registry_id,
+            dataset_display_name=exp.spec.dataset_display_name,
+            model_registry_id=exp.spec.model_registry_id,
+            model_display_name=exp.spec.model_display_name,
         )
         results.append(result)
 

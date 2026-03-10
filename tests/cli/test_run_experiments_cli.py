@@ -57,12 +57,12 @@ def test_run_experiments_success(mock_run, tmp_path: Path) -> None:
     """Test successful execution with mocked workflow."""
     # Create dummy config file
     config = tmp_path / "experiments.toml"
-    config.write_text('output_dir = "output"\n')
+    config.write_text(f'output_dir = "{tmp_path / "output"}"\n')
 
     # Mock successful results
     mock_run.return_value = [
-        ExperimentResult(experiment_id="exp1", status="Success"),
-        ExperimentResult(experiment_id="exp2", status="Success"),
+        ExperimentResult(experiment_id="exp1", experiment_display_name="exp1", status="Success"),
+        ExperimentResult(experiment_id="exp2", experiment_display_name="exp2", status="Success"),
     ]
 
     app = typer.Typer()
@@ -82,13 +82,14 @@ def test_run_experiments_with_failures(mock_run, tmp_path: Path) -> None:
     """Test error output formatting and exit code when experiments fail."""
     # Create dummy config file
     config = tmp_path / "experiments.toml"
-    config.write_text('output_dir = "output"\n')
+    config.write_text(f'output_dir = "{tmp_path / "output"}"\n')
 
     # Mock mixed results (one success, one failure)
     mock_run.return_value = [
-        ExperimentResult(experiment_id="exp1", status="Success"),
+        ExperimentResult(experiment_id="exp1", experiment_display_name="exp1", status="Success"),
         ExperimentResult(
             experiment_id="exp2",
+            experiment_display_name="exp2",
             status="Failed",
             error="Dataset generation failed",
         ),
@@ -111,11 +112,11 @@ def test_run_experiments_force_flag(mock_run, tmp_path: Path) -> None:
     """Test --force flag is passed correctly to workflow."""
     # Create dummy config file
     config = tmp_path / "experiments.toml"
-    config.write_text('output_dir = "output"\n')
+    config.write_text(f'output_dir = "{tmp_path / "output"}"\n')
 
     # Mock successful results
     mock_run.return_value = [
-        ExperimentResult(experiment_id="exp1", status="Success"),
+        ExperimentResult(experiment_id="exp1", experiment_display_name="exp1", status="Success"),
     ]
 
     app = typer.Typer()

@@ -66,12 +66,13 @@ enabled = true
 def minimal_data_config(tmp_path: Path) -> Path:
     """Create a minimal data config."""
     config_path = tmp_path / "test-dataset.toml"
-    config_content = """
+    matrix_path = tmp_path / "dummy_matrix.txt"
+    config_content = f"""
 [flow]
 dataset = "test-dataset"
 
 [source]
-matrix_path = "/tmp/dummy_matrix.txt"
+matrix_path = "{matrix_path}"
 
 [generation]
 normalize = "matrix"
@@ -96,6 +97,7 @@ class TestMLflowExperimentCreation:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         # Verify experiment name in settings matches dataset name
@@ -116,6 +118,7 @@ class TestMLflowExperimentCreation:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         # Verify run name in settings matches pattern
@@ -144,6 +147,7 @@ class TestMLflowArtifactStorage:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         assert experiment.settings.PATHS.output_dir == str(output_root)
@@ -161,6 +165,7 @@ class TestMLflowArtifactStorage:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         # Verify workspace structure: output_root/dataset_id/run_id/
@@ -188,6 +193,7 @@ class TestMLflowArtifactStorage:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         assert experiment.settings.MLFLOW.enabled is True
@@ -211,6 +217,7 @@ class TestCustomArtifacts:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         workspace = experiment.workspace
@@ -236,6 +243,7 @@ class TestCustomArtifacts:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         # Save a custom CSV metric
@@ -263,6 +271,7 @@ class TestCustomArtifacts:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         # Save a dummy plot file
@@ -287,6 +296,7 @@ class TestCustomArtifacts:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         # Save custom prediction outputs
@@ -319,6 +329,7 @@ class TestMLflowPathResolution:
             minimal_model_config,
             minimal_data_config,
             output_root=output_root,
+            dataset_registry_id=minimal_data_config.stem,
         )
 
         # All MLflow paths should contain output_root
@@ -335,25 +346,27 @@ class TestMLflowPathResolution:
         from neuralls.configuration.loader import load_experiment
 
         # Create two different data configs
+        matrix_a = tmp_path / "dummy_A.txt"
+        matrix_b = tmp_path / "dummy_B.txt"
         data_config_1 = tmp_path / "dataset-A.toml"
-        data_config_1.write_text("""
+        data_config_1.write_text(f"""
 [flow]
 dataset = "dataset-A"
 
 [source]
-matrix_path = "/tmp/dummy_A.txt"
+matrix_path = "{matrix_a}"
 
 [generation]
 normalize = "matrix"
 """)
 
         data_config_2 = tmp_path / "dataset-B.toml"
-        data_config_2.write_text("""
+        data_config_2.write_text(f"""
 [flow]
 dataset = "dataset-B"
 
 [source]
-matrix_path = "/tmp/dummy_B.txt"
+matrix_path = "{matrix_b}"
 
 [generation]
 normalize = "matrix"
@@ -364,12 +377,14 @@ normalize = "matrix"
             minimal_model_config,
             data_config_1,
             output_root=output_root,
+            dataset_registry_id=data_config_1.stem,
         )
 
         exp2 = load_experiment(
             minimal_model_config,
             data_config_2,
             output_root=output_root,
+            dataset_registry_id=data_config_2.stem,
         )
 
         # Verify experiments have different names (dataset names)

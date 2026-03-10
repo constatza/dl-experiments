@@ -44,7 +44,7 @@ def main(
 
     For solver comparison after training, use:
         $ uv run train-multiple configs/experiments.toml
-        $ uv run compare-preconditioners --comparison-config configs/comparison/linear.toml --comparison-run /path/to/comparison_run.json
+        $ uv run compare-preconditioners configs/experiments.toml
 
     Example:
         # Train all experiments
@@ -84,7 +84,10 @@ def main(
         for res in results:
             status = "✓" if res.is_success else "✗"
             detail = f" ({res.error})" if res.error else ""
-            print(f"  {status} {res.experiment_id}{detail}")
+            label = res.experiment_display_name
+            if label != res.experiment_id:
+                label = f"{label} [{res.experiment_id}]"
+            print(f"  {status} {label}{detail}")
 
         failures = [r for r in results if not r.is_success]
         if failures:

@@ -476,15 +476,17 @@ def _load_experiment_settings(config: InferenceConfig) -> tuple[Any, Any, str]:
     if config.data_config_path is None:
         raise ValueError("data_config_path is required for inference")
 
+    dataset_registry_id = Path(config.data_config_path).stem
     experiment = load_experiment(
         config.config_path,
         config.data_config_path,
         output_root=config.output_root,
-        mode="inference",  # Use InferenceWorkflowConfig
+        mode="inference",
+        dataset_registry_id=dataset_registry_id,
     )
     settings = experiment.settings
     workspace = experiment.workspace
-    dataset_id = experiment.spec.data_config_path.stem
+    dataset_id = workspace.dataset_id
     return settings, workspace, dataset_id
 
 

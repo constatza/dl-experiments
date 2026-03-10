@@ -36,7 +36,10 @@ def test_register_logged_model_applies_aliases_and_tags(
         registered_model_name="NormScaledLinearFFNN",
         tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
         aliases=("@solutions", "candidate", "candidate"),
-        tags={"dataset": "solutions", "dataset_config_path": "/tmp/datasets/solutions.toml"},
+        tags={
+            "dataset": "solutions",
+            "dataset_config_path": str(tmp_path / "datasets" / "solutions.toml"),
+        },
     )
 
     assert record.name == "NormScaledLinearFFNN"
@@ -65,7 +68,7 @@ def test_register_logged_model_applies_aliases_and_tags(
                 name="NormScaledLinearFFNN",
                 version="7",
                 key="dataset_config_path",
-                value="/tmp/datasets/solutions.toml",
+                value=str(tmp_path / "datasets" / "solutions.toml"),
             ),
         ]
     )
@@ -93,6 +96,7 @@ def test_register_logged_model_rejects_reserved_alias(
 @patch("neuralls.workflows.model_catalog.MlflowClient")
 def test_assign_dataset_alias_to_registered_model_picks_highest_version(
     mock_client_cls: MagicMock,
+    tmp_path: Path,
 ) -> None:
     """Alias assignment picks highest matching version for the same run."""
     client = mock_client_cls.return_value
@@ -111,7 +115,7 @@ def test_assign_dataset_alias_to_registered_model_picks_highest_version(
     client.get_model_version_by_alias.return_value = resolved
 
     version = assign_dataset_alias_to_registered_model(
-        tracking_uri="sqlite:////tmp/mlflow.db",
+        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
         registered_model_name="NormScaledLinearFFNN",
         run_id="run-1",
         dataset_alias="@solutions",
@@ -133,6 +137,7 @@ def test_assign_dataset_alias_to_registered_model_picks_highest_version(
 @patch("neuralls.workflows.model_catalog.MlflowClient")
 def test_assign_dataset_alias_to_registered_model_returns_none_when_missing(
     mock_client_cls: MagicMock,
+    tmp_path: Path,
 ) -> None:
     """No matching version for run_id returns None without alias assignment."""
     client = mock_client_cls.return_value
@@ -142,7 +147,7 @@ def test_assign_dataset_alias_to_registered_model_returns_none_when_missing(
     client.search_model_versions.return_value = [mv]
 
     version = assign_dataset_alias_to_registered_model(
-        tracking_uri="sqlite:////tmp/mlflow.db",
+        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
         registered_model_name="NormScaledLinearFFNN",
         run_id="run-1",
         dataset_alias="solutions",

@@ -13,6 +13,8 @@ Domain models:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -110,3 +112,32 @@ def compute_diagnostics(
         duration_seconds=duration,
         metrics=metrics,
     )
+
+
+def write_diagnostics_figure(
+    y_true: Any,
+    y_pred: Any,
+    diagnostics: PredictionDiagnostics,
+    figures_dir: Path,
+) -> Path:
+    """Write a parity + residuals diagnostics figure to disk.
+
+    Args:
+        y_true: True target values.
+        y_pred: Predicted values.
+        diagnostics: Computed diagnostics with ``rel_error`` attribute.
+        figures_dir: Directory to write the figure into.
+
+    Returns:
+        Path to the saved figure file.
+    """
+    from neuralls.plotting import plot_parity_and_residuals
+
+    figure_path = figures_dir / "diagnostics_training.png"
+    plot_parity_and_residuals(
+        y_true.ravel(),
+        y_pred.ravel(),
+        rel_l2_error=diagnostics.rel_error,
+        save_path=figure_path,
+    )
+    return figure_path

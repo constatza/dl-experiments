@@ -150,6 +150,7 @@ class TestOptunaNestedRuns:
             model_config_path,
             data_config_path,
             output_root=output_root,
+            dataset_registry_id=data_config_path.stem,
         )
 
         # VERIFICATION: Optuna is enabled
@@ -234,6 +235,7 @@ class TestOptunaNestedRuns:
             model_config_path,
             data_config_path,
             output_root=output_root,
+            dataset_registry_id=data_config_path.stem,
         )
 
         # VERIFICATION: Three-level hierarchy is configured
@@ -313,6 +315,7 @@ class TestOptunaNestedRuns:
             model_config_path,
             data_config_path,
             output_root=output_root,
+            dataset_registry_id=data_config_path.stem,
         )
 
         # VERIFICATION: Both Optuna and MLflow are enabled
@@ -384,6 +387,7 @@ class TestOptunaWorkflowReadiness:
             model_config_path,
             data_config_path,
             output_root=output_root,
+            dataset_registry_id=data_config_path.stem,
         )
 
         assert experiment.settings.MLFLOW.enabled is True

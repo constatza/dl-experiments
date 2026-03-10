@@ -171,6 +171,12 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
     with open(master_config_path, "w") as f:
         f.write(f'project_root = ".."\n')
         f.write(f'output_dir = "{data_dir / "output"}"\n\n')
+        f.write('[[datasets]]\n')
+        f.write('id = "test_data_gen"\n')
+        f.write('path = "datasets/test_data_gen.toml"\n\n')
+        f.write('[[models]]\n')
+        f.write(f'id = "{exp_name}_model"\n')
+        f.write(f'path = "models/{exp_name}_model.toml"\n\n')
         f.write('[[experiment]]\n')
         f.write(f'id = "{exp_name}"\n')
         f.write(f'dataset = "test_data_gen"\n')
@@ -194,7 +200,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
 
     # Verify workflow behavior
     assert len(results) == 1
-    assert results[0].experiment_id == "test_model"
+    assert results[0].experiment_id == exp_name
     assert results[0].status == "Success"
     assert mock_train.called
 
@@ -332,6 +338,12 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
     with open(master_config_path, "w") as f:
         f.write(f'project_root = ".."\n')
         f.write(f'output_dir = "{data_dir / "output"}"\n\n')
+        f.write('[[datasets]]\n')
+        f.write('id = "mlflow_test_data"\n')
+        f.write('path = "datasets/mlflow_test_data.toml"\n\n')
+        f.write('[[models]]\n')
+        f.write(f'id = "{exp_name}_model"\n')
+        f.write(f'path = "models/{exp_name}_model.toml"\n\n')
         f.write('[[experiment]]\n')
         f.write(f'id = "{exp_name}"\n')
         f.write(f'dataset = "mlflow_test_data"\n')
@@ -355,6 +367,6 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
 
     # Verify workflow behavior
     assert len(results) == 1
-    assert results[0].experiment_id == "mlflow_test_model"
+    assert results[0].experiment_id == exp_name
     assert results[0].status == "Success"
     assert mock_train.called
