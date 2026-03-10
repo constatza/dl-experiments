@@ -26,30 +26,6 @@ NormalizeSystem: TypeAlias = Literal[
 ]
 
 
-class ComparisonsTrackingConfig(BaseModel):
-    """Compatibility model reused by experiments/multi-training configs."""
-
-    tracking_uri: str = Field(..., min_length=1)
-    artifact_location: str = Field(..., min_length=1)
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-@dataclass(frozen=True)
-class ComparisonTracking:
-    """MLflow coordinates for comparison result logging."""
-
-    tracking_uri: str
-    artifact_location: Path
-    experiment_name: str = "neuralls-comparisons"
-
-
-@dataclass(frozen=True)
-class ModelStoreRef:
-    """MLflow tracking URI used to resolve model_ref preconditioners."""
-
-    tracking_uri: str
-
-
 @dataclass(frozen=True)
 class SolverParams:
     """Numerical solver parameters."""
@@ -79,30 +55,14 @@ class ComparisonGeneral:
 
     params: SolverParams
     data: ComparisonData
-    tracking: ComparisonTracking | None
-    model_store: ModelStoreRef | None
 
 
 @dataclass(frozen=True)
 class ComparisonConfig:
     """Runtime domain model for comparison config."""
 
-    schema_version: Literal[3]
-    run_name: str | None
     general: ComparisonGeneral
     preconditioners: tuple[PreconditionerConfig, ...]
-
-
-class _ComparisonTrackingModel(BaseModel):
-    tracking_uri: str = Field(..., min_length=1)
-    artifact_location: Path
-    experiment_name: str = "neuralls-comparisons"
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class _ModelStoreRefModel(BaseModel):
-    tracking_uri: str = Field(..., min_length=1)
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class _SolverParamsModel(BaseModel):
@@ -127,14 +87,10 @@ class _ComparisonDataModel(BaseModel):
 class _ComparisonGeneralModel(BaseModel):
     params: _SolverParamsModel
     data: _ComparisonDataModel
-    tracking: _ComparisonTrackingModel | None = None
-    model_store: _ModelStoreRefModel | None = None
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class _ComparisonConfigModel(BaseModel):
-    schema_version: Literal[3]
-    run_name: str | None = None
     general: _ComparisonGeneralModel
     preconditioners: list[PreconditionerConfig]
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -143,6 +99,9 @@ class _ComparisonConfigModel(BaseModel):
     def validate_preconditioners(self) -> _ComparisonConfigModel:
         if not self.preconditioners:
             raise ValueError("Comparison config must define at least one [[preconditioners]] entry.")
+        names = [spec.name for spec in self.preconditioners]
+        if len(names) != len(set(names)):
+            raise ValueError("Comparison config cannot define duplicate preconditioner names.")
         neural_specs = [
             spec for spec in self.preconditioners if isinstance(spec, NeuralPreconditionerConfig)
         ]
@@ -154,36 +113,39 @@ class _ComparisonConfigModel(BaseModel):
                 raise ValueError(
                     f"Neural preconditioner '{spec.name}' must define model_ref."
                 )
-            if spec.checkpoint_path is not None or spec.experiment is not None:
+            if spec.checkpoint_path is not None:
                 raise ValueError(
-                    f"Neural preconditioner '{spec.name}' cannot use checkpoint_path/experiment "
-                    "in schema_version=3."
+                    f"Neural preconditioner '{spec.name}' cannot use checkpoint_path in comparison configs."
                 )
-
-        if self.general.model_store is None:
-            raise ValueError(
-                "general.model_store.tracking_uri is required when neural preconditioners use model_ref."
-            )
+            if (
+                isinstance(spec.model_ref, RegisteredModelRefConfig)
+                and spec.model_ref.name is None
+                and spec.experiment is None
+            ):
+                raise ValueError(
+                    f"Neural preconditioner '{spec.name}' must define experiment when "
+                    "registered model_ref.name is omitted."
+                )
 
         requires_dataset_alias = any(
             isinstance(spec.model_ref, RegisteredModelRefConfig)
             and spec.model_ref.alias is not None
             and spec.model_ref.alias.strip() == "@dataset"
+            and spec.experiment is None
             for spec in neural_specs
         )
         if requires_dataset_alias and self.general.data.dataset_alias is None:
             raise ValueError(
-                "general.data.dataset_alias is required when model_ref alias is '@dataset'."
+                "general.data.dataset_alias is required when model_ref alias is '@dataset' "
+                "and no neural preconditioner experiment binding is provided."
             )
         return self
 
 
 def parse_comparison_config(raw: dict[str, object]) -> ComparisonConfig:
-    """Parse strict schema_version=3 comparison TOML payload."""
+    """Parse the current comparison TOML payload."""
     parsed = _ComparisonConfigModel.model_validate(raw)
     return ComparisonConfig(
-        schema_version=parsed.schema_version,
-        run_name=parsed.run_name,
         general=ComparisonGeneral(
             params=SolverParams(
                 rtol=parsed.general.params.rtol,
@@ -199,22 +161,6 @@ def parse_comparison_config(raw: dict[str, object]) -> ComparisonConfig:
                 rhs_index=parsed.general.data.rhs_index,
                 dataset_alias=parsed.general.data.dataset_alias,
                 normalize_system=parsed.general.data.normalize_system,
-            ),
-            tracking=(
-                ComparisonTracking(
-                    tracking_uri=parsed.general.tracking.tracking_uri,
-                    artifact_location=parsed.general.tracking.artifact_location,
-                    experiment_name=parsed.general.tracking.experiment_name,
-                )
-                if parsed.general.tracking is not None
-                else None
-            ),
-            model_store=(
-                ModelStoreRef(
-                    tracking_uri=parsed.general.model_store.tracking_uri,
-                )
-                if parsed.general.model_store is not None
-                else None
             ),
         ),
         preconditioners=tuple(parsed.preconditioners),

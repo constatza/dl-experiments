@@ -17,7 +17,7 @@ Architecture:
     6. Wrap preconditioners with scheduling (iteration limits, fallbacks)
     7. Run CG comparison
     8. Generate recommendations
-    9. Generate plots (if enabled)
+    9. Generate plots
     10. Return result
 
 Key Components:
@@ -44,7 +44,6 @@ Example:
     >>> result = compare_preconditioners(
     ...     general_params=general,
     ...     preconditioner_configs=configs,
-    ...     save_plots=True,
     ... )
     >>> print(result.summary)
 """
@@ -460,7 +459,6 @@ def compare_preconditioners(
     preconditioner_configs: Sequence[PreconditionerConfig],
     output_root: Path | None = None,
     figures_root: Path | None = None,
-    save_plots: bool = True,
 ) -> ComparisonResult:
     """Run CG comparisons and generate diagnostics.
 
@@ -489,8 +487,6 @@ def compare_preconditioners(
         preconditioner_configs: Sequence of preconditioner configurations
         output_root: Optional override for output root directory
         figures_root: Optional override for figures directory
-        save_plots: Whether to generate diagnostic plots
-
     Returns:
         ComparisonResult containing:
             - results: Raw CG comparison results (iterations, residuals, etc.)
@@ -523,7 +519,6 @@ def compare_preconditioners(
         >>> result = compare_preconditioners(
         ...     general_params=general,
         ...     preconditioner_configs=configs,
-        ...     save_plots=True,
         ... )
         >>> print(result.summary)
         >>> print(f"Best: {result.recommendations}")
@@ -577,12 +572,8 @@ def compare_preconditioners(
     # Step 8: Generate recommendations (best solver combinations)
     recommendations = summarize_best_combinations(results)
 
-    # Step 9: Generate diagnostic plots (if enabled)
-    plot_paths = (
-        _generate_comparison_plots(results, cond_numbers, paths)
-        if save_plots
-        else {}
-    )
+    # Step 9: Generate diagnostic plots.
+    plot_paths = _generate_comparison_plots(results, cond_numbers, paths)
 
     # Step 12: Package and return result
     return ComparisonResult(

@@ -1,0 +1,16 @@
+[general]
+
+[general.params]
+rtol = 1e-6
+atol = 1e-12
+max_iterations = 100
+
+[general.data]
+matrix_path = "tests/fixtures/data/matrix.npy"
+rhs_path = "tests/fixtures/data/rhs.npy"
+normalize_system = "matrix"
+
+[[preconditioners]]
+name = "neural"
+type = "neural"
+model_ref = { source = "registered", name = "NormScaledLinearFFNN", alias = "solutions" }

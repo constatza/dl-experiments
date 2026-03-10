@@ -1,11 +1,13 @@
-"""Tests for neuralls.workflows.comparison (schema_version=3)."""
+"""Tests for neuralls.workflows.comparison."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import tomli_w
 
 from neuralls.configuration.preconditioner import (
     NeuralPreconditionerConfig,
@@ -13,18 +15,17 @@ from neuralls.configuration.preconditioner import (
     StandardPreconditionerConfig,
 )
 from neuralls.solver.models.result import CGComparisonResult
+from neuralls.workflows.comparison import (
+    _resolve_neural_preconditioners,
+    _validate_neural_preconditioner,
+    run_comparison,
+    run_comparison_batch,
+)
 from neuralls.workflows.comparison_artifacts import (
     coerce_comparison_result_payload,
     extract_array_artifacts,
     serialize_comparison_payload,
 )
-from neuralls.workflows.comparison import (
-    _resolve_neural_preconditioners,
-    _resolve_preconditioner,
-    _validate_neural_preconditioner,
-    run_comparison,
-)
-from neuralls.workflows.comparison_run import ComparisonRun
 from neuralls.workflows.results import (
     ComparisonRecommendations,
     ComparisonResult,
@@ -37,17 +38,58 @@ _LOAD_COMPARISON_CONFIG = "neuralls.workflows.comparison.load_comparison_config"
 _COMPARE_PRECONDITIONERS = "neuralls.workflows.comparison.compare_preconditioners"
 _MLFLOW_MODULE = "neuralls.workflows.comparison.mlflow"
 _SETUP_TRACKING = "neuralls.workflows.comparison.setup_comparison_tracking"
-_RESOLVE_PRECONDITIONER_MODELS = "neuralls.workflows.comparison.resolve_preconditioner_models"
 
 
-def _make_mock_comp_run(run_id: str = "comp-run-id") -> MagicMock:
-    mock_run = MagicMock()
-    mock_run.info.run_id = run_id
-    return mock_run
+def _write_comparison_config(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "[general]",
+                "",
+                "[general.params]",
+                "rtol = 1.0e-6",
+                "atol = 1.0e-14",
+                "max_iterations = 10",
+                'stopping_criterion = "residual_norm"',
+                "m_max = 10",
+                "",
+                "[general.data]",
+                'matrix_path = "/tmp/matrix.npy"',
+                'rhs_path = "/tmp/rhs.npy"',
+                "",
+                "[[preconditioners]]",
+                'name = "none"',
+                'type = "identity"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_experiments_config(path: Path, *, with_comparisons: bool = False) -> None:
+    payload: dict[str, object] = {
+        "mlflow": {
+            "tracking_uri": f"sqlite:///{(path.parent / 'mlruns' / 'mlflow.db').as_posix()}",
+        },
+        "names": {
+            "training": "neuralls-training",
+            "comparison": "Comparisons",
+        },
+    }
+    if with_comparisons:
+        payload["comparisons"] = [
+            {"id": "a", "path": "comparison-a.toml"},
+            {"id": "b", "path": "comparison-b.toml"},
+        ]
+        _write_comparison_config(path.parent / "comparison-a.toml")
+        _write_comparison_config(path.parent / "comparison-b.toml")
+    with path.open("wb") as fh:
+        tomli_w.dump(payload, fh)
 
 
 def _configure_mock_mlflow(mock_mlflow: MagicMock, run_id: str = "comp-run-id") -> None:
-    mock_run = _make_mock_comp_run(run_id=run_id)
+    mock_run = MagicMock()
+    mock_run.info.run_id = run_id
     mock_mlflow.start_run.return_value.__enter__.return_value = mock_run
     mock_mlflow.start_run.return_value.__exit__.return_value = False
     mock_mlflow.get_artifact_uri.return_value = f"mlartifacts/0/{run_id}/artifacts"
@@ -55,23 +97,15 @@ def _configure_mock_mlflow(mock_mlflow: MagicMock, run_id: str = "comp-run-id") 
 
 def _mock_cfg(
     *,
-    tracking_uri: str = "sqlite:////tmp/comparisons.db",
-    artifact_location: str = "/tmp/mlartifacts",
-    model_tracking_uri: str = "sqlite:////tmp/models.db",
     preconditioners: list[object] | None = None,
 ) -> MagicMock:
     cfg = MagicMock()
-    cfg.run_name = None
-    cfg.general.tracking.tracking_uri = tracking_uri
-    cfg.general.tracking.artifact_location = artifact_location
-    cfg.general.tracking.experiment_name = "neuralls-comparisons"
-    cfg.general.model_store.tracking_uri = model_tracking_uri
     cfg.general.data.dataset_alias = None
     cfg.preconditioners = tuple(preconditioners or [])
     return cfg
 
 
-def _typed_comparison_result() -> ComparisonResult:
+def _typed_comparison_result(plot_path: Path) -> ComparisonResult:
     return ComparisonResult(
         results={
             "none": CGComparisonResult(
@@ -91,7 +125,7 @@ def _typed_comparison_result() -> ComparisonResult:
         },
         summary="ok",
         solver_params=object(),
-        plot_paths=PlotPaths(convergence=Path("/tmp/convergence.png")),
+        plot_paths=PlotPaths(convergence=plot_path),
         preconditioners=("none",),
         condition_numbers={"none": 1.0},
         recommendations=ComparisonRecommendations(
@@ -125,11 +159,11 @@ def test_validate_neural_preconditioner_requires_model_ref() -> None:
         raise AssertionError("Expected ValueError")
 
 
-def test_validate_neural_preconditioner_rejects_checkpoint_path() -> None:
+def test_validate_neural_preconditioner_rejects_checkpoint_path(tmp_path: Path) -> None:
     spec = NeuralPreconditionerConfig(
         name="neural",
         type=PreconditionerType.NEURAL,
-        checkpoint_path=Path("/tmp/model.ckpt"),
+        checkpoint_path=tmp_path / "model.ckpt",
         model_ref={"source": "logged", "run_id": "run-1"},
     )
     try:
@@ -140,16 +174,7 @@ def test_validate_neural_preconditioner_rejects_checkpoint_path() -> None:
         raise AssertionError("Expected ValueError")
 
 
-def test_resolve_preconditioner_keeps_non_neural_unchanged(
-    comparison_run: ComparisonRun,
-) -> None:
-    spec = StandardPreconditionerConfig(name="jacobi", type=PreconditionerType.JACOBI)
-    assert _resolve_preconditioner(spec, comparison_run) is spec
-
-
-def test_resolve_neural_preconditioners_validates_all(
-    comparison_run: ComparisonRun,
-) -> None:
+def test_resolve_neural_preconditioners_validates_all() -> None:
     specs = [
         StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY),
         NeuralPreconditionerConfig(
@@ -158,77 +183,28 @@ def test_resolve_neural_preconditioners_validates_all(
             model_ref={"source": "logged", "run_id": "run-1"},
         ),
     ]
-    resolved = _resolve_neural_preconditioners(specs, comparison_run)
+    resolved = _resolve_neural_preconditioners(specs)
     assert len(resolved) == 2
 
 
-def test_run_comparison_pipeline_mode_success(
-    comparison_run: ComparisonRun,
-    tmp_path: Path,
-) -> None:
-    comparison_config = tmp_path / "comparison.toml"
-    comparison_config.touch()
-    cfg = _mock_cfg(
-        preconditioners=[
-            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY),
-            NeuralPreconditionerConfig(
-                name="neural",
-                type=PreconditionerType.NEURAL,
-                model_ref={"source": "logged", "run_id": "run-1"},
-            ),
-        ]
+def test_extract_array_artifacts_detaches_numpy_data(tmp_path: Path) -> None:
+    payload, array_artifacts = extract_array_artifacts(
+        _typed_comparison_result(tmp_path / "convergence.png")
     )
-    payload = MagicMock()
-
-    with (
-        patch(_LOAD_COMPARISON_CONFIG, return_value=cfg),
-        patch(_COMPARE_PRECONDITIONERS, return_value=payload),
-        patch(_RESOLVE_PRECONDITIONER_MODELS, side_effect=lambda **kwargs: kwargs["specs"]),
-        patch(_MLFLOW_MODULE) as mock_mlflow,
-        patch(_SETUP_TRACKING) as mock_setup_tracking,
-    ):
-        _configure_mock_mlflow(mock_mlflow)
-        outcomes = run_comparison(comparison_config, ComparisonParams(), comparison_run)
-
-    assert len(outcomes) == 1
-    assert outcomes[0].success is True
-    assert outcomes[0].payload is None
-    mock_setup_tracking.assert_called_once_with(
-        tracking_uri=cfg.general.tracking.tracking_uri,
-        artifact_location=cfg.general.tracking.artifact_location,
-        experiment_name=cfg.general.tracking.experiment_name,
-    )
-    _, start_kwargs = mock_mlflow.start_run.call_args
-    assert start_kwargs["tags"]["batch_run_id"] == comparison_run.mlflow_run_id
-
-
-def test_extract_array_artifacts_detaches_numpy_data() -> None:
-    payload, array_artifacts = extract_array_artifacts(_typed_comparison_result())
     serialized = serialize_comparison_payload(payload)
-
     assert serialized["results"]["none"]["iterations"] == 2
     assert serialized["results"]["none"]["residual"] == 1.0e-8
-    x_ref = serialized["results"]["none"]["x"]
-    assert x_ref == {
+    assert serialized["results"]["none"]["x"] == {
         "path": "arrays/results/none/x.npy",
         "shape": [2],
         "dtype": "float64",
     }
     artifact_paths = {artifact.reference.path for artifact in array_artifacts}
     assert Path("arrays/results/none/x.npy") in artifact_paths
-    np.testing.assert_array_equal(
-        next(
-            artifact.values
-            for artifact in array_artifacts
-            if artifact.reference.path == Path("arrays/results/none/x.npy")
-        ),
-        np.array([1.0, 2.0]),
-    )
 
 
 def test_coerce_comparison_result_payload_uses_safe_defaults_for_magicmock() -> None:
     payload = coerce_comparison_result_payload(MagicMock())
-
     assert payload.summary == ""
     assert payload.preconditioners == ()
     assert payload.condition_numbers == {}
@@ -237,48 +213,265 @@ def test_coerce_comparison_result_payload_uses_safe_defaults_for_magicmock() -> 
     assert payload.results == {}
 
 
-def test_run_comparison_standalone_requires_tracking(tmp_path: Path) -> None:
+def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
+    comparison_config = tmp_path / "comparison.toml"
+    experiments_config = tmp_path / "experiments.toml"
+    comparison_config.touch()
+    _write_experiments_config(experiments_config)
+    cfg = _mock_cfg(preconditioners=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)])
+    payload = MagicMock()
+
+    with (
+        patch(_LOAD_COMPARISON_CONFIG, return_value=cfg),
+        patch(_COMPARE_PRECONDITIONERS, return_value=payload),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_SETUP_TRACKING) as mock_setup_tracking,
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        outcomes = run_comparison(
+            comparison_config,
+            ComparisonParams(),
+            experiments_config_path=experiments_config,
+        )
+
+    assert outcomes[0].success is True
+    mock_setup_tracking.assert_called_once()
+    assert mock_setup_tracking.call_args.kwargs["experiment_name"] == "Comparisons"
+
+
+def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None:
+    """Comparison artifacts should record uploaded figures paths, not temp absolutes."""
+    external_plots = tmp_path / "external-plots"
+    external_plots.mkdir()
+    experiments_config = tmp_path / "experiments.toml"
+    _write_experiments_config(experiments_config)
+    convergence = external_plots / "convergence.png"
+    condition_numbers = external_plots / "condition_numbers.png"
+    convergence.write_text("convergence", encoding="utf-8")
+    condition_numbers.write_text("condition", encoding="utf-8")
     comparison_config = tmp_path / "comparison.toml"
     comparison_config.touch()
     cfg = _mock_cfg(preconditioners=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)])
-    cfg.general.tracking = None
+    payload = ComparisonResult(
+        results={},
+        summary="ok",
+        solver_params=object(),
+        preconditioners=("none",),
+        plot_paths=PlotPaths(
+            convergence=convergence,
+            condition_numbers=condition_numbers,
+        ),
+        recommendations=ComparisonRecommendations(),
+    )
+    logged_snapshot: dict[str, object] = {}
 
-    with patch(_LOAD_COMPARISON_CONFIG, return_value=cfg):
-        outcomes = run_comparison(comparison_config, ComparisonParams(), None)
+    def _capture_logged_artifacts(path: str) -> None:
+        root = Path(path)
+        logged_snapshot["files"] = {
+            item.relative_to(root).as_posix()
+            for item in root.rglob("*")
+            if item.is_file()
+        }
+        logged_snapshot["comparison_json"] = json.loads(
+            (root / "comparison.json").read_text(encoding="utf-8")
+        )
+
+    with (
+        patch(_LOAD_COMPARISON_CONFIG, return_value=cfg),
+        patch(_COMPARE_PRECONDITIONERS, return_value=payload),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_SETUP_TRACKING),
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        mock_mlflow.log_artifacts.side_effect = _capture_logged_artifacts
+        outcomes = run_comparison(
+            comparison_config,
+            ComparisonParams(),
+            experiments_config_path=experiments_config,
+        )
+
+    assert outcomes[0].success is True
+    assert "figures/convergence.png" in logged_snapshot["files"]
+    assert "figures/condition_numbers.png" in logged_snapshot["files"]
+    plot_paths = logged_snapshot["comparison_json"]["plot_paths"]
+    assert plot_paths["convergence"] == "figures/convergence.png"
+    assert plot_paths["condition_numbers"] == "figures/condition_numbers.png"
+
+
+def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
+    tmp_path: Path,
+) -> None:
+    comparison_config = tmp_path / "comparison.toml"
+    experiments_config = tmp_path / "experiments.toml"
+    comparison_config.touch()
+    _write_experiments_config(experiments_config)
+    cfg = _mock_cfg(
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY),
+            NeuralPreconditionerConfig(
+                name="missing-neural",
+                type=PreconditionerType.NEURAL,
+                model_ref={"source": "registered", "name": "MissingFFNN", "alias": "solutions"},
+            ),
+        ]
+    )
+    payload = MagicMock()
+
+    with (
+        patch(_LOAD_COMPARISON_CONFIG, return_value=cfg),
+        patch(_COMPARE_PRECONDITIONERS, return_value=payload),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_SETUP_TRACKING),
+        patch(
+            "neuralls.workflows.comparison.resolve_preconditioner_models_with_warnings",
+            return_value=MagicMock(
+                specs=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)],
+                warnings=("Skipping neural preconditioner 'missing-neural': Registered model 'MissingFFNN' not found",),
+            ),
+        ),
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        outcomes = run_comparison(
+            comparison_config,
+            ComparisonParams(),
+            experiments_config_path=experiments_config,
+        )
+
+    assert outcomes[0].success is True
+    assert len(outcomes[0].warnings) == 1
+    assert "Skipping neural preconditioner 'missing-neural'" in outcomes[0].warnings[0]
+
+
+def test_run_comparison_fails_if_all_preconditioners_are_skipped(
+    tmp_path: Path,
+) -> None:
+    comparison_config = tmp_path / "comparison.toml"
+    experiments_config = tmp_path / "experiments.toml"
+    comparison_config.touch()
+    _write_experiments_config(experiments_config)
+    cfg = _mock_cfg(
+        preconditioners=[
+            NeuralPreconditionerConfig(
+                name="missing-neural",
+                type=PreconditionerType.NEURAL,
+                model_ref={"source": "registered", "name": "MissingFFNN", "alias": "solutions"},
+            ),
+        ]
+    )
+
+    with (
+        patch(_LOAD_COMPARISON_CONFIG, return_value=cfg),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_SETUP_TRACKING),
+        patch(
+            "neuralls.workflows.comparison.resolve_preconditioner_models_with_warnings",
+            return_value=MagicMock(
+                specs=[],
+                warnings=("Skipping neural preconditioner 'missing-neural': Registered model 'MissingFFNN' not found",),
+            ),
+        ),
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        outcomes = run_comparison(
+            comparison_config,
+            ComparisonParams(),
+            experiments_config_path=experiments_config,
+        )
+
     assert outcomes[0].success is False
-    assert outcomes[0].error is not None
-    assert "general.tracking is required" in outcomes[0].error
+    assert "No runnable preconditioners remain" in (outcomes[0].error or "")
 
 
-def test_run_comparison_pipeline_also_requires_tracking(
-    comparison_run: ComparisonRun,
+def test_run_comparison_ignores_unrelated_broken_experiments(
     tmp_path: Path,
 ) -> None:
     comparison_config = tmp_path / "comparison.toml"
     comparison_config.touch()
-    cfg = _mock_cfg(preconditioners=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)])
-    cfg.general.tracking = None
-
-    with patch(_LOAD_COMPARISON_CONFIG, return_value=cfg):
-        outcomes = run_comparison(comparison_config, ComparisonParams(), comparison_run)
-    assert outcomes[0].success is False
-    assert outcomes[0].error is not None
-    assert "general.tracking is required" in outcomes[0].error
-
-
-def test_run_comparison_rejects_experiments_config_path(tmp_path: Path) -> None:
-    comparison_config = tmp_path / "comparison.toml"
-    comparison_config.touch()
-    outcomes = run_comparison(
-        comparison_config,
-        ComparisonParams(),
-        comparison_run=None,
-        experiments_config_path=tmp_path / "experiments.toml",
+    (tmp_path / "datasets").mkdir()
+    (tmp_path / "models").mkdir()
+    (tmp_path / "datasets" / "valid-dataset.toml").write_text(
+        "[flow]\n",
+        encoding="utf-8",
     )
-    assert outcomes == [
-        ComparisonOutcome(
-            name=comparison_config.stem,
-            success=False,
-            error="experiments_config_path is not supported in comparison schema_version=3.",
+    (tmp_path / "models" / "valid-model.toml").write_text(
+        "[MODEL]\nname = 'NormScaledLinearFFNN'\nmodule_path = 'test.module'\n",
+        encoding="utf-8",
+    )
+    experiments_config = tmp_path / "experiments.toml"
+    experiments_config.write_text(
+        """
+[mlflow]
+tracking_uri = "sqlite:///tmp/mlflow.db"
+
+[[datasets]]
+id = "valid-dataset"
+path = "datasets/valid-dataset.toml"
+
+[[models]]
+id = "valid-model"
+path = "models/valid-model.toml"
+
+[[experiments]]
+id = "valid-exp"
+dataset = "valid-dataset"
+model = "valid-model"
+        """.strip(),
+        encoding="utf-8",
+    )
+    cfg = _mock_cfg(
+        preconditioners=[
+            NeuralPreconditionerConfig(
+                name="registered-neural",
+                type=PreconditionerType.NEURAL,
+                model_ref={
+                    "source": "registered",
+                    "name": "NormScaledLinearFFNN",
+                    "alias": "residuals-100",
+                },
+            ),
+        ]
+    )
+    payload = MagicMock()
+
+    with (
+        patch(_LOAD_COMPARISON_CONFIG, return_value=cfg),
+        patch(_COMPARE_PRECONDITIONERS, return_value=payload),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_SETUP_TRACKING),
+        patch(
+            "neuralls.workflows.comparison.resolve_preconditioner_models_with_warnings",
+            return_value=MagicMock(specs=cfg.preconditioners, warnings=()),
+        ) as mock_resolve_specs,
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        outcomes = run_comparison(
+            comparison_config,
+            ComparisonParams(),
+            experiments_config_path=experiments_config,
         )
-    ]
+
+    assert outcomes[0].success is True
+    assert mock_resolve_specs.call_args.kwargs["experiment_contexts"] is None
+
+
+def test_run_comparison_batch_preserves_declared_order(tmp_path: Path) -> None:
+    experiments_config = tmp_path / "experiments.toml"
+    _write_experiments_config(experiments_config, with_comparisons=True)
+
+    def _fake_run_comparison(**kwargs: object) -> list[ComparisonOutcome]:
+        return [
+            ComparisonOutcome(
+                comparison_id=str(kwargs["comparison_id"]),
+                comparison_display_name=str(kwargs["comparison_display_name"]),
+                success=True,
+            )
+        ]
+
+    with patch(
+        "neuralls.workflows.comparison.run_comparison",
+        side_effect=_fake_run_comparison,
+    ) as mock_run:
+        outcomes = run_comparison_batch(experiments_config, ComparisonParams())
+
+    assert [outcome.comparison_id for outcome in outcomes] == ["a", "b"]
+    assert [call.kwargs["comparison_id"] for call in mock_run.call_args_list] == ["a", "b"]

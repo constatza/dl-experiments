@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 class ComparisonSpec:
     """Inputs needed to run a comparison."""
 
-    name: str
+    comparison_id: str
+    comparison_display_name: str
     model_config: Path
     data_config: Path
     comparison_config: Path
@@ -32,14 +33,14 @@ class ComparisonSpec:
 class ComparisonParams:
     """Runtime parameters for comparison execution."""
 
-    save_plots: bool = True
-
 
 @dataclass(frozen=True)
 class ComparisonOutcome:
     """Result for a single comparison."""
 
-    name: str
+    comparison_id: str
+    comparison_display_name: str
     success: bool
     error: str | None = None
     payload: ComparisonResult | None = None
+    warnings: tuple[str, ...] = ()

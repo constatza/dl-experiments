@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 import json
 import re
 import shutil
@@ -190,6 +190,35 @@ def save_numpy_artifacts(
     return tuple(array.reference for array in arrays)
 
 
+def _stage_plot_path(source: Path, work_root: Path) -> Path:
+    """Copy a plot into the staged artifacts directory and return its relative path."""
+    if not source.exists():
+        raise FileNotFoundError(f"Comparison plot does not exist: {source}")
+    destination = work_root / "figures" / source.name
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.resolve() != destination.resolve():
+        shutil.copy2(source, destination)
+    return destination.relative_to(work_root)
+
+
+def _stage_plot_paths(plot_paths: PlotPaths, work_root: Path) -> PlotPaths:
+    """Stage comparison plots under work_root/figures and return relative paths."""
+    staged = {
+        key: _stage_plot_path(path, work_root)
+        for key, path in plot_paths.to_mapping().items()
+    }
+    return PlotPaths.from_mapping(staged)
+
+
+def _stage_result_plots(
+    result: ComparisonArtifactSource,
+    work_root: Path,
+) -> ComparisonArtifactSource:
+    """Rewrite result plot paths to staged artifact-relative paths."""
+    staged_paths = _stage_plot_paths(result.plot_paths, work_root)
+    return replace(result, plot_paths=staged_paths)
+
+
 def _save_comparison_toml(
     result: ComparisonArtifactSource,
     output_path: Path,
@@ -219,7 +248,8 @@ def write_comparison_artifacts(
     comparison_config: Path,
 ) -> ComparisonArtifactManifest:
     """Write all structured comparison artifacts to disk."""
-    payload, pending_arrays = extract_array_artifacts(result)
+    staged_result = _stage_result_plots(result, work_root)
+    payload, pending_arrays = extract_array_artifacts(staged_result)
     manifest = ComparisonArtifactManifest(
         comparison_toml=work_root / "comparison.toml",
         comparison_json=work_root / "comparison.json",
@@ -228,7 +258,7 @@ def write_comparison_artifacts(
         config_copy=work_root / "config" / comparison_config.name,
         arrays=save_numpy_artifacts(work_root, pending_arrays),
     )
-    _save_comparison_toml(result, manifest.comparison_toml)
+    _save_comparison_toml(staged_result, manifest.comparison_toml)
     manifest.comparison_json.write_text(
         json.dumps(serialize_comparison_payload(payload), indent=2, sort_keys=True),
         encoding="utf-8",

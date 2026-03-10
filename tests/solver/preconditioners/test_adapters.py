@@ -206,9 +206,12 @@ def test_adapter_validates_checkpoint_exists(
     assert_array_equal(result, expected)
 
 
-def test_adapter_handles_missing_checkpoint_file(mock_adapter: MockAdapter) -> None:
+def test_adapter_handles_missing_checkpoint_file(
+    mock_adapter: MockAdapter,
+    tmp_path: Path,
+) -> None:
     """Test that adapter raises FileNotFoundError for missing checkpoint."""
-    nonexistent_path = Path("/nonexistent/checkpoint.ckpt")
+    nonexistent_path = tmp_path / "missing" / "checkpoint.ckpt"
 
     with pytest.raises(FileNotFoundError, match="Checkpoint not found"):
         mock_adapter.create_predictor(nonexistent_path)

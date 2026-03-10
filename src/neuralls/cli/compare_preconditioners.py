@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""CLI wrapper for preconditioner comparison.
-
-Supports two modes:
-- Pipeline mode: with ``--comparison-run`` from ``train-multiple``.
-- Standalone mode: without ``--comparison-run``; comparison config must include
-  ``[general.tracking]``.
-
-Usage::
-
-    # Standalone mode (no ComparisonRun needed)
-    uv run compare-preconditioners --comparison-config configs/comparison/linear.toml
-
-    # Pipeline mode (with ComparisonRun from train-multiple)
-    uv run compare-preconditioners \\
-        --comparison-config configs/comparison/linear.toml \\
-        --comparison-run /path/to/comparison_run.json
-"""
+"""CLI wrapper for preconditioner comparison."""
 
 from __future__ import annotations
 
@@ -30,8 +14,7 @@ from neuralls.constants import (
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_CHECKMARK,
 )
-from neuralls.workflows.comparison import run_comparison
-from neuralls.workflows.comparison_run import load_comparison_run
+from neuralls.workflows.comparison import run_comparison_batch
 from neuralls.workflows.results import ComparisonResult
 from neuralls.workflows.specs import (
     ComparisonOutcome,
@@ -64,9 +47,12 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
     successful = [o for o in outcomes if o.success]
     failed = [o for o in outcomes if not o.success]
     for outcome in outcomes:
+        label = outcome.comparison_display_name
         logger.info("=" * 80)
-        logger.info(f"Solver config: {outcome.name}")
+        logger.info(f"Comparison: {label}")
         logger.info("=" * 80)
+        for warning in outcome.warnings:
+            logger.warning(warning)
         if outcome.success and outcome.payload:
             _log_comparison_results(outcome.payload)
         else:
@@ -81,57 +67,22 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
     logger.info(f"Failed: {len(failed)}")
     if failed:
         for item in failed:
-            logger.error(f"  ✗ {item.name}: {item.error}")
+            logger.error(f"  ✗ {item.comparison_id}: {item.error}")
         raise typer.Exit(code=EXIT_FAILURE)
     logger.info(f"\n{SYMBOL_CHECKMARK} All comparisons completed successfully!")
 
 
 def main(
-    comparison_config: Path = typer.Option(
+    config: Path = typer.Argument(
         ...,
-        "--comparison-config",
-        "-s",
-        help="Path to comparison config (e.g., configs/comparison/linear.toml)",
-    ),
-    comparison_run: Path | None = typer.Option(
-        default=None,
-        help=(
-            "Path to comparison_run.json produced by train-multiple "
-            "(optional metadata-only context). "
-            "Comparison tracking is always taken from [general.tracking]."
-        ),
-        exists=False,
-    ),
-    plots: bool = typer.Option(
-        True,
-        "--plots/--no-plots",
-        help="Save comparison plots to disk (default: True)",
+        help="Path to experiments TOML (e.g. configs/experiments.toml)",
     ),
 ) -> None:
-    """Compare preconditioner methods using comparison config.
-
-    Supports pipeline mode (with --comparison-run) and standalone mode (without).
-    """
-    cr = None
-    if comparison_run is not None:
-        try:
-            cr = load_comparison_run(comparison_run)
-        except (FileNotFoundError, KeyError, ValueError, OSError) as exc:
-            logger.warning(
-                "Could not load comparison run from '{}': {}. Continuing without it.",
-                comparison_run,
-                exc,
-            )
-            cr = None
-        if cr is not None:
-            logger.info(f"Loaded comparison_run_id = {cr.mlflow_run_id}")
-    else:
-        logger.info("Standalone mode: no comparison_run provided")
-
-    params = ComparisonParams(save_plots=plots)
+    """Compare all configured preconditioner profiles from experiments.toml."""
+    params = ComparisonParams()
 
     try:
-        outcomes = run_comparison(comparison_config, params, cr)
+        outcomes = run_comparison_batch(config, params)
     except (ValueError, KeyError) as exc:
         logger.error(str(exc))
         raise typer.Exit(code=EXIT_FAILURE) from exc

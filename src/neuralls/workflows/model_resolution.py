@@ -31,12 +31,28 @@ _DATASET_ALIAS_PLACEHOLDER = "@dataset"
 
 
 @dataclass(frozen=True)
+class ExperimentModelContext:
+    """Per-experiment lookup context for comparison model resolution."""
+
+    dataset_alias: str | None = None
+    model_name: str | None = None
+
+
+@dataclass(frozen=True)
 class ModelResolution:
     """Immutable model resolution result."""
 
     model_uri: str
     run_id: str
     checkpoint_path: Path
+
+
+@dataclass(frozen=True)
+class PreconditionerResolutionResult:
+    """Resolved specs plus any skipped-resolution warnings."""
+
+    specs: list[PreconditionerConfig]
+    warnings: tuple[str, ...] = ()
 
 
 def _find_single_checkpoint(root: Path) -> Path:
@@ -109,31 +125,37 @@ def _resolve_registered_ref(
     client: MlflowClient,
     destination: Path,
     dataset_alias: str | None,
+    model_name: str | None,
 ) -> ModelResolution:
     """Resolve a registered model reference."""
-    matches = search_registered_models(model_name=ref.name, tracking_uri=tracking_uri)
+    resolved_model_name = ref.name or model_name
+    if resolved_model_name is None:
+        raise ValueError(
+            "Registered model_ref.name is required unless supplied by an experiment binding."
+        )
+    matches = search_registered_models(model_name=resolved_model_name, tracking_uri=tracking_uri)
     if not matches:
-        raise ValueError(f"Registered model '{ref.name}' not found")
+        raise ValueError(f"Registered model '{resolved_model_name}' not found")
 
     if ref.alias is not None:
         resolved_alias = _resolve_registered_alias(ref.alias, dataset_alias=dataset_alias)
-        model_uri = build_registered_model_uri(ref.name, alias=resolved_alias)
-        version = client.get_model_version_by_alias(ref.name, resolved_alias)
+        model_uri = build_registered_model_uri(resolved_model_name, alias=resolved_alias)
+        version = client.get_model_version_by_alias(resolved_model_name, resolved_alias)
         run_id = version.run_id
     else:
         if ref.version is not None:
             resolved_version = ref.version
         else:
-            versions = list_model_versions(ref.name, tracking_uri=tracking_uri)
+            versions = list_model_versions(resolved_model_name, tracking_uri=tracking_uri)
             if not versions:
-                raise ValueError(f"Registered model '{ref.name}' has no versions")
+                raise ValueError(f"Registered model '{resolved_model_name}' has no versions")
             resolved_version = max(versions)
         version = get_model_version(
-            model_name=ref.name,
+            model_name=resolved_model_name,
             version=resolved_version,
             tracking_uri=tracking_uri,
         )
-        model_uri = build_registered_model_uri(ref.name, version=resolved_version)
+        model_uri = build_registered_model_uri(resolved_model_name, version=resolved_version)
         run_id = version.run_id
 
     checkpoint_path = _download_checkpoint_for_run(
@@ -155,7 +177,8 @@ def _resolve_registered_alias(alias: str, dataset_alias: str | None) -> str:
     if stripped == _DATASET_ALIAS_PLACEHOLDER:
         if dataset_alias is None:
             raise ValueError(
-                "model_ref alias '@dataset' requires general.data.dataset_alias in comparison config."
+                "model_ref alias '@dataset' requires general.data.dataset_alias "
+                "or a neural experiment binding."
             )
         return normalize_registry_alias(dataset_alias)
     return normalize_registry_alias(stripped)
@@ -211,6 +234,7 @@ def resolve_model_ref(
     tracking_uri: str,
     destination: Path,
     dataset_alias: str | None = None,
+    model_name: str | None = None,
 ) -> ModelResolution:
     """Resolve one neural preconditioner model reference."""
     ref = spec.model_ref
@@ -224,6 +248,7 @@ def resolve_model_ref(
             client=client,
             destination=destination,
             dataset_alias=dataset_alias,
+            model_name=model_name,
         )
     if isinstance(ref, LoggedModelRefConfig):
         return _resolve_logged_ref(
@@ -241,9 +266,30 @@ def resolve_preconditioner_models(
     tracking_uri: str,
     download_root: Path,
     dataset_alias: str | None = None,
+    experiment_contexts: dict[str, ExperimentModelContext] | None = None,
 ) -> list[PreconditionerConfig]:
     """Resolve all neural preconditioners to concrete checkpoint paths."""
+    return resolve_preconditioner_models_with_warnings(
+        specs=specs,
+        tracking_uri=tracking_uri,
+        download_root=download_root,
+        dataset_alias=dataset_alias,
+        experiment_contexts=experiment_contexts,
+    ).specs
+
+
+def resolve_preconditioner_models_with_warnings(
+    *,
+    specs: list[PreconditionerConfig],
+    tracking_uri: str,
+    download_root: Path,
+    dataset_alias: str | None = None,
+    experiment_contexts: dict[str, ExperimentModelContext] | None = None,
+    skip_unresolved: bool = False,
+) -> PreconditionerResolutionResult:
+    """Resolve neural preconditioners and optionally skip unresolved ones."""
     resolved: list[PreconditionerConfig] = []
+    warnings: list[str] = []
     for spec in specs:
         if spec.type != "neural":
             resolved.append(spec)
@@ -261,12 +307,28 @@ def resolve_preconditioner_models(
                 f"Neural solver '{neural_spec.name}' requires either checkpoint_path "
                 "or model_ref."
             )
-        resolution = resolve_model_ref(
-            spec=neural_spec,
-            tracking_uri=tracking_uri,
-            destination=download_root / neural_spec.name.replace(" ", "_"),
-            dataset_alias=dataset_alias,
+        context = (
+            experiment_contexts.get(neural_spec.experiment)
+            if experiment_contexts is not None and neural_spec.experiment is not None
+            else None
         )
+        try:
+            resolution = resolve_model_ref(
+                spec=neural_spec,
+                tracking_uri=tracking_uri,
+                destination=download_root / neural_spec.name.replace(" ", "_"),
+                dataset_alias=context.dataset_alias if context is not None else dataset_alias,
+                model_name=context.model_name if context is not None else None,
+            )
+        except (ValueError, FileNotFoundError, RuntimeError, OSError, KeyError) as exc:
+            if not skip_unresolved:
+                raise
+            warning = (
+                f"Skipping neural preconditioner '{neural_spec.name}': {exc}"
+            )
+            logger.warning(warning)
+            warnings.append(warning)
+            continue
         checkpoint_path = resolution.checkpoint_path
         resolved.append(
             neural_spec.model_copy(
@@ -276,4 +338,7 @@ def resolve_preconditioner_models(
                 }
             )
         )
-    return resolved
+    return PreconditionerResolutionResult(
+        specs=resolved,
+        warnings=tuple(warnings),
+    )

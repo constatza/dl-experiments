@@ -26,12 +26,9 @@ def _write_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:
 
 
 def _write_comparison_config(path: Path, system_path: Path) -> None:
-    output_root = path.parent / "output"
     path.write_text(
         "\n".join(
             [
-                "schema_version = 3",
-                "",
                 "[general]",
                 "",
                 "[general.params]",
@@ -44,13 +41,6 @@ def _write_comparison_config(path: Path, system_path: Path) -> None:
                 f'matrix_path = "{system_path}"',
                 f'rhs_path = "{system_path}"',
                 "normalize_system = \"matrix\"",
-                "",
-                "[general.tracking]",
-                f'tracking_uri = "sqlite:///{(path.parent / "comparisons.db").as_posix()}"',
-                f'artifact_location = "{(output_root / "mlartifacts").as_posix()}"',
-                "",
-                "[general.model_store]",
-                f'tracking_uri = "sqlite:///{(path.parent / "models.db").as_posix()}"',
                 "",
                 "[[preconditioners]]",
                 'name = "none"',

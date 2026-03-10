@@ -14,8 +14,10 @@ from neuralls.configuration.preconditioner import (
 )
 from neuralls.workflows.model_resolution import (
     ModelResolution,
+    PreconditionerResolutionResult,
     resolve_model_ref,
     resolve_preconditioner_models,
+    resolve_preconditioner_models_with_warnings,
 )
 
 
@@ -107,6 +109,33 @@ def test_resolve_preconditioner_models_requires_model_source(tmp_path: Path) -> 
             tracking_uri=_tracking_uri(tmp_path),
             download_root=tmp_path,
         )
+
+
+@patch("neuralls.workflows.model_resolution.resolve_model_ref")
+def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
+    mock_resolve_model_ref,
+    tmp_path: Path,
+) -> None:
+    """Comparison-specific resolution can skip unresolved neural specs."""
+    mock_resolve_model_ref.side_effect = ValueError("Registered model 'MissingFFNN' not found")
+    jacobi = StandardPreconditionerConfig(name="jacobi", type=PreconditionerType.JACOBI)
+    neural = NeuralPreconditionerConfig(
+        name="missing-neural",
+        type=PreconditionerType.NEURAL,
+        model_ref={"source": "registered", "name": "MissingFFNN", "alias": "solutions"},
+    )
+
+    resolved = resolve_preconditioner_models_with_warnings(
+        specs=[jacobi, neural],
+        tracking_uri=_tracking_uri(tmp_path),
+        download_root=tmp_path,
+        skip_unresolved=True,
+    )
+
+    assert isinstance(resolved, PreconditionerResolutionResult)
+    assert resolved.specs == [jacobi]
+    assert len(resolved.warnings) == 1
+    assert "Skipping neural preconditioner 'missing-neural'" in resolved.warnings[0]
 
 
 @patch("neuralls.workflows.model_resolution.MlflowClient")

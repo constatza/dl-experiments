@@ -311,14 +311,18 @@ def test_neural_preconditioner_with_custom_adapter(
     assert_array_equal(result, expected)
 
 
-def test_neural_preconditioner_checkpoint_not_found(well_conditioned_matrix: NDArray) -> None:
+def test_neural_preconditioner_checkpoint_not_found(
+    well_conditioned_matrix: NDArray,
+    tmp_path: Path,
+) -> None:
     """Test NeuralPreconditioner with non-existent checkpoint."""
     mock_adapter = MockAdapter()
+    missing_checkpoint = tmp_path / "missing" / "checkpoint.ckpt"
 
     config = NeuralPreconditionerConfig(
         name="neural",
         type=PreconditionerType.NEURAL,
-        checkpoint_path=Path("/nonexistent/checkpoint.ckpt"),
+        checkpoint_path=missing_checkpoint,
     )
 
     with pytest.raises(FileNotFoundError, match="Checkpoint not found"):

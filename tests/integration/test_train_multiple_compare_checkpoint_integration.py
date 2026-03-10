@@ -10,6 +10,8 @@ import pytest
 import tomli_w
 import torch
 
+from neuralls.configuration.experiments import ExperimentsConfig
+from neuralls.io.toml_loader import load_raw_toml
 from neuralls.workflows.comparison import run_comparison
 from neuralls.workflows.data import process_data_from_config
 from neuralls.io.dataset_storage import resolve_dataset_paths
@@ -89,7 +91,6 @@ def data_config_path(
     matrix_path, rhs_path = raw_system_files
     path = config_root / "datasets" / "tiny-data.toml"
     payload = {
-        "id": "tiny-data",
         "source": {
             "matrix_path": str(matrix_path),
             "rhs_path": str(rhs_path),
@@ -158,6 +159,9 @@ def model_config_path(config_root: Path) -> Path:
                 "shuffle": True,
             },
         },
+        "MLFLOW": {
+            "enabled": False,
+        },
         "OPTUNA": {
             "enabled": False,
         },
@@ -185,7 +189,7 @@ def runs_config_path(
                 "",
                 "[names]",
                 'training = "neuralls-training"',
-                'comparison = "neuralls-comparisons"',
+                'comparison = "Comparisons"',
                 "",
                 "[[run]]",
                 'id = "tiny-linear-run"',
@@ -203,12 +207,17 @@ def trained_batch_result(
     runs_config_path: Path,
     data_config_path: Path,
     processed_root: Path,
+    output_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> BatchResult:
     """Execute train_batch once for this integration scenario."""
+    tracking_uri = f"sqlite:///{(output_root / 'mlruns' / 'mlflow.db').as_posix()}"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
+    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", str((output_root / "mlartifacts").resolve()))
+    monkeypatch.chdir(runs_config_path.parent.parent)
     process_data_from_config(data_config_path)
-    batch_result = train_batch(
-        experiments_config_path=runs_config_path,
-    )
+    cfg = ExperimentsConfig.model_validate(load_raw_toml(runs_config_path))
+    batch_result = train_batch(cfg=cfg, configs_dir=runs_config_path.parent)
     assert len(batch_result.results) == 1, "Integration test must train exactly one network."
     return batch_result
 
@@ -233,8 +242,6 @@ def comparison_config_path(
     path.write_text(
         "\n".join(
             [
-                "schema_version = 3",
-                "",
                 "[general]",
                 "",
                 "[general.params]",
@@ -248,13 +255,6 @@ def comparison_config_path(
                 f'matrix_path = "{dataset_dir}"',
                 f'rhs_path = "{dataset_dir}"',
                 'normalize_system = "matrix"',
-                "",
-                "[general.tracking]",
-                f'tracking_uri = "sqlite:///{(config_root.parent / "comparisons" / "mlflow.db").as_posix()}"',
-                f'artifact_location = "{(config_root.parent / "comparisons" / "mlartifacts").as_posix()}"',
-                "",
-                "[general.model_store]",
-                f'tracking_uri = "sqlite:///{(config_root.parent / "output" / "mlruns" / "mlflow.db").as_posix()}"',
                 "",
                 "[[preconditioners]]",
                 'name = "neural_norm_scaled_linear_ffnn"',
@@ -295,7 +295,8 @@ def test_train_multiple_checkpoint_then_compare_model_loading(
 
     outcomes = run_comparison(
         comparison_config=comparison_config_path,
-        params=ComparisonParams(save_plots=False),
+        params=ComparisonParams(),
+        experiments_config_path=runs_config_path,
     )
 
     assert len(outcomes) == 1

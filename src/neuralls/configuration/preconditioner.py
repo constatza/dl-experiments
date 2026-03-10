@@ -40,14 +40,14 @@ class RegisteredModelRefConfig(BaseModel):
 
     Attributes:
         source: Discriminator field, always "registered".
-        name: Registered model name.
+        name: Registered model name when explicitly provided.
         alias: Model alias (e.g. ``"@solutions"``); ``@`` prefix is stripped.
         version: Explicit model version number.
         latest: If True, select the latest version.
     """
 
     source: Literal["registered"] = "registered"
-    name: str = Field(..., min_length=1)
+    name: str | None = Field(default=None, min_length=1)
     alias: str | None = None
     version: int | None = Field(default=None, ge=1)
     latest: bool | None = None
