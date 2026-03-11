@@ -204,6 +204,10 @@ def plot_convergence_comparison(
     metadata: Mapping[str, Any] | None = None,
     save_path: str | Path | None = None,
     show: bool = False,
+    title: str | None = None,
+    rtol: float | None = None,
+    atol: float | None = None,
+    max_iterations: int | None = None,
 ) -> None:
     """Plot convergence comparison between preconditioners.
 
@@ -212,6 +216,10 @@ def plot_convergence_comparison(
         metadata: Optional metadata dict mapping method name -> NeuralPreconditionerMetadata
         save_path: Path to save plot
         show: Whether to show plot
+        title: Optional title for the plot
+        rtol: Optional relative tolerance parameter to display
+        atol: Optional absolute tolerance parameter to display
+        max_iterations: Optional max iterations parameter to display
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     metadata = dict(metadata or {})
@@ -237,7 +245,20 @@ def plot_convergence_comparison(
 
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Relative Residual $\\|r\\| / \\|b\\|$")
-    ax.set_title("Convergence Comparison (Preconditioners Only)")
+
+    # Build subtitle from non-None parameters
+    subtitle_parts = []
+    if rtol is not None:
+        subtitle_parts.append(f"rtol={rtol:.0e}")
+    if atol is not None:
+        subtitle_parts.append(f"atol={atol:.0e}")
+    if max_iterations is not None:
+        subtitle_parts.append(f"maxiter={max_iterations}")
+
+    if subtitle_parts:
+        ax.set_title(", ".join(subtitle_parts), fontsize=9)
+
+    fig.suptitle(title or "Convergence Comparison", fontsize=13, fontweight="bold")
     ax.grid(True, alpha=0.3)
     ax.legend(loc="upper right")
 
@@ -694,13 +715,15 @@ def plot_metric_comparison(
     legend: Mapping[str, str] | None = None,
     save_path: Path | None = None,
     show: bool = False,
+    title: str | None = None,
+    horizontal: bool = False,
 ) -> None:
     """Bar chart comparing a single metric across labelled experiments.
 
     Experiments are identified by short labels (e.g. "1", "2", "3") on the
-    x-axis. When ``legend`` is provided it is embedded below the plot as a
-    text block so the full experiment identity is preserved without cluttering
-    the axis.
+    x-axis or y-axis (when horizontal). When ``legend`` is provided it is embedded
+    below the plot as a text block so the full experiment identity is preserved
+    without cluttering the axis.
 
     Args:
         labels: Short axis labels for each bar (e.g. ``["1", "2", "3"]``).
@@ -714,20 +737,35 @@ def plot_metric_comparison(
             automatically if they do not exist.
         show: Whether to call ``plt.show()`` (disabled by default for
             headless / batch use).
+        title: Optional title for the plot. Defaults to "Metric Comparison: {metric_name}".
+        horizontal: If True, use horizontal bars (barh) and swap axis labels.
     """
-    fig, ax = plt.subplots(figsize=(max(6, len(labels) * 1.2), 5))
+    if horizontal:
+        fig, ax = plt.subplots(figsize=(5, max(3, len(labels) * 0.6)))
+    else:
+        fig, ax = plt.subplots(figsize=(max(6, len(labels) * 1.2), 5))
 
     x_pos = np.arange(len(labels))
     colormap = matplotlib.colormaps["Set1"]
     colors = colormap(np.linspace(0, 0.9, max(len(labels), 1)))
 
-    ax.bar(x_pos, values, color=colors, alpha=0.85, edgecolor="black", linewidth=0.7)
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(labels, fontsize=11)
-    ax.set_xlabel("Experiment", fontsize=12)
-    ax.set_ylabel(metric_name, fontsize=12)
-    ax.set_title(f"Metric Comparison: {metric_name}", fontsize=13, fontweight="bold")
-    ax.grid(True, alpha=0.3, axis="y")
+    if horizontal:
+        ax.barh(x_pos, values, color=colors, alpha=0.85, edgecolor="black", linewidth=0.7)
+        ax.set_yticks(x_pos)
+        ax.set_yticklabels(labels, fontsize=11)
+        ax.set_ylabel("Experiment", fontsize=12)
+        ax.set_xlabel(metric_name, fontsize=12)
+        ax.set_xscale("log")
+        ax.grid(True, alpha=0.3, axis="x")
+    else:
+        ax.bar(x_pos, values, color=colors, alpha=0.85, edgecolor="black", linewidth=0.7)
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(labels, fontsize=11)
+        ax.set_xlabel("Experiment", fontsize=12)
+        ax.set_ylabel(metric_name, fontsize=12)
+        ax.grid(True, alpha=0.3, axis="y")
+
+    ax.set_title(title or f"Metric Comparison: {metric_name}", fontsize=13, fontweight="bold")
 
     if legend:
         legend_lines = "\n".join(f"  {k}: {v}" for k, v in sorted(legend.items()))

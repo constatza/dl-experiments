@@ -19,6 +19,7 @@ class PlotPaths:
     condition_numbers: Path | None = None
     parity: Path | None = None
     residuals: Path | None = None
+    iterations_barplot: Path | None = None
 
     @classmethod
     def from_mapping(cls, mapping: dict[str, Path] | None) -> PlotPaths:
@@ -30,6 +31,7 @@ class PlotPaths:
             condition_numbers=mapping.get("condition_numbers"),
             parity=mapping.get("parity"),
             residuals=mapping.get("residuals"),
+            iterations_barplot=mapping.get("iterations_barplot"),
         )
 
     def to_mapping(self) -> dict[str, Path]:
@@ -39,6 +41,7 @@ class PlotPaths:
             "condition_numbers": self.condition_numbers,
             "parity": self.parity,
             "residuals": self.residuals,
+            "iterations_barplot": self.iterations_barplot,
         }
         return {key: path for key, path in values.items() if path is not None}
 

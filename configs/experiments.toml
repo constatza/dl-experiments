@@ -43,6 +43,7 @@ id = "eig-solutions-largest"
 path = "datasets/eig-solutions-largest.toml"
 display_name = "Eig Solutions Largest"
 
+
 [[datasets]]
 id = "gaussian"
 path = "datasets/gaussian-rhs.toml"
@@ -96,35 +97,47 @@ display_name = "NormScaledLinearFFNN L2"
 # Experiments
 # -----------
 
+# [[experiments]]
+# id = "solutions"
+# dataset = "solutions"
+# model = "linear-l2"
+# display_name = "Solutions"
+
 [[experiments]]
-id = "solutions"
+id = "spectral-energy"
 dataset = "solutions"
-model = "linear-l2"
-display_name = "Solutions"
-
-[[experiments]]
-id = "eig-rhs-largest"
-dataset = "eig-rhs-largest"
 model = "linear"
-display_name = "Eig RHS Largest"
+display_name = "Solutions L-notay"
 
-[[experiments]]
-id = "eig-rhs-smallest"
-dataset = "eig-rhs-smallest"
-model = "linear"
-display_name = "Eig RHS Smallest"
+# [[experiments]]
+# id = "eig-rhs-largest"
+# dataset = "eig-rhs-largest"
+# model = "linear"
+# display_name = "Eig RHS Largest"
 
-[[experiments]]
-id = "eig-solutions-largest"
-dataset = "eig-solutions-largest"
-model = "linear"
-display_name = "Eig Sol Largest"
+# [[experiments]]
+# id = "eig-rhs-smallest"
+# dataset = "eig-rhs-smallest"
+# model = "linear"
+# display_name = "Eig RHS Smallest"
 
-[[experiments]]
-id = "residuals"
-dataset = "residuals-100"
-model = "linear"
-display_name = "Residuals"
+# [[experiments]]
+# id = "eig-solutions-largest"
+# dataset = "eig-solutions-largest"
+# model = "linear"
+# display_name = "Eig Sol Largest"
+
+# [[experiments]]
+# id = "eig-solutions-smallest"
+# dataset = "eig-solutions-smallest"
+# model = "linear"
+# display_name = "Eig Sol Smallest"
+
+# [[experiments]]
+# id = "residuals"
+# dataset = "residuals-100"
+# model = "linear"
+# display_name = "Residuals"
 
 
 
@@ -134,14 +147,14 @@ display_name = "Residuals"
 # -----------
 
 [[comparisons]]
-id = "linear"
+id = "spectral"
 path = "comparison/linear.toml"
-display_name = "Linear Comparison"
+display_name = "Spectral Comparison"
 
 [[comparisons]]
 id = "scaled-solutions"
 path = "comparison/scaled-solutions.toml"
-display_name = "Scaled Solutions Comparison"
+display_name = "Scaled Spectral Comparison"
 
 [[comparisons]]
 id = "sparse-rhs"

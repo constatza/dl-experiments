@@ -144,7 +144,7 @@ def _write_experiments_config(path: Path, output_root: Path) -> str:
     return tracking_uri
 
 
-def _write_comparison_config(path: Path, dataset_dir: Path, tracking_uri: str) -> None:
+def _write_comparison_config(path: Path, dataset_dir: Path) -> None:
     """Write minimal comparison config for run_comparison orchestration."""
     path.write_text(
         "\n".join(
@@ -202,7 +202,7 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
     )
 
     comparison_config = tmp_path / "comparison.toml"
-    _write_comparison_config(comparison_config, dataset_dir, tracking_uri)
+    _write_comparison_config(comparison_config, dataset_dir)
 
     def _fake_compare_preconditioners(*, output_root: Path, **_: object) -> SimpleNamespace:
         figures_dir = output_root / "figures"
@@ -215,9 +215,6 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
         )
 
     with patch(
-        "neuralls.workflows.comparison.resolve_preconditioner_models",
-        side_effect=lambda **kwargs: kwargs["specs"],
-    ), patch(
         "neuralls.workflows.comparison.compare_preconditioners",
         side_effect=_fake_compare_preconditioners,
     ):

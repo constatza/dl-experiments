@@ -63,7 +63,7 @@ from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from neuralls.io.filesystem import ensure_dir
 from ..io.comparison import load_system_arrays
 from neuralls.normalization import create_scale_from_config
-from ..plotting import plot_convergence_comparison
+from ..plotting import plot_convergence_comparison, plot_metric_comparison
 from ..solver.preconditioners import create_preconditioner, create_scheduled_preconditioner
 from .cg_runner import (
     format_results_summary,
@@ -430,6 +430,10 @@ def _generate_comparison_plots(
     results: dict[str, CGComparisonResult],
     cond_numbers: dict[str, float],
     paths: ComparisonPaths,
+    display_name: str | None = None,
+    rtol: float | None = None,
+    atol: float | None = None,
+    max_iterations: int | None = None,
 ) -> PlotPaths:
     """Generate diagnostic plots for comparison.
 
@@ -437,19 +441,50 @@ def _generate_comparison_plots(
         results: CG comparison results
         cond_numbers: Condition numbers
         paths: Comparison paths
+        display_name: Optional display name for plots
+        rtol: Optional relative tolerance parameter to display
+        atol: Optional absolute tolerance parameter to display
+        max_iterations: Optional max iterations parameter to display
 
     Returns:
         Typed plot paths.
     """
     suffix = paths.matrix.stem or "comparison"
-    cond_path = plot_condition_numbers(cond_numbers, save_dir=paths.figures, suffix=suffix)
+    cond_path = plot_condition_numbers(
+        cond_numbers,
+        save_dir=paths.figures,
+        suffix=suffix,
+        title=display_name,
+        rtol=rtol,
+        atol=atol,
+    )
 
     convergence_path = paths.figures / f"preconditioner_convergence_{suffix}.png"
-    plot_convergence_comparison(results, metadata=None, save_path=convergence_path)
+    plot_convergence_comparison(
+        results,
+        metadata=None,
+        save_path=convergence_path,
+        title=display_name,
+        rtol=rtol,
+        atol=atol,
+        max_iterations=max_iterations,
+    )
+
+    # Generate horizontal iterations barplot
+    iter_path = paths.figures / f"preconditioner_iterations_{suffix}.png"
+    plot_metric_comparison(
+        list(results.keys()),
+        [r.iterations for r in results.values()],
+        metric_name="CG Iterations",
+        title=display_name,
+        horizontal=True,
+        save_path=iter_path,
+    )
 
     return PlotPaths(
         convergence=convergence_path,
         condition_numbers=cond_path,
+        iterations_barplot=iter_path,
     )
 
 
@@ -459,6 +494,7 @@ def compare_preconditioners(
     preconditioner_configs: Sequence[PreconditionerConfig],
     output_root: Path | None = None,
     figures_root: Path | None = None,
+    display_name: str | None = None,
 ) -> ComparisonResult:
     """Run CG comparisons and generate diagnostics.
 
@@ -487,6 +523,7 @@ def compare_preconditioners(
         preconditioner_configs: Sequence of preconditioner configurations
         output_root: Optional override for output root directory
         figures_root: Optional override for figures directory
+        display_name: Optional display name for plots
     Returns:
         ComparisonResult containing:
             - results: Raw CG comparison results (iterations, residuals, etc.)
@@ -573,7 +610,15 @@ def compare_preconditioners(
     recommendations = summarize_best_combinations(results)
 
     # Step 9: Generate diagnostic plots.
-    plot_paths = _generate_comparison_plots(results, cond_numbers, paths)
+    plot_paths = _generate_comparison_plots(
+        results,
+        cond_numbers,
+        paths,
+        display_name=display_name,
+        rtol=general_params.params.rtol,
+        atol=general_params.params.atol,
+        max_iterations=general_params.params.max_iterations,
+    )
 
     # Step 12: Package and return result
     return ComparisonResult(

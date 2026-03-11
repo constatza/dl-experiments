@@ -59,25 +59,59 @@ def plot_condition_numbers(
     *,
     save_dir: Path | None = None,
     suffix: str = "conditions",
+    title: str | None = None,
+    rtol: float | None = None,
+    atol: float | None = None,
 ) -> Path | None:
+    """Plot condition numbers for preconditioners as horizontal bar chart.
+
+    Args:
+        cond_numbers: Dictionary mapping preconditioner names to condition numbers
+        save_dir: Directory to save the plot
+        suffix: Suffix for the output filename
+        title: Optional title for the plot
+        rtol: Optional relative tolerance parameter to display
+        atol: Optional absolute tolerance parameter to display
+
+    Returns:
+        Path to saved plot, or None if no condition numbers provided
+    """
     if not cond_numbers:
         return None
     labels = list(cond_numbers.keys())
     values = [cond_numbers[name] for name in labels]
-    fig, ax = plt.subplots()
-    bars = ax.bar(labels, values)
-    ax.set_title("Condition number by preconditioner")
-    ax.set_ylabel("Condition number (2-norm)")
-    ax.set_yscale("log")
+
+    # Dynamic figsize based on number of labels
+    figsize = (9, max(3, len(labels) * 0.6))
+    fig, ax = plt.subplots(figsize=figsize)
+
+    bars = ax.barh(labels, values)
+    ax.set_xscale("log")
+    ax.set_xlabel("Condition number (2-norm)")
+
+    # Build subtitle from non-None parameters
+    subtitle_parts = []
+    if rtol is not None:
+        subtitle_parts.append(f"rtol={rtol:.0e}")
+    if atol is not None:
+        subtitle_parts.append(f"atol={atol:.0e}")
+
+    if subtitle_parts:
+        ax.set_title(", ".join(subtitle_parts), fontsize=9)
+
+    fig.suptitle(title or "Condition Numbers by Preconditioner", fontsize=13, fontweight="bold")
+
+    # Annotations on the right side of bars
     for bar, value in zip(bars, values):
         ax.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            bar.get_height(),
+            bar.get_width(),
+            bar.get_y() + bar.get_height() / 2.0,
             format_scientific(value, sig_figs=4),
-            ha="center",
-            va="bottom",
+            ha="left",
+            va="center",
             fontsize=8,
         )
+
     fig.tight_layout()
     cond_path = None
     if save_dir is not None:

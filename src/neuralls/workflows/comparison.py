@@ -36,7 +36,6 @@ from neuralls.workflows.comparison_run import setup_comparison_tracking
 from neuralls.workflows.compare import compare_preconditioners
 from neuralls.workflows.model_resolution import (
     ExperimentModelContext,
-    resolve_preconditioner_models,
     resolve_preconditioner_models_with_warnings,
 )
 from neuralls.workflows.results import ComparisonResult
@@ -304,6 +303,7 @@ def run_comparison(
                     general_params=cfg.general,
                     preconditioner_configs=resolved_specs,
                     output_root=work_root,
+                    display_name=resolved_comparison_display_name,
                 )
                 artifact_source = coerce_comparison_result_payload(raw_result)
                 write_comparison_artifacts(
@@ -312,6 +312,18 @@ def run_comparison(
                     comparison_config=comparison_config,
                 )
                 mlflow.log_artifacts(str(work_root))
+
+                # Create nested child runs for each preconditioner result
+                if isinstance(raw_result, ComparisonResult):
+                    for name, entry in raw_result.results.items():
+                        child_tags = {
+                            "phase": "preconditioner_run",
+                            "preconditioner": name,
+                            "comparison_id": resolved_comparison_id,
+                        }
+                        with mlflow.start_run(run_name=name, nested=True, tags=child_tags):
+                            for step, residual in enumerate(entry.residual_history):
+                                mlflow.log_metric("residual", residual, step=step)
 
             mlflow.log_param("comparison_config", comparison_config.stem)
             mlflow.log_param("comparison_id", resolved_comparison_id)
