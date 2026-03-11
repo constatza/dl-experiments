@@ -29,7 +29,7 @@ from neuralls.io.toml_loader import load_data_config
 from neuralls.workflows.inference.output import read_mlflow_sidecar
 from neuralls.workflows.mlflow_client import fetch_mlflow_metrics
 from neuralls.workflows.model_catalog import (
-    assign_dataset_alias_to_registered_model,
+    register_logged_model,
     read_registered_model_name,
 )
 from neuralls.workflows.training import train_model
@@ -215,15 +215,15 @@ def _annotate_mlflow_run(
     model_registry_id: str | None,
     model_display_name: str,
 ) -> None:
-    """Log batch params and assign dataset alias for one completed training run.
+    """Log batch params and register model under experiment_id for one completed training run.
 
     Args:
         label: Short numeric label for log messages.
         run_id: MLflow run UUID from the training sidecar.
         tracking_uri: MLflow tracking server URI.
         checkpoint_path: Permanent checkpoint path to record.
-        model_config_path: Path to model config (provides [MODEL].name).
-        dataset_id: Dataset runtime identity string for alias assignment.
+        model_config_path: Path to model config (provides [MODEL].name as model_class tag).
+        experiment_id: Experiment identifier used as the registered model name.
     """
     try:
         client = MlflowClient(tracking_uri=tracking_uri)
@@ -241,36 +241,27 @@ def _annotate_mlflow_run(
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"[{label}] Could not log params to MLflow: {exc}")
 
-    model_name = read_registered_model_name(model_config_path)
-    if model_name is None:
-        logger.warning(
-            "[{}] Could not determine [MODEL].name from {}. "
-            "Skipping dataset alias assignment.",
-            label,
-            model_config_path,
-        )
-        return
+    model_class = read_registered_model_name(model_config_path)
+    tags: dict[str, str] = {"model_class": model_class} if model_class else {}
 
     try:
-        assigned = assign_dataset_alias_to_registered_model(
-            tracking_uri=tracking_uri,
-            registered_model_name=model_name,
+        record = register_logged_model(
             run_id=run_id,
-            dataset_alias=dataset_id,
+            registered_model_name=experiment_id,
+            tracking_uri=tracking_uri,
+            tags=tags,
         )
-        if assigned is not None:
-            logger.info(
-                "[{}] Assigned alias '{}' -> {} v{}",
-                label,
-                dataset_id,
-                model_name,
-                assigned,
-            )
+        logger.info(
+            "[{}] Registered {} v{} under experiment_id '{}'",
+            label,
+            record.name,
+            record.version,
+            experiment_id,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "[{}] Could not assign dataset alias '{}' for run {}: {}",
+            "[{}] Could not register model for run {}: {}",
             label,
-            dataset_id,
             run_id,
             exc,
         )

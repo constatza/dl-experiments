@@ -14,9 +14,9 @@ comparison = "Comparisons"
 # -------
 
 [[datasets]]
-id = "solutions"
+id = "spectral"
 path = "datasets/solutions.toml"
-display_name = "Solutions"
+display_name = "Spectral Solutions"
 
 [[datasets]]
 id = "residuals-100"
@@ -47,7 +47,7 @@ display_name = "Eig Solutions Largest"
 [[datasets]]
 id = "gaussian"
 path = "datasets/gaussian-rhs.toml"
-display_name = "gaussian-rhs"
+display_name = "Gaussian RHS"
 
 [[datasets]]
 id = "scaled-solutions"
@@ -97,47 +97,47 @@ display_name = "NormScaledLinearFFNN L2"
 # Experiments
 # -----------
 
-# [[experiments]]
-# id = "solutions"
-# dataset = "solutions"
-# model = "linear-l2"
-# display_name = "Solutions"
+[[experiments]]
+id = "spectral-l2"
+dataset = "spectral"
+model = "linear-l2"
+display_name = "Spectral L2"
 
 [[experiments]]
 id = "spectral-energy"
-dataset = "solutions"
+dataset = "spectral"
 model = "linear"
-display_name = "Solutions L-notay"
+display_name = "Spectral L-notay"
 
-# [[experiments]]
-# id = "eig-rhs-largest"
-# dataset = "eig-rhs-largest"
-# model = "linear"
-# display_name = "Eig RHS Largest"
+[[experiments]]
+id = "eig-rhs-largest"
+dataset = "eig-rhs-largest"
+model = "linear"
+display_name = "Eig RHS Largest"
 
-# [[experiments]]
-# id = "eig-rhs-smallest"
-# dataset = "eig-rhs-smallest"
-# model = "linear"
-# display_name = "Eig RHS Smallest"
+[[experiments]]
+id = "eig-rhs-smallest"
+dataset = "eig-rhs-smallest"
+model = "linear"
+display_name = "Eig RHS Smallest"
 
-# [[experiments]]
-# id = "eig-solutions-largest"
-# dataset = "eig-solutions-largest"
-# model = "linear"
-# display_name = "Eig Sol Largest"
+[[experiments]]
+id = "eig-solutions-largest"
+dataset = "eig-solutions-largest"
+model = "linear"
+display_name = "Eig Sol Largest"
 
-# [[experiments]]
-# id = "eig-solutions-smallest"
-# dataset = "eig-solutions-smallest"
-# model = "linear"
-# display_name = "Eig Sol Smallest"
+[[experiments]]
+id = "eig-solutions-smallest"
+dataset = "eig-solutions-smallest"
+model = "linear"
+display_name = "Eig Sol Smallest"
 
-# [[experiments]]
-# id = "residuals"
-# dataset = "residuals-100"
-# model = "linear"
-# display_name = "Residuals"
+[[experiments]]
+id = "residuals"
+dataset = "residuals-100"
+model = "linear"
+display_name = "Residuals"
 
 
 
@@ -147,9 +147,9 @@ display_name = "Solutions L-notay"
 # -----------
 
 [[comparisons]]
-id = "spectral"
-path = "comparison/linear.toml"
-display_name = "Spectral Comparison"
+id = "gaussian"
+path = "comparison/gaussian.toml"
+display_name = "Gaussian RHS"
 
 [[comparisons]]
 id = "scaled-solutions"

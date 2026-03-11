@@ -32,8 +32,8 @@ def _coerce_non_empty_str(value: Any) -> str | None:
     return text
 
 
-def normalize_registry_alias(alias: str) -> str:
-    """Normalize user-facing alias syntax to MLflow-safe alias.
+def normalize_registry_id(alias: str) -> str:
+    """Normalize user-facing registry id or alias to MLflow-safe form.
 
     Supports optional ``@`` prefix for user-facing references.
     """
@@ -90,7 +90,7 @@ def resolve_dataset_identity(
     )
     return DatasetIdentity(
         name=dataset_name,
-        registry_alias=normalize_registry_alias(dataset_name),
+        registry_alias=normalize_registry_id(dataset_name),
         source="id",
     )
 
@@ -109,6 +109,6 @@ def resolve_dataset_identity_from_mapping(
     dataset_name = _require_dataset_name(configured, config_path=None)
     return DatasetIdentity(
         name=dataset_name,
-        registry_alias=normalize_registry_alias(dataset_name),
+        registry_alias=normalize_registry_id(dataset_name),
         source="id",
     )

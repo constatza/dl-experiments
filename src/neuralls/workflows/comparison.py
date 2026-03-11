@@ -26,7 +26,7 @@ from neuralls.configuration.preconditioner import (
     PreconditionerType,
     RegisteredModelRefConfig,
 )
-from neuralls.io.toml_loader import load_data_config, load_raw_toml
+from neuralls.io.toml_loader import load_data_config
 from neuralls.io.toml_loader import load_comparison_config
 from neuralls.workflows.comparison_artifacts import (
     coerce_comparison_result_payload,
@@ -107,22 +107,6 @@ def _referenced_experiment_ids(
     return tuple(ids)
 
 
-def _read_registered_model_name(model_config_path: Path) -> str | None:
-    """Read [MODEL].name from a model config."""
-    try:
-        raw = load_raw_toml(model_config_path)
-    except (FileNotFoundError, OSError, ValueError):
-        return None
-    model_section = raw.get("MODEL")
-    if not isinstance(model_section, dict):
-        return None
-    model_name = model_section.get("name")
-    if not isinstance(model_name, str):
-        return None
-    stripped = model_name.strip()
-    return stripped or None
-
-
 def _build_master_experiment_contexts(
     cfg_path: Path,
     experiment_ids: tuple[str, ...],
@@ -139,7 +123,7 @@ def _build_master_experiment_contexts(
         ).name
         contexts[experiment_id] = ExperimentModelContext(
             dataset_alias=dataset_id,
-            model_name=_read_registered_model_name(binding.model_config_path),
+            model_name=experiment_id,
         )
     return contexts
 
@@ -187,7 +171,7 @@ def neural_specs_from_experiments(
             name=entry.effective_display_name,
             type=PreconditionerType.NEURAL,
             experiment=entry.id,
-            model_ref=RegisteredModelRefConfig(alias="@dataset"),
+            model_ref=RegisteredModelRefConfig(latest=True),
         )
         for entry in entries
         if entry.id not in claimed_ids

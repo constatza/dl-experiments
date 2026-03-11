@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from neuralls.configuration.dataset_identity import normalize_registry_alias
+from neuralls.configuration.dataset_identity import normalize_registry_id
 from dlkit.interfaces.api.functions.model_logged import (
     build_logged_model_uri,
     search_logged_models,
@@ -180,8 +180,8 @@ def _resolve_registered_alias(alias: str, dataset_alias: str | None) -> str:
                 "model_ref alias '@dataset' requires general.data.dataset_alias "
                 "or a neural experiment binding."
             )
-        return normalize_registry_alias(dataset_alias)
-    return normalize_registry_alias(stripped)
+        return normalize_registry_id(dataset_alias)
+    return normalize_registry_id(stripped)
 
 
 def _resolve_logged_ref(

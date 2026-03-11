@@ -13,6 +13,7 @@ from neuralls.configuration.master_registry import resolve_comparison_config_pat
 from neuralls.io.toml_loader import load_raw_toml
 from neuralls.workflows.multi_training import (
     TrainingRunResult,
+    _annotate_mlflow_run,
     _collect_batch_metrics,
     _make_label_map,
     _resolve_config_paths,
@@ -160,7 +161,7 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path) -> None:
 
     with (
         patch("neuralls.workflows.multi_training.train_model", return_value=ckpt),
-        patch("neuralls.workflows.multi_training.assign_dataset_alias_to_registered_model"),
+        patch("neuralls.workflows.multi_training.register_logged_model"),
         patch("neuralls.workflows.multi_training.fetch_mlflow_metrics", return_value={"eval/rel_error": 0.1}),
         patch("neuralls.workflows.multi_training.MlflowClient"),
     ):
@@ -176,6 +177,46 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path) -> None:
     assert result.checkpoint_path == ckpt
     assert result.mlflow_run_id == "run-123"
     assert result.metrics["eval/rel_error"] == pytest.approx(0.1)
+
+
+@pytest.fixture
+def model_config_with_model_name(tmp_path: Path) -> Path:
+    """Model config TOML with [MODEL].name set."""
+    path = tmp_path / "model.toml"
+    path.write_text("[MODEL]\nname = 'NormScaledLinearFFNN'\n")
+    return path
+
+
+def test_annotate_mlflow_run_registers_under_experiment_id(
+    tmp_path: Path,
+    model_config_with_model_name: Path,
+) -> None:
+    """After training, model is registered under experiment_id with model_class tag."""
+    with (
+        patch("neuralls.workflows.multi_training.register_logged_model") as mock_register,
+        patch("neuralls.workflows.multi_training.MlflowClient"),
+    ):
+        _annotate_mlflow_run(
+            label="1",
+            run_id="run-abc",
+            tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+            checkpoint_path=tmp_path / "model.ckpt",
+            model_config_path=model_config_with_model_name,
+            experiment_id="spectral-energy",
+            experiment_display_name="Spectral Energy",
+            dataset_id="solutions",
+            dataset_display_name="Solutions",
+            dataset_registry_id="solutions",
+            model_registry_id="ffnn",
+            model_display_name="FFNN",
+        )
+
+    mock_register.assert_called_once_with(
+        run_id="run-abc",
+        registered_model_name="spectral-energy",
+        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tags={"model_class": "NormScaledLinearFFNN"},
+    )
 
 
 def test_train_batch_raises_for_empty_config(tmp_path: Path) -> None:

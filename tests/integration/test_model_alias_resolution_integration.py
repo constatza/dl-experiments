@@ -14,8 +14,9 @@ import pytest
 from neuralls.configuration.preconditioner import (
     NeuralPreconditionerConfig,
     PreconditionerType,
+    RegisteredModelRefConfig,
 )
-from neuralls.workflows.model_catalog import assign_dataset_alias_to_registered_model
+from neuralls.workflows.model_catalog import assign_dataset_alias_to_registered_model, register_logged_model
 from neuralls.workflows.model_resolution import resolve_model_ref
 
 
@@ -135,3 +136,112 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
     assert resolution.checkpoint_path.exists()
     assert resolution.checkpoint_path.suffix == ".ckpt"
     _assert_path_within(resolution.checkpoint_path, download_root)
+
+
+def test_experiment_id_registration_resolves_via_latest(tmp_path: Path) -> None:
+    """register_logged_model under experiment_id resolves via latest=True without alias."""
+    tracking_uri = _tracking_uri(tmp_path)
+    artifacts_dir = (tmp_path / "mlartifacts").resolve()
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    mlflow.set_tracking_uri(tracking_uri)
+    experiment_name = f"experiment-id-registration-{tmp_path.name}"
+    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    if client.get_experiment_by_name(experiment_name) is None:
+        client.create_experiment(
+            experiment_name,
+            artifact_location=str(artifacts_dir),
+        )
+    mlflow.set_experiment(experiment_name)
+
+    checkpoint_file = tmp_path / "model.ckpt"
+    checkpoint_file.write_text("dummy-checkpoint")
+    model_code = _write_identity_model(tmp_path / "identity_model.py")
+
+    with mlflow.start_run(run_name="experiment-id-run") as run:
+        run_id = run.info.run_id
+        mlflow.pyfunc.log_model(
+            artifact_path="model",
+            python_model=model_code,
+        )
+        mlflow.log_artifact(str(checkpoint_file), artifact_path="model")
+
+    experiment_id = "spectral-energy-integration"
+    record = register_logged_model(
+        run_id=run_id,
+        registered_model_name=experiment_id,
+        tracking_uri=tracking_uri,
+        aliases=("candidate",),
+        tags={"model_class": "NormScaledLinearFFNN"},
+    )
+    assert record.name == experiment_id
+    assert record.version == 1
+
+    spec = NeuralPreconditionerConfig(
+        name="neural",
+        type=PreconditionerType.NEURAL,
+        experiment=experiment_id,
+        model_ref=RegisteredModelRefConfig(latest=True),
+    )
+
+    download_root = tmp_path / "downloads"
+    resolution = resolve_model_ref(
+        spec=spec,
+        tracking_uri=tracking_uri,
+        destination=download_root,
+        model_name=experiment_id,
+    )
+    assert resolution.run_id == run_id
+    assert resolution.checkpoint_path.exists()
+    assert resolution.checkpoint_path.suffix == ".ckpt"
+    _assert_path_within(resolution.checkpoint_path, download_root)
+
+
+def test_two_experiments_same_dataset_no_alias_collision(tmp_path: Path) -> None:
+    """Two experiments on the same dataset register as separate models without collision."""
+    tracking_uri = _tracking_uri(tmp_path)
+    artifacts_dir = (tmp_path / "mlartifacts").resolve()
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    mlflow.set_tracking_uri(tracking_uri)
+    experiment_name = f"no-collision-{tmp_path.name}"
+    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    if client.get_experiment_by_name(experiment_name) is None:
+        client.create_experiment(
+            experiment_name,
+            artifact_location=str(artifacts_dir),
+        )
+    mlflow.set_experiment(experiment_name)
+
+    model_code = _write_identity_model(tmp_path / "identity_model.py")
+    checkpoint_file = tmp_path / "model.ckpt"
+    checkpoint_file.write_text("dummy-checkpoint")
+
+    run_ids: list[str] = []
+    for run_name in ("run-linear", "run-linear-l2"):
+        with mlflow.start_run(run_name=run_name) as run:
+            run_ids.append(run.info.run_id)
+            mlflow.pyfunc.log_model(artifact_path="model", python_model=model_code)
+            mlflow.log_artifact(str(checkpoint_file), artifact_path="model")
+
+    record_a = register_logged_model(
+        run_id=run_ids[0],
+        registered_model_name="spectral-energy-col-test",
+        tracking_uri=tracking_uri,
+        aliases=("candidate",),
+        tags={"model_class": "NormScaledLinearFFNN"},
+    )
+    record_b = register_logged_model(
+        run_id=run_ids[1],
+        registered_model_name="spectral-energy-l2-col-test",
+        tracking_uri=tracking_uri,
+        aliases=("candidate",),
+        tags={"model_class": "NormScaledLinearFFNN"},
+    )
+
+    assert record_a.name != record_b.name
+    assert record_a.run_id != record_b.run_id
+    version_a = client.get_model_version_by_alias(record_a.name, "candidate")
+    version_b = client.get_model_version_by_alias(record_b.name, "candidate")
+    assert version_a.run_id == run_ids[0]
+    assert version_b.run_id == run_ids[1]

@@ -8,7 +8,7 @@ import pytest
 
 from neuralls.configuration.data_models import DataConfigFile
 from neuralls.configuration.dataset_identity import (
-    normalize_registry_alias,
+    normalize_registry_id,
     resolve_dataset_identity,
     resolve_dataset_identity_from_mapping,
 )
@@ -44,6 +44,6 @@ def test_resolve_dataset_identity_falls_back_to_path_stem() -> None:
     assert identity.source == "id"
 
 
-def test_normalize_registry_alias_rejects_invalid_chars() -> None:
+def test_normalize_registry_id_rejects_invalid_chars() -> None:
     with pytest.raises(ValueError, match=r"\^\[\\w\\-\]\+\$"):
-        normalize_registry_alias("alias with spaces")
+        normalize_registry_id("alias with spaces")

@@ -10,7 +10,7 @@ import mlflow
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
-from neuralls.configuration.dataset_identity import normalize_registry_alias
+from neuralls.configuration.dataset_identity import normalize_registry_id
 from dlkit.interfaces.api.functions.model_logged import build_logged_model_uri
 
 RESERVED_ALIASES: set[str] = {"latest"}
@@ -36,7 +36,7 @@ def _normalize_aliases(aliases: tuple[str, ...]) -> tuple[str, ...]:
     normalized_aliases: list[str] = []
     seen: set[str] = set()
     for alias in aliases:
-        normalized = normalize_registry_alias(alias)
+        normalized = normalize_registry_id(alias)
         if normalized in RESERVED_ALIASES:
             raise ValueError(
                 f"Alias '{normalized}' is reserved and cannot be assigned."
@@ -54,7 +54,7 @@ def register_logged_model(
     registered_model_name: str,
     tracking_uri: str,
     artifact_path: str = "model",
-    aliases: tuple[str, ...] = ("candidate",),
+    aliases: tuple[str, ...] = (),
     tags: Mapping[str, str] | None = None,
 ) -> RegisteredModelRecord:
     """Register a logged model artifact and attach aliases."""
