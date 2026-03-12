@@ -222,7 +222,7 @@ model = "linear"
 # configs/datasets/collect-504.toml - Dataset generation
 
 [MLFLOW]
-enabled = true
+# Presence of [MLFLOW] enables tracking intent.
 ```
 
 **During Comparison**:
@@ -253,7 +253,18 @@ fallback = "jacobi"
 - Comparison profiles stay reusable without becoming a second source of truth for MLflow topology.
 - Neural preconditioners stay explicit peers of classical baselines.
 - Training and comparison MLflow infrastructure both come from `experiments.toml`.
+- Training run identity is passed directly to `dlkit.interfaces.api.execute(...)`:
+  experiment name from `[names].training`, run name from the experiment display name plus timestamp.
 - Dataset identity comes from dataset config `id`, not filename stems.
+
+### 5. Inference (`prediction.py`)
+
+**Purpose**: Load a checkpoint, run prediction, and persist plots/CSV outputs.
+
+**Interface**:
+- Uses `dlkit.interfaces.api.load_model()` as the supported inference entrypoint.
+- Does not route inference through `execute()`.
+- Loads inference settings via `load_experiment(..., mode="inference")`.
 
 ## Common Patterns
 

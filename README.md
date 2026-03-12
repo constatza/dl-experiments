@@ -96,7 +96,14 @@ tracking_uri = "sqlite:////abs/path/mlflow.db"
 
 Model configs must not define `tracking_uri` or `artifacts_destination`.
 Nested `client/server` subsections are removed from user-facing config files.
+The presence of a flat `[MLFLOW]` section enables MLflow intent in model configs;
+there is no `enabled` field anymore.
 Training and comparison topology both belong in `experiments.toml` or runtime environment.
+
+Training uses explicit MLflow run identity at execution time:
+- default training experiment name: `"Training"` from `[names].training`
+- training run name: `{experiment_display_name}-{YYYY-MM-DDTHH:MM:SS}`
+- registry-backed runs and registered model versions receive structured tags for UI filtering
 
 ## Recent API Changes
 
@@ -218,6 +225,7 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
   ```bash
   uv run predict --config configs/models/linear.toml --data-config configs/datasets/collect-504-solutions.toml
   ```
+  - Inference uses DLKit's dedicated public inference API (`load_model()`), not `execute()`.
   - `--config`: Path to the model configuration.
   - `--data-config`: Path to the data configuration.
   - `--synthetic`: Run a synthetic benchmark (using $x=ones$, $b=Ax$) instead of loading data.

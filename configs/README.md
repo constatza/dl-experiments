@@ -64,14 +64,17 @@ Model configs now use a flat MLflow section:
 
 ```toml
 [MLFLOW]
-enabled = true
-experiment_name = "optional-user-override"
-run_name = "optional-user-override"
 ```
 
 Nested `[MLFLOW.client]` / `[MLFLOW.server]` keys are no longer supported.
+The presence of `[MLFLOW]` enables MLflow intent; do not set `enabled = true/false`.
 Model configs must not define `tracking_uri` or `artifacts_destination`.
 Those infrastructure values come from `experiments.toml` or runtime env.
+
+Training MLflow naming is controlled at runtime:
+- `[names].training` in `experiments.toml` defaults to `"Training"`
+- training run names are built as `{experiment_display_name}-{timestamp}`
+- comparison runs use timestamped display names plus structured tags
 
 ## Comparison Protocol (Strict)
 
