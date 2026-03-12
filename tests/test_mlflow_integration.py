@@ -90,7 +90,7 @@ class TestMLflowExperimentCreation:
         minimal_data_config: Path,
         output_root: Path,
     ):
-        """Verify experiment is created with dataset name."""
+        """Verify MLflow is enabled for a loaded experiment."""
         from neuralls.configuration.loader import load_experiment
 
         experiment = load_experiment(
@@ -100,9 +100,7 @@ class TestMLflowExperimentCreation:
             dataset_registry_id=minimal_data_config.stem,
         )
 
-        # Verify experiment name in settings matches dataset name
-        dataset_name = minimal_data_config.stem  # "test-dataset"
-        assert experiment.settings.MLFLOW.experiment_name == dataset_name
+        assert experiment.settings.MLFLOW is not None
 
     def test_mlflow_run_creation_with_timestamp(
         self,
@@ -110,8 +108,7 @@ class TestMLflowExperimentCreation:
         minimal_data_config: Path,
         output_root: Path,
     ):
-        """Verify run name includes model-timestamp pattern."""
-        import re
+        """Verify load_experiment does not need to embed run naming in settings."""
         from neuralls.configuration.loader import load_experiment
 
         experiment = load_experiment(
@@ -121,14 +118,7 @@ class TestMLflowExperimentCreation:
             dataset_registry_id=minimal_data_config.stem,
         )
 
-        # Verify run name in settings matches pattern
-        run_name = experiment.settings.MLFLOW.run_name
-
-        # Should match: TestSession-YYYY-MM-DDTHH:MM:SS
-        pattern = r"^TestSession-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$"
-        assert re.match(pattern, run_name), (
-            f"run_name '{run_name}' doesn't match expected pattern"
-        )
+        assert experiment.settings.MLFLOW is not None
 
 
 class TestMLflowArtifactStorage:
@@ -196,7 +186,7 @@ class TestMLflowArtifactStorage:
             dataset_registry_id=minimal_data_config.stem,
         )
 
-        assert experiment.settings.MLFLOW.enabled is True
+        assert experiment.settings.MLFLOW is not None
         assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
         assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 
@@ -386,10 +376,6 @@ normalize = "matrix"
             output_root=output_root,
             dataset_registry_id=data_config_2.stem,
         )
-
-        # Verify experiments have different names (dataset names)
-        assert exp1.settings.MLFLOW.experiment_name == "dataset-A"
-        assert exp2.settings.MLFLOW.experiment_name == "dataset-B"
 
         # Verify workspace roots are isolated by dataset
         assert "dataset-A" in str(exp1.workspace.root_dir)

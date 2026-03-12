@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -192,12 +193,83 @@ def test_register_logged_model_uses_experiment_id_as_name(
         model_uri="runs:/run-exp/model",
         name=experiment_id,
     )
-    client.set_model_version_tag.assert_called_once_with(
-        name=experiment_id,
-        version="3",
-        key="model_class",
-        value=model_class,
+    registered_at_value = next(
+        call_args.kwargs["value"]
+        for call_args in client.set_model_version_tag.call_args_list
+        if call_args.kwargs["key"] == "registered_at"
     )
+    client.set_model_version_tag.assert_has_calls(
+        [
+            call(
+                name=experiment_id,
+                version="3",
+                key="registered_at",
+                value=registered_at_value,
+            ),
+            call(
+                name=experiment_id,
+                version="3",
+                key="model_class",
+                value=model_class,
+            ),
+        ],
+        any_order=True,
+    )
+    datetime.fromisoformat(registered_at_value)
+
+
+@patch("neuralls.workflows.model_catalog.MlflowClient")
+@patch("neuralls.workflows.model_catalog.mlflow")
+def test_register_logged_model_always_sets_registered_at(
+    mock_mlflow: MagicMock,
+    mock_client_cls: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Every registered model version receives a UTC registration timestamp tag."""
+    mock_mlflow.register_model.return_value.version = "5"
+    client = mock_client_cls.return_value
+
+    register_logged_model(
+        run_id="run-1",
+        registered_model_name="exp-1",
+        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tags={"model_class": "NormScaledLinearFFNN"},
+    )
+
+    registered_at_calls = [
+        call_args
+        for call_args in client.set_model_version_tag.call_args_list
+        if call_args.kwargs["key"] == "registered_at"
+    ]
+    assert len(registered_at_calls) == 1
+    datetime.fromisoformat(registered_at_calls[0].kwargs["value"])
+
+
+@patch("neuralls.workflows.model_catalog.MlflowClient")
+@patch("neuralls.workflows.model_catalog.mlflow")
+def test_register_logged_model_registered_at_not_overridden_by_caller(
+    mock_mlflow: MagicMock,
+    mock_client_cls: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Caller-provided registered_at values must not replace the invariant timestamp."""
+    mock_mlflow.register_model.return_value.version = "5"
+    client = mock_client_cls.return_value
+
+    register_logged_model(
+        run_id="run-1",
+        registered_model_name="exp-1",
+        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tags={"registered_at": "override"},
+    )
+
+    registered_at_calls = [
+        call_args
+        for call_args in client.set_model_version_tag.call_args_list
+        if call_args.kwargs["key"] == "registered_at"
+    ]
+    assert len(registered_at_calls) == 1
+    assert registered_at_calls[0].kwargs["value"] != "override"
 
 
 def test_register_logged_model_two_experiments_no_alias_collision(

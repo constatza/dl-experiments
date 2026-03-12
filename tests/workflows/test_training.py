@@ -11,7 +11,10 @@ Covers:
 from __future__ import annotations
 
 from pathlib import Path
+import re
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -318,3 +321,172 @@ def test_fast_dev_run_predict_returns_list_of_dicts(tmp_path: Path) -> None:
         output = preds
     assert isinstance(output, np.ndarray)
     assert output.ndim >= 1
+
+
+def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path) -> None:
+    """Registry-backed training passes explicit experiment/run names and structured tags."""
+    from neuralls.configuration.domain import ExperimentWorkspace
+    from neuralls.workflows.training import train_model
+
+    config_path = tmp_path / "model.toml"
+    data_config_path = tmp_path / "data.toml"
+    config_path.write_text("")
+    data_config_path.write_text("")
+
+    workspace = ExperimentWorkspace(
+        dataset_id="dataset-1",
+        run_id="workspace-run",
+        root_dir=tmp_path / "workspace",
+        data_dir=tmp_path / "workspace" / "data",
+    )
+    workspace.checkpoint_dir.mkdir(parents=True)
+    checkpoint_path = workspace.checkpoint_dir / "model.ckpt"
+    checkpoint_path.write_text("checkpoint")
+
+    experiment = SimpleNamespace(
+        settings=object(),
+        workspace=workspace,
+        spec=SimpleNamespace(
+            experiment_id="exp-1",
+            experiment_display_name="Experiment One",
+            dataset_registry_id="dataset-1",
+            dataset_display_name="Dataset One",
+            model_registry_id="model-1",
+            model_display_name="Model One",
+        ),
+    )
+    training_result = SimpleNamespace(run_id="run-123", metrics={})
+
+    with (
+        patch("neuralls.workflows.training.load_experiment", return_value=experiment) as mock_load,
+        patch("neuralls.workflows.training._load_and_prepare_data", return_value=(None, [], [])),
+        patch(
+            "neuralls.workflows.training._configure_training_pipeline",
+            return_value=(experiment.settings, workspace),
+        ),
+        patch("neuralls.workflows.training.execute", return_value=training_result) as mock_execute,
+        patch("neuralls.workflows.training.get_latest_checkpoint", return_value=checkpoint_path),
+        patch(
+            "neuralls.workflows.training._resolve_mlflow_logging_config",
+            return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
+        ),
+        patch(
+            "neuralls.workflows.training._resolve_mlflow_run_ids",
+            return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
+        ),
+        patch("neuralls.workflows.training._log_training_context"),
+        patch("neuralls.workflows.training.write_mlflow_sidecar"),
+        patch("neuralls.workflows.training._stage_training_artifacts"),
+        patch("neuralls.workflows.training._log_training_evaluation"),
+        patch("neuralls.workflows.training.log_artifacts_to_mlflow"),
+    ):
+        train_model(
+            config_path=str(config_path),
+            data_config_path=str(data_config_path),
+            output_root=tmp_path / "output",
+            experiment_id="exp-1",
+            experiment_display_name="Experiment One",
+            dataset_registry_id="dataset-1",
+            dataset_display_name="Dataset One",
+            model_registry_id="model-1",
+            model_display_name="Model One",
+            mlflow_experiment_name="Training",
+        )
+
+    load_args = mock_load.call_args.args
+    assert load_args[0] == config_path
+    assert load_args[1] == data_config_path
+
+    execute_kwargs = mock_execute.call_args.kwargs
+    assert execute_kwargs["experiment_name"] == "Training"
+    assert re.match(
+        r"^Experiment One-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$",
+        execute_kwargs["run_name"],
+    )
+    assert execute_kwargs["tags"] == {
+        "phase": "training",
+        "experiment_id": "exp-1",
+        "dataset_id": "dataset-1",
+        "model_id": "model-1",
+        "experiment_display_name": "Experiment One",
+    }
+
+
+def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
+    tmp_path: Path,
+) -> None:
+    """Legacy callers without explicit experiment names use dataset display name and no tags."""
+    from neuralls.configuration.domain import ExperimentWorkspace
+    from neuralls.workflows.training import train_model
+
+    config_path = tmp_path / "model.toml"
+    data_config_path = tmp_path / "data.toml"
+    config_path.write_text("")
+    data_config_path.write_text("")
+
+    workspace = ExperimentWorkspace(
+        dataset_id="dataset-legacy",
+        run_id="workspace-run",
+        root_dir=tmp_path / "workspace",
+        data_dir=tmp_path / "workspace" / "data",
+    )
+    workspace.checkpoint_dir.mkdir(parents=True)
+    checkpoint_path = workspace.checkpoint_dir / "model.ckpt"
+    checkpoint_path.write_text("checkpoint")
+
+    experiment = SimpleNamespace(
+        settings=object(),
+        workspace=workspace,
+        spec=SimpleNamespace(
+            experiment_id="legacy-exp",
+            experiment_display_name="Legacy Experiment",
+            dataset_registry_id="dataset-legacy",
+            dataset_display_name="Dataset Display",
+            model_registry_id=None,
+            model_display_name=None,
+        ),
+    )
+
+    with (
+        patch("neuralls.workflows.training.load_experiment", return_value=experiment),
+        patch("neuralls.workflows.training._load_and_prepare_data", return_value=(None, [], [])),
+        patch(
+            "neuralls.workflows.training._configure_training_pipeline",
+            return_value=(experiment.settings, workspace),
+        ),
+        patch(
+            "neuralls.workflows.training.execute",
+            return_value=SimpleNamespace(run_id="run-123", metrics={}),
+        ) as mock_execute,
+        patch("neuralls.workflows.training.get_latest_checkpoint", return_value=checkpoint_path),
+        patch(
+            "neuralls.workflows.training._resolve_mlflow_logging_config",
+            return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
+        ),
+        patch(
+            "neuralls.workflows.training._resolve_mlflow_run_ids",
+            return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
+        ),
+        patch("neuralls.workflows.training._log_training_context"),
+        patch("neuralls.workflows.training.write_mlflow_sidecar"),
+        patch("neuralls.workflows.training._stage_training_artifacts"),
+        patch("neuralls.workflows.training._log_training_evaluation"),
+        patch("neuralls.workflows.training.log_artifacts_to_mlflow"),
+    ):
+        train_model(
+            config_path=config_path,
+            data_config_path=data_config_path,
+            output_root=tmp_path / "output",
+            experiment_id="legacy-exp",
+            experiment_display_name="Legacy Experiment",
+            dataset_registry_id="dataset-legacy",
+            dataset_display_name="Dataset Display",
+        )
+
+    execute_kwargs = mock_execute.call_args.kwargs
+    assert execute_kwargs["experiment_name"] == "Dataset Display"
+    assert re.match(
+        r"^Legacy Experiment-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$",
+        execute_kwargs["run_name"],
+    )
+    assert execute_kwargs["tags"] is None

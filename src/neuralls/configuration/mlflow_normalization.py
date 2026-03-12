@@ -158,6 +158,9 @@ def normalize_model_mlflow(raw: dict[str, Any], config_path: Path) -> dict[str, 
     if not isinstance(mlflow_raw, dict):
         return normalized
 
+    # dlkit now treats the presence of [MLFLOW] as enabling tracking.
+    mlflow_raw.pop("enabled", None)
+
     legacy_sections = [key for key in ("client", "server") if key in mlflow_raw]
     if legacy_sections:
         joined = ", ".join(legacy_sections)

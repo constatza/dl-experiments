@@ -13,7 +13,12 @@ from loguru import logger
 
 from neuralls.configuration.dataset_identity import resolve_dataset_identity
 from neuralls.configuration.comparison import ComparisonConfig
-from neuralls.configuration.experiments import ExperimentEntry, ExperimentsConfig, resolve_display_name
+from neuralls.configuration.experiments import (
+    ComparisonRegistryEntry,
+    ExperimentEntry,
+    ExperimentsConfig,
+    resolve_display_name,
+)
 from neuralls.configuration.master_registry import (
     get_experiment_binding,
     load_validated_master_config,
@@ -39,6 +44,7 @@ from neuralls.workflows.model_resolution import (
     resolve_preconditioner_models_with_warnings,
 )
 from neuralls.workflows.results import ComparisonResult
+from neuralls.workflows.run_specs import build_comparison_run_spec, build_child_comparison_tags
 from neuralls.workflows.specs import ComparisonOutcome, ComparisonParams
 
 
@@ -248,11 +254,6 @@ def run_comparison(
             if auto_specs:
                 cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))
         topology = _resolve_comparison_topology(experiments_config_path)
-        tags = {
-            "phase": "comparison",
-            "comparison_id": resolved_comparison_id,
-            "comparison_display_name": resolved_comparison_display_name,
-        }
         resolution_warnings: tuple[str, ...] = ()
 
         setup_comparison_tracking(
@@ -260,9 +261,14 @@ def run_comparison(
             artifact_location=topology.artifact_location,
             experiment_name=topology.experiment_name,
         )
-        run_name = resolved_comparison_display_name
+        comparison_entry = ComparisonRegistryEntry(
+            id=resolved_comparison_id,
+            path=comparison_config,
+            display_name=comparison_display_name,
+        )
+        run_name, comp_tags = build_comparison_run_spec(entry=comparison_entry)
 
-        with mlflow.start_run(run_name=run_name, tags=tags) as comp_run:
+        with mlflow.start_run(run_name=run_name, tags=comp_tags.as_mlflow_tags()) as comp_run:
             comp_run_id = comp_run.info.run_id
             mlflow.log_param("artifact_uri", mlflow.get_artifact_uri())
 
@@ -300,12 +306,12 @@ def run_comparison(
                 # Create nested child runs for each preconditioner result
                 if isinstance(raw_result, ComparisonResult):
                     for name, entry in raw_result.results.items():
-                        child_tags = {
-                            "phase": "preconditioner_run",
-                            "preconditioner": name,
-                            "comparison_id": resolved_comparison_id,
-                        }
-                        with mlflow.start_run(run_name=name, nested=True, tags=child_tags):
+                        child_tags = build_child_comparison_tags(
+                            preconditioner_name=name,
+                            comparison_id=resolved_comparison_id,
+                            parent_run_name=run_name,
+                        )
+                        with mlflow.start_run(run_name=name, nested=True, tags=child_tags.as_mlflow_tags()):
                             for step, residual in enumerate(entry.residual_history):
                                 mlflow.log_metric("residual", residual, step=step)
 

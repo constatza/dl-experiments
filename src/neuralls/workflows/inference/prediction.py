@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from loguru import logger
 
-from dlkit import load_model
+from dlkit.interfaces.api import load_model
 from dlkit.core.postprocessing import stack_batches
 from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
@@ -112,7 +112,8 @@ def create_predictor(
 ) -> Any:
     """Create DLKit predictor from checkpoint with fitted transforms.
 
-    Uses FULL_64 precision and enables checkpoint-based transforms.
+    Uses the public DLKit inference API, FULL_64 precision, and
+    checkpoint-based transforms.
     Fitted transforms (normalization, scaling, etc.) are automatically
     loaded from checkpoint metadata and applied during prediction.
 

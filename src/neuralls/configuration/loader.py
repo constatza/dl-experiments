@@ -201,11 +201,6 @@ def load_experiment(
             "Model name missing. Set [SESSION].name or [MODEL].name in model config."
         )
 
-    # Use timestamp for MLflow run name (traceability)
-    # but NOT for workspace directory (clean paths)
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    mlflow_run_name = f"{base_name}-{timestamp}"
     workspace_run_id = base_name
 
     # 4. Build experiment spec (use base_name for logical ID)
@@ -237,7 +232,6 @@ def load_experiment(
             model_config_path=model_config_path,
             workspace=workspace,
             path_context=path_ctx,
-            mlflow_run_name=mlflow_run_name,
             mlflow_experiment_name=mlflow_topology.experiment_name,
             force_mlflow_enabled=mlflow_topology.force_enabled,
         )
@@ -248,8 +242,6 @@ def load_experiment(
             model_config_path=model_config_path,
             workspace=workspace,
             path_context=path_ctx,
-            mlflow_run_name=mlflow_run_name,
-            mlflow_experiment_name=mlflow_topology.experiment_name,
             force_mlflow_enabled=mlflow_topology.force_enabled,
             base_settings=model_cfg,
         )

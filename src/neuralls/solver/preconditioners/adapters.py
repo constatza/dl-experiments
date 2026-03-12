@@ -160,7 +160,7 @@ class DLKitAdapter(PredictorAdapter):
 
         try:
             # Lazy import to avoid hard dependency
-            from dlkit import load_model
+            from dlkit.interfaces.api import load_model
             from dlkit.tools.config.precision.strategy import PrecisionStrategy
 
             logger.debug(f"Loading checkpoint from: {checkpoint_path}")

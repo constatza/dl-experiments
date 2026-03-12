@@ -11,6 +11,7 @@ from mlflow.tracking import MlflowClient
 
 from neuralls.configuration.dataset_identity import resolve_dataset_identity
 from neuralls.configuration.experiments import (
+    ExperimentEntry,
     ExperimentsConfig,
     RegistryEntry,
     RunEntry,
@@ -32,6 +33,7 @@ from neuralls.workflows.model_catalog import (
     register_logged_model,
     read_registered_model_name,
 )
+from neuralls.workflows.run_specs import build_registration_tags
 from neuralls.workflows.training import train_model
 
 
@@ -242,14 +244,23 @@ def _annotate_mlflow_run(
         logger.warning(f"[{label}] Could not log params to MLflow: {exc}")
 
     model_class = read_registered_model_name(model_config_path)
-    tags: dict[str, str] = {"model_class": model_class} if model_class else {}
+    entry = ExperimentEntry(
+        id=experiment_id,
+        dataset_id=dataset_registry_id or dataset_id,
+        model_id=model_registry_id or experiment_id,
+        display_name=experiment_display_name,
+    )
+    reg_tags = build_registration_tags(
+        entry=entry,
+        model_class=model_class,
+    )
 
     try:
         record = register_logged_model(
             run_id=run_id,
             registered_model_name=experiment_id,
             tracking_uri=tracking_uri,
-            tags=tags,
+            tags=reg_tags.as_mlflow_tags(),
         )
         logger.info(
             "[{}] Registered {} v{} under experiment_id '{}'",
@@ -274,6 +285,7 @@ def _train_single(
     data_config_path: Path,
     label: str,
     output_root: Path | None,
+    mlflow_experiment_name: str,
     dataset_registry_id: str | None = None,
     dataset_display_name: str | None = None,
     model_registry_id: str | None = None,
@@ -305,6 +317,7 @@ def _train_single(
         dataset_display_name=dataset_display_name,
         model_registry_id=model_registry_id,
         model_display_name=model_display_name,
+        mlflow_experiment_name=mlflow_experiment_name,
     )
     data_cfg = load_data_config(data_config_path)
     dataset_id = resolve_dataset_identity(
@@ -426,6 +439,7 @@ def train_batch(
         tracking_uri=cfg.mlflow.tracking_uri,
         artifacts_destination=cfg.mlflow.artifacts_destination,
     )
+    mlflow_experiment_name = cfg.names.training
 
     # ------------------------------------------------------------------
     # Phase 1: Train — dlkit manages all individual MLflow runs independently
@@ -466,6 +480,7 @@ def train_batch(
                 data_config_path=data_config,
                 label=label,
                 output_root=base_output,
+                mlflow_experiment_name=mlflow_experiment_name,
                 dataset_registry_id=dataset_registry_id,
                 dataset_display_name=dataset_display_name,
                 model_registry_id=model_registry_id,

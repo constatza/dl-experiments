@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 
 import mlflow
@@ -80,7 +81,10 @@ def register_logged_model(
                 f"{registered_model_name}@{alias}: "
                 f"expected version {version}, got {resolved_version.version}."
             )
-    for key, value in (tags or {}).items():
+    registration_ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+    effective_tags: dict[str, str] = dict(tags or {})
+    effective_tags["registered_at"] = registration_ts
+    for key, value in effective_tags.items():
         client.set_model_version_tag(
             name=registered_model_name,
             version=str(version),

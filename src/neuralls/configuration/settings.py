@@ -20,8 +20,6 @@ def build_settings(
     model_config_path: Path,
     workspace: ExperimentWorkspace,
     path_context: PathContext,
-    mlflow_run_name: str | None = None,
-    mlflow_experiment_name: str | None = None,
     force_mlflow_enabled: bool = False,
     base_settings: Any | None = None,
 ) -> Any:
@@ -30,14 +28,13 @@ def build_settings(
     This function:
     1. Loads base settings from model config (dlkit)
     2. Injects workspace root for training artifacts
-    3. Injects MLflow tracking URI and artifact location (from output_root)
+    3. Enables MLflow when required by topology
     4. Injects processed data path
 
     Args:
         model_config_path: Path to model config TOML.
         workspace: Experiment workspace with data and run info.
         path_context: Resolved base paths (source of truth).
-        mlflow_run_name: MLflow run name with timestamp (optional, defaults to workspace.run_id).
         base_settings: Optional pre-loaded settings instance to reuse.
 
     Returns:
@@ -45,9 +42,6 @@ def build_settings(
     """
     # Load base settings from dlkit
     settings = base_settings if base_settings is not None else load_model_config(model_config_path)
-
-    # Use provided MLflow run name or default to workspace.run_id
-    run_name = mlflow_run_name if mlflow_run_name is not None else workspace.run_id
 
     updates: dict[str, Any] = {
         "TRAINING": {
@@ -66,11 +60,7 @@ def build_settings(
         getattr(settings, "MLFLOW", None) is not None or force_mlflow_enabled
     )
     if should_patch_mlflow:
-        updates["MLFLOW"] = {
-            "enabled": True if force_mlflow_enabled else getattr(settings.MLFLOW, "enabled", False),
-            "experiment_name": mlflow_experiment_name or workspace.dataset_id,
-            "run_name": run_name,
-        }
+        updates["MLFLOW"] = {}
 
     settings = update_settings(settings, updates)
 
@@ -141,7 +131,6 @@ def build_inference_settings(
     # Only inject MLflow if enabled in config or explicitly forced.
     if getattr(settings, "MLFLOW", None) is not None or force_mlflow_enabled:
         updates["MLFLOW"] = {
-            "enabled": True if force_mlflow_enabled else getattr(settings.MLFLOW, "enabled", False),
             "experiment_name": mlflow_experiment_name or workspace.dataset_id,
             "run_name": run_name,
         }

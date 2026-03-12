@@ -102,9 +102,8 @@ class TestBuildSettings:
         # Check workspace root injected
         assert Path(settings.TRAINING.trainer.default_root_dir) == workspace.root_dir
 
-        # Check flat MLflow fields injected
-        assert settings.MLFLOW.experiment_name == workspace.dataset_id
-        assert settings.MLFLOW.run_name == workspace.run_id
+        # Check MLflow remains enabled without embedding runtime naming.
+        assert settings.MLFLOW is not None
         assert not hasattr(settings.MLFLOW, "client")
         assert not hasattr(settings.MLFLOW, "server")
 
@@ -141,7 +140,7 @@ class TestBuildSettings:
             path_context=path_ctx,
         )
 
-        assert settings.MLFLOW.enabled is True
+        assert settings.MLFLOW is not None
         assert not hasattr(settings.MLFLOW, "tracking_uri")
         assert not hasattr(settings.MLFLOW, "artifacts_destination")
 
@@ -240,9 +239,8 @@ class TestLoadExperiment:
         # Check workspace paths injected
         assert Path(experiment.settings.TRAINING.trainer.default_root_dir) == experiment.workspace.root_dir
 
-        # Check MLflow configuration
-        assert experiment.settings.MLFLOW.experiment_name == "data"
-        assert experiment.settings.MLFLOW.run_name.startswith("test-model")
+        # Check MLflow remains enabled without embedding runtime naming.
+        assert experiment.settings.MLFLOW is not None
         assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
         assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 

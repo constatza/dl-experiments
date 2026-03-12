@@ -172,6 +172,7 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path) -> None:
             data_config_path=data_cfg,
             label="1",
             output_root=None,
+            mlflow_experiment_name="Training",
         )
 
     assert result.checkpoint_path == ckpt
@@ -215,7 +216,13 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
         run_id="run-abc",
         registered_model_name="spectral-energy",
         tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
-        tags={"model_class": "NormScaledLinearFFNN"},
+        tags={
+            "experiment_id": "spectral-energy",
+            "dataset_id": "solutions",
+            "model_id": "ffnn",
+            "experiment_display_name": "Spectral Energy",
+            "model_class": "NormScaledLinearFFNN",
+        },
     )
 
 
@@ -241,6 +248,7 @@ def test_train_batch_returns_local_output_dir(valid_experiments_toml: Path, tmp_
         result = train_batch(cfg=cfg, configs_dir=valid_experiments_toml.parent)
 
     assert mock_train.call_count == 1
+    assert mock_train.call_args.kwargs["mlflow_experiment_name"] == "Training"
     assert result.output_dir == (tmp_path / "output" / "training")
     assert result.label_map["1"]["experiment_id"] == "ffnn_test"
 

@@ -37,7 +37,7 @@ class ExperimentNamesConfig(BaseModel):
         comparison: Name for comparison experiments.
     """
 
-    training: str = "neuralls-training"
+    training: str = "Training"
     comparison: str = "Comparisons"
     model_config = ConfigDict(extra="forbid", frozen=True)
 
