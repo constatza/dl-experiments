@@ -127,9 +127,7 @@ class TestWithDatasetArrays:
         sample_matrix_array: np.ndarray,
     ) -> None:
         """Test dataset injection includes matrix for GraphDataset."""
-        graph_settings = mock_settings.model_copy(
-            update={"DATASET": mock_settings.DATASET.model_copy(update={"name": "GraphDataset"})}
-        )
+        graph_settings = mock_settings.update_with({"DATASET": {"name": "GraphDataset"}})
         updated = with_dataset_arrays(
             graph_settings,
             sample_rhs_array,

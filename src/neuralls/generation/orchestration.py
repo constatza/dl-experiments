@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 from loguru import logger
 from scipy.sparse import csc_matrix
 
-from .data_types import NormalizeType
+from .data_types import NormalizeType, ScaleMetadata
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .trace_utils import (
@@ -224,6 +225,324 @@ def generate_mixture(
     return X, Y, residual_traces, error_traces
 
 
+@dataclass(frozen=True)
+class _CachedMatrix:
+    """Immutable cached matrix data for generation.
+
+    Stores all derived matrices and scaling information computed once
+    per unique matrix_sample_id, avoiding redundant computation.
+
+    Attributes:
+        matrix_norm: Normalized system matrix (as dense array)
+        matrix_for_generation: CSC sparse version of normalized matrix
+        scale: IScale object or None (scaling strategy applied)
+        matrix_norm_value: Computed matrix norm value
+        matrix_value_scale: Scaling factor applied
+        scale_params: Dictionary of scale parameters or None
+    """
+
+    matrix_norm: np.ndarray
+    matrix_for_generation: Any  # csc_matrix; avoid top-level scipy import
+    scale: Any  # IScale | None
+    matrix_norm_value: float
+    matrix_value_scale: float
+    scale_params: dict[str, Any] | None
+
+
+def _open_streams(
+    matrix_path: str,
+    rhs_path: str | None,
+    sample_id_regex: str | None,
+) -> tuple[Any, Any, list[Any]]:
+    """Open matrix and optional RHS streams and bind them.
+
+    Args:
+        matrix_path: Path expression for matrix stream
+        rhs_path: Optional path expression for RHS stream
+        sample_id_regex: Optional regex for sample ID extraction
+
+    Returns:
+        Tuple of (matrix_stream, rhs_stream, bindings)
+    """
+    matrix_stream = open_matrix_stream(
+        matrix_path_expr=matrix_path,
+        sample_id_regex=sample_id_regex,
+    )
+    rhs_stream = (
+        open_vector_stream(rhs_path, sample_id_regex=sample_id_regex)
+        if rhs_path is not None
+        else None
+    )
+    bindings = bind_sources(
+        matrix_ids=matrix_stream.sample_ids,
+        rhs_ids=rhs_stream.sample_ids if rhs_stream is not None else None,
+        solution_ids=None,
+    )
+    return matrix_stream, rhs_stream, bindings
+
+
+@dataclass(frozen=True)
+class _BindingResult:
+    """Result from processing one binding.
+
+    Stores generated and accumulated data from a single matrix-RHS binding.
+
+    Attributes:
+        rhs_block: Generated RHS block for this binding
+        solution_block: Generated solution block for this binding
+        matrix_norm_value: Computed norm of normalized matrix
+        matrix_value_scale: Scaling factor applied to matrix values
+        scale_params: Dictionary of scale parameters or None
+    """
+
+    rhs_block: np.ndarray
+    solution_block: np.ndarray
+    matrix_norm_value: float
+    matrix_value_scale: float
+    scale_params: ScaleMetadata | None
+
+
+def _process_binding(
+    binding: Any,
+    matrix_stream: Any,
+    rhs_stream: Any,
+    matrix_cache: dict[int, _CachedMatrix],
+    normalize: NormalizeType,
+    matrix_norm_type: str,
+    counts: dict[str, int] | None,
+    mix: dict[str, float] | None,
+    total: int | None,
+    seed: int,
+    shuffle: bool,
+    strategy_overrides: dict[str, dict[str, Any]] | None,
+) -> _BindingResult:
+    """Process one matrix-RHS binding and generate samples.
+
+    Args:
+        binding: Single binding to process
+        matrix_stream: Opened matrix stream
+        rhs_stream: Optional opened RHS stream
+        matrix_cache: Cache of computed matrices
+        normalize: Normalization type
+        matrix_norm_type: Norm type for matrix calculation
+        counts: Sample counts per strategy
+        mix: Mixing proportions
+        total: Total samples
+        seed: Random seed
+        shuffle: Whether to shuffle samples
+        strategy_overrides: Strategy-specific overrides
+
+    Returns:
+        BindingResult with generated data blocks
+    """
+    from ..math_utils import calculate_matrix_norm
+
+    # Get or compute normalized matrix
+    cached = matrix_cache.get(binding.matrix_sample_id)
+    if cached is None:
+        from .helpers import _normalize_matrix_for_generation
+
+        dense_sample = matrix_stream.load_dense_sample(binding.matrix_sample_id)
+        dense_matrix = np.asarray(dense_sample.matrix, dtype=np.float64)
+        if dense_matrix.shape[0] != dense_matrix.shape[1]:
+            raise ValueError(
+                f"Matrix sample {binding.matrix_sample_id} must be square, got {dense_matrix.shape}"
+            )
+        matrix_norm, scale, matrix_value_scale = _normalize_matrix_for_generation(
+            dense_matrix,
+            normalize,
+            spectral_radius_bound=None,
+        )
+        matrix_for_generation = csc_matrix(matrix_norm)
+        matrix_norm_value = calculate_matrix_norm(
+            matrix_norm,
+            norm_type=matrix_norm_type,
+        )
+        scale_params = scale.to_dict() if scale is not None else None
+        cached = _CachedMatrix(
+            matrix_norm=matrix_norm,
+            matrix_for_generation=matrix_for_generation,
+            scale=scale,
+            matrix_norm_value=matrix_norm_value,
+            matrix_value_scale=matrix_value_scale,
+            scale_params=scale_params,
+        )
+        matrix_cache[binding.matrix_sample_id] = cached
+
+    # Load optional RHS
+    single_rhs: np.ndarray | None = None
+    if rhs_stream is not None and binding.rhs_sample_id is not None:
+        rhs_sample = rhs_stream.load_sample(binding.rhs_sample_id)
+        single_rhs = np.asarray(rhs_sample.vector, dtype=np.float64)
+        if single_rhs.shape[0] != cached.matrix_norm.shape[0]:
+            raise ValueError(
+                f"RHS sample {binding.rhs_sample_id} length {single_rhs.shape[0]} "
+                f"doesn't match matrix size {cached.matrix_norm.shape[0]}"
+            )
+        if cached.scale is not None:
+            single_rhs = cached.scale.scale_rhs(single_rhs)
+
+    # Generate mixture
+    logger.info(
+        f"Generating/loading samples for binding sample_id={binding.sample_id} "
+        f"(matrix_id={binding.matrix_sample_id})..."
+    )
+    X, Y, residual_traces, error_traces = generate_mixture(
+        cached.matrix_for_generation,
+        counts=counts,
+        mix=mix,
+        total=total,
+        seed=seed,
+        shuffle=shuffle,
+        strategy_overrides=strategy_overrides,
+        single_rhs=single_rhs,
+    )
+
+    # Select final blocks based on available traces
+    if error_traces is not None:
+        X_final = error_traces.residuals
+        Y_final = error_traces.errors
+    elif residual_traces is not None:
+        X_final = residual_traces.residuals
+        Y_final = residual_traces.solutions
+    else:
+        X_final = X
+        Y_final = Y
+
+    if X_final.shape != Y_final.shape:
+        raise ValueError(
+            f"Generated RHS/solution shape mismatch: {X_final.shape} vs {Y_final.shape}"
+        )
+
+    return _BindingResult(
+        rhs_block=np.asarray(X_final, dtype=np.float64),
+        solution_block=np.asarray(Y_final, dtype=np.float64),
+        matrix_norm_value=float(cached.matrix_norm_value),
+        matrix_value_scale=float(cached.matrix_value_scale),
+        scale_params=cached.scale_params,  # type: ignore[arg-type]  # ScaleMetadata compatible
+    )
+
+
+def _resolve_final_scale(
+    norm_values: list[float],
+    scale_values: list[float],
+    metadata_values: list[ScaleMetadata | None],
+) -> tuple[float, float, ScaleMetadata | None]:
+    """Resolve final scaling parameters from all bindings.
+
+    Checks consistency across bindings and logs warnings for inconsistencies.
+
+    Args:
+        norm_values: Matrix norm values from each binding
+        scale_values: Matrix value scale factors from each binding
+        metadata_values: Scale metadata from each binding
+
+    Returns:
+        Tuple of (final_matrix_norm, final_matrix_scale, final_scale_metadata)
+    """
+    if not norm_values or not scale_values:
+        raise ValueError("No norm or scale values to resolve")
+
+    # Resolve matrix norm
+    matrix_norm_value = float(norm_values[0])
+    if not all(np.isclose(v, matrix_norm_value, rtol=1e-10, atol=1e-12) for v in norm_values):
+        logger.warning(
+            "Multiple normalized matrix norms detected across bindings; "
+            "persisting first value in manifest metadata."
+        )
+
+    # Resolve matrix value scale
+    matrix_value_scale = float(scale_values[0])
+    if not all(
+        np.isclose(v, matrix_value_scale, rtol=1e-10, atol=1e-12)
+        for v in scale_values
+    ):
+        logger.warning(
+            "Multiple matrix value scales detected across bindings; "
+            "persisting sparse pack with value_scale=1.0."
+        )
+        matrix_value_scale = 1.0
+
+    # Resolve scale metadata
+    unique_scale_payloads = {
+        json.dumps(payload, sort_keys=True) if payload is not None else "null"
+        for payload in metadata_values
+    }
+    scale_metadata: ScaleMetadata | None = None
+    if len(unique_scale_payloads) == 1:
+        scale_metadata = metadata_values[0]
+    else:
+        logger.warning(
+            "Multiple scale metadata payloads detected across bindings; "
+            "persisting empty scale metadata in manifest."
+        )
+        scale_metadata = None
+
+    return matrix_norm_value, matrix_value_scale, scale_metadata
+
+
+def _persist_dataset(
+    dataset_dir: str,
+    rhs_all: np.ndarray,
+    solutions_all: np.ndarray,
+    indices: np.ndarray,
+    values: np.ndarray,
+    nnz_ptr: np.ndarray,
+    matrix_size: tuple[int, int],
+    normalize: NormalizeType,
+    matrix_norm_type: str,
+    matrix_norm: float,
+    matrix_value_scale: float,
+    scale_metadata: ScaleMetadata | None,
+    num_bindings: int,
+) -> None:
+    """Persist dataset to disk.
+
+    Side effect: Writes files to dataset_dir with manifest and arrays.
+
+    Args:
+        dataset_dir: Output directory path
+        rhs_all: Stacked RHS vectors
+        solutions_all: Stacked solution vectors
+        indices: Sparse matrix indices
+        values: Sparse matrix values
+        nnz_ptr: Sparse matrix row pointers
+        matrix_size: Tuple of (rows, cols) for system matrix
+        normalize: Normalization type applied
+        matrix_norm_type: Type of norm computed
+        matrix_norm: Final matrix norm value
+        matrix_value_scale: Final value scale factor
+        scale_metadata: Metadata about scaling
+        num_bindings: Number of matrix-RHS bindings processed
+    """
+    from pathlib import Path
+    from ..io.dataset_storage import save_dataset_from_sparse
+
+    dataset_dir_path = Path(dataset_dir)
+    dataset_dir_path.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Saving to: {dataset_dir}")
+
+    save_dataset_from_sparse(
+        dataset_dir=dataset_dir_path,
+        rhs=rhs_all,
+        solutions=solutions_all,
+        indices=indices,
+        values=values,
+        nnz_ptr=nnz_ptr,
+        size=matrix_size,
+        normalization_type=str(normalize),
+        matrix_norm=matrix_norm,
+        matrix_norm_type=matrix_norm_type,
+        matrix_value_scale=matrix_value_scale,
+        scale_metadata=scale_metadata,  # type: ignore[arg-type]  # ScaleMetadata compatible
+    )
+
+    logger.info(
+        f"Dataset built successfully: {dataset_dir} "
+        f"(samples={rhs_all.shape[0]}, matrix_samples={num_bindings})"
+    )
+
+
 def build_dataset(
     matrix_path: str,
     dataset_dir: str,
@@ -240,14 +559,30 @@ def build_dataset(
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
 ) -> str:
-    """Build dataset from streamed matrix sources without dense N-matrix materialization."""
-    from pathlib import Path
-    from ..math_utils import calculate_matrix_norm
-    from ..io.dataset_storage import (
-        SparsePackAccumulator,
-        save_dataset_from_sparse,
-    )
-    from .helpers import _normalize_matrix_for_generation
+    """Build dataset from streamed matrix sources without dense N-matrix materialization.
+
+    Orchestrates dataset generation pipeline by coordinating stream opening,
+    matrix normalization, sample generation, and persistent storage.
+
+    Args:
+        matrix_path: Path expression for matrix stream
+        dataset_dir: Output directory for dataset
+        counts: Sample counts per strategy
+        mix: Mixing proportions
+        total: Total sample count
+        rhs_path: Optional path expression for RHS stream
+        solutions_path: Optional path expression for solutions
+        sample_id_regex: Optional regex for sample ID extraction
+        normalize: Normalization type to apply
+        matrix_norm_type: Type of norm to compute
+        shuffle: Whether to shuffle samples
+        seed: Random seed for reproducibility
+        strategy_overrides: Strategy-specific configuration overrides
+
+    Returns:
+        Path to generated dataset directory
+    """
+    from ..io.dataset_storage import SparsePackAccumulator
 
     logger.info("Building dataset...")
     logger.info(f"  Matrix: {matrix_path}")
@@ -257,24 +592,15 @@ def build_dataset(
     if rhs_path is not None:
         logger.info(f"  RHS source: {rhs_path}")
 
-    matrix_stream = open_matrix_stream(
-        matrix_path_expr=matrix_path,
-        sample_id_regex=sample_id_regex,
-    )
-    rhs_stream = (
-        open_vector_stream(rhs_path, sample_id_regex=sample_id_regex)
-        if rhs_path is not None
-        else None
-    )
-    bindings = bind_sources(
-        matrix_ids=matrix_stream.sample_ids,
-        rhs_ids=rhs_stream.sample_ids if rhs_stream is not None else None,
-        solution_ids=None,
+    # Open streams and bind sources
+    matrix_stream, rhs_stream, bindings = _open_streams(
+        matrix_path, rhs_path, sample_id_regex
     )
     logger.info(
         f"  Matrix samples: {len(matrix_stream.sample_ids)} | System bindings: {len(bindings)}"
     )
 
+    # Setup accumulators
     sparse_acc = SparsePackAccumulator()
     single_matrix_mode = len(matrix_stream.sample_ids) == 1
     single_matrix_written = False
@@ -282,168 +608,79 @@ def build_dataset(
     solution_blocks: list[np.ndarray] = []
     matrix_norm_values: list[float] = []
     matrix_value_scale_values: list[float] = []
-    scale_metadata_values: list[dict[str, Any] | None] = []
-    matrix_cache: dict[
-        int, tuple[np.ndarray, Any, Any, float, float, dict[str, Any] | None]
-    ] = {}
+    scale_metadata_values: list[ScaleMetadata | None] = []
+    matrix_cache: dict[int, _CachedMatrix] = {}
 
+    # Process each binding
     logger.info(f"  Normalization: {normalize}")
     for binding in bindings:
-        cached = matrix_cache.get(binding.matrix_sample_id)
-        if cached is None:
-            dense_sample = matrix_stream.load_dense_sample(binding.matrix_sample_id)
-            dense_matrix = np.asarray(dense_sample.matrix, dtype=np.float64)
-            if dense_matrix.shape[0] != dense_matrix.shape[1]:
-                raise ValueError(
-                    f"Matrix sample {binding.matrix_sample_id} must be square, got {dense_matrix.shape}"
-                )
-            matrix_norm, scale, matrix_value_scale = _normalize_matrix_for_generation(
-                dense_matrix,
-                normalize,
-                spectral_radius_bound=None,
-            )
-            matrix_for_generation = csc_matrix(matrix_norm)
-            matrix_norm_value = calculate_matrix_norm(
-                matrix_norm,
-                norm_type=matrix_norm_type,
-            )
-            scale_params = scale.to_dict() if scale is not None else None
-            cached = (
-                matrix_norm,
-                matrix_for_generation,
-                scale,
-                matrix_norm_value,
-                matrix_value_scale,
-                scale_params,
-            )
-            matrix_cache[binding.matrix_sample_id] = cached
-        (
-            matrix_norm,
-            matrix_for_generation,
-            scale,
-            matrix_norm_value,
-            matrix_value_scale,
-            scale_params,
-        ) = cached
-
-        single_rhs: np.ndarray | None = None
-        if rhs_stream is not None and binding.rhs_sample_id is not None:
-            rhs_sample = rhs_stream.load_sample(binding.rhs_sample_id)
-            single_rhs = np.asarray(rhs_sample.vector, dtype=np.float64)
-            if single_rhs.shape[0] != matrix_norm.shape[0]:
-                raise ValueError(
-                    f"RHS sample {binding.rhs_sample_id} length {single_rhs.shape[0]} "
-                    f"doesn't match matrix size {matrix_norm.shape[0]}"
-                )
-            if scale is not None:
-                single_rhs = scale.scale_rhs(single_rhs)
-
-        logger.info(
-            f"Generating/loading samples for binding sample_id={binding.sample_id} "
-            f"(matrix_id={binding.matrix_sample_id})..."
-        )
-        X, Y, residual_traces, error_traces = generate_mixture(
-            matrix_for_generation,
-            counts=counts,
-            mix=mix,
-            total=total,
-            seed=seed,
-            shuffle=shuffle,
-            strategy_overrides=strategy_overrides,
-            single_rhs=single_rhs,
+        result = _process_binding(
+            binding,
+            matrix_stream,
+            rhs_stream,
+            matrix_cache,
+            normalize,
+            matrix_norm_type,
+            counts,
+            mix,
+            total,
+            seed,
+            shuffle,
+            strategy_overrides,
         )
 
-        if error_traces is not None:
-            X_final = error_traces.residuals
-            Y_final = error_traces.errors
-        elif residual_traces is not None:
-            X_final = residual_traces.residuals
-            Y_final = residual_traces.solutions
-        else:
-            X_final = X
-            Y_final = Y
-
-        if X_final.shape != Y_final.shape:
-            raise ValueError(
-                f"Generated RHS/solution shape mismatch: {X_final.shape} vs {Y_final.shape}"
-            )
-        if X_final.shape[0] == 0:
+        # Skip empty results
+        if result.rhs_block.shape[0] == 0:
             continue
 
-        rhs_blocks.append(np.asarray(X_final, dtype=np.float64))
-        solution_blocks.append(np.asarray(Y_final, dtype=np.float64))
-        if single_matrix_mode:
-            if not single_matrix_written:
-                # Persist single source matrix once; dlkit reader broadcasts n_samples=1 at runtime.
-                sparse_acc.append_dense_matrix(matrix_norm, repeats=1)
-                single_matrix_written = True
-        else:
-            sparse_acc.append_dense_matrix(matrix_norm, repeats=int(X_final.shape[0]))
-        matrix_norm_values.append(float(matrix_norm_value))
-        matrix_value_scale_values.append(float(matrix_value_scale))
-        scale_metadata_values.append(scale_params)
+        # Accumulate blocks and metadata
+        rhs_blocks.append(result.rhs_block)
+        solution_blocks.append(result.solution_block)
+
+        # Cache matrix in appropriate format and accumulate
+        cached = matrix_cache.get(binding.matrix_sample_id)
+        if cached is not None:
+            if single_matrix_mode:
+                if not single_matrix_written:
+                    sparse_acc.append_dense_matrix(cached.matrix_norm, repeats=1)
+                    single_matrix_written = True
+            else:
+                sparse_acc.append_dense_matrix(cached.matrix_norm, repeats=int(result.rhs_block.shape[0]))
+
+        matrix_norm_values.append(result.matrix_norm_value)
+        matrix_value_scale_values.append(result.matrix_value_scale)
+        scale_metadata_values.append(result.scale_params)
 
     if not rhs_blocks or not solution_blocks:
         raise ValueError("No samples were generated for dataset persistence.")
 
+    # Build sparse arrays
     rhs_all = np.vstack(rhs_blocks)
     solutions_all = np.vstack(solution_blocks)
     indices, values, nnz_ptr, matrix_size = sparse_acc.build_arrays()
 
-    dataset_dir_path = Path(dataset_dir)
-    dataset_dir_path.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Saving to: {dataset_dir}")
-
-    matrix_norm_value = float(matrix_norm_values[0])
-    if not all(np.isclose(v, matrix_norm_value, rtol=1e-10, atol=1e-12) for v in matrix_norm_values):
-        logger.warning(
-            "Multiple normalized matrix norms detected across bindings; "
-            "persisting first value in manifest metadata."
-        )
-    matrix_value_scale = float(matrix_value_scale_values[0])
-    if not all(
-        np.isclose(v, matrix_value_scale, rtol=1e-10, atol=1e-12)
-        for v in matrix_value_scale_values
-    ):
-        logger.warning(
-            "Multiple matrix value scales detected across bindings; "
-            "persisting sparse pack with value_scale=1.0."
-        )
-        matrix_value_scale = 1.0
-
-    unique_scale_payloads = {
-        json.dumps(payload, sort_keys=True) if payload is not None else "null"
-        for payload in scale_metadata_values
-    }
-    scale_metadata: dict[str, Any] | None = None
-    if len(unique_scale_payloads) == 1:
-        scale_metadata = scale_metadata_values[0]
-    else:
-        logger.warning(
-            "Multiple scale metadata payloads detected across bindings; "
-            "persisting empty scale metadata in manifest."
-        )
-        scale_metadata = {}
-
-    save_dataset_from_sparse(
-        dataset_dir=dataset_dir_path,
-        rhs=rhs_all,
-        solutions=solutions_all,
-        indices=indices,
-        values=values,
-        nnz_ptr=nnz_ptr,
-        size=matrix_size,
-        normalization_type=str(normalize),
-        matrix_norm=matrix_norm_value,
-        matrix_norm_type=matrix_norm_type,
-        matrix_value_scale=matrix_value_scale,
-        scale_metadata=scale_metadata,
+    # Resolve final scaling parameters
+    matrix_norm_value, matrix_value_scale, scale_metadata = _resolve_final_scale(
+        matrix_norm_values, matrix_value_scale_values, scale_metadata_values
     )
 
-    logger.info(
-        f"Dataset built successfully: {dataset_dir} "
-        f"(samples={rhs_all.shape[0]}, matrix_samples={len(bindings)})"
+    # Persist dataset
+    _persist_dataset(
+        dataset_dir,
+        rhs_all,
+        solutions_all,
+        indices,
+        values,
+        nnz_ptr,
+        matrix_size,
+        normalize,
+        matrix_norm_type,
+        matrix_norm_value,
+        matrix_value_scale,
+        scale_metadata,
+        len(bindings),
     )
+
     return dataset_dir
 
 
