@@ -218,6 +218,34 @@ def test_register_logged_model_uses_experiment_id_as_name(
     datetime.fromisoformat(registered_at_value)
 
 
+@patch("neuralls.workflows.model_catalog.logger")
+@patch("neuralls.workflows.model_catalog.MlflowClient")
+@patch("neuralls.workflows.model_catalog.mlflow")
+def test_register_logged_model_warns_when_name_exists(
+    mock_mlflow: MagicMock,
+    mock_client_cls: MagicMock,
+    mock_logger: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Existing registered names emit a warning before adding a new version."""
+    mock_mlflow.register_model.return_value.version = "5"
+    client = mock_client_cls.return_value
+    client.get_registered_model.return_value = object()
+
+    register_logged_model(
+        run_id="run-1",
+        registered_model_name="exp-1",
+        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tags={"model_class": "NormScaledLinearFFNN"},
+    )
+
+    client.get_registered_model.assert_called_once_with("exp-1")
+    mock_logger.warning.assert_called_once_with(
+        "Registered model '{}' already exists. Registering a new version.",
+        "exp-1",
+    )
+
+
 @patch("neuralls.workflows.model_catalog.MlflowClient")
 @patch("neuralls.workflows.model_catalog.mlflow")
 def test_register_logged_model_always_sets_registered_at(

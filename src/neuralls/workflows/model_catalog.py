@@ -49,6 +49,22 @@ def _normalize_aliases(aliases: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(normalized_aliases)
 
 
+def _warn_existing_registered_model_name(
+    *,
+    client: MlflowClient,
+    registered_model_name: str,
+) -> None:
+    """Warn when registration will append a version to an existing model."""
+    try:
+        client.get_registered_model(registered_model_name)
+    except Exception:
+        return
+    logger.warning(
+        "Registered model '{}' already exists. Registering a new version.",
+        registered_model_name,
+    )
+
+
 def register_logged_model(
     *,
     run_id: str,
@@ -61,10 +77,13 @@ def register_logged_model(
     """Register a logged model artifact and attach aliases."""
     model_uri = build_logged_model_uri(run_id=run_id, artifact_path=artifact_path)
     mlflow.set_tracking_uri(tracking_uri)
+    client = MlflowClient(tracking_uri=tracking_uri)
+    _warn_existing_registered_model_name(
+        client=client,
+        registered_model_name=registered_model_name,
+    )
     registered = mlflow.register_model(model_uri=model_uri, name=registered_model_name)
     version = int(registered.version)
-
-    client = MlflowClient(tracking_uri=tracking_uri)
     for alias in _normalize_aliases(aliases):
         client.set_registered_model_alias(
             name=registered_model_name,

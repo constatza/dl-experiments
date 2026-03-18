@@ -34,8 +34,8 @@ def test_training_tags_contains_all_fields() -> None:
     }
 
 
-def test_training_run_spec_name_has_timestamp() -> None:
-    """Training run specs use the experiment display name plus timestamp."""
+def test_training_run_spec_name_has_readable_timestamp() -> None:
+    """Training run specs use the experiment display name plus a readable timestamp."""
     entry = ExperimentEntry(
         id="exp-1",
         dataset_id="dataset-1",
@@ -45,14 +45,14 @@ def test_training_run_spec_name_has_timestamp() -> None:
 
     spec = build_training_run_spec(
         entry=entry,
-        experiment_name="Training",
+        experiment_name="Train",
         paths=MlflowPaths("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
         workspace_root=Path("/tmp/workspace"),
-        timestamp="2026-03-12T12:00:00",
+        timestamp="Thu 12 Mar 2026 - 12:00:00",
     )
 
-    assert spec.experiment_name == "Training"
-    assert spec.run_name == "Experiment One-2026-03-12T12:00:00"
+    assert spec.experiment_name == "Train"
+    assert spec.run_name == "Experiment One-Thu 12 Mar 2026 - 12:00:00"
     assert dict(spec.tags) == {
         "phase": "training",
         "experiment_id": "exp-1",

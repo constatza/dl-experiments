@@ -4,7 +4,7 @@ project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
 
 [names]
-training = "Training"
+training = "Train"
 comparison = "Comparisons"
 
 # -------

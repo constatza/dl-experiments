@@ -23,6 +23,11 @@ def iso_timestamp(dt: datetime | None = None) -> str:
     return (dt or datetime.now()).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def format_run_timestamp(dt: datetime | None = None) -> str:
+    """Return a readable local timestamp for MLflow run names."""
+    return (dt or datetime.now()).strftime("%a %d %b %Y - %H:%M:%S")
+
+
 @dataclass(frozen=True)
 class TrainingRunTags:
     """Structured tags for a training run.
@@ -138,7 +143,7 @@ def build_training_run_spec(
 ) -> MlflowRunConfig:
     """Build complete MlflowRunConfig for a training run.
 
-    Run name format: ``{display_name}-{ISO_timestamp}``
+    Run name format: ``{display_name}-{readable_timestamp}``
 
     Args:
         entry: Experiment registry entry.
@@ -150,7 +155,7 @@ def build_training_run_spec(
     Returns:
         Complete MlflowRunConfig ready for training.
     """
-    ts = timestamp or iso_timestamp()
+    ts = timestamp or format_run_timestamp()
     tags = TrainingRunTags(
         phase="training",
         experiment_id=entry.id,

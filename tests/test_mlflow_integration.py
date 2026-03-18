@@ -34,7 +34,7 @@ def output_root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def minimal_model_config(tmp_path: Path, output_root: Path) -> Path:
-    """Create a minimal model config with MLflow enabled."""
+    """Create a minimal model config that relies on default MLflow settings."""
     config_path = tmp_path / "minimal_model.toml"
 
     config_content = f"""
@@ -54,9 +54,6 @@ devices = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = true
 """
     config_path.write_text(config_content)
     return config_path

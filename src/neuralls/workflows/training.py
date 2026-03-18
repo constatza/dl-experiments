@@ -52,10 +52,11 @@ from neuralls.workflows.mlflow_client import (
     log_diagnostics_to_mlflow,
     parent_run_context,
 )
-from neuralls.workflows.run_specs import build_training_run_spec, iso_timestamp
+from neuralls.workflows.run_specs import build_training_run_spec, format_run_timestamp
 
 GRAPH_DATASET_NAME: str = "GraphDataset"
 FLEXIBLE_DATASET_NAME: str = "FlexibleDataset"
+TRAINING_EXPERIMENT_NAME: str = "Train"
 
 
 @dataclass(frozen=True)
@@ -195,8 +196,8 @@ def _resolve_dataset(
     """
     _validate_dataset_section(settings)
     base_dataset = settings.DATASET or DatasetSettings()
-    dataset = base_dataset.model_copy(
-        update={
+    dataset = base_dataset.update_with(
+        {
             "features": features,
             "targets": targets,
             "name": base_dataset.name or "FlexibleDataset",
@@ -204,7 +205,7 @@ def _resolve_dataset(
             "memmap_cache": False,
         }
     )
-    return settings.model_copy(update={"DATASET": dataset})
+    return settings.update_with({"DATASET": dataset})
 
 
 def _configure_output_paths(
@@ -257,11 +258,34 @@ def _configure_dataloader_runtime(settings: GeneralSettings) -> GeneralSettings:
     return settings.update_with({"DATAMODULE": datamodule_cfg})
 
 
+def _configure_mlflow(
+    settings: GeneralSettings,
+    *,
+    mlflow_experiment_name: str,
+    mlflow_run_name: str,
+) -> GeneralSettings:
+    """Inject concrete MLflow names into training settings."""
+    if not settings.MLFLOW:
+        return settings
+    updated = update_settings(
+        settings,
+        {
+            "MLFLOW": {
+                "experiment_name": mlflow_experiment_name,
+                "run_name": mlflow_run_name,
+            }
+        },
+    )
+    return updated  # type: ignore[return-value]
+
+
 def _configure_training_pipeline(
     settings: GeneralSettings,
     workspace: ExperimentWorkspace,
     features: list[FeatureType],
     targets: list[TargetType],
+    mlflow_experiment_name: str,
+    mlflow_run_name: str,
 ) -> tuple[GeneralSettings, ExperimentWorkspace]:
     """Apply all configuration transformations to settings.
 
@@ -269,9 +293,7 @@ def _configure_training_pipeline(
     1. Inject features/targets into DATASET section (in-memory arrays)
     2. Configure dataloader runtime (workers, pin_memory)
     3. Configure output paths (checkpoint dir, default root dir)
-
-    MLflow experiment/run name and tags are passed directly to ``execute()``
-    rather than injected into settings.
+    4. Inject concrete MLflow experiment/run names into settings
 
     Each transformation is a pure function that returns new GeneralSettings.
     The transformations are independent and can be tested in isolation.
@@ -281,6 +303,8 @@ def _configure_training_pipeline(
         workspace: Experiment workspace with directory paths
         features: Feature configs created from dataset artifacts
         targets: Target configs created from dataset artifacts
+        mlflow_experiment_name: Training experiment bucket name.
+        mlflow_run_name: Timestamped training run name.
 
     Returns:
         Tuple of (updated_settings, workspace) ready for DLKit execute()
@@ -288,6 +312,11 @@ def _configure_training_pipeline(
     settings = _resolve_dataset(settings, features, targets)
     settings = _configure_dataloader_runtime(settings)
     settings = _configure_output_paths(settings, workspace.root_dir)
+    settings = _configure_mlflow(
+        settings,
+        mlflow_experiment_name=mlflow_experiment_name,
+        mlflow_run_name=mlflow_run_name,
+    )
     return settings, workspace
 
 
@@ -316,7 +345,8 @@ def _build_training_run_config(
     workspace_root: Path,
 ) -> MlflowRunConfig:
     """Build the execute()-time MLflow run config for training."""
-    experiment_name = mlflow_experiment_name or dataset_display_name
+    _ = (mlflow_experiment_name, dataset_display_name)
+    experiment_name = TRAINING_EXPERIMENT_NAME
     paths = _build_runtime_mlflow_paths(runtime_mlflow_env)
     if experiment_id and dataset_registry_id and model_registry_id:
         entry = ExperimentEntry(
@@ -333,7 +363,7 @@ def _build_training_run_config(
         )
     return MlflowRunConfig(
         experiment_name=experiment_name,
-        run_name=f"{experiment_display_name}-{iso_timestamp()}",
+        run_name=f"{experiment_display_name}-{format_run_timestamp()}",
         tags={},
         paths=paths,
         workspace_root=workspace_root,
@@ -452,6 +482,78 @@ def _resolve_mlflow_run_ids(
 
     fallback_experiment_id, fallback_run_id = found
     return tracking_uri, fallback_experiment_id, fallback_run_id
+
+
+def _find_single_checkpoint(root: Path) -> Path:
+    """Return one checkpoint under a downloaded MLflow artifact tree."""
+    checkpoints = sorted(root.glob("**/*.ckpt"))
+    if not checkpoints:
+        raise FileNotFoundError(f"No checkpoint found under {root}")
+    return checkpoints[0]
+
+
+def _download_training_checkpoint(
+    *,
+    tracking_uri: str,
+    run_id: str,
+    destination: Path,
+) -> Path:
+    """Download checkpoint artifacts for a completed MLflow run."""
+    client = MlflowClient(tracking_uri=tracking_uri)
+    try:
+        downloaded_root = Path(
+            client.download_artifacts(
+                run_id=run_id,
+                path="checkpoints",
+                dst_path=str(destination),
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            f"Could not download checkpoints for run '{run_id}' from MLflow."
+        ) from exc
+    return _find_single_checkpoint(downloaded_root)
+
+
+def _resolve_training_checkpoint(
+    *,
+    training_result: Any,
+    workspace: ExperimentWorkspace,
+    tracking_uri: str | None,
+    run_id: str | None,
+) -> Path:
+    """Resolve the produced checkpoint from local artifacts or MLflow."""
+    checkpoint_path = getattr(training_result, "checkpoint_path", None)
+    if checkpoint_path is not None:
+        direct_checkpoint = Path(checkpoint_path)
+        if direct_checkpoint.exists():
+            return direct_checkpoint
+
+    artifacts = getattr(training_result, "artifacts", {}) or {}
+    for key in ("best_checkpoint", "last_checkpoint"):
+        candidate = artifacts.get(key)
+        if candidate is None:
+            continue
+        artifact_checkpoint = Path(candidate)
+        if artifact_checkpoint.exists():
+            return artifact_checkpoint
+
+    local_checkpoint = get_latest_checkpoint(workspace.checkpoint_dir)
+    if local_checkpoint is not None and local_checkpoint.exists():
+        return local_checkpoint
+
+    if tracking_uri and run_id:
+        logger.info(
+            "Checkpoint missing locally for run {}. Downloading from MLflow artifacts.",
+            run_id,
+        )
+        return _download_training_checkpoint(
+            tracking_uri=tracking_uri,
+            run_id=run_id,
+            destination=workspace.checkpoint_dir,
+        )
+
+    raise RuntimeError(f"No checkpoint found in {workspace.checkpoint_dir}")
 
 
 _PREDICTION_KEYS: tuple[str, ...] = (
@@ -601,8 +703,8 @@ def train_model(
     This is the main entry point for model training. It orchestrates:
     1. Load experiment configuration (model + data configs) into a temp dir
     2. Resolve dataset artifacts (rhs/solutions/matrix_coo)
-    3. Configure DLKit settings (dataset, paths)
-    4. Build execute()-time MLflow naming and tags
+    3. Build execute()-time MLflow naming and tags
+    4. Configure DLKit settings (dataset, paths, MLflow names)
     5. Execute training via DLKit
     6. Copy checkpoint to permanent location under output_root
     7. Return path to saved checkpoint
@@ -669,15 +771,7 @@ def train_model(
         # Step 2: Resolve training dataset artifacts
         _, features, targets = _load_and_prepare_data(settings, workspace)
 
-        # Step 3: Configure DLKit settings (dataset, paths)
-        settings, workspace = _configure_training_pipeline(
-            settings,
-            workspace,
-            features,
-            targets,
-        )
-
-        # Step 4: Build execute()-time MLflow naming and tags
+        # Step 3: Build execute()-time MLflow naming and tags
         run_config = _build_training_run_config(
             experiment_id=experiment.spec.experiment_id,
             experiment_display_name=resolved_experiment_display_name,
@@ -687,6 +781,16 @@ def train_model(
             mlflow_experiment_name=mlflow_experiment_name,
             runtime_mlflow_env=runtime_mlflow_env,
             workspace_root=workspace.root_dir,
+        )
+
+        # Step 4: Configure DLKit settings (dataset, paths, MLflow names)
+        settings, workspace = _configure_training_pipeline(
+            settings,
+            workspace,
+            features,
+            targets,
+            run_config.experiment_name,
+            run_config.run_name,
         )
 
         # Step 5: Execute training via DLKit
@@ -701,12 +805,7 @@ def train_model(
                     tags=dict(run_config.tags) or None,
                 )
 
-            # Step 6: Retrieve checkpoint from temp dir (before it is deleted)
-            local_checkpoint = get_latest_checkpoint(workspace.checkpoint_dir)
-            if local_checkpoint is None:
-                raise RuntimeError(f"No checkpoint found in {workspace.checkpoint_dir}")
-
-            # Step 7: Stage artifacts and upload them to MLflow while temp files still exist
+            # Step 6: Resolve MLflow run metadata and retrieve the checkpoint
             tracking_uri, artifacts_destination = _resolve_mlflow_logging_config()
             mlflow_coords = _resolve_mlflow_run_ids(
                 training_result=training_result,
@@ -714,7 +813,23 @@ def train_model(
                 experiment_name=run_config.experiment_name,
                 run_name=run_config.run_name,
             )
+            resolved_tracking_uri = tracking_uri
+            resolved_run_id = None
+            if mlflow_coords is not None:
+                resolved_tracking_uri, _, resolved_run_id = mlflow_coords
+            else:
+                resolved_run_id = (
+                    getattr(training_result, "mlflow_run_id", None)
+                    or getattr(training_result, "run_id", None)
+                )
+            local_checkpoint = _resolve_training_checkpoint(
+                training_result=training_result,
+                workspace=workspace,
+                tracking_uri=resolved_tracking_uri,
+                run_id=resolved_run_id,
+            )
 
+            # Step 7: Stage artifacts and upload them to MLflow while temp files still exist
             if mlflow_coords is not None:
                 tracking_uri, exp_id, run_id = mlflow_coords
                 _log_training_context(

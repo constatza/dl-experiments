@@ -42,6 +42,8 @@ def build_settings(
     """
     # Load base settings from dlkit
     settings = base_settings if base_settings is not None else load_model_config(model_config_path)
+    if getattr(settings, "MLFLOW", None) is None:
+        settings = settings.patch({"MLFLOW": {}})
 
     updates: dict[str, Any] = {
         "TRAINING": {
@@ -56,10 +58,7 @@ def build_settings(
         },
     }
 
-    should_patch_mlflow = (
-        getattr(settings, "MLFLOW", None) is not None or force_mlflow_enabled
-    )
-    if should_patch_mlflow:
+    if getattr(settings, "MLFLOW", None) is not None or force_mlflow_enabled:
         updates["MLFLOW"] = {}
 
     settings = update_settings(settings, updates)

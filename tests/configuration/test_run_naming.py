@@ -28,9 +28,6 @@ max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = false
 """
     config_path.write_text(config_content)
     return config_path
@@ -54,9 +51,6 @@ max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = false
 """
     config_path.write_text(config_content)
     return config_path
@@ -81,9 +75,6 @@ max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = false
 """
     config_path.write_text(config_content)
     return config_path
@@ -247,9 +238,6 @@ max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = false
 """
         bad_config.write_text(bad_config_content)
 
@@ -283,9 +271,6 @@ max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = false
 """
         special_config.write_text(special_config_content)
 

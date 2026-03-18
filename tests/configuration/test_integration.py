@@ -35,9 +35,6 @@ max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = true
 """
     config_path.write_text(config_content)
     return config_path
@@ -280,9 +277,6 @@ max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = true
 """)
 
         experiment = load_experiment(
@@ -314,9 +308,6 @@ max_epochs = 1
 
 [DATASET]
 name = "FlexibleDataset"
-
-[MLFLOW]
-enabled = true
 """)
 
         experiment = load_experiment(

@@ -240,12 +240,16 @@ def test_to_numpy_predictions_shape_matches_targets(
 # ---------------------------------------------------------------------------
 
 
-def test_fast_dev_run_predict_returns_list_of_dicts(tmp_path: Path) -> None:
+def test_fast_dev_run_predict_returns_list_of_dicts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """trainer.predict() produces stacked TensorDict and to_numpy() output.
 
     This test documents the expected API so _log_training_evaluation() can rely on it.
     Runs a single fast_dev_run training step using DLKit programmatic settings.
     """
+    import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
     from dlkit.interfaces.api import execute
     from dlkit.tools.config import GeneralSettings, SessionSettings
     from dlkit.tools.config import DataModuleSettings, DatasetSettings, TrainingSettings
@@ -256,6 +260,8 @@ def test_fast_dev_run_predict_returns_list_of_dicts(tmp_path: Path) -> None:
         MetricComponentSettings,
     )
     from dlkit.tools.config.data_entries import ValueFeature, ValueTarget
+
+    monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
     n_samples, n_features, n_targets = 20, 4, 2
     rng = np.random.default_rng(42)
@@ -390,7 +396,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             dataset_display_name="Dataset One",
             model_registry_id="model-1",
             model_display_name="Model One",
-            mlflow_experiment_name="Training",
+            mlflow_experiment_name="Train",
         )
 
     load_args = mock_load.call_args.args
@@ -398,9 +404,9 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
     assert load_args[1] == data_config_path
 
     execute_kwargs = mock_execute.call_args.kwargs
-    assert execute_kwargs["experiment_name"] == "Training"
+    assert execute_kwargs["experiment_name"] == "Train"
     assert re.match(
-        r"^Experiment One-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$",
+        r"^Experiment One-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
         execute_kwargs["run_name"],
     )
     assert execute_kwargs["tags"] == {
@@ -484,9 +490,9 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
         )
 
     execute_kwargs = mock_execute.call_args.kwargs
-    assert execute_kwargs["experiment_name"] == "Dataset Display"
+    assert execute_kwargs["experiment_name"] == "Train"
     assert re.match(
-        r"^Legacy Experiment-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$",
+        r"^Legacy Experiment-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
         execute_kwargs["run_name"],
     )
     assert execute_kwargs["tags"] is None

@@ -89,7 +89,7 @@ def _build_default_mlflow_topology(path_ctx_output_root: Path) -> MlflowTopology
         tracking_uri=f"sqlite:///{(path_ctx_output_root / 'mlruns' / 'mlflow.db').as_posix()}",
         artifacts_destination=str((path_ctx_output_root / "mlartifacts").resolve()),
     )
-    return MlflowTopology(env=env)
+    return MlflowTopology(env=env, force_enabled=True)
 
 
 def _build_experiments_mlflow_topology(

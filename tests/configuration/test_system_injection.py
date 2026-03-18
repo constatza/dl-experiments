@@ -43,7 +43,7 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
             "tracking_uri": tracking_uri,
         },
         "names": {
-            "training": "Training",
+            "training": "Train",
             "comparison": "Comparisons",
         },
     }
