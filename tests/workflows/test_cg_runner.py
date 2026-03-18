@@ -27,6 +27,7 @@ from neuralls.solver.preconditioners import (
     PreconditionerContext,
     ScheduledPreconditioner,
 )
+from neuralls.solver.preconditioners.base import NonLinearPreconditioner
 from neuralls.workflows.cg_runner import (
     format_results_summary,
     run_cg_comparison,
@@ -184,6 +185,76 @@ def test_run_cg_comparison_routes_to_flexible_cg(
     assert isinstance(result, CGComparisonResult)
     # Flexible CG provides iteration history
     assert len(result.residual_history) > 1
+
+
+def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
+    monkeypatch: pytest.MonkeyPatch,
+    spd_matrix: NDArray,
+    rhs_vector: NDArray,
+) -> None:
+    """Test that nonlinear preconditioners use flexible_cg by default."""
+
+    class DummyNonLinearPreconditioner(NonLinearPreconditioner):
+        def apply(
+            self,
+            residual: NDArray,
+            context: PreconditionerContext | None = None,
+        ) -> NDArray:
+            return residual
+
+    flexible_calls: list[str] = []
+    pcg_calls: list[str] = []
+
+    from neuralls.solver.models.result import SolverResult
+
+    def fake_flexible_cg(*args: object, **kwargs: object) -> tuple[NDArray, SolverResult]:
+        flexible_calls.append("flexible")
+        return np.zeros_like(rhs_vector), SolverResult(
+            converged=True,
+            iterations=3,
+            residual=1e-8,
+            residual_abs=1e-8,
+            rhs_norm=float(np.linalg.norm(rhs_vector)),
+            breakdown=False,
+            residual_history=[1.0, 1e-8],
+            residual_history_abs=[1.0, 1e-8],
+            tol=1e-8,
+            atol=1e-10,
+        )
+
+    def fake_pcg(*args: object, **kwargs: object) -> tuple[NDArray, SolverResult]:
+        pcg_calls.append("pcg")
+        return np.zeros_like(rhs_vector), SolverResult(
+            converged=True,
+            iterations=2,
+            residual=1e-7,
+            residual_abs=1e-7,
+            rhs_norm=float(np.linalg.norm(rhs_vector)),
+            breakdown=False,
+            residual_history=[1.0, 1e-7],
+            residual_history_abs=[1.0, 1e-7],
+            tol=1e-8,
+            atol=1e-10,
+        )
+
+    monkeypatch.setattr("neuralls.workflows.cg_runner.flexible_cg", fake_flexible_cg)
+    monkeypatch.setattr("neuralls.workflows.cg_runner.pcg", fake_pcg)
+
+    results = run_cg_comparison(
+        spd_matrix,
+        rhs_vector,
+        preconditioners={
+            "nonlinear": DummyNonLinearPreconditioner(),
+            "none": Identity(),
+        },
+        rtol=1e-8,
+        atol=1e-10,
+        maxiter=100,
+    )
+
+    assert flexible_calls == ["flexible"]
+    assert pcg_calls == ["pcg"]
+    assert results["nonlinear"].converged
 
 
 def test_run_cg_comparison_routes_to_pcg(spd_matrix: NDArray, rhs_vector: NDArray) -> None:

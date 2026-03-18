@@ -26,7 +26,7 @@ class SolverConfig:
     maxiter: int
     """Maximum number of iterations allowed."""
 
-    trace_mode: TraceMode | str
+    trace_mode: TraceMode
     """Verbosity of iteration tracking."""
 
     m_max: int | None = None

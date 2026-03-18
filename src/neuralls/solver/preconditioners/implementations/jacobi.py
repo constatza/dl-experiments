@@ -26,7 +26,7 @@ class JacobiPreconditioner(LinearPreconditioner[NDArray]):
         >>> z = precond.apply(residual)  # z = D^{-1}r
     """
 
-    def _compute_operator(self, matrix: NDArray, **kwargs) -> NDArray:
+    def _compute_operator(self, matrix: NDArray) -> NDArray:
         """Extract and invert diagonal from matrix.
 
         Args:

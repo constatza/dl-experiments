@@ -29,12 +29,11 @@ class ICholeskyPreconditioner(LinearPreconditioner[NDArray]):
         >>> z = precond.apply(residual)  # z = (LL^T)^{-1}r
     """
 
-    def _compute_operator(self, matrix: NDArray, **kwargs) -> NDArray:
+    def _compute_operator(self, matrix: NDArray) -> NDArray:
         """Store the lower triangular factor L.
 
         Args:
             matrix: Lower triangular matrix L
-            **kwargs: Ignored
 
         Returns:
             The matrix L itself.

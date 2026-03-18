@@ -34,7 +34,7 @@ from scipy.sparse.linalg import LinearOperator
 
 from .monitoring.event_log import EventLog
 from .monitoring.iteration_history import IterationHistory
-from .monitoring.trace_mode import TraceMode
+from .monitoring.trace_mode import TraceMode, coerce_trace_mode
 from .conjugate_gradient import FCGSolver, PCGSolver
 from .models.result import SolverResult
 from .strategies.orthogonalization import create_fcg_orthogonalization
@@ -132,10 +132,7 @@ def flexible_cg(
     orthog_strategy = create_fcg_orthogonalization(m_max=m_max)
 
     # Create logging objects based on trace mode
-    # Convert string to TraceMode if needed
-    trace_mode_enum = (
-        TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
-    )
+    trace_mode_enum = coerce_trace_mode(trace_mode)
     iteration_history = (
         IterationHistory(mode=trace_mode_enum)
         if trace_mode_enum != TraceMode.DISABLED
@@ -262,10 +259,7 @@ def pcg(
         reorthog_strategy = create_fcg_orthogonalization(m_max=m_max)
 
     # Create logging objects based on trace mode
-    # Convert string to TraceMode if needed
-    trace_mode_enum = (
-        TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
-    )
+    trace_mode_enum = coerce_trace_mode(trace_mode)
     iteration_history = (
         IterationHistory(mode=trace_mode_enum)
         if trace_mode_enum != TraceMode.DISABLED
@@ -372,9 +366,7 @@ def scipy_cg(
         precond_strategy = CallablePreconditioner(preconditioner)
 
     # Create logging objects based on trace mode
-    trace_mode_enum = (
-        TraceMode(trace_mode) if isinstance(trace_mode, str) else trace_mode
-    )
+    trace_mode_enum = coerce_trace_mode(trace_mode)
     iteration_history = (
         IterationHistory(mode=trace_mode_enum)
         if trace_mode_enum != TraceMode.DISABLED

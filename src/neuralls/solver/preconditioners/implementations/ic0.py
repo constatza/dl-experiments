@@ -52,7 +52,7 @@ class IC0Preconditioner(LinearPreconditioner[NDArray]):
         >>> precond = IC0Preconditioner(matrix, threshold=1e-12)
     """
 
-    def __init__(self, matrix: NDArray, threshold: float = 1e-14, **kwargs):
+    def __init__(self, matrix: NDArray, threshold: float = 1e-14) -> None:
         """Initialize IC(0) preconditioner.
 
         Args:
@@ -60,20 +60,18 @@ class IC0Preconditioner(LinearPreconditioner[NDArray]):
             threshold: Drop tolerance - entries with |value| < threshold are
                        treated as zeros. Improves numerical stability and
                        maintains sparsity. Default: 1e-14
-            **kwargs: Additional arguments (reserved for future extensions)
 
         Raises:
             ValueError: If matrix is not SPD or IC(0) breaks down
         """
         self._threshold = threshold
-        super().__init__(matrix, threshold=threshold, **kwargs)
+        super().__init__(matrix)
 
-    def _compute_operator(self, matrix: NDArray, **kwargs) -> NDArray:
+    def _compute_operator(self, matrix: NDArray) -> NDArray:
         """Compute IC(0) factorization of system matrix.
 
         Args:
             matrix: Symmetric positive definite system matrix A
-            **kwargs: Must contain 'threshold' parameter
 
         Returns:
             Lower triangular incomplete Cholesky factor L
@@ -81,8 +79,7 @@ class IC0Preconditioner(LinearPreconditioner[NDArray]):
         Raises:
             ValueError: If matrix is not SPD or IC(0) breaks down
         """
-        threshold = kwargs.get("threshold", 1e-14)
-        return _compute_ic0_factor_sparse(matrix, threshold)
+        return _compute_ic0_factor_sparse(matrix, self._threshold)
 
     def apply(
         self, residual: NDArray, context: PreconditionerContext | None = None

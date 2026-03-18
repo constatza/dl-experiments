@@ -16,7 +16,11 @@ from scipy.linalg import norm
 from ..constants import DEFAULT_ATOL, DEFAULT_M_MAX, DEFAULT_RTOL
 from ..solver.factories import flexible_cg, pcg
 from ..solver.models.result import CGComparisonResult, SolverResult
-from ..solver.preconditioners.base import ContextualPreconditioner, Preconditioner
+from ..solver.preconditioners.base import (
+    ContextualPreconditioner,
+    NonLinearPreconditioner,
+    Preconditioner,
+)
 from .results import ComparisonRecommendations, RankedRecommendation
 
 
@@ -34,7 +38,10 @@ def run_cg_comparison(
 ) -> dict[str, CGComparisonResult]:
     """Run CG with multiple preconditioners for comparison.
 
-    Uses type-based routing: ContextualPreconditioner → flexible_cg, others → pcg.
+    Uses type-based routing:
+    - Contextual/iteration-dependent preconditioners → flexible_cg
+    - Non-linear preconditioners (for example neural models) → flexible_cg
+    - Static linear preconditioners → pcg
 
     Args:
         A: System matrix
@@ -156,8 +163,16 @@ def run_cg_comparison(
 
 
 def _requires_flexible_cg(preconditioner: Preconditioner) -> bool:
-    """Check if preconditioner requires flexible CG (needs iteration context)."""
-    return isinstance(preconditioner, ContextualPreconditioner)
+    """Check if preconditioner requires flexible CG.
+
+    Flexible CG is required for:
+    - contextual preconditioners that depend on iteration state
+    - non-linear preconditioners such as neural models
+    """
+    return isinstance(
+        preconditioner,
+        (ContextualPreconditioner, NonLinearPreconditioner),
+    )
 
 
 def format_results_summary(results: dict[str, CGComparisonResult]) -> str:

@@ -85,3 +85,21 @@ class TraceMode(StrEnum):
 
     FULL = "full"
     """Log scalars + vectors. High memory (~MB-GB). Debugging/research mode."""
+
+
+def coerce_trace_mode(value: TraceMode | str) -> TraceMode:
+    """Convert string to TraceMode; pass TraceMode through unchanged.
+
+    Args:
+        value: A TraceMode enum or string representation
+
+    Returns:
+        TraceMode enum value
+
+    Examples:
+        >>> coerce_trace_mode("minimal")
+        <TraceMode.MINIMAL: 'minimal'>
+        >>> coerce_trace_mode(TraceMode.MINIMAL)
+        <TraceMode.MINIMAL: 'minimal'>
+    """
+    return TraceMode(value) if isinstance(value, str) else value

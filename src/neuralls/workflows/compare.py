@@ -52,7 +52,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from collections.abc import Callable, Sequence
 
 import numpy as np
@@ -64,7 +64,11 @@ from neuralls.io.filesystem import ensure_dir
 from ..io.comparison import load_system_arrays
 from neuralls.normalization import create_scale_from_config
 from ..plotting import plot_convergence_comparison, plot_metric_comparison
-from ..solver.preconditioners import create_preconditioner, create_scheduled_preconditioner
+from ..solver.preconditioners import (
+    create_preconditioner,
+    create_scheduled_preconditioner,
+    PreconditionerScheduleConfig,
+)
 from .cg_runner import (
     format_results_summary,
     run_cg_comparison,
@@ -339,7 +343,8 @@ def _normalize_linear_system(
         )
 
     rhs_samples = rhs.reshape(1, -1) if strategy == "spectral" else None
-    scale = create_scale_from_config(strategy, matrix, rhs_samples=rhs_samples)
+    scale_strategy = cast(Literal["none", "matrix", "spectral", "diagonal"], strategy)
+    scale = create_scale_from_config(scale_strategy, matrix, rhs_samples=rhs_samples)
     if scale is None:
         return matrix, rhs
     if isinstance(scale, list):
@@ -402,25 +407,16 @@ def _create_scheduled_preconditioners(
     for cfg in preconditioner_configs:
         primary = base_preconditioners[cfg.name]
 
-        # Create fallback preconditioner if iteration limit is specified
-        fallback: Preconditioner | None = None
-        if cfg.limit_iters >= 0:
-            # Create fallback on-demand
-            if cfg.fallback in base_preconditioners:
-                fallback = base_preconditioners[cfg.fallback]
-            else:
-                fallback_config = StandardPreconditionerConfig(
-                    name=f"{cfg.name}_fallback",
-                    type=cfg.fallback,
-                )
-                fallback = create_preconditioner(matrix, fallback_config)
+        # Create schedule config from preconditioner config
+        schedule = PreconditionerScheduleConfig(
+            limit_iters=cfg.limit_iters,
+            fallback=cfg.fallback,
+        )
 
         # Wrap with scheduling if limit_iters is specified
-        limit_iters = cfg.limit_iters if cfg.limit_iters >= 0 else None
         scheduled[cfg.name] = create_scheduled_preconditioner(
             primary=primary,
-            fallback=fallback,
-            limit_iters=limit_iters,
+            schedule=schedule,
         )
 
     return scheduled

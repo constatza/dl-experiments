@@ -157,24 +157,22 @@ class LinearPreconditioner[T_Operator](Preconditioner):
         >>> z = precond.apply(residual)  # z = D^{-1}r
     """
 
-    def __init__(self, matrix: NDArray, **kwargs):
+    def __init__(self, matrix: NDArray) -> None:
         """Initialize from system matrix.
 
         Args:
             matrix: System matrix A (will compute M from this)
-            **kwargs: Additional arguments for the preconditioner
         """
-        self._operator: T_Operator = self._compute_operator(matrix, **kwargs)
+        self._operator: T_Operator = self._compute_operator(matrix)
 
     @abstractmethod
-    def _compute_operator(self, matrix: NDArray, **kwargs) -> T_Operator:
+    def _compute_operator(self, matrix: NDArray) -> T_Operator:
         """Compute internal preconditioner operator from matrix.
 
         Subclasses implement this to extract diag, compute ILU, etc.
 
         Args:
             matrix: System matrix A
-            **kwargs: Additional arguments
 
         Returns:
             Internal representation for fast application

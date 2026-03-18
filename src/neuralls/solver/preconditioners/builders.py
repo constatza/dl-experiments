@@ -20,9 +20,9 @@ Design:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import numpy as np
 from numpy.typing import NDArray
 
 from .implementations import (
@@ -41,8 +41,26 @@ if TYPE_CHECKING:
         PreconditionerConfig,
         IC0PreconditionerConfig,
         NeuralPreconditionerConfig,
+        BasePreconditionerConfig,
     )
     from .ports import PredictorAdapter
+
+
+@dataclass(frozen=True)
+class PreconditionerScheduleConfig:
+    """Scheduling parameters for preconditioner switching.
+
+    Extracted from BasePreconditionerConfig for internal use.
+    Separates scheduling concerns from preconditioner configuration.
+
+    Attributes:
+        limit_iters: Number of iterations to apply primary preconditioner.
+                     -1 means unlimited (use primary for entire solve).
+        fallback: Preconditioner type to switch to after limit is reached.
+    """
+
+    limit_iters: int = -1
+    fallback: PreconditionerType = PreconditionerType.IDENTITY
 
 
 def create_preconditioner(
@@ -82,12 +100,15 @@ def create_preconditioner(
 
     # Check if type is NEURAL but config is not NeuralPreconditionerConfig
     if config.type == PreconditionerType.NEURAL:
-        if not isinstance(config, NeuralPreconditionerConfig):
+        if not isinstance(config, NeuralPreconditionerConfig):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError(
                 f"Neural type requires NeuralPreconditionerConfig, got {type(config)}"
             )
+        ckpt = config.resolved_checkpoint_path or config.checkpoint_path
+        if ckpt is None:
+            raise ValueError("NeuralPreconditionerConfig requires checkpoint_path or resolved_checkpoint_path")
         return NeuralPreconditioner(
-            checkpoint_path=config.checkpoint_path,
+            checkpoint_path=ckpt,
             config_path=config.config_path,
             data_config_path=config.data_config_path,
             adapter=adapter,
@@ -101,59 +122,67 @@ def create_preconditioner(
             )
         return IC0Preconditioner(matrix, threshold=config.threshold)
 
-    # Standard cases: Use explicit mapping
-    PRECONDITIONER_CLASSES: dict[PreconditionerType, type[Preconditioner]] = {
-        PreconditionerType.IDENTITY: Identity,
-        PreconditionerType.NONE: Identity,
-        PreconditionerType.JACOBI: JacobiPreconditioner,
-        PreconditionerType.ILU: ILUPreconditioner,
-        PreconditionerType.ICHOLESKY: ICholeskyPreconditioner,
-    }
-
-    cls = PRECONDITIONER_CLASSES.get(config.type)
-    if cls is None:
-        raise ValueError(
-            f"Unsupported preconditioner type: {config.type}. "
-            f"Supported: {list(PRECONDITIONER_CLASSES.keys())}"
-        )
-
-    # Identity doesn't need matrix argument - explicit return for type safety
+    # Standard cases with explicit dispatch for type safety
     if config.type in (PreconditionerType.IDENTITY, PreconditionerType.NONE):
         return Identity()
-    else:
-        return cls(matrix)  # type: ignore[call-arg]  # Matrix-based preconditioners
+    if config.type == PreconditionerType.JACOBI:
+        return JacobiPreconditioner(matrix)
+    if config.type == PreconditionerType.ILU:
+        return ILUPreconditioner(matrix)
+    if config.type == PreconditionerType.ICHOLESKY:
+        return ICholeskyPreconditioner(matrix)
+
+    raise ValueError(f"Unsupported preconditioner type: {config.type}")
+
+
+def _extract_schedule(cfg: BasePreconditionerConfig) -> PreconditionerScheduleConfig:
+    """Extract scheduling parameters from preconditioner config.
+
+    Pure function to extract scheduling concerns from mixed config.
+
+    Args:
+        cfg: Preconditioner configuration from TOML
+
+    Returns:
+        Extracted schedule configuration
+    """
+    return PreconditionerScheduleConfig(
+        limit_iters=cfg.limit_iters,
+        fallback=cfg.fallback,
+    )
 
 
 def create_scheduled_preconditioner(
     primary: Preconditioner,
-    fallback: Preconditioner | None = None,
-    limit_iters: int | None = None,
+    schedule: PreconditionerScheduleConfig,
 ) -> Preconditioner:
-    """Create a scheduled preconditioner if iteration limit is specified.
+    """Create a scheduled preconditioner based on schedule config.
 
     Args:
         primary: Main preconditioner to apply
-        fallback: Preconditioner to use after limit (defaults to Identity)
-        limit_iters: Switch to fallback after N iterations (None = unlimited)
+        schedule: Schedule configuration with iteration limit and fallback type
 
     Returns:
-        ScheduledPreconditioner if limit_iters is specified, otherwise primary unchanged
+        ScheduledPreconditioner if limit_iters > 0, otherwise primary unchanged
 
     Example:
         >>> # Limit neural preconditioner to first 10 iterations
-        >>> scheduled = create_scheduled_preconditioner(
-        ...     primary=neural_precond,
-        ...     fallback=jacobi_precond,
-        ...     limit_iters=10,
-        ... )
+        >>> schedule = PreconditionerScheduleConfig(limit_iters=10)
+        >>> scheduled = create_scheduled_preconditioner(neural_precond, schedule)
     """
-    if limit_iters is None:
+    if schedule.limit_iters < 0:
         return primary
 
     from .implementations.scheduled import ScheduledPreconditioner
 
+    # Create fallback preconditioner based on type
+    if schedule.fallback == PreconditionerType.IDENTITY:
+        fallback_precond = Identity()
+    else:
+        raise ValueError(f"Unsupported fallback type: {schedule.fallback}")
+
     return ScheduledPreconditioner(
         primary=primary,
-        fallback=fallback or Identity(),
-        limit_iters=limit_iters,
+        fallback=fallback_precond,
+        limit_iters=schedule.limit_iters,
     )

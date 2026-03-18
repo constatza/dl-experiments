@@ -25,7 +25,24 @@ class ILUPreconditioner(LinearPreconditioner):
         >>> z = precond.apply(residual)  # z = (LU)^{-1}r
     """
 
-    def _compute_operator(self, matrix: NDArray, *args, **kwargs):
+    def __init__(
+        self,
+        matrix: NDArray,
+        drop_tol: float | None = None,
+        fill_factor: int | None = None,
+    ) -> None:
+        """Initialize ILU preconditioner.
+
+        Args:
+            matrix: System matrix A
+            drop_tol: Drop tolerance for sparse ILU (scipy spilu parameter)
+            fill_factor: Fill factor for ILU (scipy spilu parameter)
+        """
+        self._drop_tol = drop_tol
+        self._fill_factor = fill_factor
+        super().__init__(matrix)
+
+    def _compute_operator(self, matrix: NDArray):
         """Compute sparse ILU factorization.
 
         Args:
@@ -39,7 +56,18 @@ class ILUPreconditioner(LinearPreconditioner):
 
         # Convert to CSC for efficient factorization
         A_csc = csc_matrix(matrix)
-        return spilu(A_csc, *args, **kwargs)  # Returns SuperLU object
+
+        # Build kwargs dict with only non-None parameters
+        kwargs = {
+            k: v
+            for k, v in {
+                "drop_tol": self._drop_tol,
+                "fill_factor": self._fill_factor,
+            }.items()
+            if v is not None
+        }
+
+        return spilu(A_csc, **kwargs)  # Returns SuperLU object
 
     def apply(self, residual: NDArray, context: PreconditionerContext | None = None) -> NDArray:
         """Solve (LU) z = r via triangular solves.
