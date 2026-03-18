@@ -43,7 +43,7 @@ def test_script_help() -> None:
     test_app.command()(main)
     result = runner.invoke(test_app, ["--help"])
     assert result.exit_code == 0
-    assert "experiments TOML" in result.stdout
+    assert "experiments registry TOML" in result.stdout
     assert "--comparison-config" not in result.stdout
     assert "--comparison-profile" not in result.stdout
 

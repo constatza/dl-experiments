@@ -47,7 +47,7 @@ results = run_cg_comparison(A, b, preconditioners=preconditioners)
 ```
 
 **Design**:
-- Type-based routing: `ContextualPreconditioner` → flexible_cg, others → pcg
+- Type-based routing: contextual and non-linear preconditioners → `flexible_cg`, static linear preconditioners → `pcg`
 - No scheduling logic here - handled by `ScheduledPreconditioner` wrapper
 - Returns `CGComparisonResult` with convergence metrics
 
@@ -106,13 +106,14 @@ result = compare_preconditioners(
 
 **Scheduling Example**:
 ```python
-# Limit neural preconditioner to first 10 iterations
-neural_config = NeuralPreconditionerConfig(
-    name="neural",
-    type="neural",
-    checkpoint_path="model.pt",
-    limit_iters=10,        # Switch to fallback after 10 iterations
-    fallback="jacobi",     # Use Jacobi as fallback
+from neuralls.solver.preconditioners import (
+    PreconditionerScheduleConfig,
+    PreconditionerType,
+)
+
+schedule = PreconditionerScheduleConfig(
+    limit_iters=10,
+    fallback=PreconditionerType.IDENTITY,
 )
 ```
 
@@ -124,9 +125,9 @@ neural_config = NeuralPreconditionerConfig(
 
 **Usage**:
 ```bash
-uv run compare-all configs/experiments.toml
+uv run compare-all <registry.toml>
 ```
-- `experiments.toml` provides MLflow topology, experiment bindings, and the ordered `[[comparisons]]` batch.
+- The selected registry provides MLflow topology, experiment bindings, and the ordered `[[comparisons]]` batch.
 - Each comparison profile file contains only solver/data/preconditioner settings.
 
 ### 4. Experiment Runner (`runner.py`)
@@ -146,7 +147,7 @@ uv run compare-all configs/experiments.toml
 
 **Usage**:
 ```bash
-uv run run-experiments --config configs/experiments.toml
+uv run run-experiments --config <registry.toml>
 ```
 
 ## Design Principles
@@ -174,13 +175,16 @@ uv run run-experiments --config configs/experiments.toml
 Scheduling is handled at the preconditioner layer, not in the comparison orchestration:
 
 ```python
-from neuralls.solver.preconditioners import create_scheduled_preconditioner
+from neuralls.solver.preconditioners import (
+    PreconditionerScheduleConfig,
+    create_scheduled_preconditioner,
+)
 
 # Create scheduled preconditioner that switches after 10 iterations
+schedule = PreconditionerScheduleConfig(limit_iters=10)
 scheduled = create_scheduled_preconditioner(
     primary=neural_precond,
-    fallback=jacobi_precond,
-    limit_iters=10,
+    schedule=schedule,
 )
 
 # Use in comparison (scheduling handled transparently)
@@ -199,31 +203,29 @@ results = run_cg_comparison(A, b, preconditioners={"neural": scheduled})
 **Master Registry**:
 ```toml
 [[datasets]]
-id = "solutions"
-path = "datasets/solutions.toml"
+id = "eig-solutions-smallest"
+path = "datasets/eig-solutions-smallest.toml"
 
 [[models]]
-id = "linear"
-path = "models/linear.toml"
-
-[[comparisons]]
-id = "linear"
-path = "comparison/linear.toml"
+id = "symmetric"
+path = "models/symmetric.toml"
 
 [[experiments]]
-id = "linear_test_solutions"
-dataset = "solutions"
-model = "linear"
+id = "eig-solutions-smallest-symmetric"
+dataset = "eig-solutions-smallest"
+model = "symmetric"
 ```
+
+Registry filenames are examples only. Use whichever registry file matches the run you want to execute.
 
 **During Training**:
 ```toml
 # configs/models/linear.toml - Neural architecture
 # configs/datasets/collect-504.toml - Dataset generation
-
-[MLFLOW]
-# Presence of [MLFLOW] enables tracking intent.
 ```
+
+Model configs rely on default MLflow settings. Tracking topology comes from
+the selected registry or runtime environment variables.
 
 **During Comparison**:
 ```toml
@@ -245,16 +247,16 @@ type = "neural"
 experiment = "linear_test_solutions"
 model_ref = { source = "registered", alias = "@dataset" }
 limit_iters = 10
-fallback = "jacobi"
+fallback = "identity"
 ```
 
 **Why Separate**:
 - The master registry is the only orchestration input for datasets, models, comparisons, and experiment bindings.
 - Comparison profiles stay reusable without becoming a second source of truth for MLflow topology.
 - Neural preconditioners stay explicit peers of classical baselines.
-- Training and comparison MLflow infrastructure both come from `experiments.toml`.
+- Training and comparison MLflow infrastructure both come from the selected experiments registry.
 - Training run identity is passed directly to `dlkit.interfaces.api.execute(...)`:
-  experiment name from `[names].training`, run name from the experiment display name plus timestamp.
+  experiment name from `[names].training`, run name from the experiment display name plus a readable timestamp.
 - Dataset identity comes from dataset config `id`, not filename stems.
 
 ### 5. Inference (`prediction.py`)
@@ -265,6 +267,7 @@ fallback = "jacobi"
 - Uses `dlkit.interfaces.api.load_model()` as the supported inference entrypoint.
 - Does not route inference through `execute()`.
 - Loads inference settings via `load_experiment(..., mode="inference")`.
+- Returns an `InferenceResult` dataclass rather than a dict.
 
 ## Common Patterns
 
@@ -274,17 +277,21 @@ fallback = "jacobi"
 from neuralls.solver.preconditioners import (
     create_preconditioner,
     create_scheduled_preconditioner,
+    PreconditionerScheduleConfig,
+    PreconditionerType,
 )
 
 # 1. Create base preconditioners from comparison config
 primary = create_preconditioner(matrix, primary_config)
-fallback = create_preconditioner(matrix, fallback_config)
 
 # 2. Wrap with scheduling if needed
+schedule = PreconditionerScheduleConfig(
+    limit_iters=10,
+    fallback=PreconditionerType.IDENTITY,
+)
 scheduled = create_scheduled_preconditioner(
     primary=primary,
-    fallback=fallback,
-    limit_iters=10,  # None = no limit (always use primary)
+    schedule=schedule,
 )
 
 # 3. Use anywhere Preconditioner is accepted
@@ -296,13 +303,12 @@ z = scheduled.apply(residual, context)
 The comparison runner automatically routes to the correct CG variant:
 
 ```python
-# ContextualPreconditioner (needs iteration context) → flexible_cg
-scheduled = ScheduledPreconditioner(primary, fallback, limit_iters=10)
-results = run_cg_comparison(A, b, {"scheduled": scheduled})  # → uses flexible_cg
+# Contextual or non-linear preconditioner → flexible_cg
+results = run_cg_comparison(A, b, {"neural": neural_precond})  # -> uses flexible_cg
 
 # Standard preconditioner → pcg
 jacobi = JacobiPreconditioner(A)
-results = run_cg_comparison(A, b, {"jacobi": jacobi})  # → uses pcg
+results = run_cg_comparison(A, b, {"jacobi": jacobi})  # -> uses pcg
 ```
 
 ## Migration Notes
@@ -327,12 +333,14 @@ from neuralls.workflows import run_cg_comparison
 **Current API**:
 ```python
 # Scheduling handled by preconditioner wrapper
-from neuralls.solver.preconditioners import create_scheduled_preconditioner
+from neuralls.solver.preconditioners import (
+    PreconditionerScheduleConfig,
+    create_scheduled_preconditioner,
+)
 
 scheduled = create_scheduled_preconditioner(
     primary=neural_precond,
-    fallback=jacobi_precond,
-    limit_iters=10
+    schedule=PreconditionerScheduleConfig(limit_iters=10)
 )
 
 results = run_cg_comparison(A, b, preconditioners={"neural": scheduled})

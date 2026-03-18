@@ -3,7 +3,7 @@
 
 Usage::
 
-    uv run generate-multiple configs/experiments.toml
+    uv run generate-multiple <registry.toml>
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from neuralls.workflows.multi_generation import generate_batch
 def main(
     config: Path = typer.Argument(
         ...,
-        help="Path to experiments TOML (e.g. configs/experiments.toml)",
+        help="Path to an experiments registry TOML.",
     ),
 ) -> None:
     """Generate all datasets listed in [[datasets]] of the experiments config."""

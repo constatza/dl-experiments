@@ -5,10 +5,8 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 ## Project Layout
 
 - `configs/` – Configuration directory containing:
-  - `experiments-*.toml` – Master registries for datasets, models, comparisons, and experiment bindings
-  - `experiments-linear.toml` – Preserved linear-focused registry
-  - `experiments-parametrized.toml` – Structured-linear registry
-  - `experiments-ffnn.toml` – Constant-width FFNN registry
+  - `experiments-*.toml` – Registry files for datasets, models, comparisons, and experiment bindings
+  - example registry files such as `experiments-linear.toml`, `experiments-parametrized.toml`, and `experiments-ffnn.toml`
   - `comparison/` – Comparison profiles (`schema_version = 3`) with solver/data params + explicit preconditioners
   - `datasets/` – Dataset specifications (collection/generation parameters, test sets)
   - `models/` – Model/training settings
@@ -51,7 +49,7 @@ output_root = workspace.root_dir      # Master output directory (from MLflow)
 
 All configs are validated using **Pydantic** at load time, catching configuration errors early with clear, actionable error messages.
 
-Checked-in registries currently cover structured-linear, preserved linear, and constant-width FFNN experiment sets under `configs/experiments-*.toml`.
+Registry filenames are not part of the runtime contract. Use whichever experiments registry matches the run you want to execute.
 
 The registry file remains the discoverability layer for:
 - datasets
@@ -79,14 +77,7 @@ Runtime identity is derived from the loaded config content, not from filename st
 
 ### MLflow Config Surface
 
-MLflow config is split between model intent and runtime topology:
-
-```toml
-[MLFLOW]
-enabled = true
-experiment_name = "optional-user-override"
-run_name = "optional-user-override"
-```
+MLflow config is split between runtime topology and execution-time names.
 
 ```toml
 [mlflow]
@@ -95,15 +86,14 @@ tracking_uri = "sqlite:////abs/path/mlflow.db"
 # artifacts_destination = "/abs/path/mlartifacts"
 ```
 
-Model configs must not define `tracking_uri` or `artifacts_destination`.
+Model configs do not need a user-authored `[MLFLOW]` section.
 Nested `client/server` subsections are removed from user-facing config files.
-The presence of a flat `[MLFLOW]` section enables MLflow intent in model configs;
-there is no `enabled` field anymore.
+The loader injects runtime MLflow settings and concrete experiment/run names during execution.
 Training and comparison topology both belong in the selected experiments registry or runtime environment.
 
 Training uses explicit MLflow run identity at execution time:
-- default training experiment name: `"Training"` from `[names].training`
-- training run name: `{experiment_display_name}-{YYYY-MM-DDTHH:MM:SS}`
+- default training experiment name: `"Train"` when `[names].training` is omitted
+- training run name: `{experiment_display_name}-{Day DD Mon YYYY - HH:MM:SS}`
 - registry-backed runs and registered model versions receive structured tags for UI filtering
 
 ## Recent API Changes
@@ -210,7 +200,7 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
 
 - **Generate every dataset in the master registry**:
   ```bash
-  uv run generate-all configs/experiments.toml
+  uv run generate-all <registry.toml>
   ```
   - `config`: Path to the master experiments registry.
 
@@ -233,33 +223,31 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
 
 - **Compare preconditioners**:
   ```bash
-  uv run compare-all configs/experiments-linear.toml
+  uv run compare-all <registry.toml>
   ```
   - `config`: Path to the master experiments registry.
   - Runs every `[[comparisons]]` entry in declared order.
-  - MLflow topology is injected from `[mlflow]` and `[names]` in `experiments.toml`.
+  - MLflow topology is injected from `[mlflow]` and `[names]` in the selected registry.
 
 - **Run full experiment matrix** (data + train):
   ```bash
-  uv run run-experiments --config configs/experiments.toml
+  uv run run-experiments --config <registry.toml>
   ```
   - `--config`: Path to the master experiments registry.
   - `--force`: Force re-training even if checkpoints already exist.
 
 - **Batch training with aggregate metrics**:
   ```bash
-  uv run train-all configs/experiments.toml --metric eval/rel_error
+  uv run train-all <registry.toml> --metric eval/rel_error
   ```
   - `config`: Path to the master experiments registry.
   - `--metric`: The MLflow metric to compare and plot across experiments.
 
 ### Comparison Workflows
 
-The repository uses **`compare-all`** as the unified tool for evaluating solver performance. Comparison is batch-driven from `experiments.toml`: each `[[comparisons]]` entry points at a comparison profile, and the CLI runs the full batch in order.
+The repository uses **`compare-all`** as the unified tool for evaluating solver performance. Comparison is batch-driven from the selected registry: each `[[comparisons]]` entry points at a comparison profile, and the CLI runs the full batch in order.
 
-Comparison profiles keep one explicit `[[preconditioners]]` list plus the solver/data settings they need. Neural entries can bind to an experiment id and resolve `model_ref.alias = "@dataset"` from that experiment's dataset identity, while MLflow topology stays centralized in `experiments.toml`.
-
-The checked-in comparison examples still live in `configs/comparison/`, while the preserved linear registry `configs/experiments-linear.toml` remains the default batch entry point for the current comparison examples.
+Comparison profiles keep one explicit `[[preconditioners]]` list plus the solver/data settings they need. Neural entries can bind to an experiment id and resolve `model_ref.alias = "@dataset"` from that experiment's dataset identity, while MLflow topology stays centralized in the selected registry.
 
 - **Optional MLflow logging**:
   ```bash
@@ -291,7 +279,7 @@ uv run pyright src/neuralls
 **Output paths:**
 - Default output root: `/data/projects/graph-cg/data/output`
 - Override via environment: `export GRAPH_CG_OUTPUT_DIR=/custom/path`
-- Or configure in `configs/experiments.toml` under the `output_dir` key
+- Or configure in the selected registry under the `output_dir` key
 
 The `output_root` is the single source of truth for all experiment artifacts:
 - MLflow tracking: `{output_root}/mlruns/mlflow.db`

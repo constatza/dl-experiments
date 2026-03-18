@@ -10,7 +10,6 @@ import typer
 
 from neuralls.workflows.runner import run_experiment_matrix
 from neuralls.constants import (
-    DEFAULT_EXPERIMENTS_CONFIG,
     DEFAULT_PROJECT_ROOT,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
@@ -19,10 +18,10 @@ from neuralls.constants import (
 
 def main(
     config: Path = typer.Option(
-        None,
+        ...,
         "--config",
         "-c",
-        help="Path to experiments definition file (default: configs/experiments.toml)",
+        help="Path to an experiments registry TOML.",
     ),
     force: bool = typer.Option(
         False,
@@ -35,31 +34,27 @@ def main(
         help="Override max training epochs (for quick tests)",
     ),
 ) -> None:
-    """Train all models defined in experiments.toml.
+    """Train all models defined in the selected registry.
 
     This command:
-    1. Reads experiment definitions from configs/experiments.toml
+    1. Reads experiment definitions from the selected registry
     2. Generates all unique datasets (with caching)
     3. Trains all models (skips if checkpoint exists, unless --force)
 
     For solver comparison after training, use:
-        $ uv run train-multiple configs/experiments.toml
-        $ uv run compare-preconditioners configs/experiments.toml
+        $ uv run train-multiple <registry.toml>
+        $ uv run compare-preconditioners <registry.toml>
 
     Example:
         # Train all experiments
-        $ uv run python src/neuralls/cli/run_experiments.py
+        $ uv run python src/neuralls/cli/run_experiments.py --config <registry.toml>
 
         # Force retrain even if checkpoints exist
-        $ uv run python src/neuralls/cli/run_experiments.py --force
+        $ uv run python src/neuralls/cli/run_experiments.py --config <registry.toml> --force
 
         # Use custom experiments file
         $ uv run python src/neuralls/cli/run_experiments.py --config custom.toml
     """
-    # Resolve defaults
-    if config is None:
-        config = DEFAULT_PROJECT_ROOT / DEFAULT_EXPERIMENTS_CONFIG
-
     if not config.exists():
         print(f"Error: Config file not found: {config}")
         raise typer.Exit(code=EXIT_FAILURE)

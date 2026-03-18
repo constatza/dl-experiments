@@ -1,9 +1,8 @@
 # Configuration System
 
 This project now uses a strict split between:
-- checked-in experiments registries (`experiments-*.toml`)
-- a preserved legacy linear registry (`experiments-linear.toml`)
-- a structured-linear registry (`experiments-parametrized.toml`)
+- experiments registries (`experiments-*.toml`)
+- example registries such as `experiments-linear.toml`, `experiments-parametrized.toml`, and `experiments-ffnn.toml`
 - training configs (`models/*` + `datasets/*`)
 - comparison configs (`comparison/*`)
 
@@ -11,9 +10,9 @@ This project now uses a strict split between:
 
 ```text
 configs/
-  experiments-parametrized.toml # Structured-linear registry
-  experiments-linear.toml   # Preserved linear-focused registry
-  experiments-ffnn.toml     # Constant-width FFNN registry
+  experiments-parametrized.toml # Example structured-linear registry
+  experiments-linear.toml   # Example linear-focused registry
+  experiments-ffnn.toml     # Example constant-width FFNN registry
   models/                   # Model/training settings
   datasets/                 # Dataset generation settings
   comparison/
@@ -23,7 +22,7 @@ configs/
 
 ## Training Protocol
 
-Each selected `experiments-*.toml` file acts as the discoverability layer for its experiment family. The checked-in registries currently cover structured-linear, preserved linear, and constant-width FFNN setups. All use explicit registries for datasets, models, comparisons, and experiment bindings.
+Any selected `experiments-*.toml` file acts as the discoverability layer for its experiment family. Filenames are examples, not part of the runtime contract. All registries use explicit tables for datasets, models, comparisons, and experiment bindings.
 
 Example:
 
@@ -64,11 +63,11 @@ Notes:
 ### MLflow Configuration
 
 Model configs should not define an `[MLFLOW]` section.
-MLflow settings come from defaults plus the master `experiments*.toml` file or runtime env.
+MLflow settings come from defaults plus the selected registry file or runtime env.
 Model configs must not define `tracking_uri` or `artifacts_destination`.
 
 Training MLflow naming is controlled at runtime:
-- `[names].training` in `experiments.toml` defaults to `"Training"`
+- `[names].training` defaults to `"Train"` when omitted
 - training run names are built as `{experiment_display_name}-{timestamp}`
 - comparison runs use timestamped display names plus structured tags
 
@@ -112,7 +111,7 @@ Validation rules:
 - If a registered `model_ref` omits `name`, the neural preconditioner must define `experiment`.
 - If any alias is `"@dataset"`, the dataset alias must come from either:
   - `general.data.dataset_alias`, or
-  - the neural preconditioner `experiment` binding resolved from `experiments.toml`
+  - the neural preconditioner `experiment` binding resolved from the selected registry
 - Unknown keys are rejected.
 
 Runtime behavior:
@@ -138,17 +137,17 @@ Experiment-bound neural resolution is deterministic:
 Dataset generation:
 
 ```bash
-uv run generate-all configs/experiments.toml
+uv run generate-all <registry.toml>
 ```
 
 Training:
 
 ```bash
-uv run train-all configs/experiments.toml
+uv run train-all <registry.toml>
 ```
 
 Comparison (standalone):
 
 ```bash
-uv run compare-all configs/experiments.toml
+uv run compare-all <registry.toml>
 ```

@@ -3,9 +3,9 @@
 
 Usage::
 
-    uv run train-multiple configs/experiments.toml
-    uv run train-multiple configs/experiments.toml --metric eval/rel_error
-    uv run train-multiple configs/experiments.toml --output-dir /tmp/batch
+    uv run train-multiple <registry.toml>
+    uv run train-multiple <registry.toml> --metric eval/rel_error
+    uv run train-multiple <registry.toml> --output-dir /tmp/batch
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from neuralls.workflows.multi_training import train_batch
 def main(
     config: Path = typer.Argument(
         ...,
-        help="Path to experiments TOML (e.g. configs/experiments.toml)",
+        help="Path to an experiments registry TOML.",
     ),
     metric: str = typer.Option(
         "eval/rel_error",

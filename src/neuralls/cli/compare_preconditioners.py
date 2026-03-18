@@ -75,10 +75,10 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
 def main(
     config: Path = typer.Argument(
         ...,
-        help="Path to experiments TOML (e.g. configs/experiments.toml)",
+        help="Path to an experiments registry TOML.",
     ),
 ) -> None:
-    """Compare all configured preconditioner profiles from experiments.toml."""
+    """Compare all configured preconditioner profiles from the selected registry."""
     params = ComparisonParams()
 
     try:

@@ -56,7 +56,7 @@ The `ConjugateGradientSolver` supports all CG variants through `DirectionStrateg
 | Variant | DirectionStrategy | Use Case |
 |---------|-------------------|----------|
 | **PCG** | `TwoTermRecurrenceStrategy` | Fixed SPD preconditioners |
-| **FCG** | `OrthogonalizationDirectionStrategy` | Variable/non-SPD preconditioners |
+| **FCG** | `OrthogonalizationDirectionStrategy` | Variable, non-SPD, or non-linear preconditioners |
 | **PCG+Reorthog** | `CompositeDirectionStrategy` | Ill-conditioned problems |
 
 ---
@@ -167,7 +167,7 @@ The easiest way to use the solver is through factory functions, which handle str
 
 ### flexible_cg()
 
-**Use for:** Neural preconditioners, variable preconditioners, FCG
+**Use for:** Neural, variable, or other non-linear preconditioners
 
 **Example:**
 ```python
