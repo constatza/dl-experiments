@@ -76,23 +76,22 @@ def main(
         comparison_config_path=comparison_config,
     )
 
-    y_pred = results.get("y_pred")
-    if y_pred is not None:
+    if results.y_pred is not None:
         import numpy as np
-        logger.info(f"Prediction summary: mean={float(np.mean(y_pred)):.4e}, std={float(np.std(y_pred)):.4e}")
+        logger.info(f"Prediction summary: mean={float(np.mean(results.y_pred)):.4e}, std={float(np.std(results.y_pred)):.4e}")
 
-    if results["y_true"] is not None and results["y_pred"] is not None:
-        logger.info(f"Generated predictions for {len(results['y_true'])} samples")
-        if results["plot_path"]:
-            logger.info(f"Saved parity plot to: {results['plot_path']}")
-        if results.get("diagnostic_plot_path"):
-            logger.info(f"Saved diagnostic plot to: {results['diagnostic_plot_path']}")
+    if results.y_true is not None and results.y_pred is not None:
+        logger.info(f"Generated predictions for {len(results.y_true)} samples")
+        if results.plot_path:
+            logger.info(f"Saved parity plot to: {results.plot_path}")
+        if results.diagnostic_plot_path:
+            logger.info(f"Saved diagnostic plot to: {results.diagnostic_plot_path}")
         elif not no_plots:
             logger.warning(
                 "Could not extract matching prediction/target arrays for plotting."
             )
 
-        logger.info(f"Inference completed in {results['duration_seconds']:.2f}s")
+        logger.info(f"Inference completed in {results.duration_seconds:.2f}s")
 
 
 def run() -> None:

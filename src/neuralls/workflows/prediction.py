@@ -23,6 +23,30 @@ PREDICTION_ARTIFACTS: tuple[str, ...] = ("figures", "predictions")
 
 
 @dataclass(frozen=True)
+class InferenceResult:
+    """Type-safe result container for inference execution.
+
+    Replaces untyped dict with explicit fields for inference outputs.
+    Enables IDE support and type checking for result access.
+
+    Attributes:
+        predictions: Predicted values array
+        y_true: True target values array
+        y_pred: Predicted values array (duplicate of predictions for compatibility)
+        duration_seconds: Elapsed time for inference in seconds
+        plot_path: Path to parity/residuals plot or None
+        diagnostic_plot_path: Path to diagnostics plot or None
+    """
+
+    predictions: np.ndarray | None
+    y_true: np.ndarray | None
+    y_pred: np.ndarray | None
+    duration_seconds: float
+    plot_path: Path | None
+    diagnostic_plot_path: Path | None
+
+
+@dataclass(frozen=True)
 class InferenceConfig:
     """Configuration for inference execution.
 
@@ -556,12 +580,12 @@ def _execute_inference_pipeline(
     return predictions, outputs.metrics, outputs.plot_paths
 
 
-def _build_result_dict(
+def _build_inference_result(
     predictions: Any,
     metrics: dict[str, float],
     plot_paths: list[Path],
-) -> dict[str, Any]:
-    """Build backward-compatible result dictionary.
+) -> InferenceResult:
+    """Build typed inference result from predictions and metrics.
 
     Args:
         predictions: Prediction results
@@ -569,16 +593,16 @@ def _build_result_dict(
         plot_paths: Generated plot paths
 
     Returns:
-        Backward-compatible result dictionary
+        InferenceResult with all outputs
     """
-    return {
-        "predictions": predictions.predictions.get("y_pred"),
-        "y_true": predictions.targets.get("y_true"),
-        "y_pred": predictions.predictions.get("y_pred"),
-        "duration_seconds": metrics.get("duration_seconds", 0.0),
-        "plot_path": plot_paths[0] if len(plot_paths) > 0 else None,
-        "diagnostic_plot_path": plot_paths[1] if len(plot_paths) > 1 else None,
-    }
+    return InferenceResult(
+        predictions=predictions.predictions.get("y_pred"),
+        y_true=predictions.targets.get("y_true"),
+        y_pred=predictions.predictions.get("y_pred"),
+        duration_seconds=metrics.get("duration_seconds", 0.0),
+        plot_path=plot_paths[0] if len(plot_paths) > 0 else None,
+        diagnostic_plot_path=plot_paths[1] if len(plot_paths) > 1 else None,
+    )
 
 
 def run_inference(
@@ -594,7 +618,7 @@ def run_inference(
     output_root: str | Path | None = None,
     synthetic_benchmark: bool = False,
     comparison_config_path: str | Path | None = None,
-) -> dict[str, Any]:
+) -> InferenceResult:
     """Run inference for parity plot generation.
 
     This is a pure orchestration function that composes single-responsibility
@@ -614,13 +638,7 @@ def run_inference(
         comparison_config_path: Path to comparison config (for synthetic)
 
     Returns:
-        Dictionary with prediction results for backward compatibility:
-            - predictions: Predicted values
-            - y_true: True target values
-            - y_pred: Predicted values (duplicate for compatibility)
-            - duration_seconds: Inference duration
-            - plot_path: Path to parity/residuals plot
-            - diagnostic_plot_path: Path to diagnostics plot
+        InferenceResult with all prediction outputs and metadata
 
     Raises:
         ValueError: If no checkpoint path or no data available
@@ -669,8 +687,8 @@ def run_inference(
             config, settings, workspace, dataset_id
         )
 
-        # 5. Build backward-compatible result
-        return _build_result_dict(predictions, metrics, plot_paths)
+        # 5. Build typed result
+        return _build_inference_result(predictions, metrics, plot_paths)
 
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         error = exc
