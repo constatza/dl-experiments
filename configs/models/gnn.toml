@@ -19,7 +19,7 @@ num_layers = 3
 
 [TRAINING.trainer]
 # Maximum number of epochs (Lightning Trainer)
-max_epochs = 800
+max_epochs = 200
 # Hardware accelerator: cpu | gpu | auto | tpu
 accelerator = "auto"
 # Enable checkpointing
@@ -89,11 +89,6 @@ name = "GraphDataset"
 # - Each sample gets its RHS vector as node features
 # - All samples share the same edge structure from matrix A
 # - Each sample has its corresponding solution as target
-
-[MLFLOW]
-# Enable MLflow tracking
-enabled = true
-
 [OPTUNA]
 # Hyperparameter optimization settings
 enabled = false

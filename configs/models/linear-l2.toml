@@ -17,7 +17,7 @@ num_training = 100
 mode = "linear"
 
 [TRAINING.trainer]
-max_epochs = 300
+max_epochs = 200
 accelerator = "auto"
 enable_checkpointing = true
 
@@ -68,9 +68,5 @@ num_workers = 0
 batch_size = 32  # Reduced for small eigenvector dataset (504 samples → ~15 batches)
 pin_memory = true
 shuffle = true
-
-[MLFLOW]
-enabled = true
-
 [OPTUNA]
 enabled = false

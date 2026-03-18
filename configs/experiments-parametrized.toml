@@ -1,0 +1,133 @@
+# Default structured-linear registry.
+
+project_root = ".."
+output_dir = "/data/projects/graph-cg/data/output"
+
+[names]
+training = "Training"
+comparison = "Comparisons"
+
+# -------
+# Datasets
+# -------
+
+[[datasets]]
+id = "residuals-100"
+path = "datasets/residuals-100.toml"
+display_name = "Solutions Residual 100"
+
+[[datasets]]
+id = "eig-rhs-smallest"
+path = "datasets/eig-rhs-smallest.toml"
+display_name = "Eig RHS Smallest"
+
+[[datasets]]
+id = "eig-solutions-smallest"
+path = "datasets/eig-solutions-smallest.toml"
+display_name = "Eig Solutions Smallest"
+
+# ------
+# Models
+# ------
+
+[[models]]
+id = "symmetric"
+path = "models/symmetric.toml"
+display_name = "NormScaledSymmetricLinear"
+
+[[models]]
+id = "spd"
+path = "models/spd.toml"
+display_name = "NormScaledSPDLinear"
+
+[[models]]
+id = "factorized"
+path = "models/factorized.toml"
+display_name = "NormScaledFactorizedLinear"
+
+# -----------
+# Experiments
+# -----------
+
+# [[experiments]]
+# id = "eig-rhs-smallest-symmetric"
+# dataset = "eig-rhs-smallest"
+# model = "symmetric"
+# display_name = "Eig RHS Smallest Symmetric"
+
+# [[experiments]]
+# id = "eig-rhs-smallest-spd"
+# dataset = "eig-rhs-smallest"
+# model = "spd"
+# display_name = "Eig RHS Smallest SPD"
+
+[[experiments]]
+id = "eig-rhs-smallest-factorized"
+dataset = "eig-rhs-smallest"
+model = "factorized"
+display_name = "Eig RHS Smallest Factorized"
+
+# [[experiments]]
+# id = "eig-solutions-smallest-symmetric"
+# dataset = "eig-solutions-smallest"
+# model = "symmetric"
+# display_name = "Eig Solutions Smallest Symmetric"
+
+[[experiments]]
+id = "eig-solutions-smallest-spd"
+dataset = "eig-solutions-smallest"
+model = "spd"
+display_name = "Eig Solutions Smallest SPD"
+
+[[experiments]]
+id = "eig-solutions-smallest-factorized"
+dataset = "eig-solutions-smallest"
+model = "factorized"
+display_name = "Eig Solutions Smallest Factorized"
+
+# [[experiments]]
+# id = "residuals-symmetric"
+# dataset = "residuals-100"
+# model = "symmetric"
+# display_name = "Residuals Symmetric"
+
+# [[experiments]]
+# id = "residuals-spd"
+# dataset = "residuals-100"
+# model = "spd"
+# display_name = "Residuals SPD"
+
+[[experiments]]
+id = "residuals-factorized"
+dataset = "residuals-100"
+model = "factorized"
+display_name = "Residuals Factorized"
+
+# -----------
+# Comparisons
+# -----------
+
+[[comparisons]]
+id = "gaussian"
+path = "comparison/gaussian.toml"
+display_name = "Gaussian RHS"
+
+[[comparisons]]
+id = "scaled-solutions"
+path = "comparison/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[comparisons]]
+id = "sparse-rhs"
+path = "comparison/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[comparisons]]
+id = "eig-few-solutions-smallest"
+path = "comparison/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[comparisons]]
+id = "eig-few-rhs-smallest"
+path = "comparison/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"

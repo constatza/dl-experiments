@@ -21,7 +21,7 @@ mode = "linear"
 
 
 [TRAINING.trainer]
-max_epochs = 400
+max_epochs = 200
 accelerator = "auto"
 enable_checkpointing = true
 
@@ -42,7 +42,7 @@ name = "AdamW"
 [TRAINING.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
-patience = 15
+patience = 10
 min_lr = 1e-14
 
 [TRAINING.loss_function]
@@ -73,12 +73,6 @@ num_workers = 0
 batch_size = 32  # Reduced for small eigenvector dataset (504 samples → ~15 batches)
 pin_memory = true
 shuffle = true
-
-
-
-[MLFLOW]
-enabled = true
-
 
 [OPTUNA]
 enabled = false

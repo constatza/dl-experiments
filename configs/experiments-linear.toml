@@ -1,10 +1,7 @@
-# Master registry for datasets, models, comparisons, and experiments.
+# Legacy linear-focused registry preserved after adding the structured-linear default.
 
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
-
-[mlflow]
-tracking_uri = "http://127.0.0.1:5000"
 
 [names]
 training = "Training"
@@ -43,7 +40,6 @@ display_name = "Eig Solutions Smallest"
 id = "eig-solutions-largest"
 path = "datasets/eig-solutions-largest.toml"
 display_name = "Eig Solutions Largest"
-
 
 [[datasets]]
 id = "gaussian"
@@ -139,9 +135,6 @@ id = "residuals"
 dataset = "residuals-100"
 model = "linear"
 display_name = "Residuals"
-
-
-
 
 # -----------
 # Comparisons

@@ -3,13 +3,13 @@ seed = 42
 precision = "float64"
 
 [MODEL]
-# Single linear layer (no hidden layers)
-name = "NormScaledLinearFFNN"
+# Symmetric linear layer with norm scaling
+name = "NormScaledSymmetricLinear"
 module_path = "dlkit.nn.ffnn"
 
 [TRAINING]
 # Checkpoint to resume training from (full training state)
-# resume_from_checkpoint = "/data/projects/graph-cg/data/output/checkpoints/linear.ckpt"
+# resume_from_checkpoint = "/data/projects/graph-cg/data/output/checkpoints/symmetric.ckpt"
 [TRAINING.lr_tuner]
 min_lr = 1e-5
 max_lr = 1e-1
@@ -23,7 +23,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "linear"
+filename = "symmetric"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
@@ -67,7 +67,7 @@ name = "InMemoryModule"
 
 [DATAMODULE.dataloader]
 num_workers = 0
-batch_size = 32  # Reduced for small eigenvector dataset (504 samples → ~15 batches)
+batch_size = 32  # Reduced for small eigenvector dataset (504 samples -> ~15 batches)
 pin_memory = true
 shuffle = true
 [OPTUNA]

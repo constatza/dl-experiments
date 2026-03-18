@@ -1,63 +1,110 @@
-# Master registry for all FFNN experiments.
+# Master registry for constant-width FFNN experiments.
 
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
 
-[mlflow]
-tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
-
 [names]
+training = "Training"
 comparison = "Comparisons"
 
-[[datasets]]
-id = "solutions"
-path = "datasets/solutions.toml"
+# -------
+# Datasets
+# -------
 
 [[datasets]]
-id = "eigenvector-solutions-largest"
-path = "datasets/eigenvector-solutions-largest.toml"
+id = "residuals-100"
+path = "datasets/residuals-100.toml"
+display_name = "Solutions Residual 100"
 
 [[datasets]]
-id = "eigenvector-solutions-smallest"
-path = "datasets/eigenvector-solutions-smallest.toml"
+id = "eig-rhs-smallest"
+path = "datasets/eig-rhs-smallest.toml"
+display_name = "Eig RHS Smallest"
 
 [[datasets]]
-id = "eigenvector-rhs-largest"
-path = "datasets/eigenvector-rhs-largest.toml"
+id = "eig-solutions-smallest"
+path = "datasets/eig-solutions-smallest.toml"
+display_name = "Eig Solutions Smallest"
 
-[[datasets]]
-id = "eigenvector-rhs-smallest"
-path = "datasets/eigenvector-rhs-smallest.toml"
+# ------
+# Models
+# ------
 
 [[models]]
 id = "ffnn"
 path = "models/ffnn.toml"
+display_name = "NormScaledConstantWidthFFNN"
+
+[[models]]
+id = "ffnn-l2"
+path = "models/ffnn-l2.toml"
+display_name = "NormScaledConstantWidthFFNN L2"
+
+# -----------
+# Comparisons
+# -----------
 
 [[comparisons]]
-id = "ffnn"
-path = "comparison/ffnn.toml"
+id = "gaussian"
+path = "comparison/gaussian.toml"
+display_name = "Gaussian RHS"
+
+[[comparisons]]
+id = "scaled-solutions"
+path = "comparison/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[comparisons]]
+id = "sparse-rhs"
+path = "comparison/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[comparisons]]
+id = "eig-few-solutions-smallest"
+path = "comparison/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[comparisons]]
+id = "eig-few-rhs-smallest"
+path = "comparison/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"
+
+# -----------
+# Experiments
+# -----------
 
 [[experiments]]
-id = "ffnn_test_solutions"
-dataset = "solutions"
+id = "eig-rhs-smallest-ffnn"
+dataset = "eig-rhs-smallest"
 model = "ffnn"
+display_name = "Eig RHS Smallest FFNN"
 
 [[experiments]]
-id = "ffnn_test_eigenvector_solutions_largest"
-dataset = "eigenvector-solutions-largest"
-model = "ffnn"
+id = "eig-rhs-smallest-ffnn-l2"
+dataset = "eig-rhs-smallest"
+model = "ffnn-l2"
+display_name = "Eig RHS Smallest FFNN L2"
 
 [[experiments]]
-id = "ffnn_test_eigenvector_solutions_smallest"
-dataset = "eigenvector-solutions-smallest"
+id = "eig-solutions-smallest-ffnn"
+dataset = "eig-solutions-smallest"
 model = "ffnn"
+display_name = "Eig Solutions Smallest FFNN"
 
 [[experiments]]
-id = "ffnn_test_eigenvector_rhs_largest"
-dataset = "eigenvector-rhs-largest"
-model = "ffnn"
+id = "eig-solutions-smallest-ffnn-l2"
+dataset = "eig-solutions-smallest"
+model = "ffnn-l2"
+display_name = "Eig Solutions Smallest FFNN L2"
 
 [[experiments]]
-id = "ffnn_test_eigenvector_rhs_smallest"
-dataset = "eigenvector-rhs-smallest"
+id = "residuals-ffnn"
+dataset = "residuals-100"
 model = "ffnn"
+display_name = "Residuals FFNN"
+
+[[experiments]]
+id = "residuals-ffnn-l2"
+dataset = "residuals-100"
+model = "ffnn-l2"
+display_name = "Residuals FFNN L2"

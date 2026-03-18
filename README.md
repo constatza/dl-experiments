@@ -5,7 +5,10 @@ Graph-CG explores neural networks as preconditioners and warm-starts for Conjuga
 ## Project Layout
 
 - `configs/` – Configuration directory containing:
-  - `experiments.toml` – Master registry for datasets, models, comparisons, and experiment bindings
+  - `experiments-*.toml` – Master registries for datasets, models, comparisons, and experiment bindings
+  - `experiments-linear.toml` – Preserved linear-focused registry
+  - `experiments-parametrized.toml` – Structured-linear registry
+  - `experiments-ffnn.toml` – Constant-width FFNN registry
   - `comparison/` – Comparison profiles (`schema_version = 3`) with solver/data params + explicit preconditioners
   - `datasets/` – Dataset specifications (collection/generation parameters, test sets)
   - `models/` – Model/training settings
@@ -48,7 +51,9 @@ output_root = workspace.root_dir      # Master output directory (from MLflow)
 
 All configs are validated using **Pydantic** at load time, catching configuration errors early with clear, actionable error messages.
 
-The master `configs/experiments.toml` file is now the single discoverability layer for:
+Checked-in registries currently cover structured-linear, preserved linear, and constant-width FFNN experiment sets under `configs/experiments-*.toml`.
+
+The registry file remains the discoverability layer for:
 - datasets
 - models
 - comparisons
@@ -57,21 +62,17 @@ The master `configs/experiments.toml` file is now the single discoverability lay
 Example:
 ```toml
 [[datasets]]
-id = "solutions"
-path = "datasets/solutions.toml"
+id = "eig-solutions-smallest"
+path = "datasets/eig-solutions-smallest.toml"
 
 [[models]]
-id = "linear"
-path = "models/linear.toml"
-
-[[comparisons]]
-id = "linear"
-path = "comparison/linear.toml"
+id = "symmetric"
+path = "models/symmetric.toml"
 
 [[experiments]]
-id = "linear_test_solutions"
-dataset = "solutions"
-model = "linear"
+id = "eig-solutions-smallest-symmetric"
+dataset = "eig-solutions-smallest"
+model = "symmetric"
 ```
 
 Runtime identity is derived from the loaded config content, not from filename stems. In particular, dataset identity comes from the dataset config top-level `id`.
@@ -98,7 +99,7 @@ Model configs must not define `tracking_uri` or `artifacts_destination`.
 Nested `client/server` subsections are removed from user-facing config files.
 The presence of a flat `[MLFLOW]` section enables MLflow intent in model configs;
 there is no `enabled` field anymore.
-Training and comparison topology both belong in `experiments.toml` or runtime environment.
+Training and comparison topology both belong in the selected experiments registry or runtime environment.
 
 Training uses explicit MLflow run identity at execution time:
 - default training experiment name: `"Training"` from `[names].training`
@@ -232,7 +233,7 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
 
 - **Compare preconditioners**:
   ```bash
-  uv run compare-all configs/experiments.toml
+  uv run compare-all configs/experiments-linear.toml
   ```
   - `config`: Path to the master experiments registry.
   - Runs every `[[comparisons]]` entry in declared order.
@@ -257,6 +258,8 @@ All CLI scripts are registered as commands and can be run via `uv run <command>`
 The repository uses **`compare-all`** as the unified tool for evaluating solver performance. Comparison is batch-driven from `experiments.toml`: each `[[comparisons]]` entry points at a comparison profile, and the CLI runs the full batch in order.
 
 Comparison profiles keep one explicit `[[preconditioners]]` list plus the solver/data settings they need. Neural entries can bind to an experiment id and resolve `model_ref.alias = "@dataset"` from that experiment's dataset identity, while MLflow topology stays centralized in `experiments.toml`.
+
+The checked-in comparison examples still live in `configs/comparison/`, while the preserved linear registry `configs/experiments-linear.toml` remains the default batch entry point for the current comparison examples.
 
 - **Optional MLflow logging**:
   ```bash

@@ -1,7 +1,9 @@
 # Configuration System
 
 This project now uses a strict split between:
-- a master registry (`experiments.toml`)
+- checked-in experiments registries (`experiments-*.toml`)
+- a preserved legacy linear registry (`experiments-linear.toml`)
+- a structured-linear registry (`experiments-parametrized.toml`)
 - training configs (`models/*` + `datasets/*`)
 - comparison configs (`comparison/*`)
 
@@ -9,8 +11,9 @@ This project now uses a strict split between:
 
 ```text
 configs/
-  experiments.toml          # Master registry for datasets/models/comparisons/experiments
-  experiments-ffnn.toml     # Alternate master registry
+  experiments-parametrized.toml # Structured-linear registry
+  experiments-linear.toml   # Preserved linear-focused registry
+  experiments-ffnn.toml     # Constant-width FFNN registry
   models/                   # Model/training settings
   datasets/                 # Dataset generation settings
   comparison/
@@ -20,7 +23,7 @@ configs/
 
 ## Training Protocol
 
-`experiments.toml` is the discoverability layer. It defines explicit registries for datasets, models, comparisons, and experiment bindings.
+Each selected `experiments-*.toml` file acts as the discoverability layer for its experiment family. The checked-in registries currently cover structured-linear, preserved linear, and constant-width FFNN setups. All use explicit registries for datasets, models, comparisons, and experiment bindings.
 
 Example:
 
@@ -58,18 +61,11 @@ Notes:
 - `[[run]]` direct-path mode is still supported for ad hoc execution.
 - Checkpoints are training outputs; optional `checkpoint_path` overrides remain experiment-local metadata.
 
-### MLflow Configuration (Flat Only)
+### MLflow Configuration
 
-Model configs now use a flat MLflow section:
-
-```toml
-[MLFLOW]
-```
-
-Nested `[MLFLOW.client]` / `[MLFLOW.server]` keys are no longer supported.
-The presence of `[MLFLOW]` enables MLflow intent; do not set `enabled = true/false`.
+Model configs should not define an `[MLFLOW]` section.
+MLflow settings come from defaults plus the master `experiments*.toml` file or runtime env.
 Model configs must not define `tracking_uri` or `artifacts_destination`.
-Those infrastructure values come from `experiments.toml` or runtime env.
 
 Training MLflow naming is controlled at runtime:
 - `[names].training` in `experiments.toml` defaults to `"Training"`
