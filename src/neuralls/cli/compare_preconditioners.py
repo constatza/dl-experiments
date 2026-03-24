@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI wrapper for preconditioner comparison."""
+"""Run every comparison profile declared in one registry."""
 
 from __future__ import annotations
 
@@ -27,20 +27,12 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 def _log_comparison_results(result: ComparisonResult) -> None:
     preconditioners = result.preconditioners
     summary = result.summary
-    recommendations = result.recommendations
 
     logger.info(f"Available preconditioners: {preconditioners}")
     if summary:
         logger.info("=" * 60)
         logger.info(summary)
         logger.info("=" * 60)
-
-    best = recommendations.overall_best
-    if best:
-        logger.info(
-            f"Best preconditioner: method={best.label} "
-            f"iterations={best.iterations} residual={best.residual}"
-        )
 
 
 def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
@@ -78,7 +70,7 @@ def main(
         help="Path to an experiments registry TOML.",
     ),
 ) -> None:
-    """Compare all configured preconditioner profiles from the selected registry."""
+    """Benchmark classical and neural preconditioners for one registry."""
     params = ComparisonParams()
 
     try:

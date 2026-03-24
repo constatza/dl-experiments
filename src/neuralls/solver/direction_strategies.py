@@ -375,7 +375,7 @@ class TruncatedOrthogonalDirection(DirectionStrategy):
         - Loss of descent property
 
     Attributes:
-        m_max: Maximum history length for orthogonalization. Default: 10.
+        m_max: Maximum history length for orthogonalization. Default: 20.
             Larger m_max → better orthogonality, higher cost.
             Typical range: 5-50.
 
@@ -387,7 +387,7 @@ class TruncatedOrthogonalDirection(DirectionStrategy):
         - Memory: O(m_max * n) to store p_k and q_k vectors
         - Cost per iteration: O(m_i * n) for orthogonalization
             where m_i ≤ m_max
-        - Typical m_max = 10 → 10x cost vs two-term recurrence
+        - Typical m_max = 20 → 20x cost vs two-term recurrence
 
     When to Use This Strategy:
         Use TruncatedOrthogonalDirection when:
@@ -416,7 +416,7 @@ class TruncatedOrthogonalDirection(DirectionStrategy):
         """Initialize TruncatedOrthogonalDirection strategy.
 
         Args:
-            m_max: Maximum history length for orthogonalization. Default: 10.
+            m_max: Maximum history length for orthogonalization. Default: 20.
                 Controls memory usage (O(m_max * n)) and orthogonalization
                 cost (O(m_max * n) per iteration).
 
@@ -427,7 +427,7 @@ class TruncatedOrthogonalDirection(DirectionStrategy):
 
                 Typical values:
                 - m_max = 5: Minimal overhead, moderate stability
-                - m_max = 10: Default, good balance
+                - m_max = 20: Default, stronger orthogonality
                 - m_max = 50: High stability, higher cost
 
             eps_orthog: Threshold for near-zero denominators in Gram-Schmidt.

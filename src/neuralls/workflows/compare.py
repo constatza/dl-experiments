@@ -8,7 +8,7 @@ preconditioners. It follows clean architecture principles:
 - Pure orchestration in main function
 
 Architecture:
-    The comparison workflow consists of 10 clear steps:
+    The comparison workflow consists of 9 clear steps:
     1. Validate inputs
     2. Resolve paths (matrix, rhs, output, figures)
     3. Load and validate linear system
@@ -16,9 +16,8 @@ Architecture:
     5. Compute condition numbers for diagnostics
     6. Wrap preconditioners with scheduling (iteration limits, fallbacks)
     7. Run CG comparison
-    8. Generate recommendations
-    9. Generate plots
-    10. Return result
+    8. Generate plots
+    9. Return result
 
 Key Components:
     - `compare_preconditioners()`: Main entry point (orchestration only)
@@ -32,7 +31,7 @@ Example:
     >>> from neuralls.configuration.preconditioner import StandardPreconditionerConfig
     >>>
     >>> general = ComparisonGeneral(
-    ...     params=SolverParams(rtol=1e-6, atol=1e-14, max_iterations=100, stopping_criterion="residual_norm", m_max=10, breakdown_tol=None),
+    ...     params=SolverParams(rtol=1e-6, atol=1e-14, max_iterations=100, stopping_criterion="residual_norm", m_max=20, breakdown_tol=None),
     ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
     ...     tracking=None,
     ...     model_store=None,
@@ -56,12 +55,14 @@ from typing import Any, Literal, cast
 from collections.abc import Callable, Sequence
 
 import numpy as np
+from loguru import logger
 
 from neuralls.configuration.preconditioner import PreconditionerConfig, StandardPreconditionerConfig
 from neuralls.configuration.comparison import ComparisonGeneral
 from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from neuralls.io.filesystem import ensure_dir
 from ..io.comparison import load_system_arrays
+from neuralls.math_utils import compute_condition_number
 from neuralls.normalization import create_scale_from_config
 from ..plotting import plot_convergence_comparison, plot_metric_comparison
 from ..solver.preconditioners import (
@@ -72,11 +73,10 @@ from ..solver.preconditioners import (
 from .cg_runner import (
     format_results_summary,
     run_cg_comparison,
-    summarize_best_combinations,
 )
 from ..validation import validate_matrix, validate_rhs_vector
 from ..solver.models.result import CGComparisonResult
-from .results import ComparisonResult, PlotPaths
+from .results import ComparisonRecommendations, ComparisonResult, PlotPaths
 
 
 StoppingCriterion = Literal["tolerance", "fixed_iterations"]
@@ -272,7 +272,7 @@ def _resolve_comparison_paths(
 
     Example:
         >>> general = ComparisonGeneral(
-        ...     params=SolverParams(rtol=1e-6, atol=1e-14, max_iterations=100, stopping_criterion="residual_norm", m_max=10, breakdown_tol=None),
+        ...     params=SolverParams(rtol=1e-6, atol=1e-14, max_iterations=100, stopping_criterion="residual_norm", m_max=20, breakdown_tol=None),
         ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
         ...     tracking=None,
         ...     model_store=None,
@@ -385,6 +385,28 @@ def _load_linear_system(
     return LinearSystem(matrix=A, rhs=b)
 
 
+def _log_matrix_condition_number(
+    matrix: np.ndarray,
+    *,
+    matrix_path: Path,
+    display_name: str | None,
+) -> None:
+    """Log the matrix condition number once per comparison."""
+    label = display_name or matrix_path.stem or matrix_path.name
+    try:
+        value = float(compute_condition_number(matrix))
+    except np.linalg.LinAlgError as exc:
+        logger.warning(
+            f"Matrix condition number unavailable: comparison={label} "
+            f"matrix={matrix_path.name} error={exc}"
+        )
+        return
+    logger.info(
+        f"Matrix condition number: comparison={label} "
+        f"matrix={matrix_path.name} value={value:.4e}"
+    )
+
+
 def _create_scheduled_preconditioners(
     preconditioner_configs: Sequence[PreconditionerConfig],
     matrix: np.ndarray,
@@ -495,7 +517,7 @@ def compare_preconditioners(
     """Run CG comparisons and generate diagnostics.
 
     This is the main entry point for preconditioner comparison. It orchestrates
-    a 12-step workflow using single-responsibility helpers.
+    an 11-step workflow using single-responsibility helpers.
 
     The function is pure orchestration - no business logic here, only composition.
     Each step delegates to a focused helper function.
@@ -510,9 +532,8 @@ def compare_preconditioners(
         7. Fallback creation - Create identity preconditioner fallback
         8. Parameter configuration - Map stopping criterion, reorthogonalization
         9. Comparison execution - Run CG solver comparison
-        10. Recommendations - Summarize best solver combinations
-        11. Plotting - Generate convergence and condition number plots
-        12. Result packaging - Return comprehensive result object
+        10. Plotting - Generate convergence and condition number plots
+        11. Result packaging - Return comprehensive result object
 
     Args:
         general_params: Comparison general configuration
@@ -527,7 +548,7 @@ def compare_preconditioners(
             - plot_paths: Dict mapping plot types to file paths
             - preconditioners: List of preconditioner names tested
             - solver_params: Solver parameters used
-            - recommendations: Best solver combinations
+            - recommendations: Reserved placeholder for future ranking metadata
 
     Raises:
         ValueError: If no preconditioner configs provided or required paths missing
@@ -540,7 +561,7 @@ def compare_preconditioners(
         >>> from neuralls.configuration.preconditioner import StandardPreconditionerConfig
         >>>
         >>> general = ComparisonGeneral(
-        ...     params=SolverParams(rtol=1e-6, atol=0.0, max_iterations=1000, stopping_criterion="residual_norm", m_max=10, breakdown_tol=None),
+        ...     params=SolverParams(rtol=1e-6, atol=0.0, max_iterations=1000, stopping_criterion="residual_norm", m_max=20, breakdown_tol=None),
         ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
         ...     tracking=None,
         ...     model_store=None,
@@ -554,7 +575,6 @@ def compare_preconditioners(
         ...     preconditioner_configs=configs,
         ... )
         >>> print(result.summary)
-        >>> print(f"Best: {result.recommendations}")
     """
     # Step 1: Validate inputs
     if not preconditioner_configs:
@@ -573,6 +593,11 @@ def compare_preconditioners(
         paths,
         rhs_index=general_params.data.rhs_index,
         normalize_system=general_params.data.normalize_system,
+    )
+    _log_matrix_condition_number(
+        system.matrix,
+        matrix_path=paths.matrix,
+        display_name=display_name,
     )
 
     # Step 4: Create preconditioners via service (uses factory function)
@@ -602,10 +627,9 @@ def compare_preconditioners(
         m_max=general_params.params.m_max,
         breakdown_tol=general_params.params.breakdown_tol,
     )
-    # Step 8: Generate recommendations (best solver combinations)
-    recommendations = summarize_best_combinations(results)
+    recommendations = ComparisonRecommendations()
 
-    # Step 9: Generate diagnostic plots.
+    # Step 8: Generate diagnostic plots.
     plot_paths = _generate_comparison_plots(
         results,
         cond_numbers,
@@ -616,7 +640,7 @@ def compare_preconditioners(
         max_iterations=general_params.params.max_iterations,
     )
 
-    # Step 12: Package and return result
+    # Step 9: Package and return result
     return ComparisonResult(
         results=results,
         summary=format_results_summary(results),

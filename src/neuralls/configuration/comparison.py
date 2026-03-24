@@ -25,7 +25,6 @@ NormalizeSystem: TypeAlias = Literal[
     "none", "matrix", "rhs", "both", "diagonal", "spectral"
 ]
 
-
 @dataclass(frozen=True)
 class SolverParams:
     """Numerical solver parameters."""

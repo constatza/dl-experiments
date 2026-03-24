@@ -51,7 +51,7 @@ def _write_comparison_config(path: Path) -> None:
                 "atol = 1.0e-14",
                 "max_iterations = 10",
                 'stopping_criterion = "residual_norm"',
-                "m_max = 10",
+                "m_max = 20",
                 "",
                 "[general.data]",
                 'matrix_path = "/tmp/matrix.npy"',

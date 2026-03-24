@@ -246,7 +246,3 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
 
     figure_artifacts = client.list_artifacts(run_id, path="figures")
     assert any(item.path.endswith("comparison_plot.png") for item in figure_artifacts)
-
-    metrics = client.get_run(run_id).data.metrics
-    assert "best_iterations" in metrics
-    assert "best_residual" in metrics

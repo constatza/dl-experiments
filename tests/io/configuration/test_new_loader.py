@@ -184,7 +184,7 @@ def test_load_experiments_rejects_unknown_comparison_experiment_reference(
                 "atol = 1.0e-14",
                 "max_iterations = 10",
                 'stopping_criterion = "residual_norm"',
-                "m_max = 10",
+                "m_max = 20",
                 "",
                 "[general.data]",
                 f'matrix_path = "{temp_config_structure / "data" / "matrix.txt"}"',

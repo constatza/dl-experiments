@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -125,13 +126,20 @@ def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
 
     comparison_cfg_model = load_comparison_config(comparison_cfg)
 
-    results = compare_preconditioners(
-        general_params=comparison_cfg_model.general,
-        preconditioner_configs=comparison_cfg_model.preconditioners,
-    )
+    with patch("neuralls.workflows.compare.logger.info") as mock_info:
+        results = compare_preconditioners(
+            general_params=comparison_cfg_model.general,
+            preconditioner_configs=comparison_cfg_model.preconditioners,
+        )
 
     # Access typed solver results from ComparisonResult
     comparison_results = results.results
     assert set(comparison_results.keys()) == {"none", "jacobi"}
     for name, info in comparison_results.items():
         assert info.iterations > 0, f"{name} did not run"
+    matrix_logs = [
+        str(call.args[0])
+        for call in mock_info.call_args_list
+        if call.args and "Matrix condition number:" in str(call.args[0])
+    ]
+    assert len(matrix_logs) == 1

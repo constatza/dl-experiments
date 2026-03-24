@@ -319,14 +319,6 @@ def run_comparison(
             mlflow.log_param("comparison_id", resolved_comparison_id)
             mlflow.log_param("comparison_display_name", resolved_comparison_display_name)
             mlflow.log_param("comp_run_id", comp_run_id)
-            best = artifact_source.recommendations.overall_best
-            if best is not None:
-                mlflow.log_metrics(
-                    {
-                        "best_iterations": float(best.iterations),
-                        "best_residual": float(best.residual),
-                    }
-                )
 
     except (ValueError, RuntimeError, OSError, FileNotFoundError, KeyError) as exc:
         logger.error(f"Comparison failed: {exc}")

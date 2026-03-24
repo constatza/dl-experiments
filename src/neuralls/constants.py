@@ -106,7 +106,7 @@ DEFAULT_DIVERGENCE_FACTOR = (
 
 # FCG (Flexible Conjugate Gradient) Algorithm Parameters
 # These control the truncated orthogonalization history for FCG variants
-DEFAULT_M_MAX = 10  # Maximum history length for truncated orthogonalization in FCG
+DEFAULT_M_MAX = 20  # Maximum history length for truncated orthogonalization in FCG
 DEFAULT_FCG_HISTORY_LIMIT = (
     200  # Max search directions to retain for orthog/reorthog stability
 )
@@ -219,7 +219,7 @@ MATRIX_COO_DIRNAME = "matrix_coo"
 # Strategy-specific iteration parameters
 # These are now configured at the strategy level (not generation level):
 # - DEFAULT_KRYLOV_ITERATIONS: Used by krylov strategy for Krylov subspace dimension
-# - DEFAULT_RESIDUAL_TRACE_ITERS: Used by cg_residual and cg_residual_error strategies
+# - DEFAULT_RESIDUAL_TRACE_ITERS: Used by residual_traces, residuals, and gaussian_residuals strategies
 DEFAULT_KRYLOV_ITERATIONS = 15
 DEFAULT_RESIDUAL_TRACE_ITERS = 8
 

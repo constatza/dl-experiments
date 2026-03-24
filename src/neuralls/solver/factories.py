@@ -89,7 +89,7 @@ def flexible_cg(
         x0: Initial guess, shape (n,). If None, uses zero vector.
         preconditioner: Callable implementing M^{-1} operation.
             If None, uses identity (no preconditioning).
-        m_max: Maximum history length for orthogonalization. Default: 10.
+        m_max: Maximum history length for orthogonalization. Default: 20.
         norm: Norm function for convergence checking. Default: euclidean_norm.
             Use energy_norm(A) for A-norm convergence criterion.
         rtol: Relative tolerance for convergence. Default: 1e-6.
@@ -238,7 +238,7 @@ def pcg(
         >>> x, result = pcg(A, b, m_max=-1)
 
         >>> # PCG with truncated reorthogonalization (window size 10)
-        >>> x, result = pcg(A, b, m_max=10)
+        >>> x, result = pcg(A, b, m_max=20)
 
         >>> # Jacobi preconditioner
         >>> x, result = pcg(A, b, preconditioner=jacobi_precond)

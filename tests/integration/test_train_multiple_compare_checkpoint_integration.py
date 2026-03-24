@@ -249,7 +249,7 @@ def comparison_config_path(
                 "atol = 1e-14",
                 f"max_iterations = {TEST_COMPARISON_MAX_ITERATIONS}",
                 'stopping_criterion = "residual_norm"',
-                "m_max = 10",
+                "m_max = 20",
                 "",
                 "[general.data]",
                 f'matrix_path = "{dataset_dir}"',

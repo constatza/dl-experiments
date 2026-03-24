@@ -167,7 +167,7 @@ class PeriodicRestartOrthogonalization(OrthogonalizationStrategy):
         3. Is "generally more cost efficient" than pure truncation (Notay 2000, Table 1)
 
     Examples:
-        >>> orthog = PeriodicRestartOrthogonalization(m_max=10)
+        >>> orthog = PeriodicRestartOrthogonalization(m_max=20)
         >>> # At iteration 11, will only use 1 direction (restart)
         >>> p, report = orthog.orthogonalize(z, p_vectors, q_vectors)
 
@@ -541,7 +541,7 @@ def create_fcg_orthogonalization(
         ValueError: If m_max < -1 or m_max == 0.
 
     Examples:
-        >>> orthog = create_fcg_orthogonalization(m_max=10)  # FCG(10)
+        >>> orthog = create_fcg_orthogonalization(m_max=20)  # FCG(20)
         >>> isinstance(orthog, PeriodicRestartOrthogonalization)
         True
         >>> orthog.window_size
