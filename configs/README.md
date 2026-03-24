@@ -1,153 +1,116 @@
-# Configuration System
+# Configuration Guide
 
-This project now uses a strict split between:
-- experiments registries (`experiments-*.toml`)
-- example registries such as `experiments-linear.toml`, `experiments-parametrized.toml`, and `experiments-ffnn.toml`
-- training configs (`models/*` + `datasets/*`)
-- comparison configs (`comparison/*`)
+The repo uses one registry to move users from a single local run to a full
+experiment batch.
 
-## Directory Layout
+## Start With The Right File
 
-```text
-configs/
-  experiments-parametrized.toml # Example structured-linear registry
-  experiments-linear.toml   # Example linear-focused registry
-  experiments-ffnn.toml     # Example constant-width FFNN registry
-  models/                   # Model/training settings
-  datasets/                 # Dataset generation settings
-  comparison/
-    linear.toml             # Comparison settings for NormScaledLinearFFNN
-    ffnn.toml               # Comparison settings for NormScaledConstantWidthFFNN
+Choose the config type that matches the task:
+
+- `datasets/*.toml`: build one processed dataset
+- `models/*.toml`: train one model
+- `comparison/*.toml`: define one solver benchmark profile
+- `experiments-*.toml`: tie datasets, models, comparisons, MLflow, and
+  experiment ids together
+
+## Recommended Progression
+
+### 1. Validate one dataset
+
+```bash
+uv run process-data configs/datasets/residuals-100.toml
 ```
 
-## Training Protocol
+### 2. Validate one model
 
-Any selected `experiments-*.toml` file acts as the discoverability layer for its experiment family. Filenames are examples, not part of the runtime contract. All registries use explicit tables for datasets, models, comparisons, and experiment bindings.
+```bash
+uv run train-model configs/models/ffnn-residual-l2.toml \
+  --data-config configs/datasets/residuals-100.toml
+```
 
-Example:
+### 3. Move to a registry
+
+```bash
+uv run run-experiments --config configs/experiments-ffnn.toml
+```
+
+### 4. Benchmark with the same registry
+
+```bash
+uv run compare-all configs/experiments-ffnn.toml
+```
+
+## Registry Anatomy
+
+Each `experiments-*.toml` file is the discoverability layer for one experiment
+family.
 
 ```toml
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
 
-[mlflow]
-tracking_uri = "sqlite:////data/projects/graph-cg/data/output/mlruns/mlflow.db"
-# optional; if omitted for sqlite URIs, defaults to sibling `mlartifacts/`
-# artifacts_destination = "/data/projects/graph-cg/data/output/mlartifacts"
+[names]
+training = "Train"
+comparison = "Comparisons"
 
 [[datasets]]
-id = "solutions"
-path = "datasets/solutions.toml"
+id = "residuals-100"
+path = "datasets/residuals-100.toml"
 
 [[models]]
-id = "linear"
-path = "models/linear.toml"
+id = "normscaled-residual-ffnn-l2"
+path = "models/ffnn-residual-l2.toml"
 
 [[comparisons]]
-id = "linear"
-path = "comparison/linear.toml"
+id = "gaussian"
+path = "comparison/gaussian.toml"
 
 [[experiments]]
-id = "linear_test_solutions"
-dataset = "solutions"
-model = "linear"
+id = "residuals-100-normscaled-residual-ffnn-l2"
+dataset = "residuals-100"
+model = "normscaled-residual-ffnn-l2"
 ```
 
-Notes:
-- Registry `id` values are stable lookup handles, not runtime dataset identity.
-- Dataset runtime identity comes from the dataset config top-level `id`.
-- The loader resolves actual config files from the registry path entries.
-- `[[run]]` direct-path mode is still supported for ad hoc execution.
-- Checkpoints are training outputs; optional `checkpoint_path` overrides remain experiment-local metadata.
+## What Lives In Each Config
 
-### MLflow Configuration
+### Dataset configs
 
-Model configs should not define an `[MLFLOW]` section.
-MLflow settings come from defaults plus the selected registry file or runtime env.
-Model configs must not define `tracking_uri` or `artifacts_destination`.
+Dataset configs define:
 
-Training MLflow naming is controlled at runtime:
-- `[names].training` defaults to `"Train"` when omitted
-- training run names are built as `{experiment_display_name}-{timestamp}`
-- comparison runs use timestamped display names plus structured tags
+- raw matrix and optional archive paths
+- generation strategy blocks
+- normalization and output settings
+- optional test-set metadata
 
-## Comparison Protocol (Strict)
+### Model configs
 
-Comparison configs use `[[preconditioners]]`.
+Model configs define:
 
-```toml
-[general]
+- DLKit model module and hyperparameters
+- trainer, optimizer, scheduler, and loss settings
+- checkpoint callback naming
 
-[general.params]
-rtol = 1e-6
-atol = 1e-14
-max_iterations = 200
-stopping_criterion = "residual_norm"
-m_max = 10
-breakdown_tol = 1e-14
+### Comparison configs
 
-[general.data]
-matrix_path = "/data/processed/solutions"
-rhs_path = "/data/processed/gaussian-rhs"
-rhs_index = 0
-normalize_system = "matrix"
+Comparison configs define:
 
-[[preconditioners]]
-name = "jacobi"
-type = "jacobi"
+- solver tolerances and iteration limits
+- matrix and RHS inputs for benchmarking
+- explicit `[[preconditioners]]` blocks
 
-[[preconditioners]]
-name = "neural_linear"
-type = "neural"
-experiment = "linear_test_solutions"
-fallback = "identity"
-model_ref = { source = "registered", alias = "@dataset" }
-```
+## MLflow And Paths
 
-Validation rules:
-- `preconditioners` must be non-empty.
-- Neural preconditioners must use `model_ref`.
-- Neural preconditioner names must be unique.
-- If a registered `model_ref` omits `name`, the neural preconditioner must define `experiment`.
-- If any alias is `"@dataset"`, the dataset alias must come from either:
-  - `general.data.dataset_alias`, or
-  - the neural preconditioner `experiment` binding resolved from the selected registry
-- Unknown keys are rejected.
+Model configs do not define their own `[MLFLOW]` block. Runtime tracking
+settings come from the selected registry or the execution environment.
 
-Runtime behavior:
-- If a neural preconditioner cannot be resolved from MLflow, comparison logs a warning and skips that preconditioner.
-- If every configured preconditioner is skipped, the comparison run fails.
+The two important roots are:
 
-## Model Resolution
+- `processed_root` for datasets
+- `output_root` for MLflow, checkpoints, and reports
 
-Neural preconditioners resolve from MLflow via `model_ref`:
-- `source = "registered"`: resolve by model name + alias/version.
-- `source = "logged"`: resolve by run/model filters (or explicit `run_id`).
+`src/neuralls/configuration/paths.py` resolves both.
 
-Experiment-bound neural resolution is deterministic:
-- resolve the explicit `experiment` id
-- derive dataset identity from the referenced dataset config `id`
-- derive registered model name from the referenced model config when `model_ref.name` is omitted
-- resolve MLflow run from `model_ref`
-- download checkpoint artifact for that run
-- use downloaded checkpoint path in the preconditioner
+## What To Read Next
 
-## CLI Usage
-
-Dataset generation:
-
-```bash
-uv run generate-all <registry.toml>
-```
-
-Training:
-
-```bash
-uv run train-all <registry.toml>
-```
-
-Comparison (standalone):
-
-```bash
-uv run compare-all <registry.toml>
-```
+- [`configs/datasets/README.md`](datasets/README.md) for strategy details
+- [`../README.md`](../README.md) for the end-to-end workflow

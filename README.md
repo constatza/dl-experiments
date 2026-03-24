@@ -1,296 +1,162 @@
-# Graph-CG: Neural Preconditioners for Conjugate Gradient Solvers
+# neuralls
 
-Graph-CG explores neural networks as preconditioners and warm-starts for Conjugate Gradient (CG) on graph-structured systems. The repository is organized around a unified experiment configuration system and a modular data-generation pipeline.
+neuralls trains neural models that help Conjugate Gradient solve graph-structured
+linear systems faster. The repo is organized around one practical workflow:
 
-## Project Layout
+1. build or collect a dataset
+2. train one model or a registry of models
+3. compare neural and classical preconditioners on benchmark systems
 
-- `configs/` – Configuration directory containing:
-  - `experiments-*.toml` – Registry files for datasets, models, comparisons, and experiment bindings
-  - example registry files such as `experiments-linear.toml`, `experiments-parametrized.toml`, and `experiments-ffnn.toml`
-  - `comparison/` – Comparison profiles (`schema_version = 3`) with solver/data params + explicit preconditioners
-  - `datasets/` – Dataset specifications (collection/generation parameters, test sets)
-  - `models/` – Model/training settings
-- `src/neuralls/` – Library code organized by functionality:
-  - `cli/` – Command-line entry points for data processing, training, comparison, and orchestration
-  - `configuration/` – Config loading, validation, and Pydantic models
-  - `solver/` – CG algorithms and preconditioner implementations ([README](src/neuralls/solver/README.md))
-  - `workflows/` – High-level orchestration for experiments and comparisons ([README](src/neuralls/workflows/README.md))
-  - `generation/` – Data synthesis and collection utilities ([README](src/neuralls/generation/README.md))
-  - `diagnostics/` – Logging, metrics, and analysis tools
-- `tests/` – End-to-end and unit coverage across CLI, configuration, generation, solver, and workflows.
+## Start Here
 
-## Experiment Configuration System
+Install dependencies with `uv`, then use the commands below in order.
 
-Experiments are organized with separate master-registry, dataset, model, and comparison configs. The system uses **typed Pydantic models** for validation at load time:
+### 1. Build one dataset
 
-```python
-from neuralls.configuration.loader import load_experiment
-
-# Load experiment with model and data configs
-experiment = load_experiment(
-    model_config_path="configs/models/ffnn.toml",
-    data_config_path="configs/datasets/collect-504-solutions.toml",
-)
-
-# Access validated settings and workspace paths
-workspace = experiment.workspace
-checkpoint_dir = workspace.checkpoint_dir  # Derived from MLflow artifact_uri
-
-# Access paths from workspace
-data_dir = workspace.data_dir         # Where datasets live
-output_root = workspace.root_dir      # Master output directory (from MLflow)
+```bash
+uv run process-data configs/datasets/residuals-100.toml
 ```
 
-**Configuration structure:**
-- **Master registry:** Explicit registries for datasets, models, comparisons, and experiment bindings
-- **Model configs:** Neural architecture and training hyperparameters (DLKit settings model)
-- **Data configs:** Dataset sources and generation strategy (validated by `DataConfigFile`)
-- **Comparison configs:** Solver tolerances, matrix/RHS paths, and explicit `[[preconditioners]]` specs (`schema_version = 3`)
+Use this first when you want to validate one dataset config and inspect the
+processed output before training.
 
-All configs are validated using **Pydantic** at load time, catching configuration errors early with clear, actionable error messages.
+### 2. Train one model on that dataset
 
-Registry filenames are not part of the runtime contract. Use whichever experiments registry matches the run you want to execute.
+```bash
+uv run train-model configs/models/ffnn-residual-l2.toml \
+  --data-config configs/datasets/residuals-100.toml
+```
 
-The registry file remains the discoverability layer for:
-- datasets
-- models
-- comparisons
-- experiment bindings between model and dataset keys
+This is the fastest path for checking whether one model and one dataset fit
+together cleanly.
 
-Example:
+### 3. Scale up to a full registry run
+
+```bash
+uv run run-experiments --config configs/experiments-ffnn.toml
+```
+
+This command builds the datasets referenced by the registry, reuses cached
+outputs where possible, and trains every declared experiment.
+
+### 4. Compare preconditioners
+
+```bash
+uv run compare-all configs/experiments-ffnn.toml
+```
+
+This runs the comparison profiles declared in the selected registry and reports
+how neural and classical preconditioners behave on the configured systems.
+
+## Command Ladder
+
+Use the commands in this order as you move from basic to advanced work:
+
+| Level | Goal | Command |
+| --- | --- | --- |
+| Basic | Build one dataset | `uv run process-data <dataset.toml>` |
+| Basic | Train one model | `uv run train-model <model.toml> --data-config <dataset.toml>` |
+| Intermediate | Build every dataset in a registry | `uv run generate-all <registry.toml>` |
+| Intermediate | Train every experiment in a registry | `uv run run-experiments --config <registry.toml>` |
+| Intermediate | Train a batch and compare one metric | `uv run train-all <registry.toml>` |
+| Advanced | Run solver comparisons | `uv run compare-all <registry.toml>` |
+| Advanced | Run inference or synthetic evaluation | `uv run predict --config <model.toml> --data-config <dataset.toml>` |
+
+## Configuration Map
+
+The repo uses three config layers plus one registry:
+
+- `configs/datasets/*.toml`: how to build or collect processed datasets
+- `configs/models/*.toml`: DLKit model and training settings
+- `configs/comparison/*.toml`: solver-comparison inputs and preconditioners
+- `configs/experiments-*.toml`: the registry that ties datasets, models,
+  comparisons, MLflow settings, and experiment ids together
+
+Example registry shape:
+
 ```toml
 [[datasets]]
-id = "eig-solutions-smallest"
-path = "datasets/eig-solutions-smallest.toml"
+id = "residuals-100"
+path = "datasets/residuals-100.toml"
 
 [[models]]
-id = "symmetric"
-path = "models/symmetric.toml"
+id = "normscaled-residual-ffnn-l2"
+path = "models/ffnn-residual-l2.toml"
+
+[[comparisons]]
+id = "gaussian"
+path = "comparison/gaussian.toml"
 
 [[experiments]]
-id = "eig-solutions-smallest-symmetric"
-dataset = "eig-solutions-smallest"
-model = "symmetric"
+id = "residuals-100-normscaled-residual-ffnn-l2"
+dataset = "residuals-100"
+model = "normscaled-residual-ffnn-l2"
 ```
 
-Runtime identity is derived from the loaded config content, not from filename stems. In particular, dataset identity comes from the dataset config top-level `id`.
+Read more in:
 
-### MLflow Config Surface
+- [`configs/README.md`](configs/README.md)
+- [`configs/datasets/README.md`](configs/datasets/README.md)
 
-MLflow config is split between runtime topology and execution-time names.
+## Basic To Advanced Concepts
 
-```toml
-[mlflow]
-tracking_uri = "sqlite:////abs/path/mlflow.db"
-# optional; defaults to sibling mlartifacts dir for sqlite
-# artifacts_destination = "/abs/path/mlartifacts"
-```
+### Basic: single dataset, single model
 
-Model configs do not need a user-authored `[MLFLOW]` section.
-Nested `client/server` subsections are removed from user-facing config files.
-The loader injects runtime MLflow settings and concrete experiment/run names during execution.
-Training and comparison topology both belong in the selected experiments registry or runtime environment.
+Work with one dataset config and one model config until:
 
-Training uses explicit MLflow run identity at execution time:
-- default training experiment name: `"Train"` when `[names].training` is omitted
-- training run name: `{experiment_display_name}-{Day DD Mon YYYY - HH:MM:SS}`
-- registry-backed runs and registered model versions receive structured tags for UI filtering
+- the dataset builds successfully
+- the model trains successfully
+- the checkpoint lands in the expected output root
 
-## Recent API Changes
+### Intermediate: registry-driven experimentation
 
-### Configuration Loader (Breaking Changes)
+Move to a registry when you want:
 
-**Simplified `load_experiment()` signature:**
-- **Removed:** `solver_config_path` parameter - comparison configs are used only at comparison time, not during experiment loading
-- **Added:** `output_root` optional parameter for overriding the master output directory
-- **Before:**
-  ```python
-  load_experiment(model_config, data_config, solver_config)  # legacy signature
-  ```
-- **After:**
-  ```python
-  load_experiment(model_config, data_config, output_root=None)  # clean separation
-  ```
+- repeatable experiment ids
+- one place for MLflow topology
+- batch dataset generation
+- batch training across multiple model and dataset combinations
 
-**Removed legacy functions:**
-- `build_flow_context()` - Use `build_path_context()` and `WorkspaceFactory` instead
-- `load_data_context()` - Use `load_experiment()` with dedicated data processing utilities
-- Import paths: `from neuralls.configuration.loader import load_experiment, load_batch` (not from top-level `__init__.py`)
+### Advanced: solver and workflow internals
 
-**New path resolution system:**
-- Moved from `neuralls.paths.core` → `neuralls.configuration.paths`
-- Simplified from `FlowContext`/`ProjectRoots` → `PathContext`/`build_path_context()`
-- Three core functions: `resolve_project_root()`, `resolve_output_root()`, `resolve_processed_root()`
+Once the outer workflow is stable, the repo opens into three deeper packages:
 
-### Solver Module (Major Refactoring)
+- [`src/neuralls/generation/README.md`](src/neuralls/generation/README.md):
+  dataset strategy internals
+- [`src/neuralls/solver/README.md`](src/neuralls/solver/README.md):
+  PCG, FCG, monitoring, and preconditioners
+- [`src/neuralls/workflows/README.md`](src/neuralls/workflows/README.md):
+  batch orchestration and comparison pipelines
 
-**Current architecture:**
-- **`conjugate_gradient.py`** - CG loop implementation and orchestration
-- **`factories.py`** - User-facing solver factory functions (`pcg`, `flexible_cg`)
-- **`models/`** - Immutable state/result hierarchy
-- **`monitoring/`** - Diagnostics (`IterationHistory`, `EventLog`, `ResidualHistoryTracker`)
-- **`strategies/`** - Norm, convergence, and direction strategy interfaces
+## Output Layout
 
-**Refactoring outcomes:**
-- Legacy monolithic solver internals were consolidated into focused modules
-- Monitoring was split into `IterationHistory` (continuous) + `EventLog` (discrete events)
-- State and result containers were migrated into typed models
+Two roots matter:
 
-**Factory function updates:**
-- `flexible_cg()` - Now uses `FlexibleCGSolver` class internally
-- `preconditioned_cg()` - Now uses `PreconditionedCGSolver` class internally
-- Import from: `from neuralls.solver.factories import flexible_cg, preconditioned_cg`
+- `processed_root`: generated datasets
+- `output_root`: MLflow tracking, checkpoints, reports, and artifacts
 
-### Preconditioner Module
+The selected registry and path helpers in `src/neuralls/configuration/paths.py`
+determine those locations. `output_root` is the source of truth for training and
+comparison artifacts.
 
-**Location:** `neuralls.solver.preconditioners/`
+## Testing
 
-**Rationale:** Preconditioners are tightly coupled to solvers and used exclusively by solver algorithms.
-
-**Package structure:**
-- **`base.py`** - Abstract base classes (Preconditioner, LinearPreconditioner, ContextualPreconditioner)
-- **`implementations.py`** - Concrete preconditioners (Identity, Jacobi, ILU, ICholesky, Neural, etc.)
-- **`builders.py`** - Factory function for TOML-based preconditioner creation
-- **`adapters.py`** - Framework integration (DLKit/PyTorch adapter for neural preconditioners)
-- **`ports.py`** - Framework-agnostic predictor interface
-- **`tensor_utils.py`** - Pure tensor conversion utilities
-
-**Usage:**
-```python
-from neuralls.solver.preconditioners import create_preconditioner
-```
-
-**Key features:**
-- LSP-compliant: Optional context parameter enables substitutability
-- Type-safe: Modern Python 3.12+ generics for LinearPreconditioner[T]
-- Unified interface: All preconditioners callable via `__call__` or `.apply()`
-- Clean separation: Configuration models in `configuration/preconditioner.py`
-
-### IO and Comparison
-
-**Moved functions:**
-- `load_comparison_config()`: `io.comparison` → `io.toml_loader` (canonical location with other loaders)
-- `run_cg_comparison()`, `format_results_summary()`, `summarize_best_combinations()`: `solver/` → `workflows/` (architectural cleanup - comparison orchestration is a workflow concern, not core solver logic)
-
-**Import updates:**
-```python
-# Config loading
-from neuralls.io.toml_loader import load_comparison_config  # ✓ Canonical location
-
-# Comparison orchestration
-from neuralls.workflows import run_cg_comparison  # ✓ Moved from solver module
-
-# Old import (deprecated)
-from neuralls.solver import run_cg_comparison  # ✗ No longer available
-```
-
-**API simplification:**
-- Removed parameters: `apply_every` (preconditioners applied continuously), `first_n` (redundant with `limit_iters`)
-- Scheduling now handled by `ScheduledPreconditioner` wrapper (see `workflows/README.md`)
-
-## Workflows and CLI
-
-All CLI scripts are registered as commands and can be run via `uv run <command>`.
-
-- **Process data** (collection or generation):
-  ```bash
-  uv run process-data configs/datasets/collect-504-solutions.toml
-  ```
-  - `config`: Path to data configuration TOML.
-
-- **Generate every dataset in the master registry**:
-  ```bash
-  uv run generate-all <registry.toml>
-  ```
-  - `config`: Path to the master experiments registry.
-
-- **Train a model**:
-  ```bash
-  uv run train-model configs/models/linear.toml --data-config configs/datasets/collect-504-solutions.toml
-  ```
-  - `config`: Path to model architecture configuration.
-  - `--data-config`: Path to the dataset metadata config used for training.
-  - `--max-epochs`: (Optional) Override the maximum number of training epochs.
-
-- **Make predictions**:
-  ```bash
-  uv run predict --config configs/models/linear.toml --data-config configs/datasets/collect-504-solutions.toml
-  ```
-  - Inference uses DLKit's dedicated public inference API (`load_model()`), not `execute()`.
-  - `--config`: Path to the model configuration.
-  - `--data-config`: Path to the data configuration.
-  - `--synthetic`: Run a synthetic benchmark (using $x=ones$, $b=Ax$) instead of loading data.
-
-- **Compare preconditioners**:
-  ```bash
-  uv run compare-all <registry.toml>
-  ```
-  - `config`: Path to the master experiments registry.
-  - Runs every `[[comparisons]]` entry in declared order.
-  - MLflow topology is injected from `[mlflow]` and `[names]` in the selected registry.
-
-- **Run full experiment matrix** (data + train):
-  ```bash
-  uv run run-experiments --config <registry.toml>
-  ```
-  - `--config`: Path to the master experiments registry.
-  - `--force`: Force re-training even if checkpoints already exist.
-
-- **Batch training with aggregate metrics**:
-  ```bash
-  uv run train-all <registry.toml> --metric eval/rel_error
-  ```
-  - `config`: Path to the master experiments registry.
-  - `--metric`: The MLflow metric to compare and plot across experiments.
-
-### Comparison Workflows
-
-The repository uses **`compare-all`** as the unified tool for evaluating solver performance. Comparison is batch-driven from the selected registry: each `[[comparisons]]` entry points at a comparison profile, and the CLI runs the full batch in order.
-
-Comparison profiles keep one explicit `[[preconditioners]]` list plus the solver/data settings they need. Neural entries can bind to an experiment id and resolve `model_ref.alias = "@dataset"` from that experiment's dataset identity, while MLflow topology stays centralized in the selected registry.
-
-- **Optional MLflow logging**:
-  ```bash
-  # Add --enable-mlflow to supported CLI commands (e.g., predict)
-  uv run predict --config configs/models/linear.toml --enable-mlflow
-  ```
-
-Prefect orchestration is implemented in `src/neuralls/workflows/` and exposed via the CLI scripts above.
-
-## Tests and Tooling
-
-**Run tests:**
 ```bash
-# All tests
-uv run pytest tests -v
-
-# Targeted suites
-uv run pytest tests/generation -v        # Data generation tests
-uv run pytest tests/solver -v            # CG solver tests
-uv run pytest tests/cli tests/workflows -v  # CLI and workflow tests
-uv run pytest tests/configuration -v     # Config loading tests
-```
-
-**Type checking:**
-```bash
+uv run pytest tests/generation -v
+uv run pytest tests/configuration -v
+uv run pytest tests/solver -v
+uv run pytest tests/workflows tests/cli -v
 uv run pyright src/neuralls
 ```
 
-**Output paths:**
-- Default output root: `/data/projects/graph-cg/data/output`
-- Override via environment: `export GRAPH_CG_OUTPUT_DIR=/custom/path`
-- Or configure in the selected registry under the `output_dir` key
+## Repo Guide
 
-The `output_root` is the single source of truth for all experiment artifacts:
-- MLflow tracking: `{output_root}/mlruns/mlflow.db`
-- MLflow artifacts: `{output_root}/mlartifacts/{experiment_id}/{run_id}/`
-- Checkpoints: `{output_root}/checkpoints/{dataset_id}/{model_name}.ckpt`
-- Comparison tracking: `/data/projects/graph-cg/data/comparisons/mlflow.db`
-- Comparison artifacts: `/data/projects/graph-cg/data/comparisons/mlartifacts/{exp_id}/{run_id}/`
+- `src/neuralls/cli/`: user-facing commands
+- `src/neuralls/configuration/`: typed config loading and workspace resolution
+- `src/neuralls/generation/`: dataset creation strategies and processing
+- `src/neuralls/solver/`: CG solvers, monitoring, and preconditioners
+- `src/neuralls/workflows/`: orchestration for training, prediction, and comparison
 
-Processed datasets live separately in the `processed_root` directory (configurable per dataset config).
-
-All path resolution is handled by three simple functions in `src/neuralls/configuration/paths.py`:
-- `resolve_project_root()` - Project base directory
-- `resolve_output_root()` - Master output directory (drives MLflow paths)
-- `resolve_processed_root()` - Processed data directory
+If you are new to the repo, stay on the command ladder above. If you are
+changing internals, start with the package README that matches the layer you are
+touching.

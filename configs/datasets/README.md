@@ -1,122 +1,127 @@
-# Data Generation and Collection Configs
+# Dataset Config Guide
 
-This directory contains configuration files for data generation and collection. These configurations are handled by the local project's data generation module (`src/neuralls/generation`), **not** by `dlkit`.
+Dataset configs are the first layer most users should touch. They answer one
+question: how do we turn a matrix plus optional archives into processed training
+data?
 
-## Directory Naming Convention
-
-Generated and archived RHS data follows a consistent naming pattern:
-
-### Collected Data (from SpectralData)
-- Format: `collect-{dim}-{norm|nonorm}`
-- Examples:
-  - `collect-504-norm` - 504-dim system, normalized
-  - `collect-2040-nonorm` - 2040-dim system, not normalized
-
-### Generated Data (synthetic)
-- Format: `generate-{dim}-{norm|nonorm}` or `generate-{dim}-krylov{percent}-{norm|nonorm}`
-- Examples:
-  - `generate-90-norm` - Pure normal generation
-  - `generate-90-krylov50-norm` - 50% krylov, 50% normal
-
-## Configuration Structure
-
-Data processing is configured via TOML files with the following sections:
-
-### [flow]
-Optional flow identification.
-- **id**: `str`. Flow identifier for generation internals. Optional.
-
-### Top-level `id`
-Canonical dataset identity.
-- **id**: `str`. Required for registry-driven training/comparison workflows.
-- This value is the canonical dataset identity used across:
-  - processed dataset lookup
-  - training workspace layout
-  - MLflow dataset tags/aliases
-  - experiment-bound comparison resolution
-- Do not rely on the filename stem as the dataset identity.
-
-### [source]
-Defines input data paths.
-- **matrix_path**: `str`. Path to the system matrix file. **Required**.
-- **rhs_path**: `str`. Path to RHS file (optional, used by some strategies).
-
-### [generation]
-Global generation settings.
-- **normalize**: `str`. Normalization method. Options: `"matrix"` (spectral radius), `"spectral"` (spectral norm), `"rhs"` (per-sample), `"diagonal"` (Jacobi), `"none"`. Default: `"matrix"`.
-- **seed**: `int`. Global random seed. Default: `42`.
-- **shuffle**: `bool`. Whether to shuffle the final dataset. Default: `True`.
-
-### [[generation.strategy]]
-Defines a specific data generation strategy. You can have multiple blocks to mix different data sources.
-
-**Common Fields:**
-- **name**: `str`. Strategy name (e.g., `"normal"`, `"krylov"`, `"rhs_archive"`). **Required**.
-- **samples**: `int`. Number of samples to generate. **Required**.
-    - `> 0`: Exact number of samples.
-    - `-1`: Use all available samples (for archives).
-    - `0`: Skip this strategy.
-- For trace strategies (`cg_residual`, `cg_residual_error`, `search_directions`), `samples`
-  is the desired trace-row budget. The implementation derives a base-system count
-  with integer division using the rows produced per CG run.
-- **seed**: `int`. Strategy-specific random seed. Default: `42`.
-- **shuffle**: `bool`. Strategy-specific shuffle. Default: `True`.
-
-**Strategies and Options:**
-
-#### `normal` (Random Normal)
-Generates dense Gaussian solution vectors and computes RHS as $b = Ax$.
-- **target_rhs_scale**: `float`. Target scale for generated RHS vectors (Euclidean norm). Default: `1.0`.
-
-#### `krylov` (Krylov Subspace)
-Generates samples enriched with Krylov subspace components.
-- **krylov_iters**: `int`. Number of Krylov iterations. Default: `5`.
-
-#### `rhs_archive` (Existing RHS)
-Uses existing RHS files.
-- **rhs_glob**: `str`. Glob pattern for RHS files. **Required**.
-- **solve_systems**: `bool`. Whether to solve $Ax=b$ to get solutions. Default: `True`.
-- **cg_tolerance**: `float`. CG convergence tolerance. Default: `1e-10`.
-- **cg_max_iters**: `int`. Maximum CG iterations. Default: `1000`.
-
-#### `solution_archive` (Existing Solutions)
-Uses existing solution files and computes RHS as $b = Ax$.
-- **solutions_glob**: `str`. Glob pattern for solution files. **Required**.
-
-#### `eigenvector_forward`
-Uses eigenvectors as solutions ($x = v_i$), computes RHS as $b = \lambda_i v_i$.
-- **which**: `str`. Eigenvalue selection. Options: `"smallest"`, `"largest"`, `"random"`. Default: `"smallest"`.
-- **include_eigenvectors**: `bool`. Whether to include eigenvectors in solutions. Default: `True`.
-- **num_eigenvectors**: `int`. Number of eigenvectors to include. Default: `1`.
-
-#### `eigenvector_inverse`
-Uses eigenvectors as RHS ($b = v_i$), solves for $x = A^{-1}v_i$.
-- **which**: `str`. Eigenvalue selection. Options: `"smallest"`, `"largest"`, `"random"`. Default: `"smallest"`.
-- **include_eigenvectors**: `bool`. Whether to include eigenvectors in solutions. Default: `True`.
-- **num_eigenvectors**: `int`. Number of eigenvectors to include. Default: `1`.
-
-#### `cg_residual_error`
-Generates data based on CG residual errors.
-- **cg_iters**: `int`. Number of CG iterations per base system. Default: `8`.
-- **every_n**: `int`. Keep one trace row every `N` iterations. Default: `1`.
-- **archive_solutions**: `bool`. Archive intermediate solutions. Default: `False`.
-- **archive_rhs**: `bool`. Archive intermediate RHS. Default: `False`.
-
-### [output]
-Output configuration.
-- **data_dir**: `str`. Directory where processed datasets will be saved (separate from experiment artifacts). Optional. If not provided, defaults to `DEFAULT_PROCESSED_DATA_DIR` from constants.
-- **output_root**: `str`. DEPRECATED (not used by data processing). Master output root for experiment artifacts is specified at experiment load time, not in data configs.
-
-### [test]
-Optional configuration for generating a comparison set.
-- **solutions_path**: `str`. Path/glob to test solution vectors.
-- **rhs**: `str`. Path to specific test RHS file.
-- **matrix**: `str`. Path to specific test matrix file.
-
-## Usage
-
-Run the `process_data.py` script with your config:
+## First Successful Run
 
 ```bash
-uv run python src/neuralls/cli/process_data.py configs/datasets/collect-504-solutions.toml
+uv run process-data configs/datasets/residuals-100.toml
 ```
+
+Start with one dataset config before moving on to training or registry-wide
+workflows.
+
+## Minimal Shape
+
+```toml
+id = "residuals-100"
+
+[source]
+matrix_path = "/path/to/matrix.txt"
+
+[generation]
+normalize = "matrix"
+seed = 42
+
+[[generation.strategy]]
+name = "residuals"
+samples = 20000
+cg_iters = 100
+
+[output]
+data_dir = "/path/to/processed"
+```
+
+## Strategy Ladder
+
+Choose the simplest strategy that matches the learning target.
+
+### Basic forward-pair strategies
+
+Use these when you want standard `(b, x)` training pairs:
+
+- `normal`
+- `krylov`
+- `eigenvector_forward`
+- `eigenvector_inverse`
+- `rhs_archive`
+- `solution_archive`
+
+### Trace strategies
+
+Use these when the model should learn from CG internals rather than only final
+solution pairs:
+
+- `residual_traces`: records `(r_k, x_k)`
+- `residuals`: records `(r_k, x_true - x_k)`
+- `gaussian_residuals`: same target as `residuals`, but samples `x_true` from a
+  Gaussian instead of reading archived solutions
+- `search_directions`: records search-direction traces
+
+For trace strategies, `samples` is a row budget, not a base-system count.
+
+## Residual Strategies
+
+`residual_traces` and `residuals` are similar but target different models:
+
+- `residual_traces` is useful when the model should predict the current iterate
+  from the current residual
+- `residuals` is useful when the model should predict the correction
+  `x_true - x_k`
+- `gaussian_residuals` removes archive dependence when Gaussian true solutions
+  are acceptable
+
+## Important Fields
+
+### Top-level `id`
+
+This is the canonical dataset identity used by:
+
+- processed dataset lookup
+- workspace layout
+- registry-driven training
+- experiment-bound comparison resolution
+
+Do not rely on the filename stem as the dataset identity.
+
+### `[source]`
+
+Usually includes:
+
+- `matrix_path`
+- optional archive paths used by strategy-specific logic
+
+### `[generation]`
+
+Controls shared behavior:
+
+- `normalize`
+- `seed`
+- `shuffle`
+
+### `[[generation.strategy]]`
+
+Each block adds one source of samples to the final dataset. Mixed datasets are
+built by combining multiple strategy blocks in order.
+
+## Output And Test Metadata
+
+`[output].data_dir` controls where processed datasets land.
+
+Optional `[test]` fields can attach evaluation assets such as:
+
+- `solutions_path`
+- `rhs`
+- `matrix`
+
+These are used later by comparison and inference workflows.
+
+## Next Steps
+
+After the dataset builds:
+
+1. train one model with `train-model`
+2. move to an experiments registry
+3. run `compare-all` once the trained checkpoint exists
