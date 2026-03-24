@@ -1,0 +1,22 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.8
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.7.3
+    hooks:
+      - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: "pytest: fast smoke"
+        entry: uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/)
