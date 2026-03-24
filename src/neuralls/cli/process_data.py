@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-r"""Process data for graph-cg: collection from archives or synthetic generation.
-
-This unified script handles both data collection (from existing RHS archives)
-and synthetic data generation through the same pipeline.
-
-Usage:
-    # Generate synthetic data
-    uv run python src/neuralls/cli/process_data.py data-configs/generate-90.toml
-
-    # Collect data from archives (with solving)
-    uv run python src/neuralls/cli/process_data.py data-configs/collect-504.toml
-
-    # Collect without solving (RHS only)
-    uv run python src/neuralls/cli/process_data.py data-configs/collect-504.toml --no-solve
-"""
+"""Build one processed dataset from a dataset config."""
 
 from __future__ import annotations
 
@@ -34,19 +20,13 @@ from neuralls.workflows.data import process_data_from_config
 def main(
     config: Path = typer.Argument(
         ...,
-        help="Path to data-config file (TOML)",
+        help="Path to a dataset config TOML.",
     ),
 ) -> None:
-    """Process data via unified pipeline using configuration files.
+    """Generate or collect one dataset.
 
-    This script automatically detects the data processing mode based on your
-    config file's strategy definitions. It handles:
-
-    - Synthetic generation (random, krylov, cg_residual strategies)
-    - Archive collection (rhs_archive, solution_archive strategies)
-    - Mixed strategies (combination of synthetic and archive)
-
-    CG solver parameters are defined in the data config file.
+    Start here when you want to inspect a single dataset config before running
+    registry-wide training or comparison commands.
     """
     try:
         print(f"Loading data config: {config}")

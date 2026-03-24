@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""CLI: train all experiments from an experiments TOML and plot aggregate metrics.
-
-Usage::
-
-    uv run train-multiple <registry.toml>
-    uv run train-multiple <registry.toml> --metric eval/rel_error
-    uv run train-multiple <registry.toml> --output-dir /tmp/batch
-"""
+"""Train every experiment in one registry and plot aggregate metrics."""
 
 from __future__ import annotations
 
@@ -38,12 +31,10 @@ def main(
         ),
     ),
 ) -> None:
-    """Train all experiments from config and plot aggregate metrics.
+    """Train the registry-defined experiment batch and compare one metric.
 
-    Sequentially trains each registry-backed ``[[experiments]]`` entry, reads MLflow metrics
-    from each run's sidecar JSON, generates a barplot comparing ``--metric``
-    across experiments, and saves a ``batch_training_labels.json`` mapping
-    short numeric labels to full experiment identities.
+    Use this command when you already trust the configs and want a compact
+    batch-training report rather than stepping through single runs.
     """
     try:
         cfg, _ = load_validated_master_config(config)

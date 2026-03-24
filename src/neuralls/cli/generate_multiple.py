@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""CLI: generate all datasets listed in [[datasets]] of an experiments config.
-
-Usage::
-
-    uv run generate-multiple <registry.toml>
-"""
+"""Generate every dataset referenced by one experiments registry."""
 
 from __future__ import annotations
 
@@ -24,7 +19,7 @@ def main(
         help="Path to an experiments registry TOML.",
     ),
 ) -> None:
-    """Generate all datasets listed in [[datasets]] of the experiments config."""
+    """Materialize the dataset layer without starting training."""
     try:
         raw = load_raw_toml(config)
         cfg = ExperimentsConfig.model_validate(raw)

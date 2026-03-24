@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI wrapper for neuralls.workflows.training.train_model."""
+"""Train one model against one dataset config."""
 
 from __future__ import annotations
 
@@ -21,18 +21,25 @@ from neuralls.workflows.training import train_model
 def main(
     config: Path = typer.Argument(
         None,
-        help="Path to TOML config",
+        help="Path to a model config TOML.",
     ),
     data_config: Path = typer.Option(
         None,
-        help="Path to data config providing dataset metadata",
+        help="Path to the dataset config used for training.",
     ),
     max_epochs: int | None = typer.Option(
         None,
-        help="Override max training epochs. Use a multiple of every_n_epochs (default 50) to ensure a checkpoint is saved.",
+        help=(
+            "Override max training epochs. Use a multiple of "
+            "every_n_epochs (default 50) if you need a checkpoint."
+        ),
     ),
 ) -> None:
-    """Train model using configuration files."""
+    """Run the single-experiment training path.
+
+    Use this command after `process-data` when you want to validate one
+    model/dataset pair before scaling up to registry-wide runs.
+    """
     if config is None:
         config = DEFAULT_PROJECT_ROOT / DEFAULT_MODEL_CONFIG
     if data_config is None:

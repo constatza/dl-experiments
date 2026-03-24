@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI entry point for running the graph-cg experiment matrix without Prefect."""
+"""Run the registry-defined data generation and training matrix."""
 
 from __future__ import annotations
 
@@ -34,26 +34,14 @@ def main(
         help="Override max training epochs (for quick tests)",
     ),
 ) -> None:
-    """Train all models defined in the selected registry.
+    """Generate datasets and train all experiments in one registry.
 
-    This command:
-    1. Reads experiment definitions from the selected registry
-    2. Generates all unique datasets (with caching)
-    3. Trains all models (skips if checkpoint exists, unless --force)
+    This is the basic batch workflow:
+    1. load one experiments registry
+    2. build each referenced dataset once
+    3. train each experiment unless a checkpoint already exists
 
-    For solver comparison after training, use:
-        $ uv run train-multiple <registry.toml>
-        $ uv run compare-preconditioners <registry.toml>
-
-    Example:
-        # Train all experiments
-        $ uv run python src/neuralls/cli/run_experiments.py --config <registry.toml>
-
-        # Force retrain even if checkpoints exist
-        $ uv run python src/neuralls/cli/run_experiments.py --config <registry.toml> --force
-
-        # Use custom experiments file
-        $ uv run python src/neuralls/cli/run_experiments.py --config custom.toml
+    Use `compare-all` after this command when you want solver benchmarking.
     """
     if not config.exists():
         print(f"Error: Config file not found: {config}")
