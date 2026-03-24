@@ -265,6 +265,8 @@ class SciPyCGSolver:
         # Extract vectors if logged (FULL mode)
         residual_vectors = None
         solution_vectors = None
+        if self.iteration_history is not None and self.iteration_history.residuals is not None:
+            residual_vectors = self.iteration_history.residuals.to_array()
         if tracker.solutions is not None:
             solution_vectors = np.array(tracker.solutions)
 

@@ -72,12 +72,12 @@ class SourceConfig(BaseModel):
 class StrategyConfig(BaseModel):
     """Validates [[generation.strategy]] entry from data config.
 
-    Each strategy defines a data generation approach (e.g., cg_residual, solution_archive).
+    Each strategy defines a data generation approach (e.g., residual_traces, solution_archive).
     """
 
     name: str = Field(
         ...,
-        description="Strategy name (cg_residual, solution_archive, etc.)",
+        description="Strategy name (residual_traces, residuals, gaussian_residuals, solution_archive, etc.)",
     )
     samples: int = Field(
         default=0,

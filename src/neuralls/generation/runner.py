@@ -67,7 +67,12 @@ def run_generation(
     strategy = _registry.get(strategy_name)
 
     # Trace strategies support optional single_rhs parameter
-    SINGLE_RHS_STRATEGIES = {"cg_residual", "residual", "cg_residual_error", "residual_error", "search_directions"}
+    SINGLE_RHS_STRATEGIES = {
+        "residual_traces",
+        "residuals",
+        "gaussian_residuals",
+        "search_directions",
+    }
 
     # Dispatch based on strategy name
     if strategy_name in SINGLE_RHS_STRATEGIES:

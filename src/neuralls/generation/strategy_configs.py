@@ -237,11 +237,11 @@ class BaseTraceConfig(BaseStrategyConfig):
 
 
 class ResidualErrorConfig(BaseTraceConfig):
-    """Configuration for ResidualErrorStrategy (cg_residual_error)."""
+    """Configuration for residual-error trace strategies."""
 
 
 class ResidualTraceConfig(BaseTraceConfig):
-    """Configuration for ResidualTraceStrategy (cg_residual)."""
+    """Configuration for the residual_traces strategy."""
 
 
 class SearchDirectionsConfig(BaseStrategyConfig):

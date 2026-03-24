@@ -15,6 +15,7 @@ from .data_types import NormalizeType, ScaleMetadata
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .trace_utils import (
+    _offset_error_traces,
     _offset_residual_traces,
     _merge_residual_traces,
     _merge_error_traces,
@@ -63,6 +64,16 @@ def _shuffle_samples(
             iteration_indices=residual_traces.iteration_indices,
             search_directions=residual_traces.search_directions,
             search_direction_products=residual_traces.search_direction_products,
+        )
+
+    if error_traces is not None:
+        error_traces = ErrorTraceSamples(
+            residuals=error_traces.residuals,
+            solutions_current=error_traces.solutions_current,
+            errors=error_traces.errors,
+            true_solutions=error_traces.true_solutions[indices],
+            sample_indices=inverse[error_traces.sample_indices],
+            iteration_indices=error_traces.iteration_indices,
         )
 
     return X_shuffled, Y_shuffled, residual_traces, error_traces
@@ -129,10 +140,10 @@ def generate_mixture(
         >>> # Generate explicit counts with strategy-specific configuration
         >>> X, Y, _, _ = generate_mixture(
         ...     A,
-        ...     counts={"normal": 50, "krylov": 30, "cg_residual": 20},
+        ...     counts={"normal": 50, "krylov": 30, "residual_traces": 20},
         ...     seed=42,
         ...     strategy_overrides={
-        ...         "cg_residual": {"cg_iters": 10},
+        ...         "residual_traces": {"cg_iters": 10},
         ...     }
         ... )
 
@@ -140,7 +151,7 @@ def generate_mixture(
         >>> rhs = np.random.randn(n)
         >>> X, Y, res_traces, _ = generate_mixture(
         ...     A,
-        ...     counts={"cg_residual": 20},
+        ...     counts={"residual_traces": 20},
         ...     single_rhs=rhs,  # All 20 samples solve A @ x = rhs
         ...     seed=42,
         ... )
@@ -202,7 +213,9 @@ def generate_mixture(
                 _offset_residual_traces(generated.residual_traces, sample_offset)
             )
         if generated.error_traces is not None:
-            error_blocks.append(generated.error_traces)
+            error_blocks.append(
+                _offset_error_traces(generated.error_traces, sample_offset)
+            )
 
         if generated.rhs is not None:
             sample_offset += generated.rhs.shape[0]

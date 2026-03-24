@@ -311,7 +311,7 @@ class TestParsing:
         config = {
             "strategy": [
                 {
-                    "name": "cg_residual_error",
+                    "name": "residuals",
                     "samples": 10000,
                     "cg_iters": 50,
                     "solutions_glob": "tests/fixtures/data/path/*.txt",
@@ -319,7 +319,7 @@ class TestParsing:
             ]
         }
         plan = parse_generation_plan(config)
-        spec = plan.strategies["cg_residual_error"]
+        spec = plan.strategies["residuals"]
         assert spec.options["cg_iters"] == 50
         assert spec.options["solutions_glob"] == "tests/fixtures/data/path/*.txt"
         assert "samples" not in spec.options
@@ -372,7 +372,7 @@ class TestIntegration:
         config = {
             "strategy": [
                 {
-                    "name": "cg_residual_error",
+                    "name": "residuals",
                     "samples": 10000,
                     "cg_iters": 50,
                     "solutions_glob": "tests/fixtures/data/solutions/*.txt",
@@ -386,7 +386,7 @@ class TestIntegration:
         plan = parse_generation_plan(config)
 
         assert len(plan.strategies) == 2
-        assert plan.strategies["cg_residual_error"].samples == 10000
+        assert plan.strategies["residuals"].samples == 10000
         assert plan.strategies["random"].samples == 5000
         assert plan.solution_archive is None
         assert plan.rhs_archive is None

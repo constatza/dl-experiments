@@ -1,4 +1,4 @@
-"""Residual trace strategy (cg_residual/residual) using SOLID architecture.
+"""Residual trace strategy producing residual-to-iterate pairs.
 
 Architecture:
     Layer 1: RandomInputProvider or ArchiveInputProvider → generate solutions
@@ -29,7 +29,7 @@ from ..trace_utils import _referenced_sample_count, _trim_residual_traces
 
 @register_strategy
 class ResidualTraceStrategy:
-    name = "cg_residual"
+    name = "residual_traces"
     ConfigType = ResidualTraceConfig
 
     def generate(
@@ -74,7 +74,7 @@ class ResidualTraceStrategy:
                         archive=archive,
                         shuffle=config.shuffle,
                         seed=config.seed,
-                        strategy_name="cg_residual",
+                        strategy_name="residual_traces",
                     )
                 )
             elif archive is not None and archive.solutions is not None:
@@ -85,7 +85,7 @@ class ResidualTraceStrategy:
             cg_iters=cg_iters,
             every_n=config.every_n,
             available_systems=available_systems,
-            strategy_name="cg_residual",
+            strategy_name="residual_traces",
         )
 
         n = matrix.shape[0]
@@ -105,7 +105,7 @@ class ResidualTraceStrategy:
                 archive=archive,
                 shuffle=config.shuffle,
                 seed=config.seed,
-                strategy_name="cg_residual",
+                strategy_name="residual_traces",
             )
 
             # Layer 2: Transform (compute RHS or load from archive)
@@ -190,9 +190,3 @@ class ResidualTraceStrategy:
             ),
             residual_traces=residual_traces,
         )
-
-
-# Alias
-@register_strategy
-class ResidualAliasStrategy(ResidualTraceStrategy):
-    name = "residual"

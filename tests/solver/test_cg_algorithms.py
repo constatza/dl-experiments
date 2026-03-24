@@ -5,7 +5,7 @@ import pytest
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from neuralls.solver import flexible_cg, pcg
+from neuralls.solver import flexible_cg, pcg, scipy_cg
 from neuralls.solver.preconditioners import Identity
 from neuralls.workflows import run_cg_comparison
 from neuralls.solver.monitoring.trace_mode import TraceMode
@@ -263,6 +263,40 @@ def test_flexible_pcg_traces_satisfy_residual_equation(
             f"  Captured r_k = {r_k}\n"
             f"  b - A @ x_k  = {computed_residual}\n"
             f"  Difference   = {r_k - computed_residual}"
+        )
+
+
+def test_scipy_cg_exposes_vector_traces(
+    spd_system: tuple[NDArray, NDArray, NDArray],
+) -> None:
+    """SciPy CG should expose traced residual and solution vectors in SolverResult."""
+    A, b, _ = spd_system
+    x0 = np.zeros_like(b)
+
+    _, info = scipy_cg(
+        A,
+        b,
+        x0,
+        maxiter=200,
+        trace_mode=TraceMode.FULL,
+        atol=FUNCTIONAL_ATOL,
+        rtol=FUNCTIONAL_RTOL,
+    )
+
+    residual_vecs = info.residual_vectors
+    solution_vecs = info.solution_vectors
+
+    assert residual_vecs is not None
+    assert solution_vecs is not None
+    assert residual_vecs.shape[0] == info.iterations + 1
+    assert solution_vecs.shape[0] == info.iterations + 1
+
+    for k in range(len(residual_vecs)):
+        np.testing.assert_allclose(
+            residual_vecs[k],
+            b - A @ solution_vecs[k],
+            atol=FUNCTIONAL_ATOL,
+            rtol=0.0,
         )
 
 

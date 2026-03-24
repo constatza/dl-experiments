@@ -133,12 +133,12 @@ def test_build_dataset_persists_residual_trace_pairs(tmp_path: Path) -> None:
     build_dataset(
         matrix_path=str(matrix_path),
         dataset_dir=str(out_dir),
-        counts={"cg_residual": 4},
+        counts={"residual_traces": 4},
         rhs_path=str(rhs_path),
         normalize="none",
         shuffle=False,
         seed=7,
-        strategy_overrides={"cg_residual": {"cg_iters": 1}},
+        strategy_overrides={"residual_traces": {"cg_iters": 1}},
     )
 
     saved_rhs, saved_solutions = load_dense_training_arrays(out_dir)
@@ -146,7 +146,7 @@ def test_build_dataset_persists_residual_trace_pairs(tmp_path: Path) -> None:
     assert saved_solutions.shape == (4, 2)
 
 
-def test_build_dataset_persists_residual_error_pairs(tmp_path: Path) -> None:
+def test_build_dataset_persists_residuals_pairs(tmp_path: Path) -> None:
     matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
     matrix_path = tmp_path / "matrix.npy"
     np.save(matrix_path, matrix)
@@ -154,16 +154,16 @@ def test_build_dataset_persists_residual_error_pairs(tmp_path: Path) -> None:
     for idx in range(3):
         np.savetxt(tmp_path / f"sol_{idx:03d}.txt", np.array([1.0 + idx, 0.5 + idx]))
 
-    out_dir = tmp_path / "residual_error_dataset"
+    out_dir = tmp_path / "residuals_dataset"
     build_dataset(
         matrix_path=str(matrix_path),
         dataset_dir=str(out_dir),
-        counts={"cg_residual_error": 4},
+        counts={"residuals": 4},
         normalize="none",
         shuffle=False,
         seed=7,
         strategy_overrides={
-            "cg_residual_error": {
+            "residuals": {
                 "cg_iters": 1,
                 "solutions_glob": str(tmp_path / "sol_*.txt"),
             }
@@ -173,3 +173,26 @@ def test_build_dataset_persists_residual_error_pairs(tmp_path: Path) -> None:
     saved_rhs, saved_solutions = load_dense_training_arrays(out_dir)
     assert saved_rhs.shape == (4, 2)
     assert saved_solutions.shape == (4, 2)
+    np.testing.assert_allclose(saved_solutions @ matrix.T, saved_rhs, atol=1e-10)
+
+
+def test_build_dataset_persists_gaussian_residual_pairs(tmp_path: Path) -> None:
+    matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
+    matrix_path = tmp_path / "matrix.npy"
+    np.save(matrix_path, matrix)
+
+    out_dir = tmp_path / "gaussian_residual_dataset"
+    build_dataset(
+        matrix_path=str(matrix_path),
+        dataset_dir=str(out_dir),
+        counts={"gaussian_residuals": 4},
+        normalize="none",
+        shuffle=False,
+        seed=7,
+        strategy_overrides={"gaussian_residuals": {"cg_iters": 1}},
+    )
+
+    saved_rhs, saved_solutions = load_dense_training_arrays(out_dir)
+    assert saved_rhs.shape == (4, 2)
+    assert saved_solutions.shape == (4, 2)
+    np.testing.assert_allclose(saved_solutions @ matrix.T, saved_rhs, atol=1e-10)

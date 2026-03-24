@@ -13,10 +13,9 @@ EXPECTED_STRATEGIES = {
     "random",
     "normal",
     "krylov",
-    "cg_residual",
-    "residual",
-    "cg_residual_error",
-    "residual_error",
+    "residual_traces",
+    "residuals",
+    "gaussian_residuals",
     "search_directions",
     "eigenvector_forward",
     "eigenvector_inverse",
@@ -56,3 +55,18 @@ def test_gaussian_inverse_runs_after_package_import(
     assert result.solutions is not None
     assert result.rhs.shape == (sample_count, spd_matrix.shape[0])
     assert result.solutions.shape == (sample_count, spd_matrix.shape[0])
+
+
+def test_removed_legacy_trace_names_fail(spd_matrix: np.ndarray) -> None:
+    """Legacy trace strategy names are intentionally unsupported."""
+    for legacy_name in (
+        "cg_residual",
+        "residual",
+        "cg_residual_error",
+        "residual_error",
+    ):
+        try:
+            run_generation(legacy_name, spd_matrix, cfg={"samples": 1, "cg_iters": 1})
+            assert False, f"{legacy_name} should be removed"
+        except KeyError:
+            pass

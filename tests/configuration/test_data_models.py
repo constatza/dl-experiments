@@ -48,19 +48,19 @@ class TestStrategyConfig:
 
     def test_strategy_config_required_fields(self):
         """Test StrategyConfig with required name field."""
-        config = StrategyConfig(name="cg_residual")
-        assert config.name == "cg_residual"
+        config = StrategyConfig(name="residual_traces")
+        assert config.name == "residual_traces"
         assert config.samples == 0
 
     def test_strategy_config_with_all_fields(self):
         """Test StrategyConfig with all fields."""
         config = StrategyConfig(
-            name="cg_residual_error",
+            name="residuals",
             samples=10000,
             residual_iters=50,
             solutions_glob="tests/fixtures/data/solutions/*.txt",
         )
-        assert config.name == "cg_residual_error"
+        assert config.name == "residuals"
         assert config.samples == 10000
         assert config.residual_iters == 50
         assert config.solutions_glob == "tests/fixtures/data/solutions/*.txt"

@@ -45,7 +45,7 @@ class GenerationStrategy(Protocol):
     - name: str - Strategy identifier for registration
     - generate(matrix, cfg, archive) - Generate samples from input
 
-    Trace strategies (residual_traces, residual_error, search_directions) also
+    Trace strategies (residual_traces, residuals, gaussian_residuals, search_directions) also
     accept an optional single_rhs parameter, but this is handled via duck-typing
     at runtime by the dispatcher.
 

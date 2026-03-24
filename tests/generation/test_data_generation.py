@@ -12,6 +12,7 @@ from neuralls.generation.helpers import (
     _generate_eigenvector_combinations,
     trace_rows_per_system,
 )
+from neuralls.generation.orchestration import _shuffle_samples
 from neuralls.normalization import (
     ErrorTraceSamples,
     ResidualTraceSamples,
@@ -40,9 +41,9 @@ def test_residual_strategy_with_archive() -> None:
     # Generate with archive
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=A,
-        mix={"cg_residual": 1.0},
+        mix={"residual_traces": 1.0},
         total=2,
-        strategy_overrides={"cg_residual": {"cg_iters": 3}},
+        strategy_overrides={"residual_traces": {"cg_iters": 3}},
         seed=7,
         shuffle=False,
         archive_solutions=archive_sols,
@@ -69,9 +70,9 @@ def test_residual_strategy_archive_validation() -> None:
     try:
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=A,
-            mix={"cg_residual": 1.0},
+            mix={"residual_traces": 1.0},
             total=8,
-            strategy_overrides={"cg_residual": {"cg_iters": 3}},
+            strategy_overrides={"residual_traces": {"cg_iters": 3}},
             seed=7,
             shuffle=False,
             archive_solutions=archive_sols,
@@ -171,7 +172,7 @@ def test_diagonal_normalization_rejects_zero_diagonal(tmp_path: Path) -> None:
 
 
 # ========================================================================
-# Tests for residual_error_strategy()
+# Tests for residuals strategy
 # ========================================================================
 
 
@@ -198,9 +199,9 @@ def test_error_strategy_with_random(
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        mix={"residual_error": 1.0},
+        mix={"residuals": 1.0},
         total=2,
-        strategy_overrides={"residual_error": {"cg_iters": 3}},
+        strategy_overrides={"residuals": {"cg_iters": 3}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -260,9 +261,9 @@ def test_error_strategy_with_archive(
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        mix={"residual_error": 1.0},
+        mix={"residuals": 1.0},
         total=2,
-        strategy_overrides={"residual_error": {"cg_iters": 3}},
+        strategy_overrides={"residuals": {"cg_iters": 3}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -308,9 +309,9 @@ def test_error_vectors_satisfy_equation(
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        mix={"residual_error": 1.0},
+        mix={"residuals": 1.0},
         total=3,
-        strategy_overrides={"residual_error": {"cg_iters": 5}},
+        strategy_overrides={"residuals": {"cg_iters": 5}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -354,9 +355,9 @@ def test_residuals_match_current_solutions(
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        mix={"residual_error": 1.0},
+        mix={"residuals": 1.0},
         total=2,
-        strategy_overrides={"residual_error": {"cg_iters": 4}},
+        strategy_overrides={"residuals": {"cg_iters": 4}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -377,6 +378,79 @@ def test_residuals_match_current_solutions(
         assert np.allclose(r_k, expected_residual, atol=1e-10), (
             f"Residual at trace {i} should equal b - A @ x_k"
         )
+
+
+def test_error_strategy_offsets_sample_indices_in_mixed_generation(
+    small_spd_matrix: np.ndarray,
+    archive_solutions: np.ndarray,
+    archive_rhs: np.ndarray,
+    test_seed: int,
+) -> None:
+    """Residual-error traces must index the combined base-system arrays correctly."""
+    rhs, solutions, residuals, error_traces = generate_mixture(
+        A=small_spd_matrix,
+        counts={"neutral_ones": 1, "residuals": 6},
+        strategy_overrides={"residuals": {"cg_iters": 2}},
+        seed=test_seed,
+        shuffle=False,
+        archive_solutions=archive_solutions,
+        archive_rhs=archive_rhs,
+    )
+
+    assert error_traces is not None
+    assert rhs.shape[0] == solutions.shape[0] == 3
+    assert np.all(error_traces.sample_indices >= 1)
+
+    for i in range(error_traces.residuals.shape[0]):
+        sample_idx = int(error_traces.sample_indices[i])
+        x_true = solutions[sample_idx]
+        b_vec = rhs[sample_idx]
+        x_k = error_traces.solutions_current[i]
+
+        np.testing.assert_allclose(error_traces.errors[i], x_true - x_k, atol=1e-12)
+        np.testing.assert_allclose(
+            error_traces.residuals[i],
+            b_vec - small_spd_matrix @ x_k,
+            atol=1e-10,
+        )
+
+
+def test_shuffle_samples_reindexes_error_traces() -> None:
+    """Shuffling must keep residual-error trace references aligned with base systems."""
+    rng = np.random.default_rng(0)
+    X = np.array([[10.0], [20.0], [30.0]], dtype=np.float64)
+    Y = np.array([[1.0], [2.0], [3.0]], dtype=np.float64)
+    error_traces = ErrorTraceSamples(
+        residuals=np.array([[100.0], [101.0], [200.0], [300.0]], dtype=np.float64),
+        solutions_current=np.array([[0.1], [0.2], [0.3], [0.4]], dtype=np.float64),
+        errors=np.array([[0.9], [0.8], [1.7], [2.6]], dtype=np.float64),
+        true_solutions=Y.copy(),
+        sample_indices=np.array([0, 0, 1, 2], dtype=np.int64),
+        iteration_indices=np.array([0, 1, 0, 0], dtype=np.int64),
+    )
+    expected_order = np.random.default_rng(0).permutation(len(X))
+    inverse = np.empty_like(expected_order)
+    inverse[expected_order] = np.arange(len(expected_order))
+
+    shuffled_X, shuffled_Y, _, shuffled_error_traces = _shuffle_samples(
+        X,
+        Y,
+        residual_traces=None,
+        error_traces=error_traces,
+        rng=rng,
+    )
+
+    assert shuffled_error_traces is not None
+    expected_indices = inverse[error_traces.sample_indices]
+    expected_true_solutions = Y[expected_order]
+
+    np.testing.assert_allclose(shuffled_X, X[expected_order])
+    np.testing.assert_allclose(shuffled_Y, expected_true_solutions)
+    np.testing.assert_array_equal(shuffled_error_traces.sample_indices, expected_indices)
+    np.testing.assert_allclose(
+        shuffled_error_traces.true_solutions,
+        expected_true_solutions,
+    )
 
 
 def test_error_strategy_validation(
@@ -400,9 +474,9 @@ def test_error_strategy_validation(
     try:
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=small_spd_matrix,
-            mix={"residual_error": 1.0},
+            mix={"residuals": 1.0},
                 total=8,
-                strategy_overrides={"residual_error": {"cg_iters": 3}},
+                strategy_overrides={"residuals": {"cg_iters": 3}},
             seed=test_seed,
             shuffle=False,
             archive_solutions=insufficient_archive,
@@ -435,9 +509,9 @@ def test_error_strategy_in_generate_mixture(
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        mix={"normal": 0.5, "residual_error": 0.5},
+        mix={"normal": 0.5, "residuals": 0.5},
         total=4,
-        strategy_overrides={"residual_error": {"cg_iters": 3}},
+        strategy_overrides={"residuals": {"cg_iters": 3}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -449,7 +523,7 @@ def test_error_strategy_in_generate_mixture(
     assert rhs.shape == (expected_normal + expected_trace, 2)
     assert solutions.shape == (expected_normal + expected_trace, 2)
 
-    # Verify error traces are present (from residual_error strategy)
+    # Verify error traces are present (from residuals strategy)
     assert error_traces is not None, "Error traces should be populated"
 
     # Verify error traces have at least 1 sample
@@ -485,9 +559,9 @@ def test_error_strategy_traces_structure(
     """
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
-        mix={"residual_error": 1.0},
+        mix={"residuals": 1.0},
         total=3,
-        strategy_overrides={"residual_error": {"cg_iters": 4}},
+        strategy_overrides={"residuals": {"cg_iters": 4}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -531,9 +605,9 @@ def test_error_strategy_with_zero_iterations(
     with pytest.raises(ValueError, match="(greater than or equal to 1|cg_iters)"):
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=small_spd_matrix,
-            mix={"residual_error": 1.0},
+            mix={"residuals": 1.0},
             total=2,
-            strategy_overrides={"residual_error": {"cg_iters": 0}},  # Zero iterations
+            strategy_overrides={"residuals": {"cg_iters": 0}},  # Zero iterations
             seed=test_seed,
             shuffle=False,
         )
@@ -966,9 +1040,9 @@ def test_pydantic_validates_residual_iters_type() -> None:
     with pytest.raises(ValueError, match="Input should be a valid integer"):
         generate_mixture(
             A=A,
-            mix={"residual_error": 1.0},
+            mix={"residuals": 1.0},
             total=2,
-            strategy_overrides={"residual_error": {"cg_iters": "many"}},
+            strategy_overrides={"residuals": {"cg_iters": "many"}},
         )
 
 

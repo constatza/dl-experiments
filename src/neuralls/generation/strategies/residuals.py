@@ -1,13 +1,13 @@
-"""Residual error strategy (cg_residual_error/residual_error) using SOLID architecture.
+"""Residual trace strategies with error targets.
 
 Architecture:
-    Layer 1: RandomInputProvider or ArchiveInputProvider → generate solutions
+    Layer 1: Archive/File or Gaussian providers → generate true solutions
     Layer 2: ComputeRhsTransform → compute RHS = A @ x
     Layer 3: SciPyCGSolver → run CG with iteration history tracking
     Layer 4: Collect residual and error traces from iteration history
 
-This strategy runs CG solver and collects both residual vectors and error vectors
-at each iteration, useful for training preconditioners with true error information.
+These strategies run CG and collect residual vectors together with exact error
+targets dx_k = x_true - x_k at each iteration.
 """
 
 from __future__ import annotations
@@ -18,16 +18,57 @@ from ..interfaces import GeneratedSamples, ArchiveData
 from ..runner import register_strategy
 from ..strategy_configs import ResidualErrorConfig
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
-from ..providers import provide_solutions, HybridInputProvider
+from ..providers import HybridInputProvider, RandomInputProvider, provide_solutions
 from ..transforms import ComputeRhsTransform
 from ...normalization import ErrorTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_error_traces
 
 
-@register_strategy
-class ResidualErrorStrategy:
-    name = "cg_residual_error"
+class _BaseResidualsStrategy:
     ConfigType = ResidualErrorConfig
+
+    def _resolve_available_systems(
+        self,
+        matrix: np.ndarray,
+        config: ResidualErrorConfig,
+        archive: ArchiveData | None,
+        rng: np.random.Generator,
+    ) -> int | None:
+        if config.solutions_glob is not None:
+            return len(
+                provide_solutions(
+                    matrix,
+                    -1,
+                    rng,
+                    solutions_glob=config.solutions_glob,
+                    archive=archive,
+                    shuffle=config.shuffle,
+                    seed=config.seed,
+                    strategy_name=self.name,
+                )
+            )
+        if archive is not None and archive.solutions is not None:
+            return int(archive.solutions.shape[0])
+        return None
+
+    def _provide_true_solutions(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        config: ResidualErrorConfig,
+        archive: ArchiveData | None,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        return provide_solutions(
+            matrix,
+            count,
+            rng,
+            solutions_glob=config.solutions_glob,
+            archive=archive,
+            shuffle=config.shuffle,
+            seed=config.seed,
+            strategy_name=self.name,
+        )
 
     def generate(
         self,
@@ -61,28 +102,16 @@ class ResidualErrorStrategy:
         available_systems: int | None = None
 
         if single_rhs is None:
-            if config.solutions_glob is not None:
-                available_systems = len(
-                    provide_solutions(
-                        matrix,
-                        -1,
-                        rng,
-                        solutions_glob=config.solutions_glob,
-                        archive=archive,
-                        shuffle=config.shuffle,
-                        seed=config.seed,
-                        strategy_name="cg_residual_error",
-                    )
-                )
-            elif archive is not None and archive.solutions is not None:
-                available_systems = int(archive.solutions.shape[0])
+            available_systems = self._resolve_available_systems(
+                matrix, config, archive, rng
+            )
 
         num_base_systems, final_rows = resolve_trace_generation_counts(
             config.samples,
             cg_iters=cg_iters,
             every_n=config.every_n,
             available_systems=available_systems,
-            strategy_name="cg_residual_error",
+            strategy_name=self.name,
         )
 
         n = matrix.shape[0]
@@ -109,14 +138,12 @@ class ResidualErrorStrategy:
             rhs_samples = np.tile(single_rhs, (num_base_systems, 1))
             sols = np.tile(true_sol, (num_base_systems, 1))
         else:
-            # Mode 2: Multiple RHS - load solutions from glob, archive, or fail fast.
-            sols = provide_solutions(
-                matrix, num_base_systems, rng,
-                solutions_glob=config.solutions_glob,
-                archive=archive,
-                shuffle=config.shuffle,
-                seed=config.seed,
-                strategy_name="cg_residual_error",
+            sols = self._provide_true_solutions(
+                matrix,
+                num_base_systems,
+                config,
+                archive,
+                rng,
             )
 
             # Layer 2: Transform (compute RHS or load from archive)
@@ -203,7 +230,22 @@ class ResidualErrorStrategy:
             error_traces=error_traces,
         )
 
+@register_strategy
+class ResidualsStrategy(_BaseResidualsStrategy):
+    name = "residuals"
+
 
 @register_strategy
-class ResidualErrorAliasStrategy(ResidualErrorStrategy):
-    name = "residual_error"
+class GaussianResidualsStrategy(_BaseResidualsStrategy):
+    name = "gaussian_residuals"
+
+    def _provide_true_solutions(
+        self,
+        matrix: np.ndarray,
+        count: int,
+        config: ResidualErrorConfig,
+        archive: ArchiveData | None,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        provider = RandomInputProvider(seed=config.seed, scale=1.0)
+        return provider.provide(matrix, count=count, rng=rng)
