@@ -26,7 +26,7 @@ def load_checkpoint_from_toml(config_path: Path) -> Path:
     return Path(candidate).expanduser().resolve()
 
 
-def _load_solver_checkpoint(solver_config: Path) -> Path | None:
+def _load_solver_checkpoint(solver_config: Path | None) -> Path | None:
     if solver_config is None:
         return None
     with open(solver_config, "rb") as fp:

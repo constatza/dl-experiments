@@ -7,7 +7,48 @@ effects and circular dependencies (notably through DLKit config modules).
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from neuralls.io.arrays import (
+        derive_checkpoint_path,
+        list_available_cases,
+        load_case_data,
+        load_system_data,
+        save_training_data,
+    )
+    from neuralls.io.base import load_matrix
+    from neuralls.io.checkpoints import clean_directory, get_latest_checkpoint
+    from neuralls.io.comparison import load_system_arrays, resolve_system_paths
+    from neuralls.io.datasets import (
+        DatasetFileTracker,
+        file_tracker,
+        has_comparison_split,
+        list_available_variants,
+        load_dataset,
+        load_numpy_array,
+        save_numpy_array,
+        track_files,
+    )
+    from neuralls.io.filesystem import (
+        copy_file,
+        derive_model_identifier,
+        ensure_dir,
+        file_exists,
+        format_file_size,
+        get_file_size,
+        get_relative_path,
+        load_text_file,
+        parse_data_dir_name,
+        sanitize_identifier,
+        save_text_file,
+    )
+    from neuralls.io.toml_loader import (
+        load_comparison_config,
+        load_data_config,
+        load_model_config,
+        load_raw_toml,
+    )
 
 _EXPORTS: dict[str, tuple[str, str]] = {
     # Filesystem
@@ -52,7 +93,41 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "load_raw_toml": ("neuralls.io.toml_loader", "load_raw_toml"),
 }
 
-__all__ = sorted(_EXPORTS.keys())
+__all__ = [
+    "ensure_dir",
+    "sanitize_identifier",
+    "derive_model_identifier",
+    "parse_data_dir_name",
+    "copy_file",
+    "get_file_size",
+    "file_exists",
+    "get_relative_path",
+    "format_file_size",
+    "save_text_file",
+    "load_text_file",
+    "load_system_data",
+    "save_training_data",
+    "load_case_data",
+    "list_available_cases",
+    "derive_checkpoint_path",
+    "load_dataset",
+    "load_numpy_array",
+    "save_numpy_array",
+    "has_comparison_split",
+    "list_available_variants",
+    "DatasetFileTracker",
+    "file_tracker",
+    "track_files",
+    "get_latest_checkpoint",
+    "clean_directory",
+    "load_matrix",
+    "resolve_system_paths",
+    "load_system_arrays",
+    "load_model_config",
+    "load_data_config",
+    "load_comparison_config",
+    "load_raw_toml",
+]
 
 
 def __getattr__(name: str) -> Any:

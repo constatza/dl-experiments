@@ -436,7 +436,7 @@ class TestPydanticValidation:
 
         # Try to create a config with an unknown parameter
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-            KrylovConfig(samples=10, unknown_param=123)
+            KrylovConfig.model_validate({"samples": 10, "unknown_param": 123})
 
     def test_pydantic_rejects_invalid_literal_values(self) -> None:
         """Test that invalid Literal values are rejected."""
@@ -445,20 +445,43 @@ class TestPydanticValidation:
 
         # Try to pass an invalid 'which' value
         with pytest.raises(ValidationError, match="Input should be"):
-            EigenvectorForwardConfig(samples=10, which="invalid")
+            EigenvectorForwardConfig.model_validate(
+                {"samples": 10, "which": "invalid"}
+            )
 
     def test_pydantic_validates_which_accepts_valid_values(self) -> None:
         """Test that valid 'which' values are accepted."""
         from neuralls.generation.strategy_configs import EigenvectorForwardConfig
 
         # All three valid values should work
-        config1 = EigenvectorForwardConfig(samples=10, which="smallest")
+        config1 = EigenvectorForwardConfig(
+            samples=10,
+            seed=42,
+            shuffle=True,
+            which="smallest",
+            include_eigenvectors=True,
+            num_eigenvectors=1,
+        )
         assert config1.which == "smallest"
 
-        config2 = EigenvectorForwardConfig(samples=10, which="largest")
+        config2 = EigenvectorForwardConfig(
+            samples=10,
+            seed=42,
+            shuffle=True,
+            which="largest",
+            include_eigenvectors=True,
+            num_eigenvectors=1,
+        )
         assert config2.which == "largest"
 
-        config3 = EigenvectorForwardConfig(samples=10, which="random")
+        config3 = EigenvectorForwardConfig(
+            samples=10,
+            seed=42,
+            shuffle=True,
+            which="random",
+            include_eigenvectors=True,
+            num_eigenvectors=1,
+        )
         assert config3.which == "random"
 
     def test_pydantic_requires_rhs_glob(self) -> None:
@@ -468,7 +491,7 @@ class TestPydanticValidation:
 
         # Try to create config without rhs_glob
         with pytest.raises(ValidationError, match="Field required"):
-            RhsArchiveConfig(samples=10)
+            RhsArchiveConfig.model_validate({"samples": 10})
 
     def test_pydantic_requires_solutions_glob(self) -> None:
         """Test that solutions_glob is required for SolutionArchiveConfig."""
@@ -477,7 +500,7 @@ class TestPydanticValidation:
 
         # Try to create config without solutions_glob
         with pytest.raises(ValidationError, match="Field required"):
-            SolutionArchiveConfig(samples=10)
+            SolutionArchiveConfig.model_validate({"samples": 10})
 
     def test_pydantic_validates_type_residual_iters(self) -> None:
         """Test that cg_iters must be int."""
@@ -486,7 +509,7 @@ class TestPydanticValidation:
 
         # Try to pass a string for cg_iters
         with pytest.raises(ValidationError, match="Input should be a valid integer"):
-            ResidualErrorConfig(samples=10, cg_iters="many")
+            ResidualErrorConfig.model_validate({"samples": 10, "cg_iters": "many"})
 
     def test_pydantic_validates_type_krylov_iters(self) -> None:
         """Test that krylov_iters must be int."""
@@ -495,14 +518,14 @@ class TestPydanticValidation:
 
         # Pydantic will coerce float to int, but invalid types should fail
         with pytest.raises(ValidationError, match="Input should be a valid integer"):
-            KrylovConfig(samples=10, krylov_iters="invalid")
+            KrylovConfig.model_validate({"samples": 10, "krylov_iters": "invalid"})
 
     def test_pydantic_frozen_prevents_mutation(self) -> None:
         """Test that frozen=True prevents mutation of config objects."""
         from neuralls.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
 
-        config = KrylovConfig(samples=10, krylov_iters=15)
+        config = KrylovConfig(samples=10, seed=42, shuffle=True, krylov_iters=15)
 
         # Try to modify a field (Pydantic raises ValidationError for frozen models)
         with pytest.raises(ValidationError, match="Instance is frozen"):
@@ -518,19 +541,38 @@ class TestPydanticValidation:
         )
 
         # All these should succeed
-        krylov = KrylovConfig(samples=100, krylov_iters=20, seed=42)
+        krylov = KrylovConfig(samples=100, seed=42, shuffle=True, krylov_iters=20)
         assert krylov.samples == 100
         assert krylov.krylov_iters == 20
 
-        residual = ResidualErrorConfig(samples=50, cg_iters=10)
+        residual = ResidualErrorConfig(
+            samples=50,
+            seed=42,
+            shuffle=True,
+            cg_iters=10,
+            solutions_glob=None,
+            archive_solutions=False,
+            archive_rhs=False,
+            every_n=1,
+        )
         assert residual.samples == 50
         assert residual.cg_iters == 10
 
         eigenvector = EigenvectorForwardConfig(
-            samples=30, which="largest", include_eigenvectors=True
+            samples=30,
+            seed=42,
+            shuffle=True,
+            which="largest",
+            include_eigenvectors=True,
+            num_eigenvectors=1,
         )
         assert eigenvector.which == "largest"
         assert eigenvector.include_eigenvectors is True
 
-        random_normal = RandomNormalConfig(samples=200, target_rhs_scale=2.5)
+        random_normal = RandomNormalConfig(
+            samples=200,
+            seed=42,
+            shuffle=True,
+            target_rhs_scale=2.5,
+        )
         assert random_normal.target_rhs_scale == 2.5

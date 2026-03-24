@@ -243,14 +243,7 @@ class OrthogonalizationDirectionStrategy(DirectionStrategy):
             directions. This ensures the search directions remain linearly
             independent and span the Krylov subspace.
         """
-        from ..models.history import DirectionHistory
-        from ..models.protocols import HasDirectionHistory
-
-        # Guard: Extract history (with fallback to empty)
-        if not isinstance(state, HasDirectionHistory):
-            history = DirectionHistory.empty(max_size=0)
-        else:
-            history = state.direction_history
+        history = state.direction_history
 
         # Orthogonalize using the configured strategy
         d_orthog, report = self.orthogonalization.orthogonalize(
@@ -363,16 +356,6 @@ class CompositeDirectionStrategy(DirectionStrategy):
 
         # Phase 2: Optional reorthogonalization
         if self.reorthog_strategy is None:
-            return d
-
-        # Guard: State must support direction history
-        from ..models.protocols import HasDirectionHistory
-
-        if not isinstance(state, HasDirectionHistory):
-            logger.warning(
-                "Reorthogonalization enabled but state does not have direction history. "
-                "Skipping reorthogonalization for this iteration."
-            )
             return d
 
         # Reorthogonalize against previous directions

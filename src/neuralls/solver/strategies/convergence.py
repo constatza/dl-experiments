@@ -44,6 +44,8 @@ class IConvergenceCriterion(ABC):
     The criterion delegates magnitude computation to the injected norm.
     """
 
+    norm: Norm
+
     @abstractmethod
     def threshold(self, rhs_norm: float) -> float:
         """Return the stopping threshold for a given RHS norm.

@@ -156,7 +156,7 @@ class TestDataConfigFile:
                     )
                 ],
             ),
-            output=OutputConfig(data_dir="tests/fixtures/data/processed"),
+            output=OutputConfig(data_dir=Path("tests/fixtures/data/processed")),
             test=DataTestConfig(solutions_path="tests/fixtures/data/test_solutions.txt"),
         )
         assert config.flow.dataset == "test_dataset"

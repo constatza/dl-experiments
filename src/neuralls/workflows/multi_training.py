@@ -246,8 +246,8 @@ def _annotate_mlflow_run(
     model_class = read_registered_model_name(model_config_path)
     entry = ExperimentEntry(
         id=experiment_id,
-        dataset_id=dataset_registry_id or dataset_id,
-        model_id=model_registry_id or experiment_id,
+        dataset=dataset_registry_id or dataset_id,
+        model=model_registry_id or experiment_id,
         display_name=experiment_display_name,
     )
     reg_tags = build_registration_tags(

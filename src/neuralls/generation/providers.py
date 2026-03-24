@@ -33,10 +33,10 @@ import numpy as np
 from .helpers import select_archive_files
 from .interfaces import ArchiveData
 
-T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
 
 
-class InputProvider(Protocol[T]):
+class InputProvider(Protocol[T_co]):
     """Protocol for input data providers.
 
     Providers abstract the source of input data, enabling strategies to be
@@ -50,7 +50,7 @@ class InputProvider(Protocol[T]):
         matrix: np.ndarray,
         count: int,
         rng: np.random.Generator,
-    ) -> T:
+    ) -> T_co:
         """Provide input data.
 
         Args:

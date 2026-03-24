@@ -13,6 +13,7 @@ from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
 from neuralls.solver import flexible_cg, pcg
+from neuralls.solver.monitoring.trace_mode import TraceMode
 
 # Define very strict tolerances for double precision accuracy goals
 DOUBLE_PRECISION_ATOL = 1e-14
@@ -103,7 +104,7 @@ def test_pcg_jacobi_double_precision_accuracy(
         atol=DOUBLE_PRECISION_ATOL,
         rtol=DOUBLE_PRECISION_RTOL,
         maxiter=200,  # Sufficiently high maxiter
-        trace_mode="full",  # Replaced capture_traces=True
+        trace_mode=TraceMode.FULL,
     )
 
     assert info.converged
@@ -165,7 +166,7 @@ def test_flexible_pcg_jacobi_double_precision_accuracy(
         rtol=DOUBLE_PRECISION_RTOL,
         maxiter=200,  # Sufficiently high maxiter
         m_max=20,  # Use a larger m_max for better orthogonalization
-        trace_mode="full",  # Replaced capture_traces=True
+        trace_mode=TraceMode.FULL,
     )
 
     assert info.converged

@@ -164,7 +164,7 @@ def _serialize_value(value: Any) -> Any:
             return {str(key): _serialize_value(item) for key, item in mapping.items()}
         case list() | tuple():
             return [_serialize_value(item) for item in value]
-        case _ if is_dataclass(value):
+        case _ if is_dataclass(value) and not isinstance(value, type):
             return _serialize_value(asdict(value))
         case _:
             raise TypeError(f"Unsupported comparison artifact value: {type(value).__name__}")

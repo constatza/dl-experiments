@@ -11,6 +11,7 @@ Tests cover:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal, cast
 
 import numpy as np
 import pytest
@@ -590,7 +591,14 @@ def test_all_strategies_produce_valid_results(
     strategies = ["none", "matrix", "diagonal", "spectral"]
 
     for strategy in strategies:
-        result = apply_normalization(strategy, A, R, X, tmp_path, verbose=False)
+        result = apply_normalization(
+            cast(Literal["none", "matrix", "spectral", "diagonal"], strategy),
+            A,
+            R,
+            X,
+            tmp_path,
+            verbose=False,
+        )
 
         assert isinstance(result, NormalizationResult)
         assert result.matrix.shape == A.shape

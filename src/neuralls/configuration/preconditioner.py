@@ -26,11 +26,11 @@ class PreconditionerType(StrEnum):
 
 
 def _normalize_null(data: dict) -> Any:
-    """Normalize 'none'/'null' to 'identity' for backward compatibility."""
+    """Normalize deprecated null-like aliases to the explicit none baseline."""
     if isinstance(data, dict):
         data = data.copy()
-        if data.get("type") in ("none", "null"):
-            data["type"] = PreconditionerType.IDENTITY
+        if data.get("type") == "null":
+            data["type"] = PreconditionerType.NONE
         return data
     return data
 
@@ -140,12 +140,10 @@ ModelRefConfig = Annotated[
 class BasePreconditionerConfig(BaseModel):
     """Shared fields for all preconditioners.
 
-    Includes both factory fields (name, type) and scheduling fields
-    (limit_iters, fallback) for convenience in comparison workflows.
+    Includes scheduling fields shared by all preconditioner variants.
     """
 
     name: str
-    type: PreconditionerType
     limit_iters: int = Field(
         default=-1, description="Iterations to apply; -1 means unlimited."
     )
@@ -163,7 +161,8 @@ class BasePreconditionerConfig(BaseModel):
 class StandardPreconditionerConfig(BasePreconditionerConfig):
     """Non-parametric, static preconditioners (identity, jacobi, ilu, icholesky)."""
 
-    type: Literal[  # type: ignore[assignment]
+    type: Literal[
+        PreconditionerType.NONE,
         PreconditionerType.IDENTITY,
         PreconditionerType.JACOBI,
         PreconditionerType.ILU,
@@ -174,7 +173,7 @@ class StandardPreconditionerConfig(BasePreconditionerConfig):
 class IC0PreconditionerConfig(BasePreconditionerConfig):
     """IC(0) preconditioner configuration with threshold parameter."""
 
-    type: Literal[PreconditionerType.IC0] = PreconditionerType.IC0  # type: ignore[assignment]
+    type: Literal[PreconditionerType.IC0] = PreconditionerType.IC0
     threshold: float = Field(
         default=1e-14,
         description="Drop tolerance - entries with |value| < threshold are treated as zeros"
@@ -184,7 +183,7 @@ class IC0PreconditionerConfig(BasePreconditionerConfig):
 class NeuralPreconditionerConfig(BasePreconditionerConfig):
     """Neural preconditioner configuration."""
 
-    type: Literal[PreconditionerType.NEURAL] = PreconditionerType.NEURAL  # type: ignore[assignment]
+    type: Literal[PreconditionerType.NEURAL] = PreconditionerType.NEURAL
     checkpoint_path: Path | None = None
     experiment: str | None = None
     config_path: Path | None = None
@@ -196,9 +195,12 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
     resolved_checkpoint_path: Path | None = None
 
 
-# Discriminated union with normalization
+ConcretePreconditionerConfig = (
+    StandardPreconditionerConfig | IC0PreconditionerConfig | NeuralPreconditionerConfig
+)
+
 _StrictPreconditionerConfig = Annotated[
-    StandardPreconditionerConfig | IC0PreconditionerConfig | NeuralPreconditionerConfig,
+    ConcretePreconditionerConfig,
     Field(discriminator="type"),
 ]
 

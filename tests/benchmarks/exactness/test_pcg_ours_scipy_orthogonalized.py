@@ -14,6 +14,7 @@ Expected Outcome:
 import pytest
 
 from neuralls.solver.factories import pcg, scipy_cg
+from neuralls.solver.monitoring.trace_mode import TraceMode
 from tests.benchmarks.exactness.conftest import (
     BENCHMARK_SIZES,
     MATRIX_TYPES,
@@ -66,7 +67,7 @@ def test_pcg_ours_ortho_scipy_comparison(
         rtol=rtol,
         atol=atol,
         maxiter=1000,
-        trace_mode="minimal",
+        trace_mode=TraceMode.MINIMAL,
     )
 
     # Run our PCG implementation WITH full reorthogonalization
@@ -78,7 +79,7 @@ def test_pcg_ours_ortho_scipy_comparison(
         rtol=rtol,
         atol=atol,
         maxiter=1000,
-        trace_mode="minimal",
+        trace_mode=TraceMode.MINIMAL,
     )
 
     # Check convergence

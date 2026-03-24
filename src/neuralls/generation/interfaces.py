@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol, TypeVar, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 import numpy as np
-from pydantic import BaseModel
+from ..normalization import ErrorTraceSamples, ResidualTraceSamples
 
 
 @dataclass(frozen=True)
@@ -16,10 +16,8 @@ class GeneratedSamples:
     matrix: np.ndarray
     rhs: np.ndarray | None
     solutions: np.ndarray | None
-    residual_traces: Any | None = None
-    error_traces: Any | None = None
-    search_directions_traces: Any | None = None
-    scale: Any | None = None
+    residual_traces: ResidualTraceSamples | None = None
+    error_traces: ErrorTraceSamples | None = None
 
 
 @dataclass(frozen=True)
@@ -38,23 +36,11 @@ class ArchiveData:
 
 
 @runtime_checkable
-class GenerationStrategy(Protocol):
-    """Protocol for all generation strategies.
-
-    All strategies must implement:
-    - name: str - Strategy identifier for registration
-    - generate(matrix, cfg, archive) - Generate samples from input
-
-    Trace strategies (residual_traces, residuals, gaussian_residuals, search_directions) also
-    accept an optional single_rhs parameter, but this is handled via duck-typing
-    at runtime by the dispatcher.
-
-    This unified protocol uses structural typing (duck-typing) rather than
-    explicit inheritance, allowing strategies to have different signatures while
-    sharing a common interface.
-    """
+class MatrixGenerationStrategy(Protocol):
+    """Protocol for strategies that generate from the matrix alone."""
 
     name: str
+    ConfigType: object
 
     def generate(
         self,
@@ -72,9 +58,24 @@ class GenerationStrategy(Protocol):
 
         Returns:
             GeneratedSamples with matrix, rhs, solutions, and optional traces
-
-        Note:
-            Trace strategies also accept optional single_rhs parameter,
-            but this is not part of the protocol signature (duck-typing).
         """
+        ...
+
+
+@runtime_checkable
+class SingleRhsGenerationStrategy(Protocol):
+    """Protocol for strategies that support explicit single-RHS generation."""
+
+    name: str
+    ConfigType: object
+
+    def generate(
+        self,
+        matrix: np.ndarray,
+        *,
+        cfg: dict[str, Any],
+        single_rhs: np.ndarray | None = None,
+        archive: ArchiveData | None = None,
+    ) -> GeneratedSamples:
+        """Generate samples from matrix with an optional shared RHS."""
         ...

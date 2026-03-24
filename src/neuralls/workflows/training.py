@@ -10,11 +10,11 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from dlkit import GeneralSettings
 from dlkit.interfaces.api import execute
-from dlkit.tools.config.core.updater import update_settings
+from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.config.data_entries import (
     Feature,
     FeatureType,
@@ -196,16 +196,21 @@ def _resolve_dataset(
     """
     _validate_dataset_section(settings)
     base_dataset = settings.DATASET or DatasetSettings()
-    dataset = base_dataset.update_with(
-        {
-            "features": features,
-            "targets": targets,
-            "name": base_dataset.name or "FlexibleDataset",
-            # SparseFeature entries are not compatible with current memmap cache path.
-            "memmap_cache": False,
-        }
+    return cast(
+        GeneralSettings,
+        patch_model(
+            settings,
+            {
+                "DATASET": {
+                    "features": features,
+                    "targets": targets,
+                    "name": base_dataset.name or "FlexibleDataset",
+                    # SparseFeature entries are not compatible with current memmap cache path.
+                    "memmap_cache": False,
+                }
+            },
+        ),
     )
-    return settings.update_with({"DATASET": dataset})
 
 
 def _configure_output_paths(
@@ -226,15 +231,23 @@ def _configure_output_paths(
         New GeneralSettings with updated TRAINING section
     """
     training_cfg = settings.TRAINING
+    if training_cfg is None or training_cfg.trainer is None:
+        raise ValueError("Training settings require TRAINING.trainer.")
 
-    trainer_cfg = training_cfg.trainer
-    callbacks = list(trainer_cfg.callbacks or [])
-
-    trainer_cfg = trainer_cfg.update_with({"default_root_dir": str(output_dir)})
-
-    trainer_cfg = trainer_cfg.update_with({"callbacks": callbacks})
-    training_cfg = training_cfg.update_with({"trainer": trainer_cfg})
-    return settings.update_with({"TRAINING": training_cfg})
+    return cast(
+        GeneralSettings,
+        patch_model(
+            settings,
+            {
+                "TRAINING": {
+                    "trainer": {
+                        "default_root_dir": str(output_dir),
+                        "callbacks": list(training_cfg.trainer.callbacks or []),
+                    }
+                }
+            },
+        ),
+    )
 
 
 def _configure_dataloader_runtime(settings: GeneralSettings) -> GeneralSettings:
@@ -247,15 +260,21 @@ def _configure_dataloader_runtime(settings: GeneralSettings) -> GeneralSettings:
     if datamodule_cfg is None or datamodule_cfg.dataloader is None:
         return settings
 
-    dataloader_cfg = datamodule_cfg.dataloader.update_with(
-        {
-            "num_workers": 0,
-            "persistent_workers": False,
-            "pin_memory": False,
-        }
+    return cast(
+        GeneralSettings,
+        patch_model(
+            settings,
+            {
+                "DATAMODULE": {
+                    "dataloader": {
+                        "num_workers": 0,
+                        "persistent_workers": False,
+                        "pin_memory": False,
+                    }
+                }
+            },
+        ),
     )
-    datamodule_cfg = datamodule_cfg.update_with({"dataloader": dataloader_cfg})
-    return settings.update_with({"DATAMODULE": datamodule_cfg})
 
 
 def _configure_mlflow(
@@ -267,7 +286,7 @@ def _configure_mlflow(
     """Inject concrete MLflow names into training settings."""
     if not settings.MLFLOW:
         return settings
-    updated = update_settings(
+    updated = patch_model(
         settings,
         {
             "MLFLOW": {
@@ -276,7 +295,7 @@ def _configure_mlflow(
             }
         },
     )
-    return updated  # type: ignore[return-value]
+    return cast(GeneralSettings, updated)
 
 
 def _configure_training_pipeline(
@@ -351,8 +370,8 @@ def _build_training_run_config(
     if experiment_id and dataset_registry_id and model_registry_id:
         entry = ExperimentEntry(
             id=experiment_id,
-            dataset_id=dataset_registry_id,
-            model_id=model_registry_id,
+            dataset=dataset_registry_id,
+            model=model_registry_id,
             display_name=experiment_display_name,
         )
         return build_training_run_spec(
@@ -740,13 +759,13 @@ def train_model(
     """
     permanent_root = Path(output_root).resolve() if output_root else DEFAULT_OUTPUT_DIR
     runtime_mlflow_env = _resolve_runtime_mlflow_env(output_root)
+    if data_config_path is None:
+        raise ValueError("data_config_path is required for training.")
 
     with tempfile.TemporaryDirectory(prefix="neuralls_train_") as _tmp:
         tmp_path = Path(_tmp)
         config_path = Path(config_path)
-        resolved_data_config_path = (
-            Path(data_config_path) if data_config_path is not None else None
-        )
+        resolved_data_config_path = Path(data_config_path)
 
         # Step 1: Load experiment configuration into temp dir
         experiment = load_experiment(
@@ -795,14 +814,20 @@ def train_model(
 
         # Step 5: Execute training via DLKit
         if max_epochs is not None:
-            settings = update_settings(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
+            settings = cast(
+                GeneralSettings,
+                patch_model(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}}),
+            )
         with scoped_mlflow_environment(runtime_mlflow_env):
             with parent_run_context(parent_run_id):
-                training_result = execute(  # type: ignore[arg-type]
-                    settings,
-                    experiment_name=run_config.experiment_name,
-                    run_name=run_config.run_name,
-                    tags=dict(run_config.tags) or None,
+                training_result = cast(
+                    Any,
+                    execute(
+                        settings,
+                        experiment_name=run_config.experiment_name,
+                        run_name=run_config.run_name,
+                        tags=dict(run_config.tags) or None,
+                    ),
                 )
 
             # Step 6: Resolve MLflow run metadata and retrieve the checkpoint

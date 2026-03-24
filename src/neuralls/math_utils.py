@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import StrEnum
+from typing import Any, cast
 
 import numpy as np
 from scipy.linalg import norm
@@ -472,8 +473,8 @@ def _to_csc(A: np.ndarray | object) -> object:
         from scipy.sparse import csc_matrix, issparse
 
         if issparse(A):
-            return A.tocsc()
+            return cast(Any, A).tocsc()
         else:
-            return csc_matrix(A)
+            return csc_matrix(cast(Any, A))
     except ImportError:
         return A

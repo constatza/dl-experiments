@@ -14,6 +14,7 @@ from scipy.sparse import csc_matrix
 from .data_types import NormalizeType, ScaleMetadata
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
+from .helpers import serialize_scale_metadata
 from .trace_utils import (
     _offset_error_traces,
     _offset_residual_traces,
@@ -259,7 +260,7 @@ class _CachedMatrix:
     scale: Any  # IScale | None
     matrix_norm_value: float
     matrix_value_scale: float
-    scale_params: dict[str, Any] | None
+    scale_params: ScaleMetadata | None
 
 
 def _open_streams(
@@ -371,7 +372,7 @@ def _process_binding(
             matrix_norm,
             norm_type=matrix_norm_type,
         )
-        scale_params = scale.to_dict() if scale is not None else None
+        scale_params = serialize_scale_metadata(scale)
         cached = _CachedMatrix(
             matrix_norm=matrix_norm,
             matrix_for_generation=matrix_for_generation,
@@ -432,7 +433,7 @@ def _process_binding(
         solution_block=np.asarray(Y_final, dtype=np.float64),
         matrix_norm_value=float(cached.matrix_norm_value),
         matrix_value_scale=float(cached.matrix_value_scale),
-        scale_params=cached.scale_params,  # type: ignore[arg-type]  # ScaleMetadata compatible
+        scale_params=cached.scale_params,
     )
 
 
@@ -547,7 +548,7 @@ def _persist_dataset(
         matrix_norm=matrix_norm,
         matrix_norm_type=matrix_norm_type,
         matrix_value_scale=matrix_value_scale,
-        scale_metadata=scale_metadata,  # type: ignore[arg-type]  # ScaleMetadata compatible
+        scale_metadata=scale_metadata,
     )
 
     logger.info(

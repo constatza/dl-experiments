@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from neuralls.generation import run_generation
+from neuralls.generation.runner import MatrixStrategyRegistration
 from neuralls.generation.strategies.rhs_archive import RhsArchiveStrategy
 
 
@@ -29,7 +30,9 @@ def test_rhs_archive_registered() -> None:
     from neuralls.generation.runner import _registry
 
     assert "rhs_archive" in _registry._strategies
-    assert isinstance(_registry._strategies["rhs_archive"], RhsArchiveStrategy)
+    registration = _registry._strategies["rhs_archive"]
+    assert isinstance(registration, MatrixStrategyRegistration)
+    assert isinstance(registration.strategy, RhsArchiveStrategy)
 
 
 def test_rhs_archive_shapes(spd_matrix: np.ndarray, rhs_files: tuple[list[Path], str]) -> None:

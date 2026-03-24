@@ -7,6 +7,7 @@ All functions are I/O actions with clear contracts.
 """
 
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 
@@ -120,8 +121,7 @@ def save_iteration_history(
 
     # Save NPZ format
     if format in (ArrayFormat.NPZ, ArrayFormat.BOTH):
-        # TODO: pyright incorrectly flags numpy savez signature with pathlib.Path objects
-        np.savez(output_dir / "history.npz", **arrays_dict)
+        cast(Any, np.savez)(str(output_dir / "history.npz"), **arrays_dict)
 
     # Save TXT format
     if format in (ArrayFormat.TXT, ArrayFormat.BOTH):

@@ -99,18 +99,23 @@ class MatrixSampleStream(Protocol):
     @property
     def sample_ids(self) -> tuple[int, ...]:
         """Available sample IDs."""
+        ...
 
     def load_dense_sample(self, sample_id: int) -> DenseMatrixSample:
         """Load one matrix sample in dense float64 format."""
+        ...
 
     def load_sparse_sample(self, sample_id: int) -> SparseMatrixSample:
         """Load one matrix sample as sparse COO components."""
+        ...
 
     def iter_dense_samples(self) -> Iterator[DenseMatrixSample]:
         """Iterate all dense matrix samples."""
+        ...
 
     def iter_sparse_samples(self) -> Iterator[SparseMatrixSample]:
         """Iterate all sparse matrix samples."""
+        ...
 
 
 @runtime_checkable
@@ -120,12 +125,15 @@ class VectorSampleStream(Protocol):
     @property
     def sample_ids(self) -> tuple[int, ...]:
         """Available sample IDs."""
+        ...
 
     def load_sample(self, sample_id: int) -> VectorSample:
         """Load one vector sample."""
+        ...
 
     def iter_samples(self) -> Iterator[VectorSample]:
         """Iterate all vector samples."""
+        ...
 
 
 class NpyMatrixStream:
@@ -485,4 +493,3 @@ __all__ = [
     "open_vector_stream",
     "bind_sources",
 ]
-

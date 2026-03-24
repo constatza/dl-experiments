@@ -78,7 +78,7 @@ def verify_dataset_consistency(dataset_dir: Path) -> tuple[bool, float]:
         relative_error = residual / norm_b if norm_b > 0 else residual
         max_error = max(max_error, relative_error)
 
-    return max_error < 1e-10, max_error
+    return bool(max_error < 1e-10), float(max_error)
 
 
 def test_solution_archive_consistency(

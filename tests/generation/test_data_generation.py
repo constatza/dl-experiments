@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -138,11 +139,11 @@ def test_diagonal_normalization_scales_rows(tmp_path: Path) -> None:
     assert normalized.residual_traces.search_direction_products is not None
     np.testing.assert_allclose(
         normalized.residual_traces.search_directions,
-        residual_traces.search_directions * diag_sqrt,
+        cast(np.ndarray, residual_traces.search_directions) * diag_sqrt,
     )
     np.testing.assert_allclose(
         normalized.residual_traces.search_direction_products,
-        residual_traces.search_direction_products * diag_sqrt_inv,
+        cast(np.ndarray, residual_traces.search_direction_products) * diag_sqrt_inv,
     )
     assert normalized.error_traces is not None
     np.testing.assert_allclose(
@@ -984,7 +985,7 @@ def test_eigenvector_backward_compatible_defaults(tmp_path: Path) -> None:
     
         # Try to create a config with an unknown parameter directly
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-            KrylovConfig(samples=10, unknown_param=123)
+            KrylovConfig.model_validate({"samples": 10, "unknown_param": 123})
 
 def test_pydantic_rejects_invalid_literal_values() -> None:
     """Test that Pydantic validation rejects invalid Literal values."""

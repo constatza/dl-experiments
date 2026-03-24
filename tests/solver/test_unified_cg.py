@@ -28,6 +28,7 @@ from neuralls.solver import (
     Identity,
 )
 from neuralls.solver.factories import flexible_cg, pcg
+from neuralls.solver.models.state import CGState
 
 
 class TestUnifiedCGSolver:
@@ -186,10 +187,8 @@ class TestDirectionStrategies:
     """Test individual direction strategies in isolation."""
 
     @pytest.fixture
-    def mock_state(self) -> object:
+    def mock_state(self) -> CGState:
         """Create mock CGState for testing strategies."""
-        from neuralls.solver.models.state import CGState
-
         # Simple state with iteration 0
         return CGState.create_initial(
             u=np.zeros(3),
@@ -202,7 +201,7 @@ class TestDirectionStrategies:
             max_history=0,
         )
 
-    def test_two_term_recurrence_first_iteration(self, mock_state: object) -> None:
+    def test_two_term_recurrence_first_iteration(self, mock_state: CGState) -> None:
         """Test TwoTermRecurrenceStrategy at first iteration."""
         strategy = TwoTermRecurrenceStrategy()
         w = np.array([2.0, 2.0, 2.0])

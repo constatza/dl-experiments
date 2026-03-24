@@ -8,8 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from dlkit.tools.config.core.updater import update_settings
+from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.io.config import load_config
+from dlkit.tools import io as dlkit_io
 
 from neuralls.configuration.domain import ExperimentWorkspace
 from neuralls.configuration.paths import PathContext
@@ -43,7 +44,7 @@ def build_settings(
     # Load base settings from dlkit
     settings = base_settings if base_settings is not None else load_model_config(model_config_path)
     if getattr(settings, "MLFLOW", None) is None:
-        settings = settings.patch({"MLFLOW": {}})
+        settings = patch_model(settings, {"MLFLOW": {}})
 
     updates: dict[str, Any] = {
         "TRAINING": {
@@ -61,7 +62,7 @@ def build_settings(
     if getattr(settings, "MLFLOW", None) is not None or force_mlflow_enabled:
         updates["MLFLOW"] = {}
 
-    settings = update_settings(settings, updates)
+    settings = patch_model(settings, updates)
 
     return settings
 
@@ -100,16 +101,19 @@ def build_inference_settings(
     toml_data = load_config(model_config_path, raw=True)
     inference_data = {k: v for k, v in toml_data.items() if k not in _INFERENCE_EXCLUDED}
     from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
-    from dlkit.tools.io.config import _sync_session_root_to_environment  # type: ignore[attr-defined]
     settings = InferenceWorkflowConfig.model_validate(inference_data)
-    _sync_session_root_to_environment(settings)
+    sync_session_root_to_environment = getattr(
+        dlkit_io.config,
+        "_sync_session_root_to_environment",
+    )
+    sync_session_root_to_environment(settings)
 
     # Use provided MLflow run name or default to workspace.run_id
     run_name = mlflow_run_name if mlflow_run_name is not None else workspace.run_id
 
     # Ensure SESSION.inference=True
     if not settings.SESSION.inference:
-        settings = update_settings(
+        settings = patch_model(
             settings,
             {
                 "SESSION": {
@@ -134,6 +138,6 @@ def build_inference_settings(
             "run_name": run_name,
         }
 
-    settings = update_settings(settings, updates)
+    settings = patch_model(settings, updates)
 
     return settings

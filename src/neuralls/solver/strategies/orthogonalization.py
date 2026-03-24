@@ -1,8 +1,7 @@
 """Orthogonalization strategies for Krylov methods (Single Responsibility).
 
 This module provides orthogonalization strategies for maintaining conjugacy/orthogonality
-in Krylov methods. Previously scattered across fcg_base.py and direction_strategies.py,
-now consolidated following the Strategy pattern.
+in Krylov methods. The implementation is consolidated in this package's strategy layer.
 
 Design:
     - OrthogonalizationStrategy: Abstract base for all orthogonalization methods

@@ -1,5 +1,7 @@
 """Fixtures and utilities for CG iteration count exactness benchmarks."""
 
+from __future__ import annotations
+
 import numpy as np
 import pytest
 from numpy.typing import NDArray
@@ -222,15 +224,15 @@ def check_residuals_match(
     r_diff = A @ (x1 - x2)
 
     # Check convergence using existing criterion
-    b_norm = np.linalg.norm(b)
+    b_norm = float(np.linalg.norm(b))
     matches = criterion.has_converged(r_diff, b_norm)
 
     # Diagnostics (compute r1, r2 only for reporting)
     r1 = b - A @ x1
     r2 = b - A @ x2
-    r1_norm = np.linalg.norm(r1)
-    r2_norm = np.linalg.norm(r2)
-    diff_norm = np.linalg.norm(r_diff)
+    r1_norm = float(np.linalg.norm(r1))
+    r2_norm = float(np.linalg.norm(r2))
+    diff_norm = float(np.linalg.norm(r_diff))
 
     diagnostics = {
         "r1_norm": r1_norm,

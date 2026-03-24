@@ -10,17 +10,35 @@ from typer.testing import CliRunner
 import tomli_w
 
 from neuralls.cli.compare_preconditioners import main
+from neuralls.configuration.comparison import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.workflows.results import ComparisonRecommendations, ComparisonResult
 from neuralls.workflows.specs import ComparisonOutcome
 
 runner = CliRunner()
 
 
+def _solver_params() -> ComparisonGeneral:
+    return ComparisonGeneral(
+        params=SolverParams(
+            rtol=1.0e-6,
+            atol=1.0e-14,
+            max_iterations=10,
+            stopping_criterion="residual_norm",
+            m_max=20,
+            breakdown_tol=None,
+        ),
+        data=ComparisonData(
+            matrix_path=Path("/tmp/matrix.npy"),
+            rhs_path=Path("/tmp/rhs.npy"),
+        ),
+    )
+
+
 def _payload() -> ComparisonResult:
     return ComparisonResult(
         results={},
         summary="ok",
-        solver_params=object(),
+        solver_params=_solver_params(),
         preconditioners=("none",),
         recommendations=ComparisonRecommendations(),
     )

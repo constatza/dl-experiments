@@ -143,6 +143,7 @@ def test_structured_linear_model_configs_load(
     )
 
     settings = load_model_config(model_path)
+    assert settings.MODEL is not None
     assert settings.MODEL.name == model_name
 
 

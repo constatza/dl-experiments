@@ -130,6 +130,7 @@ def test_denormalization_round_trip(temp_matrix_file: Path, tmp_path: Path):
         "dimension_scale": float(manifest["normalization"]["scale"]["dimension_scale"]),
     }
     scale = load_scale_from_metadata("matrix", metadata)
+    assert isinstance(scale, MatrixScale)
 
     # Get normalized RHS from dataset
     normalized_rhs = rhs[0]

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 
@@ -117,7 +117,7 @@ FCG_ORTHOG_EPSILON = 1e-14  # Threshold for near-zero inner products in Gram-Sch
 # SciPy reference: scipy/sparse/linalg/_isolve/iterative.py (BICG, BICGSTAB, CGS)
 
 
-def get_breakdown_tol(dtype: type[np.floating] = np.float64) -> float:  # type: ignore[type-arg]
+def get_breakdown_tol(dtype: type[np.floating[Any]] = np.float64) -> float:
     """Get breakdown tolerance following SciPy BICG/BICGSTAB convention.
 
     SciPy uses eps**2 for vanishing denominators in iterative solvers like
@@ -161,7 +161,7 @@ def get_breakdown_tol(dtype: type[np.floating] = np.float64) -> float:  # type: 
     return float(np.finfo(dtype).eps ** 2)
 
 
-def get_overflow_threshold(dtype: type[np.floating] = np.float64) -> float:  # type: ignore[type-arg]
+def get_overflow_threshold(dtype: type[np.floating[Any]] = np.float64) -> float:
     """Get overflow threshold as 0.1 * dtype max.
 
     Uses a fraction of the maximum representable value to leave safety margin

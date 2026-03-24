@@ -13,15 +13,29 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from dlkit import GeneralSettings
+from dlkit.tools.config import (
+    DataModuleSettings,
+    DatasetSettings,
+    ModelComponentSettings as ModelSettings,
+    SessionSettings,
+    TrainingSettings,
+)
+from dlkit.tools.config.data_entries import IPathBased
+from dlkit.tools.config.dataloader_settings import DataloaderSettings
+from dlkit.tools.config.mlflow_settings import MLflowSettings
+from dlkit.tools.config.trainer_settings import TrainerSettings
 from dlkit.tools.io.sparse import save_sparse_pack
 
 from neuralls.workflows.artifact_io import TrainingArrays
 from neuralls.workflows.mlflow_client import parent_run_context
 from neuralls.workflows.training import (
     _configure_dataloader_runtime,
+    _configure_mlflow,
+    _configure_output_paths,
     _create_feature_configs,
     _extract_evaluation_arrays,
     _resolve_mlflow_logging_config,
+    _resolve_dataset,
     _validate_dataset_section,
     GRAPH_DATASET_NAME,
     FLEXIBLE_DATASET_NAME,
@@ -62,6 +76,28 @@ def sample_arrays(tmp_path: Path) -> TrainingArrays:
     )
 
 
+@pytest.fixture
+def training_settings(tmp_path: Path) -> GeneralSettings:
+    """Concrete settings instance for immutable patch-model assertions."""
+    trainer_root = tmp_path / "original-root"
+    trainer_root.mkdir()
+    return GeneralSettings(
+        SESSION=SessionSettings(seed=42),
+        MODEL=ModelSettings(name="LinearModel"),
+        DATAMODULE=DataModuleSettings(
+            dataloader=DataloaderSettings(batch_size=8, num_workers=2, pin_memory=True)
+        ),
+        DATASET=DatasetSettings(name="FlexibleDataset", memmap_cache=True),
+        TRAINING=TrainingSettings(
+            trainer=TrainerSettings(
+                max_epochs=3,
+                default_root_dir=trainer_root,
+            )
+        ),
+        MLFLOW=MLflowSettings(experiment_name="BaseExperiment"),
+    )
+
+
 def test_validate_dataset_section_raises_on_none() -> None:
     """_validate_dataset_section raises ValueError if DATASET is None."""
     mock_settings = MagicMock(spec=GeneralSettings)
@@ -87,8 +123,9 @@ def test_create_feature_configs_graph_dataset(sample_arrays: TrainingArrays) -> 
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
     matrix_feature = next(f for f in features if f.name == "matrix")
+    assert isinstance(matrix_feature, IPathBased)
     assert matrix_feature.model_input is False
-    assert matrix_feature.path == sample_arrays.matrix_pack
+    assert matrix_feature.get_path() == sample_arrays.matrix_pack
 
 
 def test_create_feature_configs_flexible_dataset(sample_arrays: TrainingArrays) -> None:
@@ -99,8 +136,9 @@ def test_create_feature_configs_flexible_dataset(sample_arrays: TrainingArrays) 
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
     matrix_feature = next(f for f in features if f.name == "matrix")
+    assert isinstance(matrix_feature, IPathBased)
     assert matrix_feature.model_input is False
-    assert matrix_feature.path == sample_arrays.matrix_pack
+    assert matrix_feature.get_path() == sample_arrays.matrix_pack
 
 
 def test_create_feature_configs_default_to_flexible(sample_arrays: TrainingArrays) -> None:
@@ -111,7 +149,8 @@ def test_create_feature_configs_default_to_flexible(sample_arrays: TrainingArray
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
     matrix_feature = next(f for f in features if f.name == "matrix")
-    assert matrix_feature.path == sample_arrays.matrix_pack
+    assert isinstance(matrix_feature, IPathBased)
+    assert matrix_feature.get_path() == sample_arrays.matrix_pack
 
 
 def test_parent_run_context_manager() -> None:
@@ -137,32 +176,80 @@ def test_parent_run_context_manager() -> None:
             del os.environ[var_name]
 
 
-def test_configure_dataloader_runtime_forces_single_process() -> None:
-    """_configure_dataloader_runtime sets safe single-process dataloader flags."""
-    dataloader_cfg = MagicMock()
-    dataloader_cfg.update_with.return_value = "updated_dataloader"
-    datamodule_cfg = MagicMock()
-    datamodule_cfg.dataloader = dataloader_cfg
-    datamodule_cfg.update_with.return_value = "updated_datamodule"
+def test_resolve_dataset_returns_new_settings(
+    training_settings: GeneralSettings,
+) -> None:
+    """Dataset injection returns a new settings object without mutating the original."""
+    features = []
+    targets = []
 
-    settings = MagicMock(spec=GeneralSettings)
-    settings.DATAMODULE = datamodule_cfg
-    settings.update_with.return_value = "updated_settings"
+    updated = _resolve_dataset(training_settings, features, targets)
 
-    updated = _configure_dataloader_runtime(settings)
+    assert updated is not training_settings
+    assert updated.DATASET is not None
+    assert updated.DATASET.features == tuple(features)
+    assert updated.DATASET.targets == tuple(targets)
+    assert updated.DATASET.memmap_cache is False
+    assert training_settings.DATASET is not None
+    assert training_settings.DATASET.features == ()
+    assert training_settings.DATASET.targets == ()
+    assert training_settings.DATASET.memmap_cache is True
 
-    dataloader_cfg.update_with.assert_called_once_with(
-        {
-            "num_workers": 0,
-            "persistent_workers": False,
-            "pin_memory": False,
-        }
+
+def test_configure_output_paths_returns_new_settings(
+    training_settings: GeneralSettings,
+    tmp_path: Path,
+) -> None:
+    """Output-path configuration uses immutable patching."""
+    output_dir = tmp_path / "new-root"
+    output_dir.mkdir()
+
+    updated = _configure_output_paths(training_settings, output_dir)
+
+    assert updated is not training_settings
+    assert updated.TRAINING is not None
+    assert updated.TRAINING.trainer is not None
+    assert updated.TRAINING.trainer.default_root_dir == output_dir
+    assert training_settings.TRAINING is not None
+    assert training_settings.TRAINING.trainer is not None
+    assert training_settings.TRAINING.trainer.default_root_dir != output_dir
+
+
+def test_configure_dataloader_runtime_forces_single_process(
+    training_settings: GeneralSettings,
+) -> None:
+    """_configure_dataloader_runtime returns a patched settings object."""
+    updated = _configure_dataloader_runtime(training_settings)
+
+    assert updated is not training_settings
+    assert updated.DATAMODULE is not None
+    assert updated.DATAMODULE.dataloader is not None
+    assert updated.DATAMODULE.dataloader.num_workers == 0
+    assert updated.DATAMODULE.dataloader.persistent_workers is False
+    assert updated.DATAMODULE.dataloader.pin_memory is False
+    assert training_settings.DATAMODULE is not None
+    assert training_settings.DATAMODULE.dataloader is not None
+    assert training_settings.DATAMODULE.dataloader.num_workers == 2
+    assert training_settings.DATAMODULE.dataloader.pin_memory is True
+
+
+def test_configure_mlflow_returns_new_settings(
+    training_settings: GeneralSettings,
+) -> None:
+    """MLflow naming updates use immutable patching."""
+    updated = _configure_mlflow(
+        training_settings,
+        mlflow_experiment_name="Train",
+        mlflow_run_name="run-42",
     )
-    datamodule_cfg.update_with.assert_called_once_with(
-        {"dataloader": "updated_dataloader"}
-    )
-    settings.update_with.assert_called_once_with({"DATAMODULE": "updated_datamodule"})
-    assert updated == "updated_settings"
+
+    assert updated is not training_settings
+    assert updated.MLFLOW is not None
+    assert updated.MLFLOW.experiment_name == "Train"
+    assert updated.MLFLOW.run_name == "run-42"
+    assert training_settings.MLFLOW is not None
+    assert training_settings.MLFLOW.experiment_name == "BaseExperiment"
+    assert training_settings.MLFLOW.run_name is None
 
 
 @patch("neuralls.workflows.training.compute_diagnostics")

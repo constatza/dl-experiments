@@ -42,8 +42,8 @@ from .helpers import (
     _verify_solution_accuracy,
 )
 
-TIn = TypeVar("TIn")
-TOut = TypeVar("TOut")
+TIn = TypeVar("TIn", contravariant=True)
+TOut = TypeVar("TOut", covariant=True)
 
 
 class Transformation(Protocol[TIn, TOut]):

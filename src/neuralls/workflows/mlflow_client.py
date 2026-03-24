@@ -42,9 +42,9 @@ def log_artifacts_to_mlflow(
         run_id: Existing MLflow run to upload into.
         workspace_root: Local directory whose contents are uploaded.
     """
-    import mlflow
+    from mlflow.tracking import MlflowClient
 
-    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    client = MlflowClient(tracking_uri=tracking_uri)
     client.log_artifacts(run_id, str(workspace_root))
 
 
@@ -64,16 +64,14 @@ def find_mlflow_run(
     Returns:
         ``(experiment_id, run_id)`` when found, otherwise ``None``.
     """
-    import mlflow
+    from mlflow.tracking import MlflowClient
 
-    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    client = MlflowClient(tracking_uri=tracking_uri)
     experiment = client.get_experiment_by_name(experiment_name)
     if experiment is None:
         return None
 
-    filter_string = (
-        f"attributes.run_name = '{run_name}'" if run_name else None
-    )
+    filter_string = f"attributes.run_name = '{run_name}'" if run_name else ""
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         filter_string=filter_string,

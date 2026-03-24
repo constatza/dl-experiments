@@ -8,8 +8,10 @@ from unittest.mock import patch
 import pytest
 
 from neuralls.configuration.preconditioner import (
+    LoggedModelRefConfig,
     NeuralPreconditionerConfig,
     PreconditionerType,
+    RegisteredModelRefConfig,
     StandardPreconditionerConfig,
 )
 from neuralls.workflows.model_resolution import (
@@ -54,7 +56,7 @@ def test_resolve_preconditioner_models_sets_resolved_checkpoint(
     neural = NeuralPreconditionerConfig(
         name="neural",
         type=PreconditionerType.NEURAL,
-        model_ref={"source": "logged", "run_id": "run-1"},
+        model_ref=LoggedModelRefConfig(run_id="run-1"),
     )
 
     resolved = resolve_preconditioner_models(
@@ -64,6 +66,7 @@ def test_resolve_preconditioner_models_sets_resolved_checkpoint(
     )
     assert len(resolved) == 1
     resolved_neural = resolved[0]
+    assert isinstance(resolved_neural, NeuralPreconditionerConfig)
     assert resolved_neural.type == PreconditionerType.NEURAL
     assert resolved_neural.checkpoint_path == checkpoint
     assert resolved_neural.resolved_checkpoint_path == checkpoint
@@ -92,6 +95,7 @@ def test_resolve_preconditioner_models_keeps_explicit_checkpoint(
     mock_resolve_model_ref.assert_not_called()
     assert len(resolved) == 1
     resolved_neural = resolved[0]
+    assert isinstance(resolved_neural, NeuralPreconditionerConfig)
     assert resolved_neural.checkpoint_path == checkpoint
     assert resolved_neural.resolved_checkpoint_path == checkpoint
 
@@ -122,7 +126,7 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
     neural = NeuralPreconditionerConfig(
         name="missing-neural",
         type=PreconditionerType.NEURAL,
-        model_ref={"source": "registered", "name": "MissingFFNN", "alias": "solutions"},
+        model_ref=RegisteredModelRefConfig(name="MissingFFNN", alias="solutions"),
     )
 
     resolved = resolve_preconditioner_models_with_warnings(
@@ -151,7 +155,10 @@ def test_resolve_model_ref_dataset_placeholder_requires_dataset_alias(
     neural = NeuralPreconditionerConfig(
         name="neural",
         type=PreconditionerType.NEURAL,
-        model_ref={"source": "registered", "name": "NormScaledLinearFFNN", "alias": "@dataset"},
+        model_ref=RegisteredModelRefConfig(
+            name="NormScaledLinearFFNN",
+            alias="@dataset",
+        ),
     )
     with pytest.raises(ValueError, match="requires general\\.data\\.dataset_alias"):
         resolve_model_ref(
@@ -179,7 +186,10 @@ def test_resolve_model_ref_normalizes_explicit_at_alias(
     neural = NeuralPreconditionerConfig(
         name="neural",
         type=PreconditionerType.NEURAL,
-        model_ref={"source": "registered", "name": "NormScaledLinearFFNN", "alias": "@solutions"},
+        model_ref=RegisteredModelRefConfig(
+            name="NormScaledLinearFFNN",
+            alias="@solutions",
+        ),
     )
     resolve_model_ref(
         spec=neural,

@@ -195,7 +195,10 @@ class ITraceSamples(ABC):
 
         Requires concrete class to have sample_indices attribute.
         """
-        return len(self.sample_indices)  # type: ignore[attr-defined]
+        sample_indices = getattr(self, "sample_indices", None)
+        if not isinstance(sample_indices, np.ndarray):
+            raise TypeError("Trace samples must expose numpy sample_indices")
+        return len(sample_indices)
 
 
 # =============================================================================

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import warnings
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 from loguru import logger
@@ -18,6 +18,7 @@ from ..constants import (
     EIGENVECTOR_SELECT_LARGEST,
     EIGENVECTOR_SELECT_RANDOM,
 )
+from .data_types import ScaleMetadata
 from .interfaces import ArchiveData
 
 
@@ -197,12 +198,47 @@ def _normalize_matrix_for_generation(
     )
     matrix_norm = scale.scale_matrix(matrix)
     if normalize_type == "matrix":
-        scale_params = scale.to_dict()
-        matrix_value_scale = float(scale_params["spectral_radius_bound"]) * float(
-            scale_params["dimension_scale"]
-        )
+        scale_params = serialize_scale_metadata(scale)
+        if scale_params is None:
+            raise TypeError(f"Expected scale metadata for {normalize_type}")
+        spectral_radius = scale_params.get("spectral_radius_bound")
+        dimension_scale = scale_params.get("dimension_scale")
+        if not isinstance(spectral_radius, float) or not isinstance(
+            dimension_scale, float
+        ):
+            raise TypeError("Matrix normalization scale metadata must be scalar floats.")
+        matrix_value_scale = spectral_radius * dimension_scale
         return matrix_norm, scale, matrix_value_scale
     return matrix_norm, scale, 1.0
+
+
+def serialize_scale_metadata(scale: Any | None) -> ScaleMetadata | None:
+    """Serialize supported scale objects into manifest metadata."""
+    if scale is None:
+        return None
+
+    payload = scale.to_dict()
+    metadata: ScaleMetadata = {}
+
+    spectral_radius = payload.get("spectral_radius_bound")
+    if isinstance(spectral_radius, float):
+        metadata["spectral_radius_bound"] = spectral_radius
+
+    dimension_scale = payload.get("dimension_scale")
+    if isinstance(dimension_scale, float):
+        metadata["dimension_scale"] = dimension_scale
+
+    rhs_norm = payload.get("rhs_norm")
+    if isinstance(rhs_norm, float):
+        metadata["rhs_norm"] = rhs_norm
+
+    diagonal_sqrt_inv = payload.get("diagonal_sqrt_inv")
+    if isinstance(diagonal_sqrt_inv, list) and all(
+        isinstance(value, float) for value in diagonal_sqrt_inv
+    ):
+        metadata["diagonal_sqrt_inv"] = diagonal_sqrt_inv
+
+    return metadata or None
 
 
 def _resolve_strategy_counts(
@@ -289,7 +325,7 @@ def _solve_linear_systems(
             if issparse(A):
                 from scipy.sparse.linalg import factorized
 
-                solve_fn = factorized(csc_matrix(A))
+                solve_fn = cast(Any, factorized)(csc_matrix(cast(Any, A)))
                 for idx, rhs in enumerate(rhs_array):
                     solutions[idx] = np.asarray(solve_fn(rhs), dtype=np.float64)
             else:
@@ -436,7 +472,11 @@ def _compute_eigendecomposition(A: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     if isinstance(A, LinearOperator):
         raise ValueError("Eigenvector strategies require an explicit matrix, got LinearOperator.")
-    matrix = A.toarray() if issparse(A) else np.asarray(A, dtype=np.float64)
+    matrix = (
+        np.asarray(cast(Any, A).toarray(), dtype=np.float64)
+        if issparse(A)
+        else np.asarray(A, dtype=np.float64)
+    )
     if not np.allclose(matrix, matrix.T, rtol=1e-10, atol=1e-10):
         max_asymmetry = np.max(np.abs(matrix - matrix.T))
         raise ValueError(

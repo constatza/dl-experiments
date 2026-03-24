@@ -52,6 +52,14 @@ dev = [
     "pytest>=9.0",
 ]
 
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+include = [
+    "src/neuralls",
+    "tests",
+]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = [

@@ -190,16 +190,18 @@ def load_experiment(
     dataset_id = dataset_registry_id
     session = getattr(model_cfg, "SESSION", None)
     session_name = getattr(session, "name", None)
+    model_name = getattr(getattr(model_cfg, "MODEL", None), "name", None)
     # Treat dlkit's default "dlkit-session" as unset, prefer MODEL.name for clarity
     if session_name and session_name != "dlkit-session":
-        base_name = session_name
+        base_name_candidate = session_name
     else:
-        base_name = model_cfg.MODEL.name
+        base_name_candidate = model_name
 
-    if not base_name:
+    if not isinstance(base_name_candidate, str) or not base_name_candidate:
         raise ValueError(
             "Model name missing. Set [SESSION].name or [MODEL].name in model config."
         )
+    base_name = base_name_candidate
 
     workspace_run_id = base_name
 

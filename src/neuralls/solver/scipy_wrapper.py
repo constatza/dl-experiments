@@ -21,10 +21,11 @@ References:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 from collections.abc import Callable
 
 import numpy as np
+from scipy.sparse import spmatrix
 from scipy.linalg import norm
 from scipy.sparse.linalg import LinearOperator, aslinearoperator, cg
 
@@ -39,6 +40,10 @@ from .preconditioners import Identity, Preconditioner
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+type LinearSystemOperator = (
+    NDArray | spmatrix | LinearOperator | Callable[[NDArray], NDArray]
+)
 
 
 class SciPyCGSolver:
@@ -90,7 +95,7 @@ class SciPyCGSolver:
 
     def solve(
         self,
-        A: NDArray | Callable[[NDArray], NDArray],
+        A: LinearSystemOperator,
         b: NDArray,
         x0: NDArray | None = None,
         rtol: float = 1e-6,
@@ -124,10 +129,16 @@ class SciPyCGSolver:
         if isinstance(trace_mode, str):
             trace_mode = TraceMode(trace_mode)
 
-        # Prepare linear operator
-        # TODO: scipy's aslinearoperator type hints are overly strict; accepts NDArray at runtime
-        A_op = aslinearoperator(A)
         b_arr = np.asarray(b, dtype=np.float64)
+        if callable(A) and not isinstance(A, np.ndarray):
+            n = b_arr.shape[0]
+            A_op = LinearOperator(
+                shape=(n, n),
+                matvec=cast(Callable[[np.ndarray], np.ndarray], A),
+                dtype=np.float64,
+            )
+        else:
+            A_op = cast(Any, aslinearoperator)(A)
 
         # Prepare preconditioner as LinearOperator
         M_op = self._prepare_preconditioner(A_op.shape)

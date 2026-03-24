@@ -9,7 +9,7 @@ Tests zero-fill Incomplete Cholesky preconditioner to ensure:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 import pytest
@@ -233,5 +233,4 @@ def test_ic0_compares_favorably_with_jacobi(
 
     # IC(0) should require <= iterations than Jacobi
     assert result_ic0.iterations <= result_jacobi.iterations
-
 

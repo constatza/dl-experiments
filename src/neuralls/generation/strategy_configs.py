@@ -71,6 +71,32 @@ class SolveConfig(BaseModel):
         frozen=True,
     )
 
+
+def _default_direct_solve_config() -> SolveConfig:
+    """Build the standard direct-solve configuration."""
+    return SolveConfig.model_validate(
+        {
+            "method": "direct",
+            "rtol": MIN_TOLERANCE,
+            "atol": 0.0,
+            "max_iters": MAX_ITERATIONS_UPPER_LIMIT,
+            "assume_pos_def": True,
+        }
+    )
+
+
+def _default_cg_solve_config() -> SolveConfig:
+    """Build the standard CG solve configuration."""
+    return SolveConfig.model_validate(
+        {
+            "method": "cg",
+            "rtol": MIN_TOLERANCE,
+            "atol": 0.0,
+            "max_iters": MAX_ITERATIONS_UPPER_LIMIT,
+            "assume_pos_def": True,
+        }
+    )
+
 class BaseStrategyConfig(BaseModel):
     samples: int = Field(
         ...,
@@ -113,13 +139,7 @@ class EigenvectorInverseConfig(BaseEigenvectorConfig):
     """
 
     solve_config: SolveConfig = Field(
-        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
-            method="direct",
-            rtol=MIN_TOLERANCE,
-            atol=0.0,
-            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
-            assume_pos_def=True,
-        ),
+        default_factory=_default_direct_solve_config,
         description="Configuration for solving linear systems x = A^-1 @ b",
     )
 
@@ -155,13 +175,7 @@ class GaussianInverseConfig(GaussianForwardConfig):
     """Configuration for GaussianInverseStrategy."""
 
     solve_config: SolveConfig = Field(
-        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
-            method="direct",
-            rtol=MIN_TOLERANCE,
-            atol=0.0,
-            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
-            assume_pos_def=True,
-        ),
+        default_factory=_default_direct_solve_config,
         description="Configuration for solving linear systems x = A^-1 @ b",
     )
 
@@ -177,13 +191,7 @@ class UniformInverseConfig(UniformForwardConfig):
     """Configuration for UniformInverseStrategy."""
 
     solve_config: SolveConfig = Field(
-        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
-            method="direct",
-            rtol=MIN_TOLERANCE,
-            atol=0.0,
-            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
-            assume_pos_def=True,
-        ),
+        default_factory=_default_direct_solve_config,
         description="Configuration for solving linear systems x = A^-1 @ b",
     )
 
@@ -198,13 +206,7 @@ class ConstantInverseConfig(ConstantForwardConfig):
     """Configuration for ConstantInverseStrategy."""
 
     solve_config: SolveConfig = Field(
-        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
-            method="direct",
-            rtol=MIN_TOLERANCE,
-            atol=0.0,
-            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
-            assume_pos_def=True,
-        ),
+        default_factory=_default_direct_solve_config,
         description="Configuration for solving linear systems x = A^-1 @ b",
     )
 
@@ -267,13 +269,7 @@ class RhsArchiveConfig(BaseStrategyConfig):
         ..., description="Glob pattern for RHS files to load. Overrides source.rhs_path."
     )
     solve_config: SolveConfig = Field(
-        default_factory=lambda: SolveConfig(  # pyright: ignore[reportCallIssue]
-            method="cg",
-            rtol=MIN_TOLERANCE,
-            atol=0.0,
-            max_iters=MAX_ITERATIONS_UPPER_LIMIT,
-            assume_pos_def=True,
-        ),
+        default_factory=_default_cg_solve_config,
         description="Configuration for solving linear systems x = A^-1 @ b",
     )
 
@@ -345,7 +341,7 @@ class SparseRhsConfig(BaseStrategyConfig):
         ..., description="Values at the specified positions. Must match len(indices)."
     )
     solve_config: SolveConfig = Field(
-        default_factory=lambda: SolveConfig(),  # pyright: ignore[reportCallIssue]
+        default_factory=_default_direct_solve_config,
         description="Configuration for solving linear systems x = A^-1 @ b",
     )
 

@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from neuralls.generation import run_generation
+from neuralls.generation.runner import MatrixStrategyRegistration
 from neuralls.generation.strategies.solution_archive import SolutionArchiveStrategy
 
 
@@ -29,7 +30,9 @@ def test_solution_archive_registered() -> None:
     from neuralls.generation.runner import _registry
 
     assert "solution_archive" in _registry._strategies
-    assert isinstance(_registry._strategies["solution_archive"], SolutionArchiveStrategy)
+    registration = _registry._strategies["solution_archive"]
+    assert isinstance(registration, MatrixStrategyRegistration)
+    assert isinstance(registration.strategy, SolutionArchiveStrategy)
 
 
 def test_solution_archive_shapes(

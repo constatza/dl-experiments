@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 import mlflow
 import pytest
+from mlflow.tracking import MlflowClient
 
 from neuralls.configuration.preconditioner import (
     NeuralPreconditionerConfig,
@@ -79,7 +80,7 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
 
     mlflow.set_tracking_uri(tracking_uri)
     experiment_name = f"alias-resolution-integration-{tmp_path.name}"
-    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    client = MlflowClient(tracking_uri=tracking_uri)
     if client.get_experiment_by_name(experiment_name) is None:
         client.create_experiment(
             experiment_name,
@@ -93,6 +94,7 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
 
     with mlflow.start_run(run_name="tiny-model-run") as run:
         run_id = run.info.run_id
+        assert run.info.artifact_uri is not None
         run_artifact_path = _artifact_uri_to_path(run.info.artifact_uri)
         _assert_path_within(run_artifact_path, artifacts_dir)
         mlflow.pyfunc.log_model(
@@ -119,11 +121,7 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
     spec = NeuralPreconditionerConfig(
         name="neural",
         type=PreconditionerType.NEURAL,
-        model_ref={
-            "source": "registered",
-            "name": model_name,
-            "alias": "@solutions",
-        },
+        model_ref=RegisteredModelRefConfig(name=model_name, alias="@solutions"),
     )
 
     download_root = tmp_path / "downloads"
@@ -146,7 +144,7 @@ def test_experiment_id_registration_resolves_via_latest(tmp_path: Path) -> None:
 
     mlflow.set_tracking_uri(tracking_uri)
     experiment_name = f"experiment-id-registration-{tmp_path.name}"
-    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    client = MlflowClient(tracking_uri=tracking_uri)
     if client.get_experiment_by_name(experiment_name) is None:
         client.create_experiment(
             experiment_name,
@@ -205,7 +203,7 @@ def test_two_experiments_same_dataset_no_alias_collision(tmp_path: Path) -> None
 
     mlflow.set_tracking_uri(tracking_uri)
     experiment_name = f"no-collision-{tmp_path.name}"
-    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    client = MlflowClient(tracking_uri=tracking_uri)
     if client.get_experiment_by_name(experiment_name) is None:
         client.create_experiment(
             experiment_name,

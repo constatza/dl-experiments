@@ -38,8 +38,8 @@ def test_training_run_spec_name_has_readable_timestamp() -> None:
     """Training run specs use the experiment display name plus a readable timestamp."""
     entry = ExperimentEntry(
         id="exp-1",
-        dataset_id="dataset-1",
-        model_id="model-1",
+        dataset="dataset-1",
+        model="model-1",
         display_name="Experiment One",
     )
 
@@ -107,8 +107,8 @@ def test_registration_tags_optional_model_class() -> None:
     """Registration tags include model_class only when provided."""
     entry = ExperimentEntry(
         id="exp-1",
-        dataset_id="dataset-1",
-        model_id="model-1",
+        dataset="dataset-1",
+        model="model-1",
         display_name="Experiment One",
     )
 
@@ -121,8 +121,8 @@ def test_registration_tags_as_dict_excludes_none() -> None:
     """Registration tags omit None values from the MLflow payload."""
     entry = ExperimentEntry(
         id="exp-1",
-        dataset_id="dataset-1",
-        model_id="model-1",
+        dataset="dataset-1",
+        model="model-1",
         display_name="Experiment One",
     )
 

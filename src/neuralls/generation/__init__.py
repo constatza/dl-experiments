@@ -74,8 +74,3 @@ __all__ = [
 __version__ = "2.0.0"
 __author__ = "neuralls Contributors"
 __description__ = "SOLID-compliant data generation framework"
-
-# TODO(repo-split): reduce cross-package dependencies before considering a
-# standalone generation package. This layer still relies on solver tracing,
-# normalization trace containers, shared constants, and dataset I/O helpers, so
-# it is not as extraction-ready as `neuralls.solver`.

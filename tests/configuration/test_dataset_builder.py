@@ -11,6 +11,7 @@ import importlib.util
 
 import numpy as np
 import pytest
+from dlkit.tools.config.core.patching import patch_model
 
 # Skip all tests if dlkit has circular import issue
 pytestmark = pytest.mark.skipif(
@@ -64,7 +65,7 @@ def mock_settings(tmp_path: Path) -> GeneralSettings:
         MODEL=ModelSettings(name="LinearModel"),
         DATASET=DatasetSettings(name="FlexibleDataset"),
         TRAINING=TrainingSettings(
-            trainer=TrainerSettings(max_epochs=1, default_root_dir=str(trainer_root))
+            trainer=TrainerSettings(max_epochs=1, default_root_dir=trainer_root)
         ),
     )
 
@@ -127,7 +128,7 @@ class TestWithDatasetArrays:
         sample_matrix_array: np.ndarray,
     ) -> None:
         """Test dataset injection includes matrix for GraphDataset."""
-        graph_settings = mock_settings.update_with({"DATASET": {"name": "GraphDataset"}})
+        graph_settings = patch_model(mock_settings, {"DATASET": {"name": "GraphDataset"}})
         updated = with_dataset_arrays(
             graph_settings,
             sample_rhs_array,
@@ -135,3 +136,24 @@ class TestWithDatasetArrays:
             sample_matrix_array,
         )
         assert any(f.name == "matrix" for f in updated.DATASET.features)
+
+    def test_with_dataset_arrays_keeps_original_settings_immutable(
+        self,
+        mock_settings: GeneralSettings,
+        sample_rhs_array: np.ndarray,
+        sample_solutions_array: np.ndarray,
+    ) -> None:
+        """Dataset injection returns a new settings object."""
+        updated = with_dataset_arrays(
+            mock_settings,
+            sample_rhs_array,
+            sample_solutions_array,
+        )
+
+        assert updated is not mock_settings
+        assert mock_settings.DATASET is not None
+        assert mock_settings.DATASET.features == ()
+        assert mock_settings.DATASET.targets == ()
+        assert updated.DATASET is not None
+        assert updated.DATASET.features is not None
+        assert updated.DATASET.targets is not None

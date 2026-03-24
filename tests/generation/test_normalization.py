@@ -32,6 +32,8 @@ def test_normal_strategy_normalization():
     )
     R = output.rhs
     X = output.solutions
+    assert R is not None
+    assert X is not None
 
     # Check RHS norms
     rhs_norms = [norm(R[i]) for i in range(len(R))]
@@ -73,6 +75,8 @@ def test_krylov_strategy_normalization():
     )
     R = output.rhs
     X = output.solutions
+    assert R is not None
+    assert X is not None
 
     # Check RHS norms
     rhs_norms = [norm(R[i]) for i in range(len(R))]

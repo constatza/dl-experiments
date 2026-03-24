@@ -38,9 +38,9 @@ def pipe(*transforms: Transform[T]) -> Transform[T]:
         >>> # With settings transformations
         >>> from dlkit.tools.config.core.settings import GeneralSettings
         >>> def configure_dataset(settings: GeneralSettings) -> GeneralSettings:
-        ...     return settings.update_with({"DATASET": new_dataset})
+        ...     return patch_model(settings, {"DATASET": new_dataset})
         >>> def configure_mlflow(settings: GeneralSettings) -> GeneralSettings:
-        ...     return settings.patch({"MLFLOW": mlflow_config})
+        ...     return patch_model(settings, {"MLFLOW": mlflow_config})
         >>> pipeline = pipe(configure_dataset, configure_mlflow)
         >>> updated_settings = pipeline(original_settings)
 

@@ -18,10 +18,12 @@ References:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 from collections.abc import Callable
 
 import numpy as np
+from scipy.sparse import spmatrix
+from scipy.sparse.linalg import LinearOperator
 
 from .monitoring.trace_mode import TraceMode
 
@@ -34,6 +36,10 @@ if TYPE_CHECKING:
     from .models.state import SolverState
     from .monitoring.iteration_history import IterationHistory
     from .monitoring.event_log import EventLog
+
+type LinearSystemOperator = (
+    Callable[[NDArray], NDArray] | NDArray | spmatrix | LinearOperator
+)
 
 
 class IterativeSolverBase[S: SolverState](ABC):
@@ -102,7 +108,7 @@ class IterativeSolverBase[S: SolverState](ABC):
 
     def solve(
         self,
-        A: Callable[[NDArray], NDArray] | NDArray,
+        A: LinearSystemOperator,
         b: NDArray,
         x0: NDArray | None = None,
         *,
@@ -235,7 +241,7 @@ class IterativeSolverBase[S: SolverState](ABC):
 
     def _validate_system(
         self,
-        A: Callable[[NDArray], NDArray] | NDArray,
+        A: LinearSystemOperator,
         b: NDArray,
         x0: NDArray | None,
     ) -> None:
@@ -260,7 +266,7 @@ class IterativeSolverBase[S: SolverState](ABC):
 
     def _prepare_operator(
         self,
-        A: Callable[[NDArray], NDArray] | NDArray,
+        A: LinearSystemOperator,
         b: NDArray,
     ) -> Callable[[NDArray], NDArray]:
         """Prepare linear operator A.
@@ -281,10 +287,10 @@ class IterativeSolverBase[S: SolverState](ABC):
 
         # If already callable, return as is
         if callable(A) and not isinstance(A, np.ndarray):
-            return A  # type: ignore[return-value]
+            return cast(Callable[[NDArray], NDArray], A)
 
         # Convert to LinearOperator for consistency
-        linear_op = aslinearoperator(A)
+        linear_op = aslinearoperator(cast(Any, A))
         return linear_op.matvec
 
     @abstractmethod
@@ -294,7 +300,7 @@ class IterativeSolverBase[S: SolverState](ABC):
         b: NDArray,
         x0: NDArray | None,
         maxiter: int | None = None,
-    ) -> SolverState:
+    ) -> S:
         """Initialize solver state for iteration 0.
 
         Args:
@@ -318,7 +324,7 @@ class IterativeSolverBase[S: SolverState](ABC):
         linear_op: Callable[[NDArray], NDArray],
         state: S,
         breakdown_tol: float | None = None,
-    ) -> SolverState:
+    ) -> S:
         """Execute single solver iteration.
 
         Args:
@@ -414,8 +420,7 @@ class IterativeSolverBase[S: SolverState](ABC):
             if self.trace_mode == TraceMode.FULL and isinstance(state, HasVectors):
                 residual = state.r
                 solution = state.u
-                if hasattr(state, "p"):
-                    direction = state.p
+                direction = state.d
 
             self.iteration_history.log_iteration(
                 residual_norm=state.residual_norm,

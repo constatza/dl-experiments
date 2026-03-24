@@ -3,7 +3,7 @@
 Architecture:
     Layer 1: RandomInputProvider or ArchiveInputProvider → generate solutions
     Layer 2: ComputeRhsTransform → compute RHS = A @ x
-    Layer 3: SciPyCGSolver → run CG with search direction tracking
+    Layer 3: PCG solver → run CG with search direction tracking
     Layer 4: Collect (A @ p_k, p_k) pairs from iteration history
 
 This strategy collects (A @ p_k, p_k) pairs from CG iterations without requiring
@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..interfaces import GeneratedSamples, ArchiveData
-from ..runner import register_strategy
+from ..runner import register_single_rhs_strategy
 from ..strategy_configs import SearchDirectionsConfig
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
 from ..providers import HybridInputProvider
@@ -24,7 +24,7 @@ from ...normalization import ResidualTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_residual_traces
 
 
-@register_strategy
+@register_single_rhs_strategy
 class SearchDirectionsStrategy:
     """Collect search direction pairs from CG for neural preconditioner training.
 
@@ -129,55 +129,32 @@ class SearchDirectionsStrategy:
         sample_indices: list[np.ndarray] = []
         iteration_indices: list[np.ndarray] = []
 
-        # Import scipy CG solver
-        from ...solver.scipy_wrapper import SciPyCGSolver
-        from ...solver.monitoring.iteration_history import IterationHistory
+        from ...solver import pcg
         from ...solver.monitoring.trace_mode import TraceMode
 
         for sample_idx, rhs_vec in enumerate(rhs_samples):
-            # Run classical CG (scipy) for fixed number of iterations
-            iteration_history = IterationHistory(mode=TraceMode.FULL)
-            solver = SciPyCGSolver(iteration_history=iteration_history)
-
-            _, info = solver.solve(
+            _, info = pcg(
                 A=matrix,
                 b=rhs_vec,
                 x0=np.zeros(n, dtype=np.float64),
                 maxiter=cg_iters,
                 rtol=1e-20,  # Very tight to prevent early convergence
                 atol=1e-20,  # Very tight to run full iterations
-                trace_mode="full",  # Collect all intermediate vectors
+                trace_mode=TraceMode.FULL,
             )
 
-            # Extract search directions from iteration history
-            # Guard: Check if directions are available
             if (
                 info.iteration_history is None
                 or info.iteration_history.directions is None
             ):
-                raise RuntimeError(
-                    "Search directions not available from scipy CG solver.\n"
-                    "The scipy.sparse.linalg.cg implementation does not expose "
-                    "search directions (p_k vectors). To use search direction collection:\n"
-                    "  1. Implement a custom CG solver that tracks search directions, OR\n"
-                    "  2. Use a different strategy (e.g., residual_trace) for neural preconditioner training.\n"
-                    "\nTODO: Implement custom CG with search direction collection."
-                )
+                raise RuntimeError("Search directions were not captured in FULL trace mode.")
 
             direction_seq = info.iteration_history.directions.to_array()
-
-            # Guard: Check if directions array is empty (silent failure)
             if direction_seq.size == 0:
-                raise RuntimeError(
-                    f"Search directions array is empty for sample {sample_idx + 1}.\n"
-                    "This indicates the scipy CG solver did not collect search directions.\n"
-                    "See error message above for solutions."
-                )
+                raise RuntimeError(f"Search directions array is empty for sample {sample_idx + 1}.")
 
             direction_seq = direction_seq[::config.every_n]
 
-            # Compute search direction products: A @ p_k
-            # (scipy doesn't provide these, so we compute them)
             product_seq = np.array([matrix @ p for p in direction_seq], dtype=np.float64)
 
             num_pairs = direction_seq.shape[0]

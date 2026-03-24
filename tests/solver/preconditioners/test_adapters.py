@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
+from neuralls.configuration.preconditioner import PreconditionerType
 from neuralls.solver.preconditioners.ports import PredictorAdapter, PredictorPort
 
 if TYPE_CHECKING:
@@ -230,7 +231,7 @@ def test_adapter_can_be_injected_into_factory(
 
     config = NeuralPreconditionerConfig(
         name="neural",
-        type="neural",
+        type=PreconditionerType.NEURAL,
         checkpoint_path=mock_checkpoint,
     )
 

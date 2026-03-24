@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..interfaces import GeneratedSamples, ArchiveData
-from ..runner import register_strategy
+from ..runner import register_single_rhs_strategy
 from ..strategy_configs import ResidualErrorConfig
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
 from ..providers import HybridInputProvider, RandomInputProvider, provide_solutions
@@ -26,6 +26,7 @@ from ..trace_utils import _referenced_sample_count, _trim_error_traces
 
 class _BaseResidualsStrategy:
     ConfigType = ResidualErrorConfig
+    name: str
 
     def _resolve_available_systems(
         self,
@@ -230,12 +231,12 @@ class _BaseResidualsStrategy:
             error_traces=error_traces,
         )
 
-@register_strategy
+@register_single_rhs_strategy
 class ResidualsStrategy(_BaseResidualsStrategy):
     name = "residuals"
 
 
-@register_strategy
+@register_single_rhs_strategy
 class GaussianResidualsStrategy(_BaseResidualsStrategy):
     name = "gaussian_residuals"
 

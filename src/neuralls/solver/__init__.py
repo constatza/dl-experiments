@@ -125,7 +125,6 @@ __all__ = [
     "IterativeSolverBase",
     # State models
     "SolverState",
-    "SolverState",
     "CGState",
     "DirectionHistory",
     "ResidualHistory",
@@ -168,9 +167,3 @@ __all__ = [
 __version__ = "2.0.0"
 __author__ = "neuralls Contributors"
 __description__ = "Modular Flexible CG solver with strategy pattern design"
-
-# TODO(repo-split): extract `neuralls.solver` into its own package first if this
-# monorepo is decomposed. The boundary is already comparatively clean: the rest
-# of the repo mostly consumes factory functions, result models, and
-# preconditioner interfaces. The main follow-up is to internalize the remaining
-# shared defaults imported from `neuralls.constants`.

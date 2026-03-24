@@ -159,10 +159,7 @@ def test_factory_creates_identity_preconditioner(well_conditioned_matrix: NDArra
 
 def test_factory_creates_identity_for_none_type(well_conditioned_matrix: NDArray) -> None:
     """Test that factory creates Identity for 'none' type alias."""
-    # Use BasePreconditionerConfig since StandardPreconditionerConfig doesn't accept NONE
-    from neuralls.configuration.preconditioner import BasePreconditionerConfig
-
-    config = BasePreconditionerConfig(name="none", type=PreconditionerType.NONE)
+    config = StandardPreconditionerConfig(name="none", type=PreconditionerType.NONE)
 
     precond = create_preconditioner(well_conditioned_matrix, config)
 
@@ -345,6 +342,7 @@ def test_neural_preconditioner_cleanup_on_delete(
     precond = create_preconditioner(well_conditioned_matrix, config, adapter=mock_adapter)
 
     # Use the preconditioner
+    assert isinstance(precond, NeuralPreconditioner)
     predictor = mock_adapter.predictor
     assert not predictor.cleaned_up
     _ = precond.apply(residual_vector)

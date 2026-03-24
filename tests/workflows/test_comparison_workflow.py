@@ -9,9 +9,13 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import tomli_w
 
+from neuralls.configuration.comparison import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.configuration.preconditioner import (
+    LoggedModelRefConfig,
     NeuralPreconditionerConfig,
     PreconditionerType,
+    PreconditionerConfig,
+    RegisteredModelRefConfig,
     StandardPreconditionerConfig,
 )
 from neuralls.solver.models.result import CGComparisonResult
@@ -97,12 +101,37 @@ def _configure_mock_mlflow(mock_mlflow: MagicMock, run_id: str = "comp-run-id") 
 
 def _mock_cfg(
     *,
-    preconditioners: list[object] | None = None,
+    preconditioners: list[PreconditionerConfig] | None = None,
 ) -> MagicMock:
     cfg = MagicMock()
     cfg.general.data.dataset_alias = None
     cfg.preconditioners = tuple(preconditioners or [])
     return cfg
+
+
+def _solver_params() -> ComparisonGeneral:
+    return ComparisonGeneral(
+        params=SolverParams(
+            rtol=1.0e-6,
+            atol=1.0e-14,
+            max_iterations=10,
+            stopping_criterion="residual_norm",
+            m_max=20,
+            breakdown_tol=None,
+        ),
+        data=ComparisonData(
+            matrix_path=Path("/tmp/matrix.npy"),
+            rhs_path=Path("/tmp/rhs.npy"),
+        ),
+    )
+
+
+def _logged_ref(run_id: str) -> LoggedModelRefConfig:
+    return LoggedModelRefConfig(run_id=run_id)
+
+
+def _registered_ref(name: str, alias: str) -> RegisteredModelRefConfig:
+    return RegisteredModelRefConfig(name=name, alias=alias)
 
 
 def _typed_comparison_result(plot_path: Path) -> ComparisonResult:
@@ -124,7 +153,7 @@ def _typed_comparison_result(plot_path: Path) -> ComparisonResult:
             )
         },
         summary="ok",
-        solver_params=object(),
+        solver_params=_solver_params(),
         plot_paths=PlotPaths(convergence=plot_path),
         preconditioners=("none",),
         condition_numbers={"none": 1.0},
@@ -164,7 +193,7 @@ def test_validate_neural_preconditioner_rejects_checkpoint_path(tmp_path: Path) 
         name="neural",
         type=PreconditionerType.NEURAL,
         checkpoint_path=tmp_path / "model.ckpt",
-        model_ref={"source": "logged", "run_id": "run-1"},
+        model_ref=_logged_ref("run-1"),
     )
     try:
         _validate_neural_preconditioner(spec)
@@ -180,7 +209,7 @@ def test_resolve_neural_preconditioners_validates_all() -> None:
         NeuralPreconditionerConfig(
             name="neural",
             type=PreconditionerType.NEURAL,
-            model_ref={"source": "logged", "run_id": "run-1"},
+            model_ref=_logged_ref("run-1"),
         ),
     ]
     resolved = _resolve_neural_preconditioners(specs)
@@ -255,7 +284,7 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
     payload = ComparisonResult(
         results={},
         summary="ok",
-        solver_params=object(),
+        solver_params=_solver_params(),
         preconditioners=("none",),
         plot_paths=PlotPaths(
             convergence=convergence,
@@ -263,16 +292,18 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
         ),
         recommendations=ComparisonRecommendations(),
     )
-    logged_snapshot: dict[str, object] = {}
+    logged_files: set[str] = set()
+    comparison_json: dict[str, object] = {}
 
     def _capture_logged_artifacts(path: str) -> None:
+        nonlocal logged_files, comparison_json
         root = Path(path)
-        logged_snapshot["files"] = {
+        logged_files = {
             item.relative_to(root).as_posix()
             for item in root.rglob("*")
             if item.is_file()
         }
-        logged_snapshot["comparison_json"] = json.loads(
+        comparison_json = json.loads(
             (root / "comparison.json").read_text(encoding="utf-8")
         )
 
@@ -291,9 +322,10 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
         )
 
     assert outcomes[0].success is True
-    assert "figures/convergence.png" in logged_snapshot["files"]
-    assert "figures/condition_numbers.png" in logged_snapshot["files"]
-    plot_paths = logged_snapshot["comparison_json"]["plot_paths"]
+    assert "figures/convergence.png" in logged_files
+    assert "figures/condition_numbers.png" in logged_files
+    plot_paths = comparison_json["plot_paths"]
+    assert isinstance(plot_paths, dict)
     assert plot_paths["convergence"] == "figures/convergence.png"
     assert plot_paths["condition_numbers"] == "figures/condition_numbers.png"
 
@@ -311,7 +343,7 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
             NeuralPreconditionerConfig(
                 name="missing-neural",
                 type=PreconditionerType.NEURAL,
-                model_ref={"source": "registered", "name": "MissingFFNN", "alias": "solutions"},
+                model_ref=_registered_ref("MissingFFNN", "solutions"),
             ),
         ]
     )
@@ -354,7 +386,7 @@ def test_run_comparison_fails_if_all_preconditioners_are_skipped(
             NeuralPreconditionerConfig(
                 name="missing-neural",
                 type=PreconditionerType.NEURAL,
-                model_ref={"source": "registered", "name": "MissingFFNN", "alias": "solutions"},
+                model_ref=_registered_ref("MissingFFNN", "solutions"),
             ),
         ]
     )
@@ -423,11 +455,10 @@ model = "valid-model"
             NeuralPreconditionerConfig(
                 name="registered-neural",
                 type=PreconditionerType.NEURAL,
-                model_ref={
-                    "source": "registered",
-                    "name": "NormScaledLinearFFNN",
-                    "alias": "residuals-100",
-                },
+                model_ref=_registered_ref(
+                    "NormScaledLinearFFNN",
+                    "residuals-100",
+                ),
             ),
         ]
     )

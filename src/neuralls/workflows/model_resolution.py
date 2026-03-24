@@ -157,6 +157,14 @@ def _resolve_registered_ref(
         )
         model_uri = build_registered_model_uri(resolved_model_name, version=resolved_version)
         run_id = version.run_id
+        if run_id is None:
+            raise ValueError(
+                f"Registered model '{resolved_model_name}' version {resolved_version} has no run_id."
+            )
+    if run_id is None:
+        raise ValueError(
+            f"Registered model '{resolved_model_name}' could not be resolved to an MLflow run."
+        )
 
     checkpoint_path = _download_checkpoint_for_run(
         client=client,

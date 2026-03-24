@@ -22,9 +22,9 @@ from loguru import logger
 
 from neuralls.configuration.dataset_identity import resolve_dataset_identity
 from neuralls.configuration.loader import load_batch
+from neuralls.io.toml_loader import load_data_config
 from neuralls.workflows.reporting import ExperimentResult
 from neuralls.workflows.utils.hashing import compute_directory_hash
-from neuralls.workflows.data import load_data_config
 from neuralls.generation import process_config
 from neuralls.workflows.utils.paths import extract_model_name
 from neuralls.workflows.training import train_model
@@ -96,7 +96,10 @@ def run_experiment(
             data_cfg=data_cfg,
             config_path=data_config_path,
         ).name
-        data_dir = process_config(data_cfg, config_path=data_config_path)
+        data_dir = process_config(
+            data_cfg.model_dump(mode="python", exclude_none=True),
+            config_path=data_config_path,
+        )
         validate_data_exists(
             data_dir,
             [

@@ -10,8 +10,8 @@ from typing import Any
 
 import numpy as np
 from dlkit import GeneralSettings
+from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.config.data_entries import ValueFeature, ValueTarget
-from dlkit.tools.config.core.updater import update_settings
 
 
 def create_features_from_array(
@@ -67,7 +67,7 @@ def with_dataset_arrays(
     """Inject dataset arrays into GeneralSettings.
 
     Creates Features from RHS (and matrix if provided) and Targets from
-    solutions, then injects them into settings via update_settings().
+    solutions, then injects them into settings via patch_model().
 
     For datasets named "GraphDataset", includes matrix in features.
 
@@ -102,5 +102,5 @@ def with_dataset_arrays(
         "targets": targets,
     }
 
-    # Inject via update_settings
-    return update_settings(settings, {"DATASET": dataset_dict})
+    # Inject via patch_model
+    return patch_model(settings, {"DATASET": dataset_dict})

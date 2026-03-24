@@ -1,10 +1,4 @@
-"""Tests for SearchDirectionsStrategy (search_directions).
-
-This strategy collects (A @ p_k, p_k) pairs from CG iterations.
-Currently raises RuntimeError because scipy.sparse.linalg.cg does not expose
-internal search direction vectors. Tests verify registration and the expected
-error behaviour until a custom CG implementation is available.
-"""
+"""Tests for SearchDirectionsStrategy (search_directions)."""
 
 from __future__ import annotations
 
@@ -12,6 +6,7 @@ import numpy as np
 import pytest
 
 from neuralls.generation import run_generation
+from neuralls.generation.runner import SingleRhsStrategyRegistration, _registry
 
 
 @pytest.fixture
@@ -21,40 +16,62 @@ def single_rhs(spd_matrix: np.ndarray) -> np.ndarray:
     return rng.standard_normal(spd_matrix.shape[0])
 
 
-def test_search_directions_registered() -> None:
-    """SearchDirectionsStrategy is registered under 'search_directions'."""
-    from neuralls.generation.runner import _registry
-
-    assert "search_directions" in _registry._strategies
+def test_search_directions_registered_as_single_rhs_strategy() -> None:
+    """SearchDirectionsStrategy is registered with explicit single-RHS capability."""
+    registration = _registry._strategies["search_directions"]
+    assert isinstance(registration, SingleRhsStrategyRegistration)
 
 
 def test_search_directions_config_accepts_every_n(spd_matrix: np.ndarray) -> None:
-    """Config accepts every_n field without validation error (raises RuntimeError, not ValueError)."""
+    """Config accepts `every_n` and yields traced direction/product pairs."""
     cfg = {"samples": 2, "cg_iters": 4, "seed": 0, "every_n": 2}
 
-    # Should fail with RuntimeError (no search directions from scipy), NOT ValidationError
-    with pytest.raises(RuntimeError, match="search directions"):
-        run_generation("search_directions", spd_matrix, cfg=cfg, single_rhs=np.ones(spd_matrix.shape[0]))
+    result = run_generation(
+        "search_directions",
+        spd_matrix,
+        cfg=cfg,
+        single_rhs=np.ones(spd_matrix.shape[0]),
+    )
+
+    assert result.residual_traces is not None
+    assert result.residual_traces.search_directions is not None
+    assert result.residual_traces.search_direction_products is not None
+    assert result.residual_traces.search_directions.shape == result.residual_traces.search_direction_products.shape
+    assert result.residual_traces.search_directions.shape[0] > 0
 
 
-def test_search_directions_raises_not_implemented(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
+def test_search_directions_collects_repeated_single_rhs(
+    spd_matrix: np.ndarray,
+    single_rhs: np.ndarray,
 ) -> None:
-    """Attempting to collect search directions raises RuntimeError with helpful message."""
-    cfg = {"samples": 2, "cg_iters": 4, "seed": 0}
+    """Single-RHS mode keeps the same RHS while collecting CG search directions."""
+    cfg = {"samples": 3, "cg_iters": 4, "seed": 0}
 
-    with pytest.raises(RuntimeError, match="search directions"):
-        run_generation("search_directions", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+    result = run_generation("search_directions", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+
+    assert result.rhs is not None
+    assert result.rhs.shape[1] == single_rhs.shape[0]
+    for row in result.rhs:
+        np.testing.assert_allclose(row, single_rhs)
+
+    assert result.residual_traces is not None
+    assert result.residual_traces.search_directions is not None
+    assert result.residual_traces.search_direction_products is not None
 
 
-def test_search_directions_error_message_helpful(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
+def test_search_direction_products_match_matrix_action(
+    spd_matrix: np.ndarray,
+    single_rhs: np.ndarray,
 ) -> None:
-    """RuntimeError message mentions scipy and suggests alternatives."""
-    cfg = {"samples": 1, "cg_iters": 2, "seed": 0}
+    """Stored products equal `A @ p_k` for the traced directions."""
+    cfg = {"samples": 1, "cg_iters": 3, "seed": 0}
 
-    with pytest.raises(RuntimeError) as exc_info:
-        run_generation("search_directions", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+    result = run_generation("search_directions", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+    traces = result.residual_traces
 
-    msg = str(exc_info.value).lower()
-    assert "scipy" in msg or "search direction" in msg
+    assert traces is not None
+    assert traces.search_directions is not None
+    assert traces.search_direction_products is not None
+
+    expected = np.array([spd_matrix @ direction for direction in traces.search_directions])
+    np.testing.assert_allclose(traces.search_direction_products, expected)

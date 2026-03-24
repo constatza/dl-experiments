@@ -30,6 +30,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from scipy.sparse import spmatrix
 from scipy.sparse.linalg import LinearOperator
 
 from .monitoring.event_log import EventLog
@@ -55,9 +56,11 @@ from ..constants import (
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+type LinearSystemOperator = NDArray | spmatrix | LinearOperator | Callable[[NDArray], NDArray]
+
 
 def flexible_cg(
-    A: NDArray,
+    A: LinearSystemOperator,
     b: NDArray,
     x0: NDArray | None = None,
     *,
@@ -157,9 +160,7 @@ def flexible_cg(
         trace_mode=trace_mode_enum,
     )
 
-    # Solve system (rtol/atol not needed - already in convergence_criterion)
-    # Type ignore needed because solve() accepts both NDArray and Callable
-    x, result = solver.solve(  # type: ignore[arg-type]
+    x, result = solver.solve(
         A,
         b,
         x0,
@@ -173,7 +174,7 @@ def flexible_cg(
 
 
 def pcg(
-    A: NDArray,
+    A: LinearSystemOperator,
     b: NDArray,
     x0: NDArray | None = None,
     *,
@@ -287,9 +288,7 @@ def pcg(
         trace_mode=trace_mode_enum,
     )
 
-    # Solve system (rtol/atol not needed - already in convergence_criterion)
-    # Type ignore needed because solve() accepts both NDArray and Callable
-    x, result = solver.solve(  # type: ignore[arg-type]
+    x, result = solver.solve(
         A,
         b,
         x0,
@@ -303,7 +302,7 @@ def pcg(
 
 
 def scipy_cg(
-    A: NDArray,
+    A: LinearSystemOperator,
     b: NDArray,
     x0: NDArray | None = None,
     *,

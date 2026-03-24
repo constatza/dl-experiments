@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..interfaces import GeneratedSamples, ArchiveData
-from ..runner import register_strategy
+from ..runner import register_single_rhs_strategy
 from ..strategy_configs import ResidualTraceConfig
 from ..helpers import (
     _build_trace_indices,
@@ -27,7 +27,7 @@ from ...normalization import ResidualTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_residual_traces
 
 
-@register_strategy
+@register_single_rhs_strategy
 class ResidualTraceStrategy:
     name = "residual_traces"
     ConfigType = ResidualTraceConfig

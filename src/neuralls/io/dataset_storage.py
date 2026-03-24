@@ -16,6 +16,7 @@ from neuralls.constants import (
     RHS_ARRAY_FILENAME,
     SOLUTIONS_ARRAY_FILENAME,
 )
+from neuralls.generation.data_types import ScaleMetadata
 
 
 @dataclass(frozen=True)
@@ -206,7 +207,7 @@ def save_dataset(
     matrix_norm: float,
     matrix_norm_type: str,
     matrix_value_scale: float = 1.0,
-    scale_metadata: dict[str, Any] | None = None,
+    scale_metadata: ScaleMetadata | None = None,
 ) -> DatasetPaths:
     """Persist dataset as split dense arrays + COO sparse matrix pack."""
     paths = resolve_dataset_paths(dataset_dir)
@@ -257,7 +258,7 @@ def save_dataset_from_sparse(
     matrix_norm: float,
     matrix_norm_type: str,
     matrix_value_scale: float = 1.0,
-    scale_metadata: dict[str, Any] | None = None,
+    scale_metadata: ScaleMetadata | None = None,
 ) -> DatasetPaths:
     """Persist dataset using pre-built sparse COO payload arrays."""
     paths = resolve_dataset_paths(dataset_dir)
@@ -302,7 +303,7 @@ def save_dataset_from_sparse(
         nnz_ptr=nnz_ptr_arr,
         size=size,
         format=SparseFormat.COO,
-        dtype=np.float64,
+        dtype=np.dtype(np.float64),
         value_scale=value_scale,
     )
 

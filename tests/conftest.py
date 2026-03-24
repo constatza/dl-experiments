@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
@@ -131,7 +132,7 @@ def isolate_default_paths_with_tmp_path(
 def guard_repo_root_artifact_leaks(
     repo_root: Path,
     root_artifact_baseline: frozenset[str],
-) -> None:
+) -> Iterator[None]:
     """Fail if a test creates new root-level artifact directories."""
     before = root_artifact_dirs(repo_root)
     yield

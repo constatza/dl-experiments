@@ -38,10 +38,9 @@ from ...configuration.preconditioner import PreconditionerType
 
 if TYPE_CHECKING:
     from neuralls.configuration.preconditioner import (
-        PreconditionerConfig,
+        ConcretePreconditionerConfig,
         IC0PreconditionerConfig,
         NeuralPreconditionerConfig,
-        BasePreconditionerConfig,
     )
     from .ports import PredictorAdapter
 
@@ -65,7 +64,7 @@ class PreconditionerScheduleConfig:
 
 def create_preconditioner(
     matrix: NDArray,
-    config: PreconditionerConfig,
+    config: ConcretePreconditionerConfig,
     adapter: PredictorAdapter | None = None,
 ) -> Preconditioner:
     """Create preconditioner from configuration.
@@ -100,7 +99,7 @@ def create_preconditioner(
 
     # Check if type is NEURAL but config is not NeuralPreconditionerConfig
     if config.type == PreconditionerType.NEURAL:
-        if not isinstance(config, NeuralPreconditionerConfig):  # pyright: ignore[reportUnnecessaryIsInstance]
+        if not isinstance(config, NeuralPreconditionerConfig):
             raise TypeError(
                 f"Neural type requires NeuralPreconditionerConfig, got {type(config)}"
             )
@@ -135,7 +134,7 @@ def create_preconditioner(
     raise ValueError(f"Unsupported preconditioner type: {config.type}")
 
 
-def _extract_schedule(cfg: BasePreconditionerConfig) -> PreconditionerScheduleConfig:
+def _extract_schedule(cfg: ConcretePreconditionerConfig) -> PreconditionerScheduleConfig:
     """Extract scheduling parameters from preconditioner config.
 
     Pure function to extract scheduling concerns from mixed config.

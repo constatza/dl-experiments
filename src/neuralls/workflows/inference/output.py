@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from loguru import logger
@@ -147,7 +147,7 @@ def save_predictions_csv(
             f"Saved prediction samples to CSV: {[str(p) for p in csv_paths]}"
         )
 
-    return csv_paths
+    return csv_paths or []
 
 
 def save_synthetic_predictions(
@@ -315,7 +315,10 @@ def read_mlflow_sidecar(path: Path) -> dict[str, str] | None:
     """
     if not path.exists():
         return None
-    return json.loads(path.read_text())  # type: ignore[return-value]
+    data = json.loads(path.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid MLflow sidecar payload at {path}: expected object")
+    return {str(key): str(value) for key, value in cast(dict[object, object], data).items()}
 
 
 def finalize_mlflow_run(

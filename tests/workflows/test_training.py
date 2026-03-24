@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -254,6 +254,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     from dlkit.tools.config import GeneralSettings, SessionSettings
     from dlkit.tools.config import DataModuleSettings, DatasetSettings, TrainingSettings
     from dlkit.tools.config.dataloader_settings import DataloaderSettings
+    from dlkit.tools.config.mlflow_settings import MLflowSettings
     from dlkit.tools.config.trainer_settings import TrainerSettings
     from dlkit.tools.config.components.model_components import (
         ModelComponentSettings,
@@ -270,24 +271,22 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
 
     settings = GeneralSettings(
         SESSION=SessionSettings(name="test_predict_structure", seed=42),
-        MLFLOW=None,
+        MLFLOW=MLflowSettings(experiment_name="test_predict_structure"),
         OPTUNA=None,
         DATAMODULE=DataModuleSettings(
             dataloader=DataloaderSettings(batch_size=4, num_workers=0),
         ),
         DATASET=DatasetSettings(
             name="FlexibleDataset",
-            features=[ValueFeature(name="x", value=X)],
-            targets=[ValueTarget(name="y", value=Y)],
+            features=(ValueFeature(name="x", value=X),),
+            targets=(ValueTarget(name="y", value=Y),),
         ),
         TRAINING=TrainingSettings(
             trainer=TrainerSettings(
                 fast_dev_run=True,
                 enable_checkpointing=False,
                 accelerator="cpu",
-                enable_progress_bar=False,
-                enable_model_summary=False,
-                default_root_dir=str(tmp_path),
+                default_root_dir=tmp_path,
             ),
             metrics=(
                 MetricComponentSettings(
@@ -304,7 +303,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
         ),
     )
 
-    result = execute(settings)
+    result = cast(TrainingResult, execute(settings))
 
     # Verify predictions were captured
     assert result.predictions is not None, "trainer.predict() should have captured predictions"
@@ -496,3 +495,103 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
         execute_kwargs["run_name"],
     )
     assert execute_kwargs["tags"] is None
+
+
+def test_train_model_max_epochs_override_keeps_original_settings_immutable(
+    tmp_path: Path,
+) -> None:
+    """`max_epochs` override patches a fresh settings object before execute()."""
+    from dlkit import GeneralSettings
+    from dlkit.tools.config import (
+        DatasetSettings,
+        ModelComponentSettings as ModelSettings,
+        SessionSettings,
+        TrainingSettings,
+    )
+    from dlkit.tools.config.trainer_settings import TrainerSettings
+    from neuralls.configuration.domain import ExperimentWorkspace
+    from neuralls.workflows.training import train_model
+
+    config_path = tmp_path / "model.toml"
+    data_config_path = tmp_path / "data.toml"
+    config_path.write_text("")
+    data_config_path.write_text("")
+    trainer_root = tmp_path / "trainer-root"
+    trainer_root.mkdir()
+
+    base_settings = GeneralSettings(
+        SESSION=SessionSettings(seed=42),
+        MODEL=ModelSettings(name="LinearModel"),
+        DATASET=DatasetSettings(name="FlexibleDataset"),
+        TRAINING=TrainingSettings(
+            trainer=TrainerSettings(max_epochs=1, default_root_dir=trainer_root)
+        ),
+    )
+
+    workspace = ExperimentWorkspace(
+        dataset_id="dataset-1",
+        run_id="workspace-run",
+        root_dir=tmp_path / "workspace",
+        data_dir=tmp_path / "workspace" / "data",
+    )
+    workspace.checkpoint_dir.mkdir(parents=True)
+    checkpoint_path = workspace.checkpoint_dir / "model.ckpt"
+    checkpoint_path.write_text("checkpoint")
+
+    experiment = SimpleNamespace(
+        settings=base_settings,
+        workspace=workspace,
+        spec=SimpleNamespace(
+            experiment_id="exp-1",
+            experiment_display_name="Experiment One",
+            dataset_registry_id="dataset-1",
+            dataset_display_name="Dataset One",
+            model_registry_id=None,
+            model_display_name=None,
+        ),
+    )
+
+    with (
+        patch("neuralls.workflows.training.load_experiment", return_value=experiment),
+        patch("neuralls.workflows.training._load_and_prepare_data", return_value=(None, [], [])),
+        patch(
+            "neuralls.workflows.training._configure_training_pipeline",
+            return_value=(base_settings, workspace),
+        ),
+        patch(
+            "neuralls.workflows.training.execute",
+            return_value=SimpleNamespace(run_id="run-123", metrics={}),
+        ) as mock_execute,
+        patch("neuralls.workflows.training.get_latest_checkpoint", return_value=checkpoint_path),
+        patch(
+            "neuralls.workflows.training._resolve_mlflow_logging_config",
+            return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
+        ),
+        patch(
+            "neuralls.workflows.training._resolve_mlflow_run_ids",
+            return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
+        ),
+        patch("neuralls.workflows.training._log_training_context"),
+        patch("neuralls.workflows.training.write_mlflow_sidecar"),
+        patch("neuralls.workflows.training._stage_training_artifacts"),
+        patch("neuralls.workflows.training._log_training_evaluation"),
+        patch("neuralls.workflows.training.log_artifacts_to_mlflow"),
+    ):
+        train_model(
+            config_path=config_path,
+            data_config_path=data_config_path,
+            output_root=tmp_path / "output",
+            experiment_id="exp-1",
+            experiment_display_name="Experiment One",
+            dataset_registry_id="dataset-1",
+            dataset_display_name="Dataset One",
+            max_epochs=9,
+        )
+
+    execute_settings = mock_execute.call_args.args[0]
+    assert execute_settings.TRAINING is not None
+    assert execute_settings.TRAINING.trainer is not None
+    assert execute_settings.TRAINING.trainer.max_epochs == 9
+    assert base_settings.TRAINING is not None
+    assert base_settings.TRAINING.trainer is not None
+    assert base_settings.TRAINING.trainer.max_epochs == 1

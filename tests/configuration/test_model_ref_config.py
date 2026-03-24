@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from neuralls.configuration.preconditioner import NeuralPreconditionerConfig, PreconditionerType
+from neuralls.configuration.preconditioner import (
+    LoggedModelRefConfig,
+    NeuralPreconditionerConfig,
+    PreconditionerType,
+    RegisteredModelRefConfig,
+)
 
 
 def test_registered_model_ref_requires_exactly_one_selector() -> None:
@@ -14,12 +19,11 @@ def test_registered_model_ref_requires_exactly_one_selector() -> None:
         NeuralPreconditionerConfig(
             name="neural",
             type=PreconditionerType.NEURAL,
-            model_ref={
-                "source": "registered",
-                "name": "dataset-model",
-                "alias": "candidate",
-                "version": 1,
-            },
+            model_ref=RegisteredModelRefConfig(
+                name="dataset-model",
+                alias="candidate",
+                version=1,
+            ),
         )
 
 
@@ -29,10 +33,7 @@ def test_logged_model_ref_requires_filter_for_latest() -> None:
         NeuralPreconditionerConfig(
             name="neural",
             type=PreconditionerType.NEURAL,
-            model_ref={
-                "source": "logged",
-                "latest": True,
-            },
+            model_ref=LoggedModelRefConfig(latest=True),
         )
 
 
@@ -41,9 +42,7 @@ def test_logged_model_ref_with_run_id_is_valid() -> None:
     cfg = NeuralPreconditionerConfig(
         name="neural",
         type=PreconditionerType.NEURAL,
-        model_ref={
-            "source": "logged",
-            "run_id": "abc123",
-        },
+        model_ref=LoggedModelRefConfig(run_id="abc123"),
     )
+    assert cfg.model_ref is not None
     assert cfg.model_ref.source == "logged"

@@ -34,7 +34,13 @@ def sample_rhs(sample_spd_matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def test_solve_config_default() -> None:
     """Test default SolveConfig values."""
-    cfg = SolveConfig()
+    cfg = SolveConfig(
+        method="direct",
+        rtol=1e-15,
+        atol=0.0,
+        max_iters=1_000_000,
+        assume_pos_def=True,
+    )
 
     assert cfg.method == "direct"
     assert cfg.rtol > 0.0  # Has a default value
@@ -64,7 +70,13 @@ def test_solve_config_frozen() -> None:
     """Test that SolveConfig is frozen (immutable)."""
     from pydantic_core import ValidationError as PydanticValidationError
 
-    cfg = SolveConfig()
+    cfg = SolveConfig(
+        method="direct",
+        rtol=1e-15,
+        atol=0.0,
+        max_iters=1_000_000,
+        assume_pos_def=True,
+    )
 
     with pytest.raises(PydanticValidationError, match="Instance is frozen"):
         cfg.method = "cg"  # type: ignore[misc]
@@ -212,7 +224,7 @@ def test_solve_linear_systems_cg_tolerance_effect(
 def test_eigenvector_inverse_with_solve_config() -> None:
     """Test EigenvectorInverseStrategy with custom solve config."""
     from neuralls.generation.strategies.eigenvector import EigenvectorInverseStrategy
-    from neuralls.generation.strategy_configs import EigenvectorInverseConfig, SolveConfig
+    from neuralls.generation.strategy_configs import SolveConfig
 
     # Create symmetric matrix
     n = 20
@@ -280,24 +292,62 @@ def test_solve_config_pydantic_validation() -> None:
     from pydantic import ValidationError as PydanticValidationError
 
     # Valid config
-    SolveConfig(method="direct", rtol=1e-12, atol=0.0)
+    SolveConfig(
+        method="direct",
+        rtol=1e-12,
+        atol=0.0,
+        max_iters=1_000_000,
+        assume_pos_def=True,
+    )
 
     # Invalid method
     with pytest.raises(PydanticValidationError):
-        SolveConfig(method="invalid")  # type: ignore[arg-type]
+        SolveConfig.model_validate(
+            {
+                "method": "invalid",
+                "rtol": 1e-15,
+                "atol": 0.0,
+                "max_iters": 1_000_000,
+                "assume_pos_def": True,
+            }
+        )
 
     # Negative rtol
     with pytest.raises(PydanticValidationError):
-        SolveConfig(rtol=-1.0)
+        SolveConfig(
+            method="direct",
+            rtol=-1.0,
+            atol=0.0,
+            max_iters=1_000_000,
+            assume_pos_def=True,
+        )
 
     # Negative atol
     with pytest.raises(PydanticValidationError):
-        SolveConfig(atol=-1.0)
+        SolveConfig(
+            method="direct",
+            rtol=1e-15,
+            atol=-1.0,
+            max_iters=1_000_000,
+            assume_pos_def=True,
+        )
 
     # Invalid max_iters (zero)
     with pytest.raises(PydanticValidationError):
-        SolveConfig(max_iters=0)
+        SolveConfig(
+            method="direct",
+            rtol=1e-15,
+            atol=0.0,
+            max_iters=0,
+            assume_pos_def=True,
+        )
 
     # max_iters too large (exceeds MAX_ITERATIONS_UPPER_LIMIT)
     with pytest.raises(PydanticValidationError):
-        SolveConfig(max_iters=10_000_000)  # Way over limit
+        SolveConfig(
+            method="direct",
+            rtol=1e-15,
+            atol=0.0,
+            max_iters=10_000_000,
+            assume_pos_def=True,
+        )

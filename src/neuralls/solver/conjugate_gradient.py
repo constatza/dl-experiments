@@ -45,7 +45,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from .models.state import CGState, KrylovState, SolverState
+from .models.state import CGState
 from ..constants import DEFAULT_ATOL, DEFAULT_RTOL
 from .base import IterativeSolverBase
 from .strategies.convergence import CombinedToleranceCriterion, IConvergenceCriterion
@@ -67,7 +67,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-class ConjugateGradientSolver(IterativeSolverBase[KrylovState]):
+class ConjugateGradientSolver(IterativeSolverBase[CGState]):
     """Concrete Conjugate Gradient solver implementing the Strategy pattern.
 
     Provides common CG iteration logic and delegates direction computation
@@ -192,9 +192,9 @@ class ConjugateGradientSolver(IterativeSolverBase[KrylovState]):
     def _iterate_step(
         self,
         linear_op: Callable[[NDArray], NDArray],
-        state: KrylovState,
+        state: CGState,
         breakdown_tol: float | None = None,
-    ) -> SolverState:
+    ) -> CGState:
         """Execute single CG iteration.
 
         Unified CG iteration merging KrylovSolverBase and ConjugateGradientBase logic:
@@ -291,7 +291,7 @@ class ConjugateGradientSolver(IterativeSolverBase[KrylovState]):
 
     def _check_stopping(
         self,
-        state: KrylovState,
+        state: CGState,
         rtol: float,
         atol: float,
         maxiter: int,
@@ -336,7 +336,7 @@ class ConjugateGradientSolver(IterativeSolverBase[KrylovState]):
 
     def _build_result(
         self,
-        state: SolverState,
+        state: CGState,
         rtol: float,
         atol: float,
         breakdown_tol: float | None = None,
@@ -375,9 +375,7 @@ class ConjugateGradientSolver(IterativeSolverBase[KrylovState]):
         )
 
         # Fallback to CGState.residual_history if iteration_history unavailable
-        from .models.protocols import HasDirectionHistory
-
-        if residual_history_abs is None and isinstance(state, HasDirectionHistory):
+        if residual_history_abs is None:
             residual_history_abs = list(state.residual_history.norms_abs)
             # Compute relative residuals with consistent zero-RHS handling
             residual_history_rel = [

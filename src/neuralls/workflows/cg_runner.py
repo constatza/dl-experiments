@@ -10,6 +10,7 @@ concerns, not core solver algorithms.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import numpy as np
 from scipy.linalg import norm
 
@@ -28,7 +29,7 @@ def run_cg_comparison(
     A: np.ndarray,
     b: np.ndarray,
     *,
-    preconditioners: dict[str, Preconditioner],
+    preconditioners: Mapping[str, Preconditioner],
     x0: np.ndarray | None = None,
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
