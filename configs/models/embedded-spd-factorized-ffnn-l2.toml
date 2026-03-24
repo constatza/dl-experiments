@@ -3,13 +3,14 @@ seed = 42
 precision = "float64"
 
 [MODEL]
-# Symmetric linear layer with norm scaling
-name = "NormScaledSymmetricLinear"
+# Norm-scaled embedded FFNN with SPD-factorized body layers.
+name = "NormScaledEmbeddedSPDFactorizedFFNN"
 module_path = "dlkit.nn.ffnn"
+hidden_size = 500
+num_layers = 3
+residual = true
 
 [TRAINING]
-# Checkpoint to resume training from (full training state)
-# resume_from_checkpoint = "/data/projects/graph-cg/data/output/checkpoints/symmetric.ckpt"
 [TRAINING.lr_tuner]
 min_lr = 1e-5
 max_lr = 1e-1
@@ -23,29 +24,35 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "symmetric"
+filename = "embedded-spd-factorized-ffnn-l2"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
 every_n_epochs = 50
 enable_version_counter = false
 
+[[TRAINING.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "val_loss"
+patience = 60
+mode = "min"
+
 [TRAINING.optimizer]
-lr = 5e-2
+lr = 1e-2
+name = "AdamW"
 
 [TRAINING.scheduler]
 name = "ReduceLROnPlateau"
-factor = 0.5
-patience = 10
-cooldown = 5
+factor = 0.2
+patience = 5
+cooldown = 10
 threshold = 1e-2
-min_lr = 1e-7
+min_lr = 1e-14
 
 [TRAINING.loss_function]
-name = "relative_energy_norm_loss"
+name = "normalized_vector_norm_loss"
 module_path = "dlkit.core.training.functional"
 target_key = "targets.solutions"
-extra_inputs = [{ key = "features.matrix", arg = "matrix" }]
 
 [[TRAINING.metrics]]
 name = "NormalizedVectorNormError"
@@ -54,21 +61,17 @@ norm_ord = 2
 vector_dim = -1
 
 [DATASET]
-# Dataset uses PRE-NORMALIZED data from the data generation pipeline.
-# Data is normalized during generation and saved as split arrays + manifest.
-# NO additional transforms are applied during training to avoid double normalization.
-# Features/targets are injected programmatically at runtime as path-based entries.
 name = "FlexibleDataset"
 memmap_cache = true
 
 [DATAMODULE]
-
 name = "InMemoryModule"
 
 [DATAMODULE.dataloader]
 num_workers = 0
-batch_size = 32  # Reduced for small eigenvector dataset (504 samples -> ~15 batches)
+batch_size = 32
 pin_memory = true
 shuffle = true
+
 [OPTUNA]
 enabled = false

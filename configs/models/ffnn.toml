@@ -21,7 +21,7 @@ mode = "linear"
 
 
 [TRAINING.trainer]
-max_epochs = 200
+max_epochs = 300
 accelerator = "auto"
 enable_checkpointing = true
 

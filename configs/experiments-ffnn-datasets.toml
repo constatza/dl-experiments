@@ -1,0 +1,110 @@
+# Master registry for constant-width FFNN experiments.
+
+project_root = ".."
+output_dir = "/data/projects/graph-cg/data/output"
+
+[names]
+training = "Train"
+comparison = "Comparisons"
+
+# -------
+# Datasets
+# -------
+
+[[datasets]]
+id = "residuals-100"
+path = "datasets/residuals-100.toml"
+display_name = "Residual-Error 100"
+
+[[datasets]]
+id = "eig-rhs-smallest"
+path = "datasets/eig-rhs-smallest.toml"
+display_name = "Eig RHS Smallest"
+
+[[datasets]]
+id = "eig-solutions-smallest"
+path = "datasets/eig-solutions-smallest.toml"
+display_name = "Eig Solutions Smallest"
+
+# ------
+# Models
+# ------
+
+[[models]]
+id = "ffnn"
+path = "models/ffnn.toml"
+display_name = "NormScaledConstantWidthFFNN"
+
+[[models]]
+id = "ffnn-l2"
+path = "models/ffnn-l2.toml"
+display_name = "NormScaledConstantWidthFFNN L2"
+
+# -----------
+# Comparisons
+# -----------
+
+[[comparisons]]
+id = "gaussian"
+path = "comparison/gaussian.toml"
+display_name = "Gaussian RHS"
+
+[[comparisons]]
+id = "scaled-solutions"
+path = "comparison/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[comparisons]]
+id = "sparse-rhs"
+path = "comparison/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[comparisons]]
+id = "eig-few-solutions-smallest"
+path = "comparison/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[comparisons]]
+id = "eig-few-rhs-smallest"
+path = "comparison/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"
+
+# -----------
+# Experiments
+# -----------
+
+[[experiments]]
+id = "eig-rhs-smallest-ffnn"
+dataset = "eig-rhs-smallest"
+model = "ffnn"
+display_name = "Eig RHS Smallest FFNN"
+
+[[experiments]]
+id = "eig-rhs-smallest-ffnn-l2"
+dataset = "eig-rhs-smallest"
+model = "ffnn-l2"
+display_name = "Eig RHS Smallest FFNN L2"
+
+[[experiments]]
+id = "eig-solutions-smallest-ffnn"
+dataset = "eig-solutions-smallest"
+model = "ffnn"
+display_name = "Eig Solutions Smallest FFNN"
+
+[[experiments]]
+id = "eig-solutions-smallest-ffnn-l2"
+dataset = "eig-solutions-smallest"
+model = "ffnn-l2"
+display_name = "Eig Solutions Smallest FFNN L2"
+
+[[experiments]]
+id = "residuals-ffnn"
+dataset = "residuals-100"
+model = "ffnn"
+display_name = "Residual-Error FFNN"
+
+[[experiments]]
+id = "residuals-ffnn-l2"
+dataset = "residuals-100"
+model = "ffnn-l2"
+display_name = "Residual-Error FFNN L2"

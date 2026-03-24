@@ -1,4 +1,4 @@
-# Master registry for constant-width FFNN experiments.
+# Residuals-only FFNN registry for model-family sweeps.
 
 project_root = ".."
 output_dir = "/data/projects/graph-cg/data/output"
@@ -8,37 +8,37 @@ training = "Train"
 comparison = "Comparisons"
 
 # -------
-# Datasets
+# Dataset
 # -------
 
 [[datasets]]
 id = "residuals-100"
 path = "datasets/residuals-100.toml"
-display_name = "Solutions Residual 100"
-
-[[datasets]]
-id = "eig-rhs-smallest"
-path = "datasets/eig-rhs-smallest.toml"
-display_name = "Eig RHS Smallest"
-
-[[datasets]]
-id = "eig-solutions-smallest"
-path = "datasets/eig-solutions-smallest.toml"
-display_name = "Eig Solutions Smallest"
+display_name = "Residual-Error 100"
 
 # ------
 # Models
 # ------
 
 [[models]]
-id = "ffnn"
-path = "models/ffnn.toml"
-display_name = "NormScaledConstantWidthFFNN"
+id = "normscaled-residual-ffnn-l2"
+path = "models/ffnn-residual-l2.toml"
+display_name = "NormScaled | Residual FFNN | L2"
 
 [[models]]
-id = "ffnn-l2"
-path = "models/ffnn-l2.toml"
-display_name = "NormScaledConstantWidthFFNN L2"
+id = "normscaled-embedded-factorized-residual-ffnn-l2"
+path = "models/embedded-factorized-ffnn-l2.toml"
+display_name = "NormScaled | Embedded Factorized Residual FFNN | L2"
+
+[[models]]
+id = "normscaled-embedded-spd-residual-ffnn-l2"
+path = "models/embedded-spd-ffnn-l2.toml"
+display_name = "NormScaled | Embedded SPD Residual FFNN | L2"
+
+[[models]]
+id = "normscaled-embedded-spd-factorized-residual-ffnn-l2"
+path = "models/embedded-spd-factorized-ffnn-l2.toml"
+display_name = "NormScaled | Embedded SPD-Factorized Residual FFNN | L2"
 
 # -----------
 # Comparisons
@@ -74,37 +74,25 @@ display_name = "Eig Few RHS Smallest"
 # -----------
 
 [[experiments]]
-id = "eig-rhs-smallest-ffnn"
-dataset = "eig-rhs-smallest"
-model = "ffnn"
-display_name = "Eig RHS Smallest FFNN"
-
-[[experiments]]
-id = "eig-rhs-smallest-ffnn-l2"
-dataset = "eig-rhs-smallest"
-model = "ffnn-l2"
-display_name = "Eig RHS Smallest FFNN L2"
-
-[[experiments]]
-id = "eig-solutions-smallest-ffnn"
-dataset = "eig-solutions-smallest"
-model = "ffnn"
-display_name = "Eig Solutions Smallest FFNN"
-
-[[experiments]]
-id = "eig-solutions-smallest-ffnn-l2"
-dataset = "eig-solutions-smallest"
-model = "ffnn-l2"
-display_name = "Eig Solutions Smallest FFNN L2"
-
-[[experiments]]
-id = "residuals-ffnn"
+id = "residuals-100-normscaled-residual-ffnn-l2"
 dataset = "residuals-100"
-model = "ffnn"
-display_name = "Residuals FFNN"
+model = "normscaled-residual-ffnn-l2"
+display_name = "Residual-Error 100 | NormScaled | Residual FFNN | L2"
 
 [[experiments]]
-id = "residuals-ffnn-l2"
+id = "residuals-100-normscaled-embedded-factorized-residual-ffnn-l2"
 dataset = "residuals-100"
-model = "ffnn-l2"
-display_name = "Residuals FFNN L2"
+model = "normscaled-embedded-factorized-residual-ffnn-l2"
+display_name = "Residual-Error 100 | NormScaled | Embedded Factorized Residual FFNN | L2"
+
+[[experiments]]
+id = "residuals-100-normscaled-embedded-spd-residual-ffnn-l2"
+dataset = "residuals-100"
+model = "normscaled-embedded-spd-residual-ffnn-l2"
+display_name = "Residual-Error 100 | NormScaled | Embedded SPD Residual FFNN | L2"
+
+[[experiments]]
+id = "residuals-100-normscaled-embedded-spd-factorized-residual-ffnn-l2"
+dataset = "residuals-100"
+model = "normscaled-embedded-spd-factorized-residual-ffnn-l2"
+display_name = "Residual-Error 100 | NormScaled | Embedded SPD-Factorized Residual FFNN | L2"

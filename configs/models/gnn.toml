@@ -19,7 +19,7 @@ num_layers = 3
 
 [TRAINING.trainer]
 # Maximum number of epochs (Lightning Trainer)
-max_epochs = 200
+max_epochs = 300
 # Hardware accelerator: cpu | gpu | auto | tpu
 accelerator = "auto"
 # Enable checkpointing

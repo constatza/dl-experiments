@@ -14,7 +14,7 @@ comparison = "Comparisons"
 [[datasets]]
 id = "residuals-100"
 path = "datasets/residuals-100.toml"
-display_name = "Solutions Residual 100"
+display_name = "Residual-Error 100"
 
 [[datasets]]
 id = "eig-rhs-smallest"
@@ -101,7 +101,7 @@ display_name = "Eig Solutions Smallest Factorized"
 id = "residuals-factorized"
 dataset = "residuals-100"
 model = "factorized"
-display_name = "Residuals Factorized"
+display_name = "Residual-Error Factorized"
 
 # -----------
 # Comparisons

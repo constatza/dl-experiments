@@ -19,7 +19,7 @@ display_name = "Spectral Solutions"
 [[datasets]]
 id = "residuals-100"
 path = "datasets/residuals-100.toml"
-display_name = "Solutions Residual 100"
+display_name = "Residual-Error 100"
 
 [[datasets]]
 id = "eig-rhs-largest"
@@ -134,7 +134,7 @@ display_name = "Eig Sol Smallest"
 id = "residuals"
 dataset = "residuals-100"
 model = "linear"
-display_name = "Residuals"
+display_name = "Residual-Error"
 
 # -----------
 # Comparisons

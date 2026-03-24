@@ -1,11 +1,11 @@
-# Solution archive residual-error trace config using the same spectral solution registry as solutions.toml
-# Loads archived true solutions x*, computes b = A @ x*, then collects 100 CG steps of:
+# Residual-error trace dataset built from the spectral solution archive.
+# Loads archived true solutions x_true, computes b = A @ x_true, then records:
 #   residual = r_k
-#   dx = e_k = x* - x_k
-# This yields valid (A @ dx, dx) training pairs for preconditioner learning.
+#   dx = x_true - x_k
+# at each CG iteration. The persisted training pairs therefore satisfy r_k = A @ dx_k.
 #
-# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/solutions-residual-error-100.toml
-# Output: solutions-residual-error-100-{normalization}/
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/residuals-100.toml
+# Output: residuals-100-{normalization}/
 
 
 [source]
@@ -20,8 +20,8 @@ seed = 42
 # Residual-error trace strategy: use the archived solution registry and size the
 # number of base systems from the desired trace-row budget using integer division.
 [[generation.strategy]]
-name = "cg_residual_error"
-samples = 10000
+name = "residuals"
+samples = 20000
 cg_iters = 100
 solutions_glob = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
