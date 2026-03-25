@@ -27,7 +27,7 @@ repos:
         entry: uv run ty check
         language: system
         pass_filenames: false
-        stages: [pre-push]
+        stages: [pre-commit]
         files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
       - id: pytest-fast
         name: "pytest: fast smoke"
