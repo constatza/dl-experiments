@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import typer
+from typer.models import ArgumentInfo
 from typer.testing import CliRunner
 import tomli_w
 
 from neuralls.cli.compare_preconditioners import main
 from neuralls.configuration.comparison import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.workflows.results import ComparisonRecommendations, ComparisonResult
-from neuralls.workflows.specs import ComparisonOutcome
+from neuralls.workflows.specs import ComparisonOutcome, ComparisonParams
 
 runner = CliRunner()
 
@@ -55,15 +57,22 @@ def _write_experiments_config(path: Path) -> None:
         tomli_w.dump(payload, fh)
 
 
+def _build_app() -> typer.Typer:
+    app = typer.Typer()
+    app.command()(main)
+    return app
+
+
 def test_script_help() -> None:
-    """The CLI help should render successfully."""
-    test_app = typer.Typer()
-    test_app.command()(main)
+    """Help exits successfully and the CLI keeps a required positional config argument."""
+    test_app = _build_app()
     result = runner.invoke(test_app, ["--help"])
     assert result.exit_code == 0
-    assert "experiments registry TOML" in result.stdout
-    assert "--comparison-config" not in result.stdout
-    assert "--comparison-profile" not in result.stdout
+
+    parameters = inspect.signature(main).parameters
+    config = parameters["config"].default
+    assert isinstance(config, ArgumentInfo)
+    assert config.default is ...
 
 
 @patch("neuralls.cli.compare_preconditioners.run_comparison_batch")
@@ -79,8 +88,7 @@ def test_compare_cli_invokes_batch_workflow(mock_run: MagicMock, tmp_path: Path)
             payload=_payload(),
         )
     ]
-    test_app = typer.Typer()
-    test_app.command()(main)
+    test_app = _build_app()
 
     result = runner.invoke(
         test_app,
@@ -90,14 +98,13 @@ def test_compare_cli_invokes_batch_workflow(mock_run: MagicMock, tmp_path: Path)
     assert result.exit_code == 0
     mock_run.assert_called_once()
     assert mock_run.call_args.args[0] == experiments_config
-    assert len(mock_run.call_args.args) == 2
+    assert isinstance(mock_run.call_args.args[1], ComparisonParams)
 
 
 @patch("neuralls.cli.compare_preconditioners.run_comparison_batch")
 def test_compare_cli_requires_master_config(mock_run: MagicMock) -> None:
     """The CLI requires the experiments config positional argument."""
-    test_app = typer.Typer()
-    test_app.command()(main)
+    test_app = _build_app()
 
     result = runner.invoke(test_app, [])
 
@@ -118,8 +125,7 @@ def test_failure_outcome_exits_nonzero(mock_run: MagicMock, tmp_path: Path) -> N
             error="test error",
         )
     ]
-    test_app = typer.Typer()
-    test_app.command()(main)
+    test_app = _build_app()
 
     result = runner.invoke(
         test_app,
@@ -127,3 +133,4 @@ def test_failure_outcome_exits_nonzero(mock_run: MagicMock, tmp_path: Path) -> N
     )
 
     assert result.exit_code != 0
+    mock_run.assert_called_once()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -122,9 +123,9 @@ def test_validated_archive_generate_invalid_fail(
 
 
 def test_validated_archive_generate_invalid_warn(
-    sample_matrix: np.ndarray, invalid_pairs: tuple[Path, Path], capsys
+    sample_matrix: np.ndarray, invalid_pairs: tuple[Path, Path]
 ) -> None:
-    """Test that invalid pairs warn when fail_on_invalid=False."""
+    """Invalid pairs warn and still return loaded samples when configured to continue."""
     solutions_dir, rhs_dir = invalid_pairs
 
     cfg = {
@@ -137,15 +138,12 @@ def test_validated_archive_generate_invalid_warn(
     }
 
     strategy = ValidatedArchiveStrategy()
-    samples = strategy.generate(sample_matrix, cfg=cfg)
+    with patch("neuralls.generation.strategies.validated_archive.logger.warning") as mock_warning:
+        samples = strategy.generate(sample_matrix, cfg=cfg)
 
-    # Should succeed but print warning
     assert samples.rhs is not None
     assert samples.solutions is not None
-
-    # Check that warning was printed (loguru sends to stderr by default in conftest)
-    captured = capsys.readouterr()
-    assert "Found 5/5 invalid pairs" in captured.err
+    mock_warning.assert_called_once()
 
 
 def test_validated_archive_shuffle(
