@@ -103,9 +103,7 @@ class RandomInputProvider:
         n = matrix.shape[0]
         # Use local RNG if seed provided, otherwise use passed RNG
         local_rng = np.random.default_rng(self.seed) if self.seed is not None else rng
-        return local_rng.normal(size=(count, n), scale=self.scale).astype(
-            np.float64, copy=False
-        )
+        return local_rng.normal(size=(count, n), scale=self.scale).astype(np.float64, copy=False)
 
 
 class ConstantInputProvider:
@@ -181,20 +179,14 @@ class UniformInputProvider:
     ) -> np.ndarray:
         """Generate uniformly distributed vectors."""
         n = matrix.shape[0]
-        return rng.uniform(self.a, self.b, size=(count, n)).astype(
-            np.float64, copy=False
-        )
+        return rng.uniform(self.a, self.b, size=(count, n)).astype(np.float64, copy=False)
 
 
 class FileInputProvider:
     """Load vectors from files matching glob pattern.
 
     Examples:
-        >>> provider = FileInputProvider(
-        ...     glob_pattern="/data/sols_*.npy",
-        ...     shuffle=True,
-        ...     seed=42
-        ... )
+        >>> provider = FileInputProvider(glob_pattern="/data/sols_*.npy", shuffle=True, seed=42)
         >>> solutions = provider.provide(matrix=np.eye(10), count=5, rng=rng)
         >>> solutions.shape
         (5, 10)
@@ -312,20 +304,15 @@ class HybridInputProvider:
                     return data.astype(np.float64, copy=True)
                 if data.shape[0] < count:
                     raise ValueError(
-                        f"Not enough archive {self.field}: "
-                        f"need {count}, got {data.shape[0]}"
+                        f"Not enough archive {self.field}: need {count}, got {data.shape[0]}"
                     )
                 return data[:count].astype(np.float64, copy=True)
 
         # Fallback to random
         if count == -1:
-            raise ValueError(
-                f"Cannot use count=-1 for field '{self.field}' without archive data."
-            )
+            raise ValueError(f"Cannot use count=-1 for field '{self.field}' without archive data.")
         n = matrix.shape[0]
-        return rng.normal(size=(count, n), scale=self.scale).astype(
-            np.float64, copy=False
-        )
+        return rng.normal(size=(count, n), scale=self.scale).astype(np.float64, copy=False)
 
 
 class PairedFileInputProvider:
@@ -333,8 +320,7 @@ class PairedFileInputProvider:
 
     Examples:
         >>> provider = PairedFileInputProvider(
-        ...     solution_glob="/data/sols_*.npy",
-        ...     rhs_glob="/data/rhs_*.npy"
+        ...     solution_glob="/data/sols_*.npy", rhs_glob="/data/rhs_*.npy"
         ... )
         >>> solutions, rhs = provider.provide(matrix=np.eye(10), count=5, rng=rng)
         >>> solutions.shape, rhs.shape

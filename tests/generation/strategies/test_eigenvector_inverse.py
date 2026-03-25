@@ -6,7 +6,6 @@ Inverse mode: generates RHS as eigenvector combinations, then solves x = A^-1 @ 
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from neuralls.generation import run_generation
 
@@ -34,7 +33,9 @@ def test_eigenvector_inverse_shapes(spd_matrix: np.ndarray) -> None:
 def test_eigenvector_inverse_sample_count(spd_matrix: np.ndarray) -> None:
     """Different sample counts produce correct output sizes."""
     for count in (1, 3, 5):
-        result = run_generation("eigenvector_inverse", spd_matrix, cfg={"samples": count, "seed": 0})
+        result = run_generation(
+            "eigenvector_inverse", spd_matrix, cfg={"samples": count, "seed": 0}
+        )
         assert result.solutions is not None
         assert result.solutions.shape[0] == count
 

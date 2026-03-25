@@ -102,9 +102,7 @@ def _load_and_prepare_data(
     return arrays, features, targets
 
 
-def _create_feature_configs(
-    arrays: TrainingArrays, dataset_name: str | None
-) -> list[FeatureType]:
+def _create_feature_configs(arrays: TrainingArrays, dataset_name: str | None) -> list[FeatureType]:
     """Create file-backed Feature configs from dataset artifacts.
 
     Args:
@@ -156,7 +154,7 @@ def _create_target_configs(arrays: TrainingArrays) -> list[TargetType]:
         Target(
             name="solutions",
             path=arrays.solutions,
-        )
+        ),
     ]
 
 
@@ -389,8 +387,6 @@ def _build_training_run_config(
     )
 
 
-
-
 def _log_training_evaluation(
     tracking_uri: str,
     run_id: str,
@@ -483,9 +479,9 @@ def _resolve_mlflow_run_ids(
     direct_run_id = getattr(training_result, "run_id", None)
     if isinstance(direct_run_id, str) and direct_run_id:
         try:
-            resolved_experiment_id = MlflowClient(tracking_uri=tracking_uri).get_run(
-                direct_run_id
-            ).info.experiment_id
+            resolved_experiment_id = (
+                MlflowClient(tracking_uri=tracking_uri).get_run(direct_run_id).info.experiment_id
+            )
         except Exception:  # noqa: BLE001
             resolved_experiment_id = None
         if isinstance(resolved_experiment_id, str) and resolved_experiment_id:
@@ -620,12 +616,8 @@ def _extract_evaluation_arrays(
     if predictions_raw is None or targets_raw is None:
         return None
 
-    prediction_keys = (
-        list(targets_raw.keys()) if isinstance(targets_raw, Mapping) else []
-    )
-    target_keys = (
-        list(predictions_raw.keys()) if isinstance(predictions_raw, Mapping) else []
-    )
+    prediction_keys = list(targets_raw.keys()) if isinstance(targets_raw, Mapping) else []
+    target_keys = list(predictions_raw.keys()) if isinstance(predictions_raw, Mapping) else []
 
     y_pred_raw = (
         _select_mapping_value(predictions_raw, _PREDICTION_KEYS, prediction_keys)
@@ -783,9 +775,7 @@ def train_model(
         workspace = experiment.workspace
         dataset_id = workspace.dataset_id
         resolved_experiment_display_name = experiment.spec.experiment_display_name
-        resolved_dataset_display_name = (
-            experiment.spec.dataset_display_name or dataset_id
-        )
+        resolved_dataset_display_name = experiment.spec.dataset_display_name or dataset_id
 
         # Step 2: Resolve training dataset artifacts
         _, features, targets = _load_and_prepare_data(settings, workspace)
@@ -843,9 +833,8 @@ def train_model(
             if mlflow_coords is not None:
                 resolved_tracking_uri, _, resolved_run_id = mlflow_coords
             else:
-                resolved_run_id = (
-                    getattr(training_result, "mlflow_run_id", None)
-                    or getattr(training_result, "run_id", None)
+                resolved_run_id = getattr(training_result, "mlflow_run_id", None) or getattr(
+                    training_result, "run_id", None
                 )
             local_checkpoint = _resolve_training_checkpoint(
                 training_result=training_result,
@@ -893,7 +882,9 @@ def train_model(
                     workspace_root=workspace.root_dir,
                 )
             else:
-                logger.warning("Training completed without MLflow run metadata; skipping artifact upload.")
+                logger.warning(
+                    "Training completed without MLflow run metadata; skipping artifact upload."
+                )
 
         # Step 8: Copy checkpoint to permanent location (temp dir deleted after this block)
         permanent_dir = permanent_root / "checkpoints" / dataset_id

@@ -39,8 +39,6 @@ from ...configuration.preconditioner import PreconditionerType
 if TYPE_CHECKING:
     from neuralls.configuration.preconditioner import (
         ConcretePreconditionerConfig,
-        IC0PreconditionerConfig,
-        NeuralPreconditionerConfig,
     )
     from .ports import PredictorAdapter
 
@@ -100,12 +98,12 @@ def create_preconditioner(
     # Check if type is NEURAL but config is not NeuralPreconditionerConfig
     if config.type == PreconditionerType.NEURAL:
         if not isinstance(config, NeuralPreconditionerConfig):
-            raise TypeError(
-                f"Neural type requires NeuralPreconditionerConfig, got {type(config)}"
-            )
+            raise TypeError(f"Neural type requires NeuralPreconditionerConfig, got {type(config)}")
         ckpt = config.resolved_checkpoint_path or config.checkpoint_path
         if ckpt is None:
-            raise ValueError("NeuralPreconditionerConfig requires checkpoint_path or resolved_checkpoint_path")
+            raise ValueError(
+                "NeuralPreconditionerConfig requires checkpoint_path or resolved_checkpoint_path"
+            )
         return NeuralPreconditioner(
             checkpoint_path=ckpt,
             config_path=config.config_path,
@@ -116,9 +114,7 @@ def create_preconditioner(
     # IC(0) with threshold parameter
     if config.type == PreconditionerType.IC0:
         if not isinstance(config, IC0PreconditionerConfig):
-            raise TypeError(
-                f"IC(0) type requires IC0PreconditionerConfig, got {type(config)}"
-            )
+            raise TypeError(f"IC(0) type requires IC0PreconditionerConfig, got {type(config)}")
         return IC0Preconditioner(matrix, threshold=config.threshold)
 
     # Standard cases with explicit dispatch for type safety

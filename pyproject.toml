@@ -36,11 +36,33 @@ where = ["src"]  # Tells setuptools to look inside 'src'
 include = ["*"]  # Includes all packages found in 'src'
 namespaces = false # Set to true if you are using implicit namespace packages
 
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
 [tool.ruff.lint]
 extend-select = [
     "UP", # pyupgrade
     "D", # pydocstyle
 ]
+ignore = [
+    "D100", # undocumented-public-module
+    "D101", # undocumented-public-class
+    "D102", # undocumented-public-method
+    "D103", # undocumented-public-function
+    "D104", # undocumented-public-package
+    "D107", # undocumented-public-init
+    "D417", # undocumented-param
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D"]
+"tests/**/__init__.py" = ["D"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -50,11 +72,14 @@ dev = [
     "hypothesis>=6.151.6",
     "pyright>=1.1.407",
     "pytest>=9.0",
+    "ruff>=0.13.1",
 ]
 
 [tool.pyright]
 pythonVersion = "3.14"
 typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
 include = [
     "src/neuralls",
     "tests",

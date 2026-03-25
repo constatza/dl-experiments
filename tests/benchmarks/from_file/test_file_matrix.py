@@ -24,9 +24,7 @@ ITER_DIFF_THRESHOLD = 0
 
 @pytest.mark.benchmark
 @pytest.mark.parametrize("precond_type", [None, "ilu"])
-def test_fcg_pcg_equivalence_on_file(
-    system, convergence_tolerances, precond_type, matrix_path
-):
+def test_fcg_pcg_equivalence_on_file(system, convergence_tolerances, precond_type, matrix_path):
     """Test FCG vs PCG equivalence on matrix loaded from file.
 
     Args:
@@ -37,7 +35,7 @@ def test_fcg_pcg_equivalence_on_file(
     """
     A, b, x_exact, L = system
     rtol, atol = convergence_tolerances
-    n = A.shape[0]
+    A.shape[0]
 
     # Build preconditioner
     preconditioner = None
@@ -67,12 +65,8 @@ def test_fcg_pcg_equivalence_on_file(
         trace_mode=TraceMode.FULL,
     )
 
-    assert result_pcg.converged, (
-        f"PCG failed to converge. Iterations: {result_pcg.iterations}"
-    )
-    assert result_fcg.converged, (
-        f"FCG failed to converge. Iterations: {result_fcg.iterations}"
-    )
+    assert result_pcg.converged, f"PCG failed to converge. Iterations: {result_pcg.iterations}"
+    assert result_fcg.converged, f"FCG failed to converge. Iterations: {result_fcg.iterations}"
 
     # Check iteration difference
     diff = abs(result_pcg.iterations - result_fcg.iterations)
@@ -127,7 +121,7 @@ def test_ic0_quality_vs_reference(system, convergence_tolerances):
         L_reference,
         rtol=IC0_MATRIX_RTOL,
         atol=IC0_MATRIX_ATOL,
-        err_msg=f"IC0 L matrix values differ from reference",
+        err_msg="IC0 L matrix values differ from reference",
     )
 
     # Compute reconstructions
@@ -140,8 +134,7 @@ def test_ic0_quality_vs_reference(system, convergence_tolerances):
 
     # IC(0) should have reasonable reconstruction error (typically 5-20% for IC0)
     assert ic0_error < 0.5, (
-        f"IC0 reconstruction error too large: {ic0_error:.6e} "
-        f"(expected < 0.5 for IC0)"
+        f"IC0 reconstruction error too large: {ic0_error:.6e} (expected < 0.5 for IC0)"
     )
 
     # Log quality comparison

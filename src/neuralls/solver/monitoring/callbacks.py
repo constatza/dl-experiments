@@ -78,7 +78,7 @@ class SciPyCallbackAdapter:
         >>> # Used by SciPyCGSolver
         >>> from neuralls.solver.monitoring.residual_history_tracker import ResidualHistoryTracker
         >>> tracker = ResidualHistoryTracker()
-        >>> adapter = SciPyCallbackAdapter(A, b, callback_type='x', tracker=tracker)
+        >>> adapter = SciPyCallbackAdapter(A, b, callback_type="x", tracker=tracker)
         >>> # Pass to scipy.sparse.linalg.cg
         >>> x, info = scipy.sparse.linalg.cg(A, b, callback=adapter)
         >>> tracker.residual_norms_abs
@@ -106,7 +106,7 @@ class SciPyCallbackAdapter:
             iteration_history: Optional IterationHistory for continuous monitoring.
 
         Example:
-            >>> adapter = SciPyCallbackAdapter(A, b, callback_type='x')
+            >>> adapter = SciPyCallbackAdapter(A, b, callback_type="x")
             >>> # Use with scipy.sparse.linalg.cg
         """
         self.A = A
@@ -149,9 +149,7 @@ class SciPyCallbackAdapter:
                 self.tracker.record_solution(xk)
 
         # Compute relative residual
-        residual_rel = (
-            residual_abs / self.rhs_norm if self.rhs_norm > 0 else residual_abs
-        )
+        residual_rel = residual_abs / self.rhs_norm if self.rhs_norm > 0 else residual_abs
 
         # Record residual norms if tracking enabled
         if self.tracker:
@@ -180,9 +178,7 @@ class InitialStateComputer:
         - r_0 = b - A @ x_0   when x_0 is provided
 
     Example:
-        >>> x_init, r_init, r_norm = InitialStateComputer.compute_initial_residual(
-        ...     A, b, x0=None
-        ... )
+        >>> x_init, r_init, r_norm = InitialStateComputer.compute_initial_residual(A, b, x0=None)
         >>> np.allclose(r_init, b)
         True
     """
@@ -208,9 +204,7 @@ class InitialStateComputer:
 
         Example:
             >>> # Zero initial guess
-            >>> x, r, r_norm = InitialStateComputer.compute_initial_residual(
-            ...     A, b, x0=None
-            ... )
+            >>> x, r, r_norm = InitialStateComputer.compute_initial_residual(A, b, x0=None)
             >>> np.allclose(x, 0)
             True
             >>> np.allclose(r, b)
@@ -218,9 +212,7 @@ class InitialStateComputer:
 
             >>> # Non-zero initial guess
             >>> x0 = np.random.rand(n)
-            >>> x, r, r_norm = InitialStateComputer.compute_initial_residual(
-            ...     A, b, x0
-            ... )
+            >>> x, r, r_norm = InitialStateComputer.compute_initial_residual(A, b, x0)
             >>> np.allclose(x, x0)
             True
             >>> np.allclose(r, b - A @ x0)

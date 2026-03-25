@@ -6,13 +6,14 @@ in a clear, maintainable way.
 
 from __future__ import annotations
 
-from typing import Callable, TypeVar
+from typing import TypeVar
+from collections.abc import Callable
 
 T = TypeVar("T")
 Transform = Callable[[T], T]
 
 
-def pipe(*transforms: Transform[T]) -> Transform[T]:
+def pipe[T](*transforms: Transform[T]) -> Transform[T]:
     """Compose multiple transforms into a sequential pipeline.
 
     Applies transforms left-to-right (functional composition).
@@ -30,7 +31,7 @@ def pipe(*transforms: Transform[T]) -> Transform[T]:
         >>> def double(x: int) -> int:
         ...     return x * 2
         >>> def square(x: int) -> int:
-        ...     return x ** 2
+        ...     return x**2
         >>> pipeline = pipe(add_one, double, square)
         >>> pipeline(3)  # (3 + 1) * 2 ** 2 = 64
         64
@@ -49,6 +50,7 @@ def pipe(*transforms: Transform[T]) -> Transform[T]:
         - Transforms should be pure functions (no side effects)
         - Empty transforms list returns identity function
     """
+
     def pipeline(value: T) -> T:
         result = value
         for transform in transforms:

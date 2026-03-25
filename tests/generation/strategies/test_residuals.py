@@ -65,9 +65,7 @@ def test_gaussian_residuals_strategy_registered() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_residuals_single_rhs_shapes(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
-) -> None:
+def test_residuals_single_rhs_shapes(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
     """Single-RHS mode: all output arrays have the correct shapes."""
     n = spd_matrix.shape[0]
     requested_rows = 10
@@ -173,9 +171,7 @@ def test_gaussian_residuals_math_holds(spd_matrix: np.ndarray) -> None:
         x_true = et.true_solutions[s_idx]
         x_k = et.solutions_current[i]
         np.testing.assert_allclose(et.errors[i], x_true - x_k, rtol=1e-12)
-        np.testing.assert_allclose(
-            et.residuals[i], spd_matrix @ et.errors[i], rtol=1e-9, atol=1e-9
-        )
+        np.testing.assert_allclose(et.residuals[i], spd_matrix @ et.errors[i], rtol=1e-9, atol=1e-9)
 
 
 # ---------------------------------------------------------------------------
@@ -262,9 +258,7 @@ def test_residual_equals_a_times_error(
 # ---------------------------------------------------------------------------
 
 
-def test_residuals_trace_count(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
-) -> None:
+def test_residuals_trace_count(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
     """Total trace entries = num_systems × (cg_iters + 1) when every_n=1."""
     requested_rows = 10
     cg_iters = 4
@@ -279,9 +273,7 @@ def test_residuals_trace_count(
     assert et.residuals.shape[0] == expected_systems * rows_per_system
 
 
-def test_residuals_sample_indices(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
-) -> None:
+def test_residuals_sample_indices(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
     """sample_indices correctly identifies which base system each trace pair belongs to."""
     requested_rows = 15
     cg_iters = 4
@@ -300,9 +292,7 @@ def test_residuals_sample_indices(
         np.testing.assert_array_equal(et.sample_indices[start:end], s)
 
 
-def test_residuals_iteration_indices(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
-) -> None:
+def test_residuals_iteration_indices(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
     """iteration_indices run 0..cg_iters for each system when every_n=1."""
     requested_rows = 10
     cg_iters = 4
@@ -327,9 +317,7 @@ def test_residuals_iteration_indices(
 # ---------------------------------------------------------------------------
 
 
-def test_residuals_every_n_reduces_count(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
-) -> None:
+def test_residuals_every_n_reduces_count(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
     """every_n=2 yields half the trace entries (cg_iters=5 → 6 residuals, divisible by 2)."""
     cg_iters = 5  # 6 residuals per sample (0..5)
     cfg_full = {"samples": 12, "cg_iters": cg_iters, "seed": 0, "every_n": 1}
@@ -343,9 +331,7 @@ def test_residuals_every_n_reduces_count(
     assert r_half.error_traces.residuals.shape[0] == r_full.error_traces.residuals.shape[0] // 2
 
 
-def test_residuals_every_n_indices_correct(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
-) -> None:
+def test_residuals_every_n_indices_correct(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
     """every_n=2 with cg_iters=5: iteration_indices are [0, 2, 4] not [0, 1, 2]."""
     cfg = {"samples": 1, "cg_iters": 5, "seed": 0, "every_n": 2}
 
@@ -380,9 +366,7 @@ def test_residuals_every_n_math_still_holds(
         x_true = et.true_solutions[s_idx]
         x_k = et.solutions_current[i]
         np.testing.assert_allclose(et.errors[i], x_true - x_k, rtol=1e-12)
-        np.testing.assert_allclose(
-            et.residuals[i], spd_matrix @ et.errors[i], rtol=1e-9, atol=1e-9
-        )
+        np.testing.assert_allclose(et.residuals[i], spd_matrix @ et.errors[i], rtol=1e-9, atol=1e-9)
 
 
 def test_residuals_samples_minus_one_requires_finite_source(

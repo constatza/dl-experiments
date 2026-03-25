@@ -192,7 +192,11 @@ def _build_convergence_label(method_name: str, meta: Any | None) -> str:
         details.extend([f"tr={residual_iters}", f"ap={applied_iters}"])
     preconditioner_type = _meta_value(meta, "preconditioner_type")
     limit_iters = _meta_value(meta, "limit_iters")
-    if str(preconditioner_type).lower() == "neural" and isinstance(limit_iters, int) and limit_iters >= 0:
+    if (
+        str(preconditioner_type).lower() == "neural"
+        and isinstance(limit_iters, int)
+        and limit_iters >= 0
+    ):
         details.append(f"limit={limit_iters}")
     if not details:
         return method_name
@@ -297,9 +301,7 @@ def plot_noise_robustness(
     # Use matplotlib Set1 colormap for consistent colors
     colormap = matplotlib.colormaps["Set1"]
     colors = colormap(np.linspace(0, 1, max(len(methods), 3)))
-    method_colors = {
-        method: colors[i % len(colors)] for i, method in enumerate(methods)
-    }
+    method_colors = {method: colors[i % len(colors)] for i, method in enumerate(methods)}
 
     fig = plt.figure(figsize=(12, 8))
 
@@ -350,7 +352,9 @@ def plot_noise_robustness(
 
 
 # Private helpers for plot_prediction_diagnostics
-def _compute_prediction_stats(y_pred: np.ndarray, y_true: np.ndarray) -> tuple[dict[str, float], dict[str, float], dict[str, float], float]:
+def _compute_prediction_stats(
+    y_pred: np.ndarray, y_true: np.ndarray
+) -> tuple[dict[str, float], dict[str, float], dict[str, float], float]:
     """Compute comprehensive statistics for predictions and targets.
 
     Args:
@@ -415,8 +419,20 @@ def _plot_distribution_row(
     # Prediction distribution
     ax1 = fig.add_subplot(gs[0, 0])
     ax1.hist(y_pred, bins=50, alpha=0.7, color="blue", edgecolor="black")
-    ax1.axvline(pred_stats["mean"], color="red", linestyle="--", linewidth=2, label=f"Mean: {pred_stats['mean']:.3e}")
-    ax1.axvline(pred_stats["median"], color="green", linestyle="--", linewidth=2, label=f"Median: {pred_stats['median']:.3e}")
+    ax1.axvline(
+        pred_stats["mean"],
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Mean: {pred_stats['mean']:.3e}",
+    )
+    ax1.axvline(
+        pred_stats["median"],
+        color="green",
+        linestyle="--",
+        linewidth=2,
+        label=f"Median: {pred_stats['median']:.3e}",
+    )
     ax1.set_xlabel("Value", fontsize=11)
     ax1.set_ylabel("Count", fontsize=11)
     ax1.set_title("Prediction Distribution", fontsize=12, fontweight="bold")
@@ -426,8 +442,20 @@ def _plot_distribution_row(
     # Target distribution
     ax2 = fig.add_subplot(gs[0, 1])
     ax2.hist(y_true, bins=50, alpha=0.7, color="orange", edgecolor="black")
-    ax2.axvline(true_stats["mean"], color="red", linestyle="--", linewidth=2, label=f"Mean: {true_stats['mean']:.3e}")
-    ax2.axvline(true_stats["median"], color="green", linestyle="--", linewidth=2, label=f"Median: {true_stats['median']:.3e}")
+    ax2.axvline(
+        true_stats["mean"],
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Mean: {true_stats['mean']:.3e}",
+    )
+    ax2.axvline(
+        true_stats["median"],
+        color="green",
+        linestyle="--",
+        linewidth=2,
+        label=f"Median: {true_stats['median']:.3e}",
+    )
     ax2.set_xlabel("Value", fontsize=11)
     ax2.set_ylabel("Count", fontsize=11)
     ax2.set_title("Target Distribution", fontsize=12, fontweight="bold")
@@ -438,7 +466,13 @@ def _plot_distribution_row(
     ax3 = fig.add_subplot(gs[0, 2])
     ax3.hist(error, bins=50, alpha=0.7, color="red", edgecolor="black")
     ax3.axvline(0, color="black", linestyle="-", linewidth=2)
-    ax3.axvline(error_stats["mae"], color="blue", linestyle="--", linewidth=2, label=f"MAE: {error_stats['mae']:.3e}")
+    ax3.axvline(
+        error_stats["mae"],
+        color="blue",
+        linestyle="--",
+        linewidth=2,
+        label=f"MAE: {error_stats['mae']:.3e}",
+    )
     ax3.set_xlabel("Error (Pred - True)", fontsize=11)
     ax3.set_ylabel("Count", fontsize=11)
     ax3.set_title("Error Distribution", fontsize=12, fontweight="bold")
@@ -544,7 +578,13 @@ def _plot_parity_subplot(
     pad = 0.05 * (y_max - y_min) if y_max > y_min else 1.0
 
     ax.scatter(y_true, y_pred, s=5, alpha=0.5, color="purple")
-    ax.plot([y_min - pad, y_max + pad], [y_min - pad, y_max + pad], "k--", linewidth=2, label="Perfect prediction")
+    ax.plot(
+        [y_min - pad, y_max + pad],
+        [y_min - pad, y_max + pad],
+        "k--",
+        linewidth=2,
+        label="Perfect prediction",
+    )
     ax.set_xlabel("True Values", fontsize=11)
     ax.set_ylabel("Predicted Values", fontsize=11)
     ax.set_title("Parity Plot", fontsize=12, fontweight="bold")
@@ -691,9 +731,7 @@ def plot_prediction_diagnostics(
     # Row 3: Comparisons and summary
     _plot_comparison_row(fig, gs, y_pred, y_true, pred_stats, true_stats, scale_ratio, sample)
 
-    fig.suptitle(
-        "Prediction Diagnostics - Scaling Analysis", fontsize=16, fontweight="bold"
-    )
+    fig.suptitle("Prediction Diagnostics - Scaling Analysis", fontsize=16, fontweight="bold")
 
     if save_path is not None:
         save_path = Path(save_path)

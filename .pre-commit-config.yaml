@@ -1,22 +1,38 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.8
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.7.3
     hooks:
       - id: uv-lock
+        stages: [pre-commit]
+        files: ^(pyproject\.toml|uv\.lock)$
 
   - repo: local
     hooks:
+      - id: ruff
+        name: "ruff: lint"
+        entry: uv run ruff check --fix .
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
+      - id: ruff-format
+        name: "ruff: format"
+        entry: uv run ruff format --check .
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
+      - id: pyright
+        name: "pyright: src and tests"
+        entry: uv run pyright src/neuralls tests
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
       - id: pytest-fast
         name: "pytest: fast smoke"
         entry: uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q
         language: system
         pass_filenames: false
         stages: [pre-push]
-        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/)
+        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)

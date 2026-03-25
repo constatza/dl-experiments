@@ -15,7 +15,8 @@ import numpy as np
 from neuralls.solver.preconditioners import ICholeskyPreconditioner
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    pass
+
 
 def test_icholesky_preconditioner_exact_inverse() -> None:
     """Verify ICholeskyPreconditioner solves Mz=r exactly when given exact L."""
@@ -48,13 +49,13 @@ def test_icholesky_preconditioner_exact_inverse() -> None:
         r,
         rtol=1e-10,
         atol=1e-10,
-        err_msg="ICholesky preconditioner failed to invert A=LL^T correctly"
+        err_msg="ICholesky preconditioner failed to invert A=LL^T correctly",
     )
 
 
 def test_icholesky_preconditioner_shapes() -> None:
     """Verify shape handling."""
-    rng = np.random.default_rng(42)
+    np.random.default_rng(42)
     n = 5
     A = np.eye(n)
     L = np.linalg.cholesky(A)  # Just Identity

@@ -115,8 +115,6 @@ class UniformInverseStrategy:
         rhs = provider.provide(matrix, count=config.samples, rng=rng)
 
         # Layer 2: Transformation (solve for solutions)
-        solutions = SolveTransform(
-            matrix, **config.solve_config.model_dump()
-        ).transform(rhs)
+        solutions = SolveTransform(matrix, **config.solve_config.model_dump()).transform(rhs)
 
         return GeneratedSamples(matrix=matrix, rhs=rhs, solutions=solutions)

@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pytest
 
 from neuralls.solver.preconditioners import ILUPreconditioner
 
@@ -20,6 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
+
 
 def test_ilu_factorization_correctness(
     tridiagonal_spd_small: NDArray,
@@ -54,13 +54,13 @@ def test_ilu_factorization_correctness(
         M_inv_A[:, i] = ilu.solve(A_col_i)
 
     # For good factorization, M^{-1} @ A should be close to identity
-    I = np.eye(n)
+    identity = np.eye(n)
 
     # Use Frobenius norm and numpy's comparison
     # Threshold chosen based on expected ILU approximation quality
     ILU_APPROXIMATION_THRESHOLD = 0.5
     np.testing.assert_array_less(
-        np.linalg.norm(M_inv_A - I, ord="fro"), ILU_APPROXIMATION_THRESHOLD
+        np.linalg.norm(M_inv_A - identity, ord="fro"), ILU_APPROXIMATION_THRESHOLD
     )
 
 
@@ -222,5 +222,3 @@ def test_ilu_preserves_dtype(dense_spd_matrix: NDArray) -> None:
     result = precond.apply(residual)
 
     assert result.dtype == np.float64
-
-

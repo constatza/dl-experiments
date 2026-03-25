@@ -56,16 +56,8 @@ def resolve_standard_data_paths(
     Returns:
         Tuple of (features_path, targets_path)
     """
-    feat_path = (
-        Path(features_path)
-        if features_path
-        else workspace.data_dir / RHS_ARRAY_FILENAME
-    )
-    tgt_path = (
-        Path(targets_path)
-        if targets_path
-        else workspace.data_dir / SOLUTIONS_ARRAY_FILENAME
-    )
+    feat_path = Path(features_path) if features_path else workspace.data_dir / RHS_ARRAY_FILENAME
+    tgt_path = Path(targets_path) if targets_path else workspace.data_dir / SOLUTIONS_ARRAY_FILENAME
     return feat_path, tgt_path
 
 
@@ -89,9 +81,7 @@ def load_standard_data(
         - Uses explicit array files under the dataset artifact layout
         - Returns None if files don't exist (allows fallback to synthetic)
     """
-    feat_path, tgt_path = resolve_standard_data_paths(
-        workspace, features_path, targets_path
-    )
+    feat_path, tgt_path = resolve_standard_data_paths(workspace, features_path, targets_path)
 
     if not feat_path.exists() or not tgt_path.exists():
         logger.warning(
@@ -219,9 +209,7 @@ def load_inference_data(
     # Load synthetic data if requested
     if synthetic_benchmark:
         if comparison_config_path is None:
-            raise ValueError(
-                "Comparison config path is required for synthetic benchmark."
-            )
+            raise ValueError("Comparison config path is required for synthetic benchmark.")
         synthetic_data = load_synthetic_data(comparison_config_path, workspace)
 
     # Validate availability

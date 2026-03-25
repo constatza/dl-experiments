@@ -58,9 +58,7 @@ def load_dataset(
         ValueError: If variant is not supported
     """
     if variant != "dataset":
-        raise ValueError(
-            f"Unsupported dataset variant '{variant}'. Only 'dataset' is supported."
-        )
+        raise ValueError(f"Unsupported dataset variant '{variant}'. Only 'dataset' is supported.")
 
     dataset_dir = Path(dataset_dir)
     load_dataset_manifest(dataset_dir)
@@ -69,9 +67,7 @@ def load_dataset(
 
     for name, arr in (("rhs", rhs), ("solutions", solutions), ("matrix", matrix)):
         if arr.dtype != np.float64:
-            raise ValueError(
-                f"{name} dtype must be float64, got {arr.dtype}"
-            )
+            raise ValueError(f"{name} dtype must be float64, got {arr.dtype}")
 
     return {"matrix": matrix, "rhs": rhs, "solutions": solutions}
 
@@ -176,8 +172,6 @@ class DatasetFileTracker:
         Returns:
             Dictionary with operation statistics
         """
-        from neuralls.io.filesystem import format_file_size
-
         reads = [op for op in self.operations if op["operation"] == "read"]
         writes = [op for op in self.operations if op["operation"] == "write"]
 
@@ -196,12 +190,8 @@ class DatasetFileTracker:
         summary = self.get_summary()
         print("File Operations Summary:")
         print(f"  Total operations: {summary['total_operations']}")
-        print(
-            f"  Reads: {summary['reads']} ({format_file_size(summary['total_read_size'])})"
-        )
-        print(
-            f"  Writes: {summary['writes']} ({format_file_size(summary['total_write_size'])})"
-        )
+        print(f"  Reads: {summary['reads']} ({format_file_size(summary['total_read_size'])})")
+        print(f"  Writes: {summary['writes']} ({format_file_size(summary['total_write_size'])})")
 
 
 # Global file tracker instance

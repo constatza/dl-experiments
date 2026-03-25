@@ -63,9 +63,7 @@ def _validate_neural_preconditioner(spec: Any) -> None:
     if not isinstance(spec, NeuralPreconditionerConfig):
         return
     if spec.model_ref is None:
-        raise ValueError(
-            f"Neural preconditioner '{spec.name}' must define model_ref."
-        )
+        raise ValueError(f"Neural preconditioner '{spec.name}' must define model_ref.")
     if spec.checkpoint_path is not None:
         raise ValueError(
             f"Neural preconditioner '{spec.name}' cannot use checkpoint_path/experiment "
@@ -281,9 +279,7 @@ def run_comparison(
                     topology.model_store_tracking_uri,
                 )
                 if not resolved_specs:
-                    raise ValueError(
-                        "No runnable preconditioners remain after model resolution."
-                    )
+                    raise ValueError("No runnable preconditioners remain after model resolution.")
                 if resolution_warnings:
                     mlflow.log_param(
                         "skipped_preconditioners",
@@ -311,7 +307,9 @@ def run_comparison(
                             comparison_id=resolved_comparison_id,
                             parent_run_name=run_name,
                         )
-                        with mlflow.start_run(run_name=name, nested=True, tags=child_tags.as_mlflow_tags()):
+                        with mlflow.start_run(
+                            run_name=name, nested=True, tags=child_tags.as_mlflow_tags()
+                        ):
                             for step, residual in enumerate(entry.residual_history):
                                 mlflow.log_metric("residual", residual, step=step)
 
@@ -351,9 +349,7 @@ def run_comparison_batch(
     """Run all configured comparison profiles from the master config."""
     master_cfg, config_dir = _load_master_config(experiments_config_path)
     if not master_cfg.comparisons:
-        raise ValueError(
-            "Experiments config must define at least one [[comparisons]] entry."
-        )
+        raise ValueError("Experiments config must define at least one [[comparisons]] entry.")
 
     outcomes: list[ComparisonOutcome] = []
     for entry in master_cfg.comparisons:

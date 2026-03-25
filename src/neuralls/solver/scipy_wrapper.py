@@ -31,7 +31,6 @@ from scipy.sparse.linalg import LinearOperator, aslinearoperator, cg
 
 from .models.result import SolverResult
 from .monitoring.callbacks import InitialStateComputer, SciPyCallbackAdapter
-from .monitoring.events import EventType
 from .monitoring.residual_history_tracker import ResidualHistoryTracker
 from .monitoring.trace_mode import TraceMode
 from .monitoring.event_log import EventLog
@@ -41,9 +40,7 @@ from .preconditioners import Identity, Preconditioner
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-type LinearSystemOperator = (
-    NDArray | spmatrix | LinearOperator | Callable[[NDArray], NDArray]
-)
+type LinearSystemOperator = NDArray | spmatrix | LinearOperator | Callable[[NDArray], NDArray]
 
 
 class SciPyCGSolver:
@@ -66,7 +63,9 @@ class SciPyCGSolver:
         >>> precond = Identity()
         >>> event_log = EventLog()
         >>> iteration_history = IterationHistory()
-        >>> solver = SciPyCGSolver(preconditioner=precond, event_log=event_log, iteration_history=iteration_history)
+        >>> solver = SciPyCGSolver(
+        ...     preconditioner=precond, event_log=event_log, iteration_history=iteration_history
+        ... )
         >>>
         >>> x, result = solver.solve(A, b, rtol=1e-6)
         >>> print(f"Converged: {result.converged}, Iterations: {result.iterations}")
@@ -152,9 +151,7 @@ class SciPyCGSolver:
             tracker.enable_solution_tracking()
 
         # Compute initial residual and log iteration 0
-        x_init, r_init, r0_norm = InitialStateComputer.compute_initial_residual(
-            A_op, b_arr, x0
-        )
+        x_init, r_init, r0_norm = InitialStateComputer.compute_initial_residual(A_op, b_arr, x0)
 
         # Compute RHS norm for relative residuals
         rhs_norm = float(norm(b_arr))
@@ -287,11 +284,11 @@ class SciPyCGSolver:
         # Determine effective iterations by checking history against tolerance
         # SciPy might take an extra step due to floating point differences or check timing.
         # We align with our strict criterion: first k where r_k converges.
-        
+
         # Default to full history count
         raw_iterations = max(0, len(residual_history_abs) - 1)
         iterations = raw_iterations
-        
+
         # Find first convergence point
         convergence_threshold = max(rtol * rhs_norm, atol)
 
@@ -302,13 +299,13 @@ class SciPyCGSolver:
             if norm_val <= convergence_threshold:
                 converged_idx = i
                 break
-        
+
         # If we found a convergence point
         if converged_idx != -1:
             iterations = converged_idx
             # Override info code to indicate success
             info_code = 0
-            
+
             # Truncate histories to match the "virtual" stop point
             # Keep up to index `iterations` (so length is iterations + 1)
             end_idx = iterations + 1
@@ -326,8 +323,8 @@ class SciPyCGSolver:
             converged = info_code == 0
 
         # Get final residuals (NaN if no data - clearly indicates failure, not convergence)
-        final_residual_abs = residual_history_abs[-1] if residual_history_abs else float('nan')
-        final_residual_rel = residual_history_rel[-1] if residual_history_rel else float('nan')
+        final_residual_abs = residual_history_abs[-1] if residual_history_abs else float("nan")
+        final_residual_rel = residual_history_rel[-1] if residual_history_rel else float("nan")
 
         return SolverResult(
             converged=converged,

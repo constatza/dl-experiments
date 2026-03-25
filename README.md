@@ -160,3 +160,27 @@ uv run pyright src/neuralls
 If you are new to the repo, stay on the command ladder above. If you are
 changing internals, start with the package README that matches the layer you are
 touching.
+
+## Contributor Setup
+
+Contributor workflows expect local hooks and the pinned Python dev toolchain.
+
+```bash
+uv tool install prek
+uv sync --dev
+prek install -t pre-commit -t pre-push
+```
+
+You can also install `prek` with your OS package manager instead of `uv tool`.
+
+Contributor setup is not complete until `prek` is installed and the git hooks
+are registered. Developer workflows are expected to use local `pre-commit` and
+`pre-push` hooks; CI remains an independent enforcement layer.
+
+`prek` is only the hook runner here. Python tool versions are pinned in this
+repo's `uv` dev dependencies, and Python hooks run through `uv run ...`.
+
+Current hook contract:
+
+- `pre-commit`: `uv-lock` on dependency metadata changes, then Ruff lint and format checks
+- `pre-push`: Pyright and the fast pytest smoke suite

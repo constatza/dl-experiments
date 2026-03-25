@@ -97,9 +97,7 @@ class TestGenerationPlan:
 
     def test_valid_plan_with_all_samples(self) -> None:
         strategies = {
-            "solution_archive": StrategySpec(
-                "solution_archive", "solution_archive", -1, {}
-            ),
+            "solution_archive": StrategySpec("solution_archive", "solution_archive", -1, {}),
         }
         plan = GenerationPlan(strategies=strategies)
         assert plan.solution_archive is not None
@@ -121,9 +119,7 @@ class TestGenerationPlan:
 
     def test_solution_archive_property(self) -> None:
         strategies = {
-            "solution_archive": StrategySpec(
-                "solution_archive", "solution_archive", -1, {}
-            ),
+            "solution_archive": StrategySpec("solution_archive", "solution_archive", -1, {}),
         }
         plan = GenerationPlan(strategies=strategies)
         assert plan.solution_archive is not None
@@ -151,9 +147,7 @@ class TestGenerationPlan:
         strategies = {
             "random": StrategySpec("random", "random", 100, {}),
             "rhs_archive": StrategySpec("rhs_archive", "rhs_archive", 50, {}),
-            "solution_archive": StrategySpec(
-                "solution_archive", "solution_archive", 50, {}
-            ),
+            "solution_archive": StrategySpec("solution_archive", "solution_archive", 50, {}),
         }
         plan = GenerationPlan(strategies=strategies)
         synthetic = plan.synthetic
@@ -445,9 +439,7 @@ class TestPydanticValidation:
 
         # Try to pass an invalid 'which' value
         with pytest.raises(ValidationError, match="Input should be"):
-            EigenvectorForwardConfig.model_validate(
-                {"samples": 10, "which": "invalid"}
-            )
+            EigenvectorForwardConfig.model_validate({"samples": 10, "which": "invalid"})
 
     def test_pydantic_validates_which_accepts_valid_values(self) -> None:
         """Test that valid 'which' values are accepted."""

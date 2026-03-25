@@ -6,7 +6,8 @@ import importlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import Mapping, Sequence
 
 from .constants import DEFAULT_MLRUNS_DIR, DEFAULT_MLARTIFACTS_DIR, DEFAULT_PROJECT_ROOT
 
@@ -79,7 +80,9 @@ def resolve_mlflow_paths(
         project_root,
     )
     artifact_target = Path(artifact_uri) if artifact_uri else DEFAULT_MLARTIFACTS_DIR
-    artifact_root = artifact_target if artifact_target.is_absolute() else workspace / artifact_target
+    artifact_root = (
+        artifact_target if artifact_target.is_absolute() else workspace / artifact_target
+    )
     return MlflowPaths(tracking_uri=tracking, artifact_uri=str(artifact_root.resolve()))
 
 

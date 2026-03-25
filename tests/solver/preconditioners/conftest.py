@@ -12,8 +12,6 @@ import numpy as np
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from numpy.typing import NDArray
 
 

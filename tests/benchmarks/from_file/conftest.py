@@ -61,7 +61,7 @@ def system(matrix_path, rhs_path):
     L = load_matrix(str(L_PATH), delimiter=",")
     # Zero out near-zero entries using centralized threshold
     A[np.absolute(A) <= SPARSITY_THRESHOLD] = 0
-    n = A.shape[0]
+    A.shape[0]
     b = load_matrix(str(rhs_path), delimiter=",")
     x_exact = linalg.solve(A, b)
     return A, b, x_exact, L

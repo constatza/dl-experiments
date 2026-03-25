@@ -3,21 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-import tomllib
 import importlib.util
 
 import pytest
+from neuralls.configuration.domain import ExperimentWorkspace
+from neuralls.configuration.loader import load_batch
 
 # Skip all tests if dlkit has circular import issue
 pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("dlkit") is None,
-    reason="dlkit circular import issue"
+    importlib.util.find_spec("dlkit") is None, reason="dlkit circular import issue"
 )
-
-from dlkit import GeneralSettings
-
-from neuralls.configuration.loader import load_batch
-from neuralls.configuration.domain import ExperimentBatch, RunnableExperiment, ExperimentWorkspace
 
 
 @pytest.fixture
@@ -37,65 +32,65 @@ def temp_config_structure(tmp_path: Path) -> Path:
     with open(project_root / "configs" / "experiments.toml", "w") as f:
         f.write('project_root = ".."\n')
         f.write(f'output_dir = "{project_root / "output"}"\n\n')
-        f.write('[[datasets]]\n')
+        f.write("[[datasets]]\n")
         f.write('id = "exp1_data"\n')
         f.write('path = "datasets/exp1_data.toml"\n\n')
-        f.write('[[datasets]]\n')
+        f.write("[[datasets]]\n")
         f.write('id = "exp2_data"\n')
         f.write('path = "datasets/exp2_data.toml"\n\n')
-        f.write('[[models]]\n')
+        f.write("[[models]]\n")
         f.write('id = "exp1_model"\n')
         f.write('path = "models/exp1_model.toml"\n\n')
-        f.write('[[models]]\n')
+        f.write("[[models]]\n")
         f.write('id = "exp2_model"\n')
         f.write('path = "models/exp2_model.toml"\n\n')
-        f.write('# Experiment 1: Full config with explicit checkpoint\n')
-        f.write('[[experiment]]\n')
+        f.write("# Experiment 1: Full config with explicit checkpoint\n")
+        f.write("[[experiment]]\n")
         f.write('id = "exp1"\n')
         f.write('dataset = "exp1_data"\n')
         f.write('model = "exp1_model"\n')
         f.write(f'checkpoint_path = "{project_root / "checkpoints" / "exp1.ckpt"}"\n\n')
-        f.write('# Experiment 2: Config without checkpoint (will warn)\n')
-        f.write('[[experiment]]\n')
+        f.write("# Experiment 2: Config without checkpoint (will warn)\n")
+        f.write("[[experiment]]\n")
         f.write('id = "exp2"\n')
         f.write('dataset = "exp2_data"\n')
         f.write('model = "exp2_model"\n')
 
     # Dataset configs
     with open(project_root / "configs" / "datasets" / "exp1_data.toml", "w") as f:
-        f.write('[flow]\n\n')
-        f.write('[source]\n')
+        f.write("[flow]\n\n")
+        f.write("[source]\n")
         f.write(f'matrix_path = "{matrix_path}"\n\n')
-        f.write('[generation]\n')
+        f.write("[generation]\n")
         f.write('normalize = "matrix"\n')
-        f.write('shuffle = false\n')
-        f.write('seed = 42\n\n')
-        f.write('[output]\n')
+        f.write("shuffle = false\n")
+        f.write("seed = 42\n\n")
+        f.write("[output]\n")
         f.write(f'data_dir = "{project_root / "data" / "processed"}"\n')
 
     with open(project_root / "configs" / "datasets" / "exp2_data.toml", "w") as f:
-        f.write('[flow]\n\n')
-        f.write('[source]\n')
+        f.write("[flow]\n\n")
+        f.write("[source]\n")
         f.write(f'matrix_path = "{matrix2_path}"\n\n')
-        f.write('[generation]\n')
+        f.write("[generation]\n")
         f.write('normalize = "matrix"\n')
-        f.write('shuffle = false\n')
-        f.write('seed = 42\n\n')
-        f.write('[output]\n')
+        f.write("shuffle = false\n")
+        f.write("seed = 42\n\n")
+        f.write("[output]\n")
         f.write(f'data_dir = "{project_root / "data" / "processed"}"\n')
 
     # Model configs
     with open(project_root / "configs" / "models" / "exp1_model.toml", "w") as f:
-        f.write('[SESSION]\n')
+        f.write("[SESSION]\n")
         f.write('name = "exp1_model"\n\n')
-        f.write('[MODEL]\n')
+        f.write("[MODEL]\n")
         f.write('name = "TestModel"\n')
         f.write('module_path = "test.module"\n')
 
     with open(project_root / "configs" / "models" / "exp2_model.toml", "w") as f:
-        f.write('[SESSION]\n')
+        f.write("[SESSION]\n")
         f.write('name = "exp2_model"\n\n')
-        f.write('[MODEL]\n')
+        f.write("[MODEL]\n")
         f.write('name = "TestModel2"\n')
         f.write('module_path = "test.module2"\n')
 
@@ -144,7 +139,9 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     assert exp2.spec.checkpoint_path is None
 
 
-def test_load_experiments_missing_registry_id(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
+def test_load_experiments_missing_registry_id(
+    temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch
+):
     """Missing registry ids fail before any guessed-path lookup."""
     monkeypatch.chdir(temp_config_structure)
 
@@ -152,15 +149,17 @@ def test_load_experiments_missing_registry_id(temp_config_structure: Path, monke
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
         f.write('project_root = ".."\n')
         f.write(f'output_dir = "{temp_config_structure / "output"}"\n\n')
-        f.write('[[models]]\n')
+        f.write("[[models]]\n")
         f.write('id = "exp1_model"\n')
         f.write('path = "models/exp1_model.toml"\n\n')
-        f.write('[[experiment]]\n')
+        f.write("[[experiment]]\n")
         f.write('id = "exp_missing"\n')
         f.write('dataset = "missing_dataset"\n')
         f.write('model = "exp1_model"\n')
 
-    with pytest.raises(ValueError, match="Experiment 'exp_missing' references dataset id 'missing_dataset'"):
+    with pytest.raises(
+        ValueError, match="Experiment 'exp_missing' references dataset id 'missing_dataset'"
+    ):
         load_batch(
             master_config_path=temp_config_structure / "configs" / "experiments.toml",
         )
@@ -199,17 +198,22 @@ def test_load_experiments_rejects_unknown_comparison_experiment_reference(
         )
     )
     with open(temp_config_structure / "configs" / "experiments.toml", "a") as f:
-        f.write('\n[[comparisons]]\n')
+        f.write("\n[[comparisons]]\n")
         f.write('id = "linear"\n')
         f.write('path = "comparison/linear.toml"\n')
 
-    with pytest.raises(ValueError, match="Comparison 'linear' neural preconditioner 'bound-neural' references experiment id 'missing-exp'"):
+    with pytest.raises(
+        ValueError,
+        match="Comparison 'linear' neural preconditioner 'bound-neural' references experiment id 'missing-exp'",
+    ):
         load_batch(
             master_config_path=temp_config_structure / "configs" / "experiments.toml",
         )
 
 
-def test_load_experiments_no_experiments(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
+def test_load_experiments_no_experiments(
+    temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch
+):
     """Test that ValueError is raised when no experiments defined."""
     monkeypatch.chdir(temp_config_structure)
 

@@ -87,13 +87,9 @@ class GenerationPlan:
         if not self.strategies:
             raise ValueError("At least one generation strategy must be configured")
 
-        active_strategies = [
-            spec for spec in self.strategies.values() if spec.samples != 0
-        ]
+        active_strategies = [spec for spec in self.strategies.values() if spec.samples != 0]
         if not active_strategies:
-            raise ValueError(
-                "At least one strategy must have samples > 0 or samples = -1"
-            )
+            raise ValueError("At least one strategy must have samples > 0 or samples = -1")
 
     @property
     def rhs_archive(self) -> StrategySpec | None:
@@ -109,9 +105,7 @@ class GenerationPlan:
     def synthetic(self) -> Mapping[str, StrategySpec]:
         """Get all synthetic (non-archive) strategies."""
         excluded = {ConfigKeys.TYPE_RHS_ARCHIVE, ConfigKeys.TYPE_SOLUTION_ARCHIVE}
-        return {
-            name: spec for name, spec in self.strategies.items() if name not in excluded
-        }
+        return {name: spec for name, spec in self.strategies.items() if name not in excluded}
 
 
 def _ensure_sequence(value: Any) -> Sequence[Any]:
@@ -128,9 +122,7 @@ def _ensure_sequence(value: Any) -> Sequence[Any]:
     """
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return value
-    raise ValueError(
-        "'generation.strategy' must be an array of tables ([[generation.strategy]])"
-    )
+    raise ValueError("'generation.strategy' must be an array of tables ([[generation.strategy]])")
 
 
 def _parse_strategy_entry(
@@ -207,8 +199,7 @@ def parse_generation_plan(generation_cfg: Mapping[str, Any]) -> GenerationPlan:
         ...     "strategy": [
         ...         {"name": "random", "samples": 1000},
         ...         {"name": "krylov", "samples": 500, "krylov_iters": 15},
-        ...         {"name": "solution_archive", "samples": -1,
-        ...          "solutions_glob": "/data/*.txt"},
+        ...         {"name": "solution_archive", "samples": -1, "solutions_glob": "/data/*.txt"},
         ...     ]
         ... }
         >>> plan = parse_generation_plan(config)
@@ -234,9 +225,7 @@ def parse_generation_plan(generation_cfg: Mapping[str, Any]) -> GenerationPlan:
 
     for index, raw_spec in enumerate(entries):
         if not isinstance(raw_spec, Mapping):
-            raise ValueError(
-                f"'generation.strategy' entry at index {index} must be a table"
-            )
+            raise ValueError(f"'generation.strategy' entry at index {index} must be a table")
 
         raw_name, samples, canonical, options = _parse_strategy_entry(raw_spec, index)
 

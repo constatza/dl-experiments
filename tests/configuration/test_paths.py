@@ -101,9 +101,7 @@ class TestResolveProcessedRoot:
         absolute_processed = tmp_path / "absolute_processed"
         absolute_processed.mkdir()
 
-        data_cfg = DataConfigFile(
-            output=OutputConfig(data_dir=absolute_processed)
-        )
+        data_cfg = DataConfigFile(output=OutputConfig(data_dir=absolute_processed))
 
         result = resolve_processed_root(data_cfg, tmp_path)
         assert result == absolute_processed
@@ -115,9 +113,7 @@ class TestResolveProcessedRoot:
 
         (project_root / "relative" / "processed").mkdir(parents=True)
 
-        data_cfg = DataConfigFile(
-            output=OutputConfig(data_dir=Path("relative/processed"))
-        )
+        data_cfg = DataConfigFile(output=OutputConfig(data_dir=Path("relative/processed")))
 
         result = resolve_processed_root(data_cfg, project_root)
         expected = (project_root / "relative" / "processed").resolve()
@@ -228,9 +224,7 @@ class TestBuildPathContext:
 
         (project_root / "data" / "processed").mkdir(parents=True)
 
-        data_cfg = DataConfigFile(
-            output=OutputConfig(data_dir=Path("data/processed"))
-        )
+        data_cfg = DataConfigFile(output=OutputConfig(data_dir=Path("data/processed")))
 
         ctx = build_path_context(data_cfg, project_override=project_root)
 
@@ -246,9 +240,7 @@ class TestBuildPathContext:
         for path in [project_root, output_root, processed_dir]:
             path.mkdir()
 
-        data_cfg = DataConfigFile(
-            output=OutputConfig(data_dir=processed_dir)
-        )
+        data_cfg = DataConfigFile(output=OutputConfig(data_dir=processed_dir))
 
         ctx = build_path_context(
             data_cfg,

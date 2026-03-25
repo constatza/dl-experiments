@@ -335,9 +335,7 @@ class TestBackwardCompatibility:
         # Direct FCG solver with explicit convergence criterion
         orthog = PeriodicRestartOrthogonalization(m_max=10)
         criterion = CombinedToleranceCriterion(rtol=1e-10, atol=1e-14)
-        new_solver = FCGSolver(
-            orthogonalization=orthog, convergence_criterion=criterion
-        )
+        new_solver = FCGSolver(orthogonalization=orthog, convergence_criterion=criterion)
         x_new, result_new = new_solver.solve(A, b, maxiter=100)
 
         # FCG solver via factory

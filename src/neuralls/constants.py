@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
+from .math_utils import MatrixNormType
 
 # =============================================================================
 # Exit Codes
@@ -38,16 +39,12 @@ def _path_from_env(var_name: str, fallback: Path) -> Path:
 DEFAULT_PROCESSED_DATA_DIR = _path_from_env(
     "GRAPH_CG_PROCESSED_DIR", DEFAULT_PROJECT_ROOT / "data" / "processed"
 )
-DEFAULT_OUTPUT_DIR = _path_from_env(
-    "GRAPH_CG_OUTPUT_DIR", DEFAULT_PROJECT_ROOT / "data" / "output"
-)
+DEFAULT_OUTPUT_DIR = _path_from_env("GRAPH_CG_OUTPUT_DIR", DEFAULT_PROJECT_ROOT / "data" / "output")
 DEFAULT_FIGURES_DIR = _path_from_env(
     "GRAPH_CG_FIGURES_DIR", DEFAULT_PROJECT_ROOT / "data" / "figures"
 )
 DEFAULT_CHECKPOINTS_DIR = DEFAULT_OUTPUT_DIR / "checkpoints"
-DEFAULT_MLRUNS_DIR = _path_from_env(
-    "GRAPH_CG_MLRUNS_DIR", DEFAULT_PROJECT_ROOT / "data" / "mlruns"
-)
+DEFAULT_MLRUNS_DIR = _path_from_env("GRAPH_CG_MLRUNS_DIR", DEFAULT_PROJECT_ROOT / "data" / "mlruns")
 DEFAULT_MLARTIFACTS_DIR = _path_from_env(
     "GRAPH_CG_MLARTIFACTS_DIR", DEFAULT_PROJECT_ROOT / "data" / "mlartifacts"
 )
@@ -71,9 +68,7 @@ EXP_SOLVER_CONFIG_NAME = "solver.toml"
 # CG Solver Defaults
 # =============================================================================
 DEFAULT_RTOL = 1e-6  # Relative tolerance for CG solves
-DEFAULT_ATOL = (
-    1e-14  # Absolute tolerance for convergence (in addition to relative tolerance)
-)
+DEFAULT_ATOL = 1e-14  # Absolute tolerance for convergence (in addition to relative tolerance)
 DEFAULT_CG_MAX_ITERATIONS = 1000
 DEFAULT_CG_STOPPING_CRITERION = "tolerance"
 
@@ -91,25 +86,15 @@ REORTHOG_DEFAULT_WINDOW = 10  # Default window size for partial reorthogonalizat
 
 # CG Algorithm Safety Parameters
 # These parameters control restart/breakdown behavior for flexible PCG with non-SPD preconditioners
-DEFAULT_CURVATURE_EPSILON = (
-    1e-14  # eps_curv: Restart if curvature d_k < eps_curv * ||p_k||^2
-)
-DEFAULT_BETA_MAX = (
-    1e10  # Maximum allowed beta before restart (prevents runaway in non-SPD cases)
-)
-DEFAULT_RESIDUAL_REPLACEMENT_FREQ = (
-    50  # m_replacement: Recompute true residual every N iterations
-)
-DEFAULT_DIVERGENCE_FACTOR = (
-    1e10  # gamma_div: Declare divergence if ||r|| > gamma_div * ||b||
-)
+DEFAULT_CURVATURE_EPSILON = 1e-14  # eps_curv: Restart if curvature d_k < eps_curv * ||p_k||^2
+DEFAULT_BETA_MAX = 1e10  # Maximum allowed beta before restart (prevents runaway in non-SPD cases)
+DEFAULT_RESIDUAL_REPLACEMENT_FREQ = 50  # m_replacement: Recompute true residual every N iterations
+DEFAULT_DIVERGENCE_FACTOR = 1e10  # gamma_div: Declare divergence if ||r|| > gamma_div * ||b||
 
 # FCG (Flexible Conjugate Gradient) Algorithm Parameters
 # These control the truncated orthogonalization history for FCG variants
 DEFAULT_M_MAX = 20  # Maximum history length for truncated orthogonalization in FCG
-DEFAULT_FCG_HISTORY_LIMIT = (
-    200  # Max search directions to retain for orthog/reorthog stability
-)
+DEFAULT_FCG_HISTORY_LIMIT = 200  # Max search directions to retain for orthog/reorthog stability
 FCG_ORTHOG_EPSILON = 1e-14  # Threshold for near-zero inner products in Gram-Schmidt
 
 # Numerical Stability Thresholds (following SciPy conventions)
@@ -230,9 +215,7 @@ DEFAULT_SHUFFLE = True
 # =============================================================================
 # Comparison/Evaluation Defaults
 # =============================================================================
-DEFAULT_TEST_SAMPLE_INDEX = (
-    0  # Which sample to extract for single-sample comparison tasks
-)
+DEFAULT_TEST_SAMPLE_INDEX = 0  # Which sample to extract for single-sample comparison tasks
 
 
 # =============================================================================
@@ -247,10 +230,6 @@ EigenvectorSelectionMode = Literal["smallest", "largest", "random"]
 # =============================================================================
 # Matrix Norm Types (for dataset metadata)
 # =============================================================================
-# NOTE: MatrixNormType enum is defined in math_utils.py as single source of truth
-# Re-exported here for backward compatibility and convenient access
-from .math_utils import MatrixNormType
-
 # Convenience aliases for backward compatibility
 MATRIX_NORM_SPECTRAL = MatrixNormType.SPECTRAL.value
 MATRIX_NORM_FROBENIUS = MatrixNormType.FROBENIUS.value
@@ -303,9 +282,7 @@ class ConfigKeys:
     RHS_ARCHIVE_GLOB = "rhs_archive_glob"
     STRATEGY = "strategy"
     PERCENTAGE = "percentage"  # Deprecated: use SAMPLES instead
-    SAMPLES = (
-        "samples"  # Number of samples to generate (0=skip, -1=all, >0=exact count)
-    )
+    SAMPLES = "samples"  # Number of samples to generate (0=skip, -1=all, >0=exact count)
     NAME = "name"
     RHS_GLOB = "rhs_glob"
     SOLUTIONS_GLOB = "solutions_glob"

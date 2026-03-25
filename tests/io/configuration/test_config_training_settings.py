@@ -76,9 +76,7 @@ module_path = "test.module"
         MINIMAL_GNN_CONFIG,
     ],
 )
-def test_training_sections_round_trip(
-    tmp_path: Path, config_content_template: str
-) -> None:
+def test_training_sections_round_trip(tmp_path: Path, config_content_template: str) -> None:
     """Ensure load_experiment preserves trainer callbacks/metrics from a temporary file."""
     # Create necessary directories that dlkit expects
     (tmp_path / "output").mkdir()

@@ -247,7 +247,11 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
     experiments_config = tmp_path / "experiments.toml"
     comparison_config.touch()
     _write_experiments_config(experiments_config)
-    cfg = _mock_cfg(preconditioners=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)])
+    cfg = _mock_cfg(
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ]
+    )
     payload = MagicMock()
 
     with (
@@ -280,7 +284,11 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
     condition_numbers.write_text("condition", encoding="utf-8")
     comparison_config = tmp_path / "comparison.toml"
     comparison_config.touch()
-    cfg = _mock_cfg(preconditioners=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)])
+    cfg = _mock_cfg(
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ]
+    )
     payload = ComparisonResult(
         results={},
         summary="ok",
@@ -299,13 +307,9 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
         nonlocal logged_files, comparison_json
         root = Path(path)
         logged_files = {
-            item.relative_to(root).as_posix()
-            for item in root.rglob("*")
-            if item.is_file()
+            item.relative_to(root).as_posix() for item in root.rglob("*") if item.is_file()
         }
-        comparison_json = json.loads(
-            (root / "comparison.json").read_text(encoding="utf-8")
-        )
+        comparison_json = json.loads((root / "comparison.json").read_text(encoding="utf-8"))
 
     with (
         patch(_LOAD_COMPARISON_CONFIG, return_value=cfg),
@@ -358,7 +362,9 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
             "neuralls.workflows.comparison.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(
                 specs=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)],
-                warnings=("Skipping neural preconditioner 'missing-neural': Registered model 'MissingFFNN' not found",),
+                warnings=(
+                    "Skipping neural preconditioner 'missing-neural': Registered model 'MissingFFNN' not found",
+                ),
             ),
         ),
     ):
@@ -399,7 +405,9 @@ def test_run_comparison_fails_if_all_preconditioners_are_skipped(
             "neuralls.workflows.comparison.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(
                 specs=[],
-                warnings=("Skipping neural preconditioner 'missing-neural': Registered model 'MissingFFNN' not found",),
+                warnings=(
+                    "Skipping neural preconditioner 'missing-neural': Registered model 'MissingFFNN' not found",
+                ),
             ),
         ),
     ):

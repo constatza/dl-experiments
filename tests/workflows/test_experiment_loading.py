@@ -70,7 +70,7 @@ class TestTrainingPipelineWithMLflow:
         """
         from neuralls.configuration.loader import load_experiment
 
-        tmp_path = training_setup["tmp_path"]
+        training_setup["tmp_path"]
         data_dir = training_setup["data_dir"]
         datasets_dir = training_setup["datasets_dir"]
         models_dir = training_setup["models_dir"]

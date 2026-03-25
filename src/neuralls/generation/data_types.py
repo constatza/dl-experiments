@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Required, TypedDict
+from typing import Literal, TypedDict
 
 
 # Type for normalization methods

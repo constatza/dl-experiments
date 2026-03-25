@@ -312,7 +312,9 @@ class NpyVectorStream:
         if self._array.ndim == 1:
             vector = _normalize_vector(np.asarray(self._array, dtype=np.float64), self._path)
         else:
-            vector = _normalize_vector(np.asarray(self._array[sample_id], dtype=np.float64), self._path)
+            vector = _normalize_vector(
+                np.asarray(self._array[sample_id], dtype=np.float64), self._path
+            )
         return VectorSample(sample_id=sample_id, vector=vector)
 
     def iter_samples(self) -> Iterator[VectorSample]:

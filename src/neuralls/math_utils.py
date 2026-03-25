@@ -19,11 +19,12 @@ class MatrixNormType(StrEnum):
     2. Add calculate_<name>_norm() function below
     3. Add entry to _NORM_STRATEGIES mapping
     """
-    SPECTRAL = "spectral"      # Spectral norm (2-norm): largest singular value
-    FROBENIUS = "frobenius"    # Frobenius norm: sqrt(sum of squared entries)
-    NUCLEAR = "nuclear"        # Nuclear norm: sum of singular values
-    ONE = "one"                # 1-norm: max column sum
-    INF = "inf"                # Infinity norm: max row sum
+
+    SPECTRAL = "spectral"  # Spectral norm (2-norm): largest singular value
+    FROBENIUS = "frobenius"  # Frobenius norm: sqrt(sum of squared entries)
+    NUCLEAR = "nuclear"  # Nuclear norm: sum of singular values
+    ONE = "one"  # 1-norm: max column sum
+    INF = "inf"  # Infinity norm: max row sum
 
 
 def calculate_normalization_scale(A: np.ndarray) -> tuple[float, float]:
@@ -206,10 +207,7 @@ def calculate_matrix_norm(
     """
     if norm_type not in _NORM_STRATEGIES:
         supported = ", ".join(norm.value for norm in MatrixNormType)
-        raise ValueError(
-            f"Unknown matrix norm type: {norm_type!r}. "
-            f"Supported types: {supported}"
-        )
+        raise ValueError(f"Unknown matrix norm type: {norm_type!r}. Supported types: {supported}")
 
     norm_fn = _NORM_STRATEGIES[norm_type]
     return norm_fn(A)
@@ -272,9 +270,7 @@ def normalize_by_matrix(
     return apply_dimension_scaling(A_scaled, b_scaled, dimension_scale)
 
 
-def normalize_by_rhs(
-    A: np.ndarray, b: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, float]:
+def normalize_by_rhs(A: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
     """Normalize system (A, b) by RHS norm with dimension scaling.
 
     Both matrix and RHS are divided by ||b|| and sqrt(d), which preserves
@@ -443,8 +439,7 @@ def validate_diagonal(diagonal: np.ndarray, threshold: float = 1e-15) -> None:
     """
     if np.any(np.abs(diagonal) < threshold):
         raise ValueError(
-            "Matrix contains near-zero diagonal entries; "
-            "cannot apply diagonal normalization."
+            "Matrix contains near-zero diagonal entries; cannot apply diagonal normalization."
         )
 
 

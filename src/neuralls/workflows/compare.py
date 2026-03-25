@@ -27,11 +27,22 @@ Key Components:
 
 Example:
     >>> from neuralls.workflows.compare import compare_preconditioners
-    >>> from neuralls.configuration.comparison import ComparisonGeneral, SolverParams, ComparisonData
+    >>> from neuralls.configuration.comparison import (
+    ...     ComparisonGeneral,
+    ...     SolverParams,
+    ...     ComparisonData,
+    ... )
     >>> from neuralls.configuration.preconditioner import StandardPreconditionerConfig
     >>>
     >>> general = ComparisonGeneral(
-    ...     params=SolverParams(rtol=1e-6, atol=1e-14, max_iterations=100, stopping_criterion="residual_norm", m_max=20, breakdown_tol=None),
+    ...     params=SolverParams(
+    ...         rtol=1e-6,
+    ...         atol=1e-14,
+    ...         max_iterations=100,
+    ...         stopping_criterion="residual_norm",
+    ...         m_max=20,
+    ...         breakdown_tol=None,
+    ...     ),
     ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
     ...     tracking=None,
     ...     model_store=None,
@@ -57,7 +68,7 @@ from collections.abc import Callable, Sequence
 import numpy as np
 from loguru import logger
 
-from neuralls.configuration.preconditioner import PreconditionerConfig, StandardPreconditionerConfig
+from neuralls.configuration.preconditioner import PreconditionerConfig
 from neuralls.configuration.comparison import ComparisonGeneral
 from ..diagnostics import compute_condition_numbers, plot_condition_numbers
 from neuralls.io.filesystem import ensure_dir
@@ -199,10 +210,7 @@ class PreconditionerService:
             >>> print(list(preconditioners.keys()))
             ['jacobi', 'ilu']
         """
-        return {
-            cfg.name: self.create_preconditioner(matrix, cfg)
-            for cfg in configs
-        }
+        return {cfg.name: self.create_preconditioner(matrix, cfg) for cfg in configs}
 
 
 # Registry for stopping criterion name mappings
@@ -241,10 +249,7 @@ def _map_stopping_criterion(name: str) -> StoppingCriterion:
     criterion = _STOPPING_CRITERION_REGISTRY.get(normalized)
     if criterion is None:
         valid_names = ", ".join(sorted(_STOPPING_CRITERION_REGISTRY.keys()))
-        raise ValueError(
-            f"Unknown stopping criterion: '{name}'. "
-            f"Valid options: {valid_names}"
-        )
+        raise ValueError(f"Unknown stopping criterion: '{name}'. Valid options: {valid_names}")
     return criterion
 
 
@@ -272,7 +277,14 @@ def _resolve_comparison_paths(
 
     Example:
         >>> general = ComparisonGeneral(
-        ...     params=SolverParams(rtol=1e-6, atol=1e-14, max_iterations=100, stopping_criterion="residual_norm", m_max=20, breakdown_tol=None),
+        ...     params=SolverParams(
+        ...         rtol=1e-6,
+        ...         atol=1e-14,
+        ...         max_iterations=100,
+        ...         stopping_criterion="residual_norm",
+        ...         m_max=20,
+        ...         breakdown_tol=None,
+        ...     ),
         ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
         ...     tracking=None,
         ...     model_store=None,
@@ -402,8 +414,7 @@ def _log_matrix_condition_number(
         )
         return
     logger.info(
-        f"Matrix condition number: comparison={label} "
-        f"matrix={matrix_path.name} value={value:.4e}"
+        f"Matrix condition number: comparison={label} matrix={matrix_path.name} value={value:.4e}"
     )
 
 
@@ -422,8 +433,6 @@ def _create_scheduled_preconditioners(
     Returns:
         Dict mapping names to scheduled preconditioner instances
     """
-    from ..solver.preconditioners.base import Preconditioner
-
     scheduled: dict[str, Any] = {}
 
     for cfg in preconditioner_configs:
@@ -557,11 +566,22 @@ def compare_preconditioners(
 
     Example:
         >>> from neuralls.workflows.compare import compare_preconditioners
-        >>> from neuralls.configuration.comparison import ComparisonGeneral, SolverParams, ComparisonData
+        >>> from neuralls.configuration.comparison import (
+        ...     ComparisonGeneral,
+        ...     SolverParams,
+        ...     ComparisonData,
+        ... )
         >>> from neuralls.configuration.preconditioner import StandardPreconditionerConfig
         >>>
         >>> general = ComparisonGeneral(
-        ...     params=SolverParams(rtol=1e-6, atol=0.0, max_iterations=1000, stopping_criterion="residual_norm", m_max=20, breakdown_tol=None),
+        ...     params=SolverParams(
+        ...         rtol=1e-6,
+        ...         atol=0.0,
+        ...         max_iterations=1000,
+        ...         stopping_criterion="residual_norm",
+        ...         m_max=20,
+        ...         breakdown_tol=None,
+        ...     ),
         ...     data=ComparisonData(matrix_path="data/matrix.txt", rhs_path="data/rhs.txt"),
         ...     tracking=None,
         ...     model_store=None,
@@ -602,9 +622,7 @@ def compare_preconditioners(
 
     # Step 4: Create preconditioners via service (uses factory function)
     service = PreconditionerService()
-    preconditioners = service.create_preconditioner_set(
-        system.matrix, preconditioner_configs
-    )
+    preconditioners = service.create_preconditioner_set(system.matrix, preconditioner_configs)
 
     # Step 5: Compute condition numbers for diagnostics
     cond_numbers = compute_condition_numbers(system.matrix, preconditioners)

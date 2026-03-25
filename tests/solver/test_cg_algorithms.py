@@ -70,9 +70,7 @@ def test_pcg_captures_residual_history(
     assert not np.isnan(info.residual_history).any()
     assert info.iteration_history is not None
     # Check scalar residual norms (logged in MINIMAL mode)
-    residual_norms = np.asarray(
-        info.iteration_history.residual_norms.to_list(), dtype=np.float64
-    )
+    residual_norms = np.asarray(info.iteration_history.residual_norms.to_list(), dtype=np.float64)
     assert residual_norms.size > 0
     assert residual_norms.size >= info.iterations
     assert not np.isnan(residual_norms).any()
@@ -215,9 +213,7 @@ def test_flexible_pcg_no_traces_by_default(
     A, b, _ = spd_system
     x0 = np.zeros_like(b)
 
-    _, info = flexible_cg(
-        A, b, x0, maxiter=50, trace_mode=TraceMode.DISABLED, atol=FUNCTIONAL_ATOL
-    )
+    _, info = flexible_cg(A, b, x0, maxiter=50, trace_mode=TraceMode.DISABLED, atol=FUNCTIONAL_ATOL)
 
     assert info.residual_vectors is None
     assert info.solution_vectors is None
@@ -256,9 +252,7 @@ def test_flexible_pcg_traces_satisfy_residual_equation(
         computed_residual = b - A @ x_k
 
         # Verify they match
-        assert np.all(
-            np.isclose(r_k, computed_residual, atol=FUNCTIONAL_ATOL, rtol=0.0)
-        ), (
+        assert np.all(np.isclose(r_k, computed_residual, atol=FUNCTIONAL_ATOL, rtol=0.0)), (
             f"Pair {k}: residual does not satisfy r_k = b - A @ x_k\n"
             f"  Captured r_k = {r_k}\n"
             f"  b - A @ x_k  = {computed_residual}\n"
@@ -341,9 +335,7 @@ def test_jacobi_factory_preserves_signs() -> None:
     r_test = np.array([0.0, 1.0, 0.0])  # Only second component non-zero
     z = jacobi_precond.apply(r_test)
     # diag[1] = -3.0, so z[1] should be negative: 1.0 / -3.0 = -0.333...
-    assert z[1] < 0, (
-        "Jacobi should preserve negative sign for negative diagonal element"
-    )
+    assert z[1] < 0, "Jacobi should preserve negative sign for negative diagonal element"
     assert np.isclose(z[1], 1.0 / -3.0), "Jacobi should compute correct reciprocal"
 
 

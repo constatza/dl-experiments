@@ -312,8 +312,7 @@ def resolve_preconditioner_models_with_warnings(
             continue
         if neural_spec.model_ref is None:
             raise ValueError(
-                f"Neural solver '{neural_spec.name}' requires either checkpoint_path "
-                "or model_ref."
+                f"Neural solver '{neural_spec.name}' requires either checkpoint_path or model_ref."
             )
         context = (
             experiment_contexts.get(neural_spec.experiment)
@@ -331,9 +330,7 @@ def resolve_preconditioner_models_with_warnings(
         except (ValueError, FileNotFoundError, RuntimeError, OSError, KeyError) as exc:
             if not skip_unresolved:
                 raise
-            warning = (
-                f"Skipping neural preconditioner '{neural_spec.name}': {exc}"
-            )
+            warning = f"Skipping neural preconditioner '{neural_spec.name}': {exc}"
             logger.warning(warning)
             warnings.append(warning)
             continue

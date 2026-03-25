@@ -19,16 +19,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pytest
 from scipy.linalg import norm
 
-from neuralls.constants import (
-    DEFAULT_ATOL,
-    DEFAULT_BETA_MAX,
-    DEFAULT_CURVATURE_EPSILON,
-    DEFAULT_DIVERGENCE_FACTOR,
-    DEFAULT_RESIDUAL_REPLACEMENT_FREQ,
-)
 from neuralls.solver.factories import flexible_cg as flexible_pcg
 
 if TYPE_CHECKING:
@@ -568,9 +560,6 @@ def test_flexible_pcg_nonzero_initial_guess(
 # =============================================================================
 
 
-
-
-
 # =============================================================================
 # Integration Test: Residual History
 # =============================================================================
@@ -712,7 +701,7 @@ def test_flexible_pcg_already_converged_initial_guess(
         Should converge immediately (iteration 0).
     """
     a, b, x_exact = tridiagonal_system_known_solution
-    
+
     # Use very tight tolerances to ensure we are testing the "already converged" logic
     # rather than just "close enough" logic
     rtol = 1e-10

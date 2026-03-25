@@ -79,8 +79,10 @@ def _array_reference(
     values: NDArray[Any],
 ) -> PendingArrayArtifact:
     """Create a typed artifact reference for a numpy array."""
-    path = Path("arrays").joinpath(*[_sanitize_path_part(part) for part in path_parts]).with_suffix(
-        ".npy"
+    path = (
+        Path("arrays")
+        .joinpath(*[_sanitize_path_part(part) for part in path_parts])
+        .with_suffix(".npy")
     )
     reference = ArrayArtifact(
         path=path,
@@ -204,8 +206,7 @@ def _stage_plot_path(source: Path, work_root: Path) -> Path:
 def _stage_plot_paths(plot_paths: PlotPaths, work_root: Path) -> PlotPaths:
     """Stage comparison plots under work_root/figures and return relative paths."""
     staged = {
-        key: _stage_plot_path(path, work_root)
-        for key, path in plot_paths.to_mapping().items()
+        key: _stage_plot_path(path, work_root) for key, path in plot_paths.to_mapping().items()
     }
     return PlotPaths.from_mapping(staged)
 
@@ -224,14 +225,8 @@ def _save_comparison_toml(
     output_path: Path,
 ) -> None:
     """Save scalar comparison diagnostics to a TOML file."""
-    iterations = {
-        name: entry.iterations
-        for name, entry in result.results.items()
-    }
-    residuals = {
-        name: entry.residual
-        for name, entry in result.results.items()
-    }
+    iterations = {name: entry.iterations for name, entry in result.results.items()}
+    residuals = {name: entry.residual for name, entry in result.results.items()}
     payload = {
         "condition_number": dict(result.condition_numbers),
         "iterations": iterations,
@@ -310,11 +305,15 @@ def _coerce_recommendations(value: object) -> ComparisonRecommendations:
             return value
         case dict() as mapping:
             ranked_value = mapping.get("ranked", ())
-            ranked = tuple(
-                recommendation
-                for item in ranked_value
-                if (recommendation := _coerce_ranked_recommendation(item)) is not None
-            ) if isinstance(ranked_value, list | tuple) else ()
+            ranked = (
+                tuple(
+                    recommendation
+                    for item in ranked_value
+                    if (recommendation := _coerce_ranked_recommendation(item)) is not None
+                )
+                if isinstance(ranked_value, list | tuple)
+                else ()
+            )
             overall_best = _coerce_ranked_recommendation(
                 mapping.get("overall_best") or mapping.get("best_overall")
             )
@@ -403,14 +402,16 @@ def coerce_comparison_result_payload(value: object) -> ComparisonArtifactSource:
 
     return ComparisonArtifactFallback(
         summary=summary if isinstance(summary, str) else "",
-        preconditioners=tuple(
-            item for item in preconditioners if isinstance(item, str)
-        ) if isinstance(preconditioners, list | tuple) else (),
+        preconditioners=tuple(item for item in preconditioners if isinstance(item, str))
+        if isinstance(preconditioners, list | tuple)
+        else (),
         condition_numbers={
             str(key): float(score)
             for key, score in condition_numbers.items()
             if isinstance(score, int | float)
-        } if isinstance(condition_numbers, dict) else {},
+        }
+        if isinstance(condition_numbers, dict)
+        else {},
         plot_paths=_coerce_plot_paths(plot_paths),
         recommendations=_coerce_recommendations(recommendations),
         results=_coerce_fallback_results(results),

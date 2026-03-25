@@ -219,9 +219,7 @@ class EigenvectorCombinationTransform:
         >>> A = create_spd_matrix(10)
         >>> # Generate 5 random combinations from smallest eigenvectors
         >>> transform = EigenvectorCombinationTransform(
-        ...     count=5,
-        ...     which="smallest",
-        ...     rng=np.random.default_rng(42)
+        ...     count=5, which="smallest", rng=np.random.default_rng(42)
         ... )
         >>> solutions = transform.transform(A)
         >>> solutions.shape
@@ -233,7 +231,7 @@ class EigenvectorCombinationTransform:
         ...     which="smallest",
         ...     rng=np.random.default_rng(42),
         ...     num_eigenvectors=3,
-        ...     include_eigenvectors=True
+        ...     include_eigenvectors=True,
         ... )
         >>> solutions = transform.transform(A)
         >>> solutions.shape
@@ -286,9 +284,7 @@ class EigenvectorCombinationTransform:
                 num_eigvecs = n
 
         if num_eigvecs > n or num_eigvecs <= 0:
-            raise ValueError(
-                f"num_eigenvectors ({num_eigvecs}) must be positive and ≤ {n}"
-            )
+            raise ValueError(f"num_eigenvectors ({num_eigvecs}) must be positive and ≤ {n}")
 
         # Select subset of eigenvectors
         selected_eigvecs, _, _ = _select_eigenvectors(
@@ -318,9 +314,7 @@ class EigenvectorCombinationTransform:
                 return selected_eigvecs.T
         else:
             # Only combinations, no pure eigenvectors
-            return _generate_eigenvector_combinations(
-                selected_eigvecs, self.count, self.rng
-            )
+            return _generate_eigenvector_combinations(selected_eigvecs, self.count, self.rng)
 
 
 class KrylovBasisTransform:
@@ -336,9 +330,7 @@ class KrylovBasisTransform:
     Examples:
         >>> A = create_spd_matrix(10)
         >>> transform = KrylovBasisTransform(
-        ...     krylov_dim=5,
-        ...     num_samples=10,
-        ...     rng=np.random.default_rng(42)
+        ...     krylov_dim=5, num_samples=10, rng=np.random.default_rng(42)
         ... )
         >>> solutions = transform.transform(A)
         >>> solutions.shape
@@ -419,9 +411,7 @@ class CGTraceTransform:
         self.rtol = rtol
         self.atol = atol
 
-    def transform(
-        self, data: tuple[np.ndarray, np.ndarray | None]
-    ) -> list[np.ndarray]:
+    def transform(self, data: tuple[np.ndarray, np.ndarray | None]) -> list[np.ndarray]:
         """Run CG and collect traces.
 
         Args:

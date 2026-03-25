@@ -281,12 +281,8 @@ def test_spectral_scale_full_roundtrip(test_system_batch: LinearSystemBatch) -> 
 
     # Normalize (per-sample scales for RHS/solution)
     A_norm = scales[0].scale_matrix(test_system_batch.matrix)
-    R_norm = np.array(
-        [s.scale_rhs(r) for s, r in zip(scales, test_system_batch.rhs_samples)]
-    )
-    X_norm = np.array(
-        [s.scale_solution(x) for s, x in zip(scales, test_system_batch.sol_samples)]
-    )
+    R_norm = np.array([s.scale_rhs(r) for s, r in zip(scales, test_system_batch.rhs_samples)])
+    X_norm = np.array([s.scale_solution(x) for s, x in zip(scales, test_system_batch.sol_samples)])
 
     # Denormalize
     A_recovered = scales[0].denormalize_matrix(A_norm)

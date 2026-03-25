@@ -94,7 +94,6 @@ class _BaseResidualsStrategy:
         Returns:
             GeneratedSamples with error_traces populated
         """
-
         # Validate and convert to typed config
         config = ResidualErrorConfig(**cfg)
 
@@ -103,9 +102,7 @@ class _BaseResidualsStrategy:
         available_systems: int | None = None
 
         if single_rhs is None:
-            available_systems = self._resolve_available_systems(
-                matrix, config, archive, rng
-            )
+            available_systems = self._resolve_available_systems(matrix, config, archive, rng)
 
         num_base_systems, final_rows = resolve_trace_generation_counts(
             config.samples,
@@ -148,9 +145,7 @@ class _BaseResidualsStrategy:
             )
 
             # Layer 2: Transform (compute RHS or load from archive)
-            rhs_provider = HybridInputProvider(
-                archive=archive, field="rhs_vectors", scale=1.0
-            )
+            rhs_provider = HybridInputProvider(archive=archive, field="rhs_vectors", scale=1.0)
             rhs_from_archive = (
                 archive is not None
                 and archive.rhs_vectors is not None
@@ -193,18 +188,22 @@ class _BaseResidualsStrategy:
             )
 
             # Extract vectors from iteration history
-            assert info.iteration_history is not None and info.iteration_history.residuals is not None
+            assert (
+                info.iteration_history is not None and info.iteration_history.residuals is not None
+            )
             residual_seq = info.iteration_history.residuals.to_array()
-            solution_seq = info.iteration_history.solutions.to_array() if info.iteration_history.solutions else np.array([])
+            solution_seq = (
+                info.iteration_history.solutions.to_array()
+                if info.iteration_history.solutions
+                else np.array([])
+            )
 
-            residual_seq = residual_seq[::config.every_n]
+            residual_seq = residual_seq[:: config.every_n]
             if solution_seq.size > 0:
-                solution_seq = solution_seq[::config.every_n]
+                solution_seq = solution_seq[:: config.every_n]
             num_pairs = residual_seq.shape[0]
 
-            error_seq = np.array(
-                [true_sol - x_k for x_k in solution_seq], dtype=np.float64
-            )
+            error_seq = np.array([true_sol - x_k for x_k in solution_seq], dtype=np.float64)
 
             residual_blocks.append(residual_seq)
             solution_current_blocks.append(solution_seq)
@@ -230,6 +229,7 @@ class _BaseResidualsStrategy:
             solutions=sols[:referenced_samples],
             error_traces=error_traces,
         )
+
 
 @register_single_rhs_strategy
 class ResidualsStrategy(_BaseResidualsStrategy):

@@ -22,10 +22,7 @@ Architecture:
 Usage:
     >>> from neuralls.generation import generate_mixture
     >>> X, Y, res_traces, err_traces = generate_mixture(
-    ...     A, b,
-    ...     mix={"normal": 1.0, "krylov": 1.0},
-    ...     total=100,
-    ...     seed=42
+    ...     A, b, mix={"normal": 1.0, "krylov": 1.0}, total=100, seed=42
     ... )
 """
 

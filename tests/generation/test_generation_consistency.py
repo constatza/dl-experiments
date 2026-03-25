@@ -116,9 +116,7 @@ def test_eigenvector_forward_consistency(tmp_path: Path, matrix_path: str) -> No
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert is_consistent, (
-        f"eigenvector_forward: A @ x != b, max error = {max_error:.2e}"
-    )
+    assert is_consistent, f"eigenvector_forward: A @ x != b, max error = {max_error:.2e}"
 
 
 def test_eigenvector_inverse_consistency(tmp_path: Path, matrix_path: str) -> None:
@@ -133,9 +131,7 @@ def test_eigenvector_inverse_consistency(tmp_path: Path, matrix_path: str) -> No
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert is_consistent, (
-        f"eigenvector_inverse: A @ x != b, max error = {max_error:.2e}"
-    )
+    assert is_consistent, f"eigenvector_inverse: A @ x != b, max error = {max_error:.2e}"
 
 
 def test_no_normalization_consistency(
@@ -255,9 +251,7 @@ def test_large_mixed_dataset_consistency(
     )
 
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert is_consistent, (
-        f"large mixed dataset: A @ x != b, max error = {max_error:.2e}"
-    )
+    assert is_consistent, f"large mixed dataset: A @ x != b, max error = {max_error:.2e}"
 
     # Verify total count
     rhs, _ = load_dense_training_arrays(Path(dataset_dir))
@@ -323,9 +317,7 @@ def test_diagonal_normalization_preserves_symmetry_with_mixed_strategies(
 
     # Verify consistency
     is_consistent, max_error = verify_dataset_consistency(Path(dataset_dir))
-    assert is_consistent, (
-        f"diagonal normalization: A @ x != b, max error = {max_error:.2e}"
-    )
+    assert is_consistent, f"diagonal normalization: A @ x != b, max error = {max_error:.2e}"
 
     # Verify matrix symmetry is preserved
     A = load_matrix_dense_sample(Path(dataset_dir), sample_index=0)
@@ -337,6 +329,4 @@ def test_diagonal_normalization_preserves_symmetry_with_mixed_strategies(
     # Verify diagonal is normalized to 1
     diag = np.diag(A)
     max_diag_error = np.max(np.abs(diag - 1.0))
-    assert max_diag_error < 1e-10, (
-        f"Diagonal not normalized to 1: max error = {max_diag_error:.2e}"
-    )
+    assert max_diag_error < 1e-10, f"Diagonal not normalized to 1: max error = {max_diag_error:.2e}"

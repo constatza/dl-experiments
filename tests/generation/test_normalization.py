@@ -26,9 +26,7 @@ def test_normal_strategy_normalization():
     # Generate samples
     strategy = RandomNormalStrategy()
     output = strategy.generate(
-        matrix=A,
-        cfg={"samples": 100, "seed": 42, "target_rhs_scale": 1.0},
-        archive=None
+        matrix=A, cfg={"samples": 100, "seed": 42, "target_rhs_scale": 1.0}, archive=None
     )
     R = output.rhs
     X = output.solutions
@@ -69,9 +67,7 @@ def test_krylov_strategy_normalization():
     # Generate samples
     strategy = KrylovStrategy()
     output = strategy.generate(
-        matrix=A,
-        cfg={"samples": 100, "seed": 42, "krylov_iters": 10},
-        archive=None
+        matrix=A, cfg={"samples": 100, "seed": 42, "krylov_iters": 10}, archive=None
     )
     R = output.rhs
     X = output.solutions

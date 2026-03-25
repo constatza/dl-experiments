@@ -7,7 +7,6 @@ import tomllib
 import numpy as np
 import pytest
 
-from neuralls.solver.factories import pcg
 from neuralls.solver.models.config import SolverConfig
 from neuralls.solver.models.result import SolverResult
 from neuralls.solver.monitoring.iteration_history import IterationHistory
@@ -308,9 +307,7 @@ class TestSaveSolverData:
         assert (target_dir / "config.toml").exists()
         assert (target_dir / "results.toml").exists()
 
-    def test_npz_format(
-        self, tmp_path: Path, simple_system, solver_config, solver_result_minimal
-    ):
+    def test_npz_format(self, tmp_path: Path, simple_system, solver_config, solver_result_minimal):
         """Test NPZ format option."""
         A, b, x_sol, x0 = simple_system
 
@@ -394,12 +391,10 @@ class TestNPZFileSizes:
         # Compare file sizes
         npz_size = (npz_dir / "system.npz").stat().st_size
         txt_size = sum(
-            (txt_dir / f).stat().st_size
-            for f in ["A.txt", "b.txt", "x0.txt", "x_sol.txt"]
+            (txt_dir / f).stat().st_size for f in ["A.txt", "b.txt", "x0.txt", "x_sol.txt"]
         )
 
         # NPZ should be significantly smaller (expect ~10x but require at least 2x)
         assert npz_size < txt_size / 2, (
-            f"NPZ ({npz_size} bytes) should be at least 2x smaller than "
-            f"TXT ({txt_size} bytes)"
+            f"NPZ ({npz_size} bytes) should be at least 2x smaller than TXT ({txt_size} bytes)"
         )

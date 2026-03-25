@@ -115,7 +115,5 @@ def test_scipy_cg_vs_fcg_consistency():
     # Both should have absolute residual = ||b||
     assert result_scipy.residual_history_abs is not None
     assert result_fcg.residual_history_abs is not None
-    assert np.isclose(
-        result_scipy.residual_history_abs[0], np.linalg.norm(b), rtol=1e-10
-    )
+    assert np.isclose(result_scipy.residual_history_abs[0], np.linalg.norm(b), rtol=1e-10)
     assert np.isclose(result_fcg.residual_history_abs[0], np.linalg.norm(b), rtol=1e-10)

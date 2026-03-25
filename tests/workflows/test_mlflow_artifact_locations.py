@@ -134,10 +134,10 @@ def _write_experiments_config(path: Path, output_root: Path) -> str:
         "mlflow": {
             "tracking_uri": tracking_uri,
         },
-            "names": {
-                "training": "neuralls-training",
-                "comparison": "Comparisons",
-            },
+        "names": {
+            "training": "neuralls-training",
+            "comparison": "Comparisons",
+        },
     }
     with path.open("wb") as fh:
         tomli_w.dump(payload, fh)

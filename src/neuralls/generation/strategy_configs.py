@@ -97,15 +97,14 @@ def _default_cg_solve_config() -> SolveConfig:
         }
     )
 
+
 class BaseStrategyConfig(BaseModel):
     samples: int = Field(
         ...,
         description="Number of samples to generate for this strategy. (0=skip, -1=all, >0=exact count)",
-        ge=-1, # samples can be -1 for all
+        ge=-1,  # samples can be -1 for all
     )
-    seed: int | None = Field(
-        DEFAULT_RANDOM_SEED, description="Random seed for reproducibility."
-    )
+    seed: int | None = Field(DEFAULT_RANDOM_SEED, description="Random seed for reproducibility.")
     shuffle: bool = Field(DEFAULT_SHUFFLE, description="Whether to shuffle the generated samples.")
 
     model_config = ConfigDict(
@@ -121,13 +120,12 @@ class BaseEigenvectorConfig(BaseStrategyConfig):
     include_eigenvectors: bool = Field(
         True, description="Whether to include eigenvectors in the generated solutions."
     )
-    num_eigenvectors: int = Field(
-        1, description="Number of eigenvectors to include.", ge=1
-    )
+    num_eigenvectors: int = Field(1, description="Number of eigenvectors to include.", ge=1)
 
 
 class EigenvectorForwardConfig(BaseEigenvectorConfig):
     """Configuration for EigenvectorForwardStrategy."""
+
     pass
 
 
@@ -252,6 +250,7 @@ class SearchDirectionsConfig(BaseStrategyConfig):
     Collects (A @ p_k, p_k) pairs from CG iterations for training neural preconditioners.
     Training mapping: NN(A @ p_k) ≈ p_k, so NN ≈ A^{-1}
     """
+
     cg_iters: int = Field(
         DEFAULT_RESIDUAL_TRACE_ITERS,
         description="Number of CG iterations to collect search direction pairs.",
@@ -286,12 +285,8 @@ class ValidatedArchiveConfig(BaseStrategyConfig):
     Loads both solutions and RHS from archives, then verifies A @ x = b consistency.
     """
 
-    solutions_glob: str = Field(
-        ..., description="Glob pattern for solution files to load."
-    )
-    rhs_glob: str = Field(
-        ..., description="Glob pattern for RHS files to load."
-    )
+    solutions_glob: str = Field(..., description="Glob pattern for solution files to load.")
+    rhs_glob: str = Field(..., description="Glob pattern for RHS files to load.")
     verification_tolerance: float = Field(
         1e-10,
         description="Maximum relative residual ||A@x - b|| / ||b|| to accept as valid.",
@@ -357,11 +352,14 @@ class SparseRhsConfig(BaseStrategyConfig):
 
 
 class MixedStrategyConfig(BaseModel):
-    """Configuration for a mix of strategies. (Not directly used by `generate` methods)"""
+    """Configuration for a mix of strategies. (Not directly used by `generate` methods)."""
+
     pass
+
 
 class GenerationConfig(BaseModel):
     """Overall configuration for data generation."""
+
     # This represents the structure of the [generation] section in the config
     # Add fields as needed to match the actual data generation config structure.
     # For now, it's a placeholder.

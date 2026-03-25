@@ -36,9 +36,7 @@ def main(
         None, help="Override targets path (required if config has no DATASET)"
     ),
     no_plots: bool = typer.Option(False, help="Skip saving plots"),
-    figures_dir: Path | None = typer.Option(
-        None, help="Override directory for saved plots"
-    ),
+    figures_dir: Path | None = typer.Option(None, help="Override directory for saved plots"),
     enable_mlflow: bool = typer.Option(
         False,
         "--enable-mlflow/--no-mlflow",
@@ -78,7 +76,10 @@ def main(
 
     if results.y_pred is not None:
         import numpy as np
-        logger.info(f"Prediction summary: mean={float(np.mean(results.y_pred)):.4e}, std={float(np.std(results.y_pred)):.4e}")
+
+        logger.info(
+            f"Prediction summary: mean={float(np.mean(results.y_pred)):.4e}, std={float(np.std(results.y_pred)):.4e}"
+        )
 
     if results.y_true is not None and results.y_pred is not None:
         logger.info(f"Generated predictions for {len(results.y_true)} samples")
@@ -87,9 +88,7 @@ def main(
         if results.diagnostic_plot_path:
             logger.info(f"Saved diagnostic plot to: {results.diagnostic_plot_path}")
         elif not no_plots:
-            logger.warning(
-                "Could not extract matching prediction/target arrays for plotting."
-            )
+            logger.warning("Could not extract matching prediction/target arrays for plotting.")
 
         logger.info(f"Inference completed in {results.duration_seconds:.2f}s")
 

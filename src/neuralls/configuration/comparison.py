@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypeAlias
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic import model_validator
@@ -21,9 +21,8 @@ from neuralls.configuration.preconditioner import (
 )
 
 
-NormalizeSystem: TypeAlias = Literal[
-    "none", "matrix", "rhs", "both", "diagonal", "spectral"
-]
+type NormalizeSystem = Literal["none", "matrix", "rhs", "both", "diagonal", "spectral"]
+
 
 @dataclass(frozen=True)
 class SolverParams:
@@ -97,7 +96,9 @@ class _ComparisonConfigModel(BaseModel):
     @model_validator(mode="after")
     def validate_preconditioners(self) -> _ComparisonConfigModel:
         if not self.preconditioners:
-            raise ValueError("Comparison config must define at least one [[preconditioners]] entry.")
+            raise ValueError(
+                "Comparison config must define at least one [[preconditioners]] entry."
+            )
         names = [spec.name for spec in self.preconditioners]
         if len(names) != len(set(names)):
             raise ValueError("Comparison config cannot define duplicate preconditioner names.")
@@ -109,9 +110,7 @@ class _ComparisonConfigModel(BaseModel):
 
         for spec in neural_specs:
             if spec.model_ref is None:
-                raise ValueError(
-                    f"Neural preconditioner '{spec.name}' must define model_ref."
-                )
+                raise ValueError(f"Neural preconditioner '{spec.name}' must define model_ref.")
             if spec.checkpoint_path is not None:
                 raise ValueError(
                     f"Neural preconditioner '{spec.name}' cannot use checkpoint_path in comparison configs."

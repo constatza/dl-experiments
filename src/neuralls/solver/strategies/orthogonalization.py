@@ -560,9 +560,7 @@ def create_fcg_orthogonalization(
         Notay, Y. (2000). Flexible Conjugate Gradients. SIAM J. Sci. Comput.
     """
     if m_max == 0:
-        raise ValueError(
-            "m_max cannot be 0. Use m_max=1 for minimal orthogonalization."
-        )
+        raise ValueError("m_max cannot be 0. Use m_max=1 for minimal orthogonalization.")
     if m_max < -1 and not np.isinf(m_max):
         raise ValueError(f"m_max must be >= -1 or np.inf, got {m_max}")
 

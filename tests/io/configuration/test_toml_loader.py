@@ -136,7 +136,7 @@ type = "jacobi"
         """Legacy solver schema must fail."""
         config_file = tmp_path / "comparison.toml"
         config_file.write_text(
-            f"""
+            """
 [general]
 rtol = 1e-6
 

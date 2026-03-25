@@ -17,15 +17,16 @@ from neuralls.configuration.preconditioner import (
     PreconditionerType,
     RegisteredModelRefConfig,
 )
-from neuralls.workflows.model_catalog import assign_dataset_alias_to_registered_model, register_logged_model
+from neuralls.workflows.model_catalog import (
+    assign_dataset_alias_to_registered_model,
+    register_logged_model,
+)
 from neuralls.workflows.model_resolution import resolve_model_ref
 
 
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.filterwarnings(
-        "ignore:codecs\\.open\\(\\) is deprecated.*:DeprecationWarning"
-    ),
+    pytest.mark.filterwarnings("ignore:codecs\\.open\\(\\) is deprecated.*:DeprecationWarning"),
 ]
 
 

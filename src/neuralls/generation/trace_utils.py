@@ -57,22 +57,14 @@ def _merge_residual_traces(
     ]
 
     if any(has_search_directions) and not all(has_search_directions):
-        raise ValueError(
-            "Residual trace blocks must uniformly include search_directions."
-        )
+        raise ValueError("Residual trace blocks must uniformly include search_directions.")
     if any(has_search_direction_products) and not all(has_search_direction_products):
-        raise ValueError(
-            "Residual trace blocks must uniformly include search_direction_products."
-        )
+        raise ValueError("Residual trace blocks must uniformly include search_direction_products.")
 
     if all(has_search_directions):
         # All blocks have search_directions (validated above), filter None for type safety
         search_directions = np.vstack(
-            [
-                block.search_directions
-                for block in blocks
-                if block.search_directions is not None
-            ]
+            [block.search_directions for block in blocks if block.search_directions is not None]
         )
     if all(has_search_direction_products):
         # All blocks have search_direction_products (validated above), filter None for type safety
@@ -158,9 +150,7 @@ def _trim_residual_traces(
         sample_indices=traces.sample_indices[slc],
         iteration_indices=traces.iteration_indices[slc],
         search_directions=(
-            None
-            if traces.search_directions is None
-            else traces.search_directions[slc]
+            None if traces.search_directions is None else traces.search_directions[slc]
         ),
         search_direction_products=(
             None

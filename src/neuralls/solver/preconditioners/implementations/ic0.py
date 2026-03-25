@@ -81,9 +81,7 @@ class IC0Preconditioner(LinearPreconditioner[NDArray]):
         """
         return _compute_ic0_factor_sparse(matrix, self._threshold)
 
-    def apply(
-        self, residual: NDArray, context: PreconditionerContext | None = None
-    ) -> NDArray:
+    def apply(self, residual: NDArray, context: PreconditionerContext | None = None) -> NDArray:
         """Solve (L @ L.T) z = r using triangular solves.
 
         Args:

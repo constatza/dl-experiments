@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import cast
 from unittest.mock import patch
 
 import numpy as np
@@ -39,7 +39,9 @@ def predictions_as_dicts() -> list[TensorDict]:
     return [
         TensorDict(
             {
-                "predictions": TensorDict({"output": torch.tensor([1.0, 2.0, 3.0])}, batch_size=[3]),
+                "predictions": TensorDict(
+                    {"output": torch.tensor([1.0, 2.0, 3.0])}, batch_size=[3]
+                ),
                 "targets": TensorDict({}, batch_size=[3]),
             },
             batch_size=[3],
@@ -100,7 +102,9 @@ def training_result_dict_predictions(predictions_as_dicts: list[TensorDict]) -> 
 
 
 @pytest.fixture
-def training_result_tensor_predictions(predictions_as_tensors: list[torch.Tensor]) -> TrainingResult:
+def training_result_tensor_predictions(
+    predictions_as_tensors: list[torch.Tensor],
+) -> TrainingResult:
     """TrainingResult with plain tensor format predictions."""
     return TrainingResult(
         model_state=None,

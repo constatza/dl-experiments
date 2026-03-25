@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import mlflow
@@ -39,9 +39,7 @@ def _normalize_aliases(aliases: tuple[str, ...]) -> tuple[str, ...]:
     for alias in aliases:
         normalized = normalize_registry_id(alias)
         if normalized in RESERVED_ALIASES:
-            raise ValueError(
-                f"Alias '{normalized}' is reserved and cannot be assigned."
-            )
+            raise ValueError(f"Alias '{normalized}' is reserved and cannot be assigned.")
         if normalized in seen:
             continue
         seen.add(normalized)
@@ -100,7 +98,7 @@ def register_logged_model(
                 f"{registered_model_name}@{alias}: "
                 f"expected version {version}, got {resolved_version.version}."
             )
-    registration_ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+    registration_ts = datetime.now(tz=UTC).isoformat(timespec="seconds")
     effective_tags: dict[str, str] = dict(tags or {})
     effective_tags["registered_at"] = registration_ts
     for key, value in effective_tags.items():
@@ -190,7 +188,7 @@ def read_registered_model_name(model_config_path: Path) -> str | None:
     try:
         with open(model_config_path, "rb") as fh:
             raw = tomllib.load(fh)
-    except (FileNotFoundError, OSError, ValueError):
+    except FileNotFoundError, OSError, ValueError:
         return None
     model_section = raw.get("MODEL")
     if not isinstance(model_section, dict):

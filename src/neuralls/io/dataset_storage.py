@@ -86,9 +86,7 @@ class SparsePackAccumulator:
         if vals.ndim != 1:
             raise ValueError(f"values must be 1D, got {vals.shape}")
         if idx.shape[1] != vals.size:
-            raise ValueError(
-                f"indices nnz ({idx.shape[1]}) does not match values ({vals.size})"
-            )
+            raise ValueError(f"indices nnz ({idx.shape[1]}) does not match values ({vals.size})")
 
         nnz = int(vals.size)
         if nnz == 0:
@@ -187,7 +185,11 @@ def _dense_to_coo_pack(
         nnz_ptr[sample_idx + 1] = nnz_ptr[sample_idx] + int(sample_values.size)
 
     if values_parts:
-        indices = np.concatenate(indices_parts, axis=1) if indices_parts else np.zeros((2, 0), dtype=np.int64)
+        indices = (
+            np.concatenate(indices_parts, axis=1)
+            if indices_parts
+            else np.zeros((2, 0), dtype=np.int64)
+        )
         values = np.concatenate(values_parts, axis=0)
     else:
         indices = np.zeros((2, 0), dtype=np.int64)
@@ -290,9 +292,7 @@ def save_dataset_from_sparse(
         )
     value_scale = float(matrix_value_scale)
     if not np.isfinite(value_scale) or value_scale <= 0.0:
-        raise ValueError(
-            f"matrix_value_scale must be finite and > 0, got {matrix_value_scale}"
-        )
+        raise ValueError(f"matrix_value_scale must be finite and > 0, got {matrix_value_scale}")
 
     np.save(paths.rhs_path, rhs_array)
     np.save(paths.solutions_path, solutions_array)

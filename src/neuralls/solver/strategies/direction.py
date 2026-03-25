@@ -32,7 +32,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-import numpy as np
 from loguru import logger
 
 from ..utils.numerics import stable_dot_product

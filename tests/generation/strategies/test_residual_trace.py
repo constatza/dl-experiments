@@ -182,7 +182,10 @@ def test_residual_trace_multi_rhs_every_n(
 
     assert result_full.residual_traces is not None
     assert result_half.residual_traces is not None
-    assert result_half.residual_traces.residuals.shape[0] == result_full.residual_traces.residuals.shape[0] // 2
+    assert (
+        result_half.residual_traces.residuals.shape[0]
+        == result_full.residual_traces.residuals.shape[0] // 2
+    )
 
 
 def test_residual_trace_samples_minus_one_requires_finite_source(

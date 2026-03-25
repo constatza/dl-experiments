@@ -210,15 +210,11 @@ def run_experiment_matrix(
     results: list[ExperimentResult] = []
     for exp in experiments:
         # Log experiment details for progress tracking
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"Experiment: {exp.spec.experiment_display_name}")
-        logger.info(
-            f"  Model: {exp.spec.model_display_name or exp.spec.model_config_path.stem}"
-        )
-        logger.info(
-            f"  Dataset: {exp.spec.dataset_display_name or exp.workspace.dataset_id}"
-        )
-        logger.info(f"{'='*60}")
+        logger.info(f"  Model: {exp.spec.model_display_name or exp.spec.model_config_path.stem}")
+        logger.info(f"  Dataset: {exp.spec.dataset_display_name or exp.workspace.dataset_id}")
+        logger.info(f"{'=' * 60}")
 
         # Run single experiment (catches exceptions internally)
         result = run_experiment(

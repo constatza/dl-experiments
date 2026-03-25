@@ -8,19 +8,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import numpy as np
-
-from neuralls.solver.preconditioners import (
-    IC0Preconditioner,
-    Identity,
-    ILUPreconditioner,
-    JacobiPreconditioner,
-)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
+
 
 def test_preconditioner_ordering(
     tridiagonal_system_known_solution: tuple[NDArray, NDArray, NDArray],
@@ -82,5 +75,3 @@ def test_preconditioner_ordering(
     # Verify ordering: ILU ≤ Jacobi ≤ Identity
     assert result_ilu.iterations <= result_jacobi.iterations
     assert result_jacobi.iterations <= result_identity.iterations
-
-

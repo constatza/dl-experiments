@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -102,7 +101,7 @@ def test_validate_dataset_section_raises_on_none() -> None:
     """_validate_dataset_section raises ValueError if DATASET is None."""
     mock_settings = MagicMock(spec=GeneralSettings)
     mock_settings.DATASET = None
-    
+
     with pytest.raises(ValueError, match=r"missing \[DATASET\] section"):
         _validate_dataset_section(mock_settings)
 
@@ -111,14 +110,14 @@ def test_validate_dataset_section_passes_if_present() -> None:
     """_validate_dataset_section passes if DATASET is present."""
     mock_settings = MagicMock(spec=GeneralSettings)
     mock_settings.DATASET = MagicMock()
-    
+
     _validate_dataset_section(mock_settings)  # Should not raise
 
 
 def test_create_feature_configs_graph_dataset(sample_arrays: TrainingArrays) -> None:
     """_create_feature_configs returns x and sparse matrix entries for GraphDataset."""
     features = _create_feature_configs(sample_arrays, GRAPH_DATASET_NAME)
-    
+
     assert len(features) == 2
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
@@ -131,7 +130,7 @@ def test_create_feature_configs_graph_dataset(sample_arrays: TrainingArrays) -> 
 def test_create_feature_configs_flexible_dataset(sample_arrays: TrainingArrays) -> None:
     """_create_feature_configs returns x and sparse matrix entries for FlexibleDataset."""
     features = _create_feature_configs(sample_arrays, FLEXIBLE_DATASET_NAME)
-    
+
     assert len(features) == 2
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
@@ -144,7 +143,7 @@ def test_create_feature_configs_flexible_dataset(sample_arrays: TrainingArrays) 
 def test_create_feature_configs_default_to_flexible(sample_arrays: TrainingArrays) -> None:
     """_create_feature_configs defaults to x + sparse matrix behavior."""
     features = _create_feature_configs(sample_arrays, None)
-    
+
     assert len(features) == 2
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
@@ -157,7 +156,7 @@ def test_parent_run_context_manager() -> None:
     """_parent_run_context correctly sets and restores MLFLOW_PARENT_RUN_ID."""
     var_name = "MLFLOW_PARENT_RUN_ID"
     original_val = os.environ.get(var_name)
-    
+
     try:
         test_id = "test-parent-id"
         with parent_run_context(test_id):
@@ -168,7 +167,7 @@ def test_parent_run_context_manager() -> None:
         # Test with None (should do nothing)
         with parent_run_context(None):
             assert os.environ.get(var_name) == original_val
-            
+
     finally:
         if original_val is not None:
             os.environ[var_name] = original_val
@@ -263,24 +262,24 @@ def test_log_training_evaluation_orchestration(
 ) -> None:
     """_log_training_evaluation delegates to diagnostics and figure helpers."""
     from neuralls.workflows.training import _log_training_evaluation
-    
+
     mock_result = MagicMock()
     mock_result.to_numpy.return_value = {
         "predictions": {"output": np.zeros((10, 1))},
         "targets": {"y": np.zeros((10, 1))},
     }
-    
+
     mock_compute.return_value = MagicMock()
     mock_write.return_value = Path("dummy.png")
     tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
-    
+
     _log_training_evaluation(
         tracking_uri=tracking_uri,
         run_id="run123",
         training_result=mock_result,
         figures_dir=tmp_path / "figures",
     )
-    
+
     mock_compute.assert_called_once()
     mock_write.assert_called_once()
     mock_mlflow_log.assert_called_once()

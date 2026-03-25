@@ -37,7 +37,7 @@ def minimal_model_config(tmp_path: Path, output_root: Path) -> Path:
     """Create a minimal model config that relies on default MLflow settings."""
     config_path = tmp_path / "minimal_model.toml"
 
-    config_content = f"""
+    config_content = """
 [SESSION]
 name = "TestSession"
 seed = 42

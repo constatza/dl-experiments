@@ -29,8 +29,6 @@ from ..transforms import (
 )
 
 
-
-
 @register_strategy
 class EigenvectorForwardStrategy:
     """Forward mode: generate solutions x, compute RHS b = A @ x.

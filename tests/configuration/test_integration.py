@@ -69,7 +69,6 @@ class TestBuildSettings:
     ):
         """Test building settings with workspace paths injected."""
         from neuralls.configuration.domain import ExperimentWorkspace
-        from neuralls.configuration.paths import PathContext
 
         # Create directories for dlkit validation
         root_dir = tmp_path / "root"
@@ -116,7 +115,6 @@ class TestBuildSettings:
     ):
         """Runtime MLflow infrastructure should not be stored in settings."""
         from neuralls.configuration.domain import ExperimentWorkspace
-        from neuralls.configuration.paths import PathContext
 
         workspace = ExperimentWorkspace(
             dataset_id="test",
@@ -234,7 +232,10 @@ class TestLoadExperiment:
         )
 
         # Check workspace paths injected
-        assert Path(experiment.settings.TRAINING.trainer.default_root_dir) == experiment.workspace.root_dir
+        assert (
+            Path(experiment.settings.TRAINING.trainer.default_root_dir)
+            == experiment.workspace.root_dir
+        )
 
         # Check MLflow remains enabled without embedding runtime naming.
         assert experiment.settings.MLFLOW is not None
@@ -375,8 +376,12 @@ normalize = "matrix"
         output_root = tmp_path / "output"
         output_root.mkdir()
 
-        exp1 = load_experiment(sample_model_config, data_config_1, output_root, dataset_registry_id=data_config_1.stem)
-        exp2 = load_experiment(sample_model_config, data_config_2, output_root, dataset_registry_id=data_config_2.stem)
+        exp1 = load_experiment(
+            sample_model_config, data_config_1, output_root, dataset_registry_id=data_config_1.stem
+        )
+        exp2 = load_experiment(
+            sample_model_config, data_config_2, output_root, dataset_registry_id=data_config_2.stem
+        )
 
         # Different data directories
         assert exp1.workspace.data_dir != exp2.workspace.data_dir

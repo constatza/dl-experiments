@@ -103,9 +103,8 @@ class ConjugateGradientSolver(IterativeSolverBase[CGState]):
         """
         self.direction_strategy = direction_strategy
         self.preconditioner = preconditioner or Identity()
-        self.convergence_criterion = (
-            convergence_criterion
-            or CombinedToleranceCriterion(rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL)
+        self.convergence_criterion = convergence_criterion or CombinedToleranceCriterion(
+            rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
         )
 
         super().__init__(
@@ -213,12 +212,7 @@ class ConjugateGradientSolver(IterativeSolverBase[CGState]):
         Returns:
             Updated CGState for next iteration
         """
-        from ..constants import DEFAULT_BREAKDOWN_TOL
-
         # Resolve breakdown tolerance
-        breakdown_tol_eff = (
-            breakdown_tol if breakdown_tol is not None else DEFAULT_BREAKDOWN_TOL
-        )
 
         # Step 1: Apply preconditioner (Notay 2000: w_k = M^{-1}(r_k))
         w = self._apply_preconditioner(self.preconditioner, state.r, state)
@@ -257,9 +251,7 @@ class ConjugateGradientSolver(IterativeSolverBase[CGState]):
         # Update residual history
         residual_history = getattr(state, "residual_history", None)
         if residual_history is not None and hasattr(residual_history, "add"):
-            rel_residual = self._compute_relative_residual(
-                residual_norm_new, state.rhs_norm
-            )
+            rel_residual = self._compute_relative_residual(residual_norm_new, state.rhs_norm)
             residual_history = residual_history.add(residual_norm_new, rel_residual)
 
         # Create new state with updated vectors
@@ -360,9 +352,7 @@ class ConjugateGradientSolver(IterativeSolverBase[CGState]):
             converged = False
         else:
             # Use self.convergence_criterion (honors injected criterion!)
-            converged = self._check_convergence_with_criterion(
-                state, self.convergence_criterion
-            )
+            converged = self._check_convergence_with_criterion(state, self.convergence_criterion)
 
         # Extract histories from iteration history
         (
@@ -370,25 +360,20 @@ class ConjugateGradientSolver(IterativeSolverBase[CGState]):
             residual_history_rel,
             residual_vectors,
             solution_vectors,
-        ) = self._extract_histories_from_iteration_history(
-            self.iteration_history, state.rhs_norm
-        )
+        ) = self._extract_histories_from_iteration_history(self.iteration_history, state.rhs_norm)
 
         # Fallback to CGState.residual_history if iteration_history unavailable
         if residual_history_abs is None:
             residual_history_abs = list(state.residual_history.norms_abs)
             # Compute relative residuals with consistent zero-RHS handling
             residual_history_rel = [
-                self._compute_relative_residual(r, state.rhs_norm)
-                for r in residual_history_abs
+                self._compute_relative_residual(r, state.rhs_norm) for r in residual_history_abs
             ]
 
         return SolverResult(
             converged=converged,
             iterations=state.iteration,
-            residual=self._compute_relative_residual(
-                state.residual_norm, state.rhs_norm
-            ),
+            residual=self._compute_relative_residual(state.residual_norm, state.rhs_norm),
             residual_abs=state.residual_norm,
             rhs_norm=state.rhs_norm,
             breakdown=state.breakdown,

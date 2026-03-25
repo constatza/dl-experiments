@@ -153,9 +153,7 @@ class TestFactoryIntegration:
         """Factory-created PeriodicRestartOrthogonalization should orthogonalize."""
         strategy = create_fcg_orthogonalization(m_max=10)
 
-        result, report = strategy.orthogonalize(
-            sample_vector, p_vectors_history, q_vectors_history
-        )
+        result, report = strategy.orthogonalize(sample_vector, p_vectors_history, q_vectors_history)
 
         # Result should differ from input (orthogonalization applied)
         assert not np.allclose(result, sample_vector)
@@ -171,9 +169,7 @@ class TestFactoryIntegration:
         """Factory-created FCG(∞) should orthogonalize against all history."""
         strategy = create_fcg_orthogonalization(m_max=-1)
 
-        result, report = strategy.orthogonalize(
-            sample_vector, p_vectors_history, q_vectors_history
-        )
+        result, report = strategy.orthogonalize(sample_vector, p_vectors_history, q_vectors_history)
 
         # Result should differ from input (orthogonalization applied)
         assert not np.allclose(result, sample_vector)

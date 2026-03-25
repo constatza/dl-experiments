@@ -6,18 +6,17 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("dlkit") is None,
-    reason="dlkit is not importable in this environment",
-)
-
 from neuralls.configuration.loader import load_experiment
 from neuralls.configuration.master_registry import (
     list_experiment_bindings,
     load_validated_master_config,
 )
 from neuralls.io.toml_loader import load_model_config
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("dlkit") is None,
+    reason="dlkit is not importable in this environment",
+)
 
 
 MODEL_CONFIG_TEMPLATE = """

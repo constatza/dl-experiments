@@ -71,8 +71,7 @@ def _require_dataset_name(
     if config_path is not None:
         return Path(config_path).stem
     raise ValueError(
-        "Missing required top-level 'id' in data config. "
-        "Dataset name must be explicitly defined."
+        "Missing required top-level 'id' in data config. Dataset name must be explicitly defined."
     )
 
 

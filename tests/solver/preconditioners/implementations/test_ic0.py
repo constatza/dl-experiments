@@ -9,15 +9,16 @@ Tests zero-fill Incomplete Cholesky preconditioner to ensure:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 import numpy as np
-import pytest
 
 from neuralls.solver.preconditioners import IC0Preconditioner
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
 
 def test_ic0_factorization_approximates_matrix(
     tridiagonal_spd_small: NDArray,
@@ -52,12 +53,12 @@ def test_ic0_preserves_sparsity_pattern(
         With default threshold, L can be sparser (drops small entries).
     """
     A = tridiagonal_spd_small
-    A_lower_mask = (np.abs(np.tril(A)) >= 1e-14)
+    A_lower_mask = np.abs(np.tril(A)) >= 1e-14
 
     # Test with strict threshold (preserve exact sparsity)
     precond_strict = IC0Preconditioner(A, threshold=0.0)
     L_strict = precond_strict._operator
-    L_strict_mask = (L_strict != 0)
+    L_strict_mask = L_strict != 0
 
     # With threshold=0, L should match A's sparsity pattern exactly
     np.testing.assert_array_equal(L_strict_mask, A_lower_mask)
@@ -233,4 +234,3 @@ def test_ic0_compares_favorably_with_jacobi(
 
     # IC(0) should require <= iterations than Jacobi
     assert result_ic0.iterations <= result_jacobi.iterations
-

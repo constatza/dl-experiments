@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.configuration.preconditioner import NeuralPreconditionerConfig, PreconditionerType, StandardPreconditionerConfig
+from neuralls.configuration.preconditioner import (
+    NeuralPreconditionerConfig,
+    PreconditionerType,
+    StandardPreconditionerConfig,
+)
 from neuralls.workflows.multi_training import TrainingRunResult
 
 # ---------------------------------------------------------------------------
@@ -15,6 +19,8 @@ from neuralls.workflows.multi_training import TrainingRunResult
 
 EXP_ID_ALPHA: str = "alpha-experiment"
 EXP_ID_BETA: str = "beta-experiment"
+
+
 @pytest.fixture
 def checkpoint_alpha(tmp_path: Path) -> Path:
     """Fake checkpoint file for the alpha experiment."""

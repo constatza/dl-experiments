@@ -137,9 +137,7 @@ def flexible_cg(
     # Create logging objects based on trace mode
     trace_mode_enum = coerce_trace_mode(trace_mode)
     iteration_history = (
-        IterationHistory(mode=trace_mode_enum)
-        if trace_mode_enum != TraceMode.DISABLED
-        else None
+        IterationHistory(mode=trace_mode_enum) if trace_mode_enum != TraceMode.DISABLED else None
     )
     event_log = EventLog() if trace_mode_enum != TraceMode.DISABLED else None
 
@@ -262,9 +260,7 @@ def pcg(
     # Create logging objects based on trace mode
     trace_mode_enum = coerce_trace_mode(trace_mode)
     iteration_history = (
-        IterationHistory(mode=trace_mode_enum)
-        if trace_mode_enum != TraceMode.DISABLED
-        else None
+        IterationHistory(mode=trace_mode_enum) if trace_mode_enum != TraceMode.DISABLED else None
     )
     event_log = EventLog() if trace_mode_enum != TraceMode.DISABLED else None
 
@@ -367,9 +363,7 @@ def scipy_cg(
     # Create logging objects based on trace mode
     trace_mode_enum = coerce_trace_mode(trace_mode)
     iteration_history = (
-        IterationHistory(mode=trace_mode_enum)
-        if trace_mode_enum != TraceMode.DISABLED
-        else None
+        IterationHistory(mode=trace_mode_enum) if trace_mode_enum != TraceMode.DISABLED else None
     )
     event_log = EventLog() if trace_mode_enum != TraceMode.DISABLED else None
 

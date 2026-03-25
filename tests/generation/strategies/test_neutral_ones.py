@@ -11,11 +11,7 @@ from neuralls.generation.strategies.neutral_ones import NeutralOnesStrategy, Neu
 @pytest.fixture
 def sample_matrix() -> np.ndarray:
     """Create a simple 3x3 test matrix."""
-    return np.array([
-        [4.0, 1.0, 0.0],
-        [1.0, 4.0, 1.0],
-        [0.0, 1.0, 4.0]
-    ], dtype=np.float64)
+    return np.array([[4.0, 1.0, 0.0], [1.0, 4.0, 1.0], [0.0, 1.0, 4.0]], dtype=np.float64)
 
 
 def test_neutral_ones_strategy_basic(sample_matrix: np.ndarray) -> None:

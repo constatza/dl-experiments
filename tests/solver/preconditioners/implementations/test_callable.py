@@ -12,6 +12,7 @@ from neuralls.solver.preconditioners import CallablePreconditioner
 
 def test_callable_preconditioner_wraps_function() -> None:
     """Verify CallablePreconditioner wraps arbitrary function."""
+
     def custom_precond(r):
         return r * 0.5  # Simple damping
 

@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
+
+
 def test_jacobi_preserves_signs(
     jacobi_preconditioner_factory: Callable[[NDArray], Callable[[NDArray], NDArray]],
 ) -> None:
@@ -174,4 +176,3 @@ def test_jacobi_preserves_dtype(well_conditioned_matrix: NDArray) -> None:
     result = precond.apply(residual)
 
     assert result.dtype == np.float64
-

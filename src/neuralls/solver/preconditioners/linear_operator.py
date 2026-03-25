@@ -9,9 +9,7 @@ from scipy.sparse.linalg import LinearOperator
 from .base import Preconditioner, PreconditionerContext
 
 
-def _ensure_vector(
-    vector: np.ndarray | None, template: np.ndarray, *, name: str
-) -> np.ndarray:
+def _ensure_vector(vector: np.ndarray | None, template: np.ndarray, *, name: str) -> np.ndarray:
     """Validate and reshape preconditioner output to match template shape.
 
     Ensures the preconditioner returns a valid ndarray with shape matching the

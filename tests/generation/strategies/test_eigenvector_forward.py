@@ -6,7 +6,6 @@ Forward mode: generates solutions as eigenvector combinations, then computes b =
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from neuralls.generation import run_generation
 
@@ -34,7 +33,9 @@ def test_eigenvector_forward_shapes(spd_matrix: np.ndarray) -> None:
 def test_eigenvector_forward_sample_count(spd_matrix: np.ndarray) -> None:
     """Different sample counts produce correct output sizes."""
     for count in (1, 3, 6):
-        result = run_generation("eigenvector_forward", spd_matrix, cfg={"samples": count, "seed": 0})
+        result = run_generation(
+            "eigenvector_forward", spd_matrix, cfg={"samples": count, "seed": 0}
+        )
         assert result.rhs is not None
         assert result.rhs.shape[0] == count
 
@@ -45,9 +46,7 @@ def test_eigenvector_forward_rhs_equals_ax(spd_matrix: np.ndarray) -> None:
 
     assert result.rhs is not None and result.solutions is not None
     for i in range(result.solutions.shape[0]):
-        np.testing.assert_allclose(
-            result.rhs[i], spd_matrix @ result.solutions[i], rtol=1e-12
-        )
+        np.testing.assert_allclose(result.rhs[i], spd_matrix @ result.solutions[i], rtol=1e-12)
 
 
 def test_eigenvector_forward_deterministic(spd_matrix: np.ndarray) -> None:

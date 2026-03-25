@@ -7,7 +7,11 @@ from pathlib import Path
 from loguru import logger
 import numpy as np
 
-from .dataset_storage import load_dense_training_arrays, load_matrix_dense_sample, load_dataset_manifest
+from .dataset_storage import (
+    load_dense_training_arrays,
+    load_matrix_dense_sample,
+    load_dataset_manifest,
+)
 
 
 def resolve_system_paths(
@@ -22,9 +26,7 @@ def resolve_system_paths(
     rhs = rhs_path or config_rhs
 
     if matrix is None or rhs is None:
-        raise ValueError(
-            "Matrix/RHS paths must be provided via solver config or caller."
-        )
+        raise ValueError("Matrix/RHS paths must be provided via solver config or caller.")
 
     return Path(matrix), Path(rhs)
 
@@ -35,9 +37,7 @@ def _flatten_rhs_if_needed(arr: np.ndarray, source_path: Path) -> np.ndarray:
     is_column_vector = arr.ndim == 2 and arr.shape[1] == 1
 
     if arr.ndim > 1 and arr.shape[0] > 1 and not is_column_vector:
-        logger.debug(
-            f"{source_path} contains multiple RHS entries; rhs_index will select one row."
-        )
+        logger.debug(f"{source_path} contains multiple RHS entries; rhs_index will select one row.")
 
     # Only extract the first row if it's NOT a column vector
     if arr.ndim > 1 and is_column_vector:
@@ -58,7 +58,7 @@ def _select_rhs_sample(arr: np.ndarray, rhs_index: int, source_path: Path) -> np
     if rhs_index < -1 or rhs_index >= arr.shape[0]:
         raise IndexError(
             f"rhs_index={rhs_index} out of range for {source_path} "
-            f"(available rows: 0..{arr.shape[0]-1}, or -1 for first row)."
+            f"(available rows: 0..{arr.shape[0] - 1}, or -1 for first row)."
         )
     return arr[rhs_index].reshape(-1)
 
@@ -80,7 +80,7 @@ def load_system_arrays(
                     return load_matrix_dense_sample(path, sample_index=0)
                 rhs, _ = load_dense_training_arrays(path)
                 return np.asarray(rhs, dtype=np.float64)
-            except (FileNotFoundError, ValueError):
+            except FileNotFoundError, ValueError:
                 if key == "matrix" and (path / "values.npy").exists():
                     return load_matrix_dense_sample(path.parent, sample_index=0)
                 raise

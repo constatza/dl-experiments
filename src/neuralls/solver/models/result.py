@@ -180,7 +180,7 @@ class CGComparisonResult:
         ...     residual_abs=1e-8,
         ...     residual_history=[1.0, 0.1, 0.01, 0.001, 1e-8],
         ...     residual_history_abs=[1.0, 0.1, 0.01, 0.001, 1e-8],
-        ...     preconditioner='jacobi',
+        ...     preconditioner="jacobi",
         ...     initial_guess=np.zeros(10),
         ...     exact_error=None,
         ...     rhs_norm=1.0,

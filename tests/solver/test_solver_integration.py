@@ -133,7 +133,8 @@ def test_solver_with_preconditioners(
     precond = request.getfixturevalue(precond_fixture)
     if precond_fixture == "identity_preconditioner":
         # Identity preconditioner takes (r, context) → wrap to take just r
-        precond_wrapped = lambda r: precond(r, None)
+        def precond_wrapped(r):
+            return precond(r, None)
     else:
         precond_wrapped = precond
 
@@ -147,9 +148,7 @@ def test_solver_with_preconditioners(
     )
 
     # Verify convergence
-    assert result.converged, (
-        f"{solver_name} with {precond_fixture} failed on {system_fixture}"
-    )
+    assert result.converged, f"{solver_name} with {precond_fixture} failed on {system_fixture}"
 
     # Verify residual tolerance
     assert result.residual_abs < max(rtol * result.rhs_norm, atol)
@@ -342,9 +341,7 @@ def test_solver_satisfies_atol_criterion_for_small_rhs(
     b_small = np.ones(10) * 1e-10
     x0 = np.zeros(10)
 
-    x, result = solver(
-        tridiagonal_spd_small, b_small, x0=x0, rtol=rtol, atol=atol, maxiter=200
-    )
+    x, result = solver(tridiagonal_spd_small, b_small, x0=x0, rtol=rtol, atol=atol, maxiter=200)
 
     assert result.converged
 

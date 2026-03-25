@@ -110,13 +110,7 @@ class TestCase1VariantA:
         )
 
         atol = compute_tolerance(expected.epsilon, expected.iterations)
-        passed = result.converged and np.isclose(
-            result.iterations, expected.iterations, rtol=0, atol=atol
-        )
-
-        assert result.converged, (
-            f"FCG({CASE1_SPEC.m_max}) did not converge at ε={expected.epsilon}"
-        )
+        assert result.converged, f"FCG({CASE1_SPEC.m_max}) did not converge at ε={expected.epsilon}"
         assert np.isclose(result.iterations, expected.iterations, rtol=0, atol=atol), (
             f"ε={expected.epsilon}: got {result.iterations}, "
             f"expected {expected.iterations} (±{atol:.1f})"
@@ -140,9 +134,7 @@ class TestCase1VariantADynamic:
     def test_dynamic_perturbation(
         self,
         case1_system: tuple[NDArray, NDArray, NDArray],
-        variant_a_dynamic_precond_factory: Callable[
-            [float], Callable[[NDArray], NDArray]
-        ],
+        variant_a_dynamic_precond_factory: Callable[[float], Callable[[NDArray], NDArray]],
         expected: NotayResult,
     ) -> None:
         """Test FCG with dynamic random perturbations."""
@@ -170,9 +162,7 @@ class TestCase1VariantADynamic:
         )
 
         # Log results for comparison
-        print(
-            f"\nDynamic variant: ε={expected.epsilon:.4f}, iterations={result.iterations}"
-        )
+        print(f"\nDynamic variant: ε={expected.epsilon:.4f}, iterations={result.iterations}")
 
 
 @pytest.mark.benchmark
@@ -216,13 +206,7 @@ class TestCase2VariantA:
         )
 
         atol = compute_tolerance(expected.epsilon, expected.iterations)
-        passed = result.converged and np.isclose(
-            result.iterations, expected.iterations, rtol=0, atol=atol
-        )
-
-        assert result.converged, (
-            f"FCG({CASE2_SPEC.m_max}) did not converge at ε={expected.epsilon}"
-        )
+        assert result.converged, f"FCG({CASE2_SPEC.m_max}) did not converge at ε={expected.epsilon}"
         assert np.isclose(result.iterations, expected.iterations, rtol=0, atol=atol), (
             f"ε={expected.epsilon}: got {result.iterations}, "
             f"expected {expected.iterations} (±{atol:.1f})"
@@ -246,9 +230,7 @@ class TestCase2VariantADynamic:
     def test_dynamic_perturbation(
         self,
         case2_system: tuple[NDArray, NDArray, NDArray],
-        variant_a_dynamic_precond_factory: Callable[
-            [float], Callable[[NDArray], NDArray]
-        ],
+        variant_a_dynamic_precond_factory: Callable[[float], Callable[[NDArray], NDArray]],
         expected: NotayResult,
     ) -> None:
         """Test FCG with dynamic random perturbations."""
@@ -317,13 +299,7 @@ class TestCase3VariantA:
         )
 
         atol = compute_tolerance(expected.epsilon, expected.iterations)
-        passed = result.converged and np.isclose(
-            result.iterations, expected.iterations, rtol=0, atol=atol
-        )
-
-        assert result.converged, (
-            f"FCG({CASE3_SPEC.m_max}) did not converge at ε={expected.epsilon}"
-        )
+        assert result.converged, f"FCG({CASE3_SPEC.m_max}) did not converge at ε={expected.epsilon}"
         assert np.isclose(result.iterations, expected.iterations, rtol=0, atol=atol), (
             f"ε={expected.epsilon}: got {result.iterations}, "
             f"expected {expected.iterations} (±{atol:.1f})"
@@ -347,9 +323,7 @@ class TestCase3VariantADynamic:
     def test_dynamic_perturbation(
         self,
         case3_system: tuple[NDArray, NDArray, NDArray],
-        variant_a_dynamic_precond_factory: Callable[
-            [float], Callable[[NDArray], NDArray]
-        ],
+        variant_a_dynamic_precond_factory: Callable[[float], Callable[[NDArray], NDArray]],
         expected: NotayResult,
     ) -> None:
         """Test FCG with dynamic random perturbations."""

@@ -67,7 +67,6 @@ class SearchDirectionsStrategy:
         Returns:
             GeneratedSamples with search_directions_traces populated
         """
-
         # Validate and convert to typed config
         config = SearchDirectionsConfig(**cfg)
 
@@ -101,15 +100,11 @@ class SearchDirectionsStrategy:
         else:
             # Mode 2: Multiple RHS - generate N different RHS vectors (SOLID pattern)
             # Layer 1: Input provision (archive with random fallback)
-            solution_provider = HybridInputProvider(
-                archive=archive, field="solutions", scale=1.0
-            )
+            solution_provider = HybridInputProvider(archive=archive, field="solutions", scale=1.0)
             sols = solution_provider.provide(matrix, count=num_base_systems, rng=rng)
 
             # Layer 2: Transform (compute RHS or load from archive)
-            rhs_provider = HybridInputProvider(
-                archive=archive, field="rhs_vectors", scale=1.0
-            )
+            rhs_provider = HybridInputProvider(archive=archive, field="rhs_vectors", scale=1.0)
             rhs_from_archive = (
                 archive is not None
                 and archive.rhs_vectors is not None
@@ -143,17 +138,14 @@ class SearchDirectionsStrategy:
                 trace_mode=TraceMode.FULL,
             )
 
-            if (
-                info.iteration_history is None
-                or info.iteration_history.directions is None
-            ):
+            if info.iteration_history is None or info.iteration_history.directions is None:
                 raise RuntimeError("Search directions were not captured in FULL trace mode.")
 
             direction_seq = info.iteration_history.directions.to_array()
             if direction_seq.size == 0:
                 raise RuntimeError(f"Search directions array is empty for sample {sample_idx + 1}.")
 
-            direction_seq = direction_seq[::config.every_n]
+            direction_seq = direction_seq[:: config.every_n]
 
             product_seq = np.array([matrix @ p for p in direction_seq], dtype=np.float64)
 
@@ -179,10 +171,6 @@ class SearchDirectionsStrategy:
         return GeneratedSamples(
             matrix=matrix,
             rhs=rhs_samples[:referenced_samples],
-            solutions=(
-                None
-                if sols is None
-                else sols[:referenced_samples]
-            ),
+            solutions=(None if sols is None else sols[:referenced_samples]),
             residual_traces=residual_traces,
         )

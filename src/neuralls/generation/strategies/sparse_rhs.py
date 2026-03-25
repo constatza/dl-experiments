@@ -79,8 +79,7 @@ class SparseRhsStrategy:
 
         n = matrix.shape[0]
         logger.info(
-            f"Building {config.samples} sparse RHS vectors "
-            f"(n={n}, {len(config.indices)} nonzeros)"
+            f"Building {config.samples} sparse RHS vectors (n={n}, {len(config.indices)} nonzeros)"
         )
 
         # Layer 1: broadcast sparse template to (N, n)

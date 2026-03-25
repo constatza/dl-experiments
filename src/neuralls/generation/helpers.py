@@ -19,7 +19,6 @@ from ..constants import (
     EIGENVECTOR_SELECT_RANDOM,
 )
 from .data_types import ScaleMetadata
-from .interfaces import ArchiveData
 
 
 def rng_from_seed(seed: int | None) -> np.random.Generator:
@@ -58,9 +57,7 @@ def rounded_counts(total: int, proportions: Mapping[str, float]) -> dict[str, in
     for key, value in proportions.items():
         weight = float(value)
         if weight < 0:
-            raise ValueError(
-                f"Mix weight for '{key}' must be non-negative, got {value}"
-            )
+            raise ValueError(f"Mix weight for '{key}' must be non-negative, got {value}")
         weights[key] = weight
 
     total_weight = sum(weights.values())
@@ -193,9 +190,7 @@ def _normalize_matrix_for_generation(
         spectral_radius_bound=spectral_radius_bound,
     )
     assert scale is not None, f"Expected scale for {normalize_type}"
-    assert not isinstance(scale, list), (
-        f"Expected single scale for {normalize_type}, got list"
-    )
+    assert not isinstance(scale, list), f"Expected single scale for {normalize_type}, got list"
     matrix_norm = scale.scale_matrix(matrix)
     if normalize_type == "matrix":
         scale_params = serialize_scale_metadata(scale)
@@ -203,9 +198,7 @@ def _normalize_matrix_for_generation(
             raise TypeError(f"Expected scale metadata for {normalize_type}")
         spectral_radius = scale_params.get("spectral_radius_bound")
         dimension_scale = scale_params.get("dimension_scale")
-        if not isinstance(spectral_radius, float) or not isinstance(
-            dimension_scale, float
-        ):
+        if not isinstance(spectral_radius, float) or not isinstance(dimension_scale, float):
             raise TypeError("Matrix normalization scale metadata must be scalar floats.")
         matrix_value_scale = spectral_radius * dimension_scale
         return matrix_norm, scale, matrix_value_scale
@@ -281,8 +274,6 @@ def _resolve_strategy_counts(
     return nonzero
 
 
-
-
 def _solve_linear_systems(
     A: np.ndarray | LinearOperator | Any,
     rhs_vectors: np.ndarray,
@@ -319,9 +310,7 @@ def _solve_linear_systems(
     match method:
         case "direct":
             if isinstance(A, LinearOperator):
-                raise ValueError(
-                    "Direct solve requires a concrete matrix, got LinearOperator."
-                )
+                raise ValueError("Direct solve requires a concrete matrix, got LinearOperator.")
             if issparse(A):
                 from scipy.sparse.linalg import factorized
 
@@ -354,18 +343,13 @@ def _solve_linear_systems(
                 if exit_code != 0:
                     residual = np.linalg.norm(A @ solution - rhs)
                     logger.warning(
-                        f"System {idx + 1} CG exit_code={exit_code} "
-                        f"(residual: {residual:.2e})"
+                        f"System {idx + 1} CG exit_code={exit_code} (residual: {residual:.2e})"
                     )
 
         case _:
-            raise ValueError(
-                f"Invalid solve method: {method}. Must be 'direct' or 'cg'"
-            )
+            raise ValueError(f"Invalid solve method: {method}. Must be 'direct' or 'cg'")
 
     return solutions
-
-
 
 
 def _build_trace_indices(
@@ -480,8 +464,7 @@ def _compute_eigendecomposition(A: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     if not np.allclose(matrix, matrix.T, rtol=1e-10, atol=1e-10):
         max_asymmetry = np.max(np.abs(matrix - matrix.T))
         raise ValueError(
-            f"Eigenvector strategies require symmetric matrices. "
-            f"Max asymmetry: {max_asymmetry:.2e}"
+            f"Eigenvector strategies require symmetric matrices. Max asymmetry: {max_asymmetry:.2e}"
         )
     eigenvalues, eigenvectors = eigh(matrix)
     return eigenvalues, eigenvectors
@@ -515,8 +498,7 @@ def _select_eigenvectors(
     n = eigenvectors.shape[0]
     if count > n:
         raise ValueError(
-            f"Requested {count} samples but matrix has only {n} eigenvectors. "
-            f"Maximum samples: {n}"
+            f"Requested {count} samples but matrix has only {n} eigenvectors. Maximum samples: {n}"
         )
     if count <= 0:
         raise ValueError(f"Sample count must be positive, got {count}")
@@ -532,6 +514,7 @@ def _select_eigenvectors(
             f"'{EIGENVECTOR_SELECT_LARGEST}', or '{EIGENVECTOR_SELECT_RANDOM}'"
         )
     return eigenvectors[:, indices], eigenvalues[indices], indices
+
 
 def _generate_eigenvector_combinations(
     eigenvectors: np.ndarray,
@@ -581,9 +564,7 @@ def _verify_solution_accuracy(
         residual = A @ solutions[i] - rhs_vectors[i]
         rhs_norm = np.linalg.norm(rhs_vectors[i])
         rel_residuals[i] = (
-            np.linalg.norm(residual) / rhs_norm
-            if rhs_norm > 0
-            else np.linalg.norm(residual)
+            np.linalg.norm(residual) / rhs_norm if rhs_norm > 0 else np.linalg.norm(residual)
         )
         if rel_residuals[i] > tolerance:
             warnings.warn(
@@ -641,9 +622,7 @@ def select_archive_files(
     # Scan for matching files
     candidates = sorted(directory.glob(pattern))
     if not candidates:
-        raise FileNotFoundError(
-            f"No files found matching pattern: {directory / pattern}"
-        )
+        raise FileNotFoundError(f"No files found matching pattern: {directory / pattern}")
 
     # Handle "all files" case
     if count == -1:
@@ -723,11 +702,7 @@ def _lanczos_iteration(
             V[:, j + 1] = w / beta[j + 1]
 
     # Build tridiagonal matrix
-    T = (
-        np.diag(alpha[:m_eff])
-        + np.diag(beta[1:m_eff], k=-1)
-        + np.diag(beta[1:m_eff], k=1)
-    )
+    T = np.diag(alpha[:m_eff]) + np.diag(beta[1:m_eff], k=-1) + np.diag(beta[1:m_eff], k=1)
 
     return V, T
 

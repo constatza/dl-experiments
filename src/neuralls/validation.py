@@ -47,9 +47,7 @@ def validate_rhs_vector(b: np.ndarray | None, A: np.ndarray | None = None) -> No
         raise ValueError("RHS contains non-finite values")
 
     if A is not None and len(b.flatten()) != A.shape[0]:
-        raise ValueError(
-            f"RHS length {len(b.flatten())} doesn't match matrix size {A.shape[0]}"
-        )
+        raise ValueError(f"RHS length {len(b.flatten())} doesn't match matrix size {A.shape[0]}")
 
 
 def validate_data_exists(
@@ -90,6 +88,4 @@ def validate_data_exists(
 
     if missing_files:
         files_str = "\n  - ".join(missing_files)
-        raise FileNotFoundError(
-            f"Required data files not found in {data_dir}:\n  - {files_str}"
-        )
+        raise FileNotFoundError(f"Required data files not found in {data_dir}:\n  - {files_str}")

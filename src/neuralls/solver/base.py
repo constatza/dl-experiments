@@ -37,9 +37,7 @@ if TYPE_CHECKING:
     from .monitoring.iteration_history import IterationHistory
     from .monitoring.event_log import EventLog
 
-type LinearSystemOperator = (
-    Callable[[NDArray], NDArray] | NDArray | spmatrix | LinearOperator
-)
+type LinearSystemOperator = Callable[[NDArray], NDArray] | NDArray | spmatrix | LinearOperator
 
 
 class IterativeSolverBase[S: SolverState](ABC):
@@ -160,9 +158,7 @@ class IterativeSolverBase[S: SolverState](ABC):
         # Step 2: Resolve defaults
         rtol_eff = rtol if rtol is not None else DEFAULT_RTOL
         atol_eff = atol if atol is not None else DEFAULT_ATOL
-        breakdown_tol_eff = (
-            breakdown_tol if breakdown_tol is not None else DEFAULT_BREAKDOWN_TOL
-        )
+        breakdown_tol_eff = breakdown_tol if breakdown_tol is not None else DEFAULT_BREAKDOWN_TOL
 
         # Resolve maxiter (default: 10 * N)
         if maxiter is not None:
@@ -185,9 +181,7 @@ class IterativeSolverBase[S: SolverState](ABC):
         while not self._check_stopping(
             state, rtol_eff, atol_eff, maxiter_eff, breakdown_tol=breakdown_tol_eff
         ):
-            state = self._iterate_step(
-                linear_op, state, breakdown_tol=breakdown_tol_eff
-            )
+            state = self._iterate_step(linear_op, state, breakdown_tol=breakdown_tol_eff)
             self._log_state(state, iteration=state.iteration)
 
         # Step 7: Build final result
@@ -494,9 +488,7 @@ class IterativeSolverBase[S: SolverState](ABC):
 
         # Validate shape/dtype
         if z.shape != residual.shape:
-            raise ValueError(
-                f"Preconditioner output shape {z.shape} != input {residual.shape}"
-            )
+            raise ValueError(f"Preconditioner output shape {z.shape} != input {residual.shape}")
 
         # Ensure float64 dtype
         return np.asarray(z, dtype=np.float64)

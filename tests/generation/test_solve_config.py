@@ -100,9 +100,7 @@ def test_solve_linear_systems_direct(
 
     # Check accuracy (should be very accurate with direct solve)
     for i in range(len(rhs_vectors)):
-        residual = np.linalg.norm(
-            sample_spd_matrix @ computed_solutions[i] - rhs_vectors[i]
-        )
+        residual = np.linalg.norm(sample_spd_matrix @ computed_solutions[i] - rhs_vectors[i])
         rhs_norm = np.linalg.norm(rhs_vectors[i])
         rel_error = residual / rhs_norm
         assert rel_error < 1e-10  # Very tight for direct solve
@@ -128,9 +126,7 @@ def test_solve_linear_systems_cg(
 
     # Check accuracy (CG should converge to high accuracy for well-conditioned SPD)
     for i in range(len(rhs_vectors)):
-        residual = np.linalg.norm(
-            sample_spd_matrix @ computed_solutions[i] - rhs_vectors[i]
-        )
+        residual = np.linalg.norm(sample_spd_matrix @ computed_solutions[i] - rhs_vectors[i])
         rhs_norm = np.linalg.norm(rhs_vectors[i])
         rel_error = residual / rhs_norm
         assert rel_error < 1e-8  # Looser tolerance for CG
@@ -224,7 +220,6 @@ def test_solve_linear_systems_cg_tolerance_effect(
 def test_eigenvector_inverse_with_solve_config() -> None:
     """Test EigenvectorInverseStrategy with custom solve config."""
     from neuralls.generation.strategies.eigenvector import EigenvectorInverseStrategy
-    from neuralls.generation.strategy_configs import SolveConfig
 
     # Create symmetric matrix
     n = 20

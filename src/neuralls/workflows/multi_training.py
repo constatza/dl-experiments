@@ -190,11 +190,7 @@ def _collect_batch_metrics(
             if any(key.startswith(p) for p in _BATCH_METRIC_PREFIXES):
                 all_metrics.setdefault(key, []).append(value)
 
-    return {
-        f"avg_{key}": sum(vals) / len(vals)
-        for key, vals in all_metrics.items()
-        if vals
-    }
+    return {f"avg_{key}": sum(vals) / len(vals) for key, vals in all_metrics.items() if vals}
 
 
 # ---------------------------------------------------------------------------
@@ -413,13 +409,10 @@ def train_batch(
         ValueError: If the TOML contains no ``[[experiment]]`` entries.
         FileNotFoundError: If any resolved config path does not exist.
     """
-
     # Support both legacy [[run]] direct paths and registry-backed [[experiments]]
     run_entries: list[Any] = list(cfg.run) or list(cfg.experiments)
     if not run_entries:
-        raise ValueError(
-            "No [[run]] or [[experiments]] entries found in experiments config"
-        )
+        raise ValueError("No [[run]] or [[experiments]] entries found in experiments config")
 
     # Derive output_dir from mlflow tracking_uri when not explicitly configured
     tracking_uri = cfg.mlflow.tracking_uri
@@ -431,9 +424,7 @@ def train_batch(
         db_path = Path(tracking_uri.removeprefix("sqlite:///"))
         base_output = db_path.parent
     else:
-        raise ValueError(
-            "experiments.toml must set output_dir when mlflow.tracking_uri is remote."
-        )
+        raise ValueError("experiments.toml must set output_dir when mlflow.tracking_uri is remote.")
 
     training_mlflow_env = build_mlflow_environment(
         tracking_uri=cfg.mlflow.tracking_uri,

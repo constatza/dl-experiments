@@ -19,13 +19,15 @@ def temp_matrix_file(tmp_path: Path):
     """Create a temporary matrix file."""
     matrix_file = tmp_path / "test_matrix.txt"
     # Create a simple 5x5 symmetric positive definite matrix
-    matrix = np.array([
-        [4.0, 1.0, 0.0, 0.0, 0.0],
-        [1.0, 4.0, 1.0, 0.0, 0.0],
-        [0.0, 1.0, 4.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0, 4.0, 1.0],
-        [0.0, 0.0, 0.0, 1.0, 4.0]
-    ])
+    matrix = np.array(
+        [
+            [4.0, 1.0, 0.0, 0.0, 0.0],
+            [1.0, 4.0, 1.0, 0.0, 0.0],
+            [0.0, 1.0, 4.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0, 4.0, 1.0],
+            [0.0, 0.0, 0.0, 1.0, 4.0],
+        ]
+    )
     np.savetxt(matrix_file, matrix)
     return matrix_file
 

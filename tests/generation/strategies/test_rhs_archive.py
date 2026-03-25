@@ -78,7 +78,9 @@ def test_rhs_archive_all_files(spd_matrix: np.ndarray, rhs_files: tuple[list[Pat
     """samples=-1 loads every available file."""
     files, glob_pattern = rhs_files
 
-    result = run_generation("rhs_archive", spd_matrix, cfg={"rhs_glob": glob_pattern, "samples": -1})
+    result = run_generation(
+        "rhs_archive", spd_matrix, cfg={"rhs_glob": glob_pattern, "samples": -1}
+    )
 
     assert result.rhs is not None
     assert result.rhs.shape[0] == len(files)

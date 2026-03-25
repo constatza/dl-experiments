@@ -80,9 +80,7 @@ def _build_context(
 
     matrix_path = _coerce_optional_str(source_cfg.get(ConfigKeys.MATRIX_PATH))
     if not matrix_path:
-        raise ValueError(
-            f"Missing '{ConfigSections.SOURCE}.{ConfigKeys.MATRIX_PATH}' in config"
-        )
+        raise ValueError(f"Missing '{ConfigSections.SOURCE}.{ConfigKeys.MATRIX_PATH}' in config")
 
     rhs_path = _coerce_optional_str(source_cfg.get(ConfigKeys.RHS_PATH))
     solutions_path = _coerce_optional_str(source_cfg.get(ConfigKeys.SOLUTIONS_PATH))
@@ -332,9 +330,7 @@ def _execute_synthetic_generation(
     # Add solution archive strategy
     if solution_archive_strategy is not None:
         counts["solution_archive"] = solution_archive_strategy.samples
-        solutions_glob = _resolve_solution_archive_path(
-            solution_archive_strategy, context
-        )
+        solutions_glob = _resolve_solution_archive_path(solution_archive_strategy, context)
         if solutions_glob:
             strategy_overrides["solution_archive"] = {
                 "solutions_glob": solutions_glob,
@@ -342,9 +338,7 @@ def _execute_synthetic_generation(
                     ConfigKeys.SHUFFLE,
                     generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE),
                 ),
-                "seed": solution_archive_strategy.options.get(
-                    ConfigKeys.SEED, seed_value
-                ),
+                "seed": solution_archive_strategy.options.get(ConfigKeys.SEED, seed_value),
             }
 
     # Add RHS archive strategy
@@ -458,9 +452,7 @@ def _execute_plan(
     return _execute_rhs_archive_only(context, rhs_archive_strategy)
 
 
-def process_config(
-    config: Mapping[str, Any], config_path: Path | str | None = None
-) -> Path:
+def process_config(config: Mapping[str, Any], config_path: Path | str | None = None) -> Path:
     """Process a data config and execute the declared generation plan.
 
     After generating the main dataset, this checks for a [test] section.

@@ -34,10 +34,7 @@ def test_current_experiment_registries_reference_residuals_dataset() -> None:
 
     for registry_path in registry_paths:
         config = _load_toml(registry_path)
-        datasets = {
-            entry["id"]: entry["path"]
-            for entry in config["datasets"]
-        }
+        datasets = {entry["id"]: entry["path"] for entry in config["datasets"]}
         assert datasets["residuals-100"] == "datasets/residuals-100.toml"
 
 
@@ -60,7 +57,4 @@ def test_residual_experiments_use_residuals_100_dataset() -> None:
         ]
 
         assert residual_experiments
-        assert all(
-            entry["dataset"] == "residuals-100"
-            for entry in residual_experiments
-        )
+        assert all(entry["dataset"] == "residuals-100" for entry in residual_experiments)

@@ -9,6 +9,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class TaskResult:
     """Outcome of a single task execution (e.g., training, prediction)."""
+
     name: str
     artifacts: list[Path] = field(default_factory=list)
     metrics: dict[str, float] = field(default_factory=dict)
@@ -19,6 +20,7 @@ class TaskResult:
 @dataclass(frozen=True)
 class ExperimentResult:
     """Final comprehensive report for a single experiment."""
+
     experiment_id: str
     experiment_display_name: str
     status: str  # "Success" or "Failed"

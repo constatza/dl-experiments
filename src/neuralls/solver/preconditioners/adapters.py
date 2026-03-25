@@ -188,16 +188,12 @@ class DLKitAdapter(PredictorAdapter):
                 device = "cpu"
                 logger.warning("Model has no parameters, defaulting to CPU")
 
-            logger.info(
-                f"Loaded model from {checkpoint_path} on device {device}"
-            )
+            logger.info(f"Loaded model from {checkpoint_path} on device {device}")
 
             return DLKitPredictor(dlkit_predictor, device)
 
         except ImportError as e:
-            raise ImportError(
-                "DLKit not installed. Install with: pip install dlkit"
-            ) from e
+            raise ImportError("DLKit not installed. Install with: pip install dlkit") from e
 
         except (FileNotFoundError, OSError, ValueError, RuntimeError) as e:
             raise RuntimeError(

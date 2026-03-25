@@ -56,9 +56,7 @@ seed = 42
         with pytest.raises(ValueError, match="Model name missing"):
             extract_model_name(config_path)
 
-    def test_extract_raises_error_when_session_name_none_and_no_model(
-        self, tmp_path: Path
-    ) -> None:
+    def test_extract_raises_error_when_session_name_none_and_no_model(self, tmp_path: Path) -> None:
         """Test error raised when SESSION.name is None and MODEL.name missing."""
         import pytest
 
@@ -113,9 +111,7 @@ name = "linear"
 
         checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
-        expected = (
-            output_root / "collect-504" / "linear" / "checkpoints" / "linear.ckpt"
-        )
+        expected = output_root / "collect-504" / "linear" / "checkpoints" / "linear.ckpt"
         assert checkpoint_path == expected
 
     def test_path_derivation_uses_model_name_not_filename(self, tmp_path: Path) -> None:
@@ -134,11 +130,7 @@ name = "custom_model_name"
 
         # Should use SESSION.name, not filename
         expected = (
-            output_root
-            / "test"
-            / "custom_model_name"
-            / "checkpoints"
-            / "custom_model_name.ckpt"
+            output_root / "test" / "custom_model_name" / "checkpoints" / "custom_model_name.ckpt"
         )
         assert checkpoint_path == expected
 
@@ -156,9 +148,7 @@ name = "ffnn"
 
         checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
-        expected = (
-            output_root / "test-eigenvector" / "ffnn" / "checkpoints" / "ffnn.ckpt"
-        )
+        expected = output_root / "test-eigenvector" / "ffnn" / "checkpoints" / "ffnn.ckpt"
         assert checkpoint_path == expected
 
     def test_path_derivation_with_string_paths(self, tmp_path: Path) -> None:
@@ -235,9 +225,7 @@ name = "{example["model_name"]}"
 
             data_config = tmp_path / f"{example['data_stem']}.toml"
 
-            checkpoint_path = derive_checkpoint_path(
-                model_config, data_config, output_root
-            )
+            checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
             expected = output_root / example["expected_suffix"]
             assert checkpoint_path == expected

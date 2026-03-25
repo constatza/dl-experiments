@@ -27,10 +27,9 @@ from neuralls.configuration.settings import build_inference_settings, build_sett
 from neuralls.configuration.mlflow_normalization import (
     build_mlflow_environment,
     derive_output_root_from_tracking_uri,
-    derive_sqlite_artifacts_destination,
     scoped_mlflow_environment,
 )
-from neuralls.io.toml_loader import load_data_config, load_model_config, load_raw_toml
+from neuralls.io.toml_loader import load_data_config, load_model_config
 
 
 @dataclass(frozen=True)
@@ -145,9 +144,7 @@ def load_experiment(
     """
     # Validate mode
     if mode not in ("training", "inference"):
-        raise ValueError(
-            f"Invalid mode: {mode!r}. Expected 'training' or 'inference'."
-        )
+        raise ValueError(f"Invalid mode: {mode!r}. Expected 'training' or 'inference'.")
     experiments_cfg = _load_experiments_config(experiments_config_path)
 
     # 1. Load and validate configs (using existing loaders)
@@ -198,9 +195,7 @@ def load_experiment(
         base_name_candidate = model_name
 
     if not isinstance(base_name_candidate, str) or not base_name_candidate:
-        raise ValueError(
-            "Model name missing. Set [SESSION].name or [MODEL].name in model config."
-        )
+        raise ValueError("Model name missing. Set [SESSION].name or [MODEL].name in model config.")
     base_name = base_name_candidate
 
     workspace_run_id = base_name
@@ -237,7 +232,7 @@ def load_experiment(
             mlflow_experiment_name=mlflow_topology.experiment_name,
             force_mlflow_enabled=mlflow_topology.force_enabled,
         )
-        logger.debug(f"Loaded inference settings (DATASET/DATAMODULE optional)")
+        logger.debug("Loaded inference settings (DATASET/DATAMODULE optional)")
     else:
         # Training: Use TrainingWorkflowConfig (DATASET/DATAMODULE required)
         settings = build_settings(
@@ -247,7 +242,7 @@ def load_experiment(
             force_mlflow_enabled=mlflow_topology.force_enabled,
             base_settings=model_cfg,
         )
-        logger.debug(f"Loaded training settings (DATASET/DATAMODULE required)")
+        logger.debug("Loaded training settings (DATASET/DATAMODULE required)")
 
     return RunnableExperiment(
         spec=spec,

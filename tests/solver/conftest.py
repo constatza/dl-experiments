@@ -428,9 +428,7 @@ def identity_preconditioner() -> Callable[[NDArray, object], NDArray]:
 
 
 @pytest.fixture
-def jacobi_preconditioner_factory() -> Callable[
-    [NDArray], Callable[[NDArray], NDArray]
-]:
+def jacobi_preconditioner_factory() -> Callable[[NDArray], Callable[[NDArray], NDArray]]:
     """Factory for Jacobi preconditioner M = diag(A).
 
     Returns:

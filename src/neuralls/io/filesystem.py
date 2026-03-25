@@ -125,7 +125,7 @@ def parse_data_dir_name(dir_name: str) -> dict[str, Any]:
     # Extract dimension (second part)
     try:
         result["dimension"] = int(parts[1])
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         pass
 
     # Check for krylov tag (if present, it's the second-to-last or third part)

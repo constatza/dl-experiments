@@ -102,9 +102,7 @@ class StrategyConfig(BaseModel):
         description="Glob pattern for RHS vector files",
     )
 
-    model_config = ConfigDict(
-        extra="allow", frozen=True
-    )  # Allow strategy-specific parameters
+    model_config = ConfigDict(extra="allow", frozen=True)  # Allow strategy-specific parameters
 
 
 class GenerationConfig(BaseModel):

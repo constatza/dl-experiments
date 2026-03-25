@@ -68,9 +68,7 @@ def test_solver_achieves_double_precision(
         maxiter=200,
     )
 
-    assert result.converged, (
-        f"{solver_name} with {precond_fixture} failed on {system_fixture}"
-    )
+    assert result.converged, f"{solver_name} with {precond_fixture} failed on {system_fixture}"
 
     # Use same convergence tolerances for solution accuracy
     np.testing.assert_allclose(x, x_exact, rtol=rtol, atol=atol)
@@ -162,8 +160,6 @@ def test_solver_matches_direct_solver_high_precision(
     np.testing.assert_allclose(x, x_exact, rtol=rtol, atol=atol)
 
 
-
-
 # =============================================================================
 # Test: Iteration Count Bounds
 # =============================================================================
@@ -204,8 +200,5 @@ def test_solver_iteration_count_reasonable(
     # For 10×10 tridiagonal with Jacobi, expect reasonable iteration count
     MAX_EXPECTED_ITERATIONS = 50
     assert result.iterations <= MAX_EXPECTED_ITERATIONS, (
-        f"{solver_name} took {result.iterations} iterations, "
-        f"expected ≤ {MAX_EXPECTED_ITERATIONS}"
+        f"{solver_name} took {result.iterations} iterations, expected ≤ {MAX_EXPECTED_ITERATIONS}"
     )
-
-

@@ -41,6 +41,7 @@ def two_result_entries() -> dict[str, CGComparisonResult]:
         A dict with two entries: "identity" and "jacobi", each populated with
         short residual histories suitable for plot testing.
     """
+
     def _make(name: str, iters: int) -> CGComparisonResult:
         history = [1.0 / (k + 1) for k in range(iters)]
         return CGComparisonResult(

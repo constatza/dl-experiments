@@ -224,9 +224,7 @@ class TestPCGReorthogonalizationInterface:
 
         # PCG with reorthogonalization using reorthogonalization parameter
         # PCGSolver creates CompositeDirectionStrategy internally when reorthogonalization is provided
-        solver = PCGSolver(
-            reorthogonalization=PeriodicRestartOrthogonalization(m_max=np.inf)
-        )
+        solver = PCGSolver(reorthogonalization=PeriodicRestartOrthogonalization(m_max=np.inf))
 
         x, result = solver.solve(spd_matrix, rhs, maxiter=100)
         assert result.converged
@@ -254,9 +252,7 @@ class TestPCGReorthogonalizationInterface:
         from neuralls.solver import PCGSolver
 
         # PCG with reorthogonalization using reorthogonalization parameter
-        solver = PCGSolver(
-            reorthogonalization=PeriodicRestartOrthogonalization(m_max=10)
-        )
+        solver = PCGSolver(reorthogonalization=PeriodicRestartOrthogonalization(m_max=10))
 
         x, result = solver.solve(spd_matrix, rhs, maxiter=100)
         assert result.converged

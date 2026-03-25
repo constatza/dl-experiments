@@ -16,6 +16,7 @@ from tests.scope_policy import new_root_artifact_dirs, root_artifact_dirs
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+
 def _patch_default_paths_for_loaded_modules(
     path_values: dict[str, Path],
     monkeypatch: pytest.MonkeyPatch,
@@ -27,9 +28,7 @@ def _patch_default_paths_for_loaded_modules(
         "DEFAULT_FIGURES_DIR_STR": str(path_values["DEFAULT_FIGURES_DIR"]),
     }
     all_values: dict[str, object] = {**path_values, **str_values}
-    all_values["DEFAULT_CHECKPOINTS_DIR"] = (
-        path_values["DEFAULT_OUTPUT_DIR"] / "checkpoints"
-    )
+    all_values["DEFAULT_CHECKPOINTS_DIR"] = path_values["DEFAULT_OUTPUT_DIR"] / "checkpoints"
     for module in tuple(sys.modules.values()):
         if not isinstance(module, ModuleType):
             continue
@@ -140,8 +139,7 @@ def guard_repo_root_artifact_leaks(
     if leaked:
         leaked_list = ", ".join(sorted(leaked))
         pytest.fail(
-            "Tests must not create root-level artifact directories outside tests/: "
-            f"{leaked_list}"
+            f"Tests must not create root-level artifact directories outside tests/: {leaked_list}"
         )
 
 
@@ -193,9 +191,7 @@ def archive_solutions() -> np.ndarray:
 
 
 @pytest.fixture
-def archive_rhs(
-    small_spd_matrix: np.ndarray, archive_solutions: np.ndarray
-) -> np.ndarray:
+def archive_rhs(small_spd_matrix: np.ndarray, archive_solutions: np.ndarray) -> np.ndarray:
     """Pre-computed RHS vectors from archive solutions.
 
     Args:

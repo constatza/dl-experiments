@@ -161,9 +161,7 @@ def test_run_cg_comparison_with_preconditioner_instances(
         assert isinstance(result.converged, bool)
 
 
-def test_run_cg_comparison_routes_to_flexible_cg(
-    spd_matrix: NDArray, rhs_vector: NDArray
-) -> None:
+def test_run_cg_comparison_routes_to_flexible_cg(spd_matrix: NDArray, rhs_vector: NDArray) -> None:
     """Test that ScheduledPreconditioner routes to flexible_cg."""
     primary = JacobiPreconditioner(spd_matrix)
     fallback = Identity()
@@ -276,9 +274,7 @@ def test_run_cg_comparison_routes_to_pcg(spd_matrix: NDArray, rhs_vector: NDArra
     assert result.converged
 
 
-def test_run_cg_comparison_adds_none_baseline(
-    spd_matrix: NDArray, rhs_vector: NDArray
-) -> None:
+def test_run_cg_comparison_adds_none_baseline(spd_matrix: NDArray, rhs_vector: NDArray) -> None:
     """Test that 'none' baseline is automatically added if missing."""
     preconditioners = {"jacobi": JacobiPreconditioner(spd_matrix)}
 
@@ -301,9 +297,7 @@ def test_run_cg_comparison_adds_none_baseline(
     assert none_result.preconditioner == "none"
 
 
-def test_run_cg_comparison_computes_exact_error(
-    spd_matrix: NDArray, rhs_vector: NDArray
-) -> None:
+def test_run_cg_comparison_computes_exact_error(spd_matrix: NDArray, rhs_vector: NDArray) -> None:
     """Test that run_cg_comparison computes exact error correctly."""
     preconditioners = {"identity": Identity()}
 
@@ -360,9 +354,7 @@ def test_format_results_summary_converged_case(
 ) -> None:
     """Test format_results_summary with converged results."""
     # Keep only converged results
-    converged_results = {
-        k: v for k, v in mock_comparison_results.items() if v.converged
-    }
+    converged_results = {k: v for k, v in mock_comparison_results.items() if v.converged}
 
     summary = format_results_summary(converged_results)
 
@@ -376,9 +368,7 @@ def test_format_results_summary_non_converged_case(
 ) -> None:
     """Test format_results_summary with non-converged results."""
     # Keep only non-converged results
-    non_converged = {
-        k: v for k, v in mock_comparison_results.items() if not v.converged
-    }
+    non_converged = {k: v for k, v in mock_comparison_results.items() if not v.converged}
 
     summary = format_results_summary(non_converged)
 

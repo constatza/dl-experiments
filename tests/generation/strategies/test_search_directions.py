@@ -36,7 +36,10 @@ def test_search_directions_config_accepts_every_n(spd_matrix: np.ndarray) -> Non
     assert result.residual_traces is not None
     assert result.residual_traces.search_directions is not None
     assert result.residual_traces.search_direction_products is not None
-    assert result.residual_traces.search_directions.shape == result.residual_traces.search_direction_products.shape
+    assert (
+        result.residual_traces.search_directions.shape
+        == result.residual_traces.search_direction_products.shape
+    )
     assert result.residual_traces.search_directions.shape[0] > 0
 
 

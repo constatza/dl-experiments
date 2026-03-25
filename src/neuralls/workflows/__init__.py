@@ -24,7 +24,7 @@ def run_experiment_matrix(
     force: bool = False,
     project_root: Path | None = None,
     **kwargs: Any,
-) -> list["ExperimentResult"]:
+) -> list[ExperimentResult]:
     from neuralls.workflows.runner import run_experiment_matrix as _run
 
     return _run(
@@ -35,7 +35,7 @@ def run_experiment_matrix(
     )
 
 
-def run_cg_comparison(*args: Any, **kwargs: Any) -> dict[str, "CGComparisonResult"]:
+def run_cg_comparison(*args: Any, **kwargs: Any) -> dict[str, CGComparisonResult]:
     """Run CG with multiple preconditioners for comparison."""
     from neuralls.workflows.cg_runner import run_cg_comparison as _run
 
@@ -49,7 +49,7 @@ def format_results_summary(*args: Any, **kwargs: Any) -> str:
     return _format(*args, **kwargs)
 
 
-def summarize_best_combinations(*args: Any, **kwargs: Any) -> "ComparisonRecommendations":
+def summarize_best_combinations(*args: Any, **kwargs: Any) -> ComparisonRecommendations:
     """Summarize best-performing CG combinations."""
     from neuralls.workflows.cg_runner import summarize_best_combinations as _summarize
 

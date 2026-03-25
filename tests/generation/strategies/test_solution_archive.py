@@ -66,9 +66,7 @@ def test_solution_archive_rhs_equals_ax(
 
     assert result.solutions is not None and result.rhs is not None
     for i in range(result.solutions.shape[0]):
-        np.testing.assert_allclose(
-            result.rhs[i], spd_matrix @ result.solutions[i], rtol=1e-12
-        )
+        np.testing.assert_allclose(result.rhs[i], spd_matrix @ result.solutions[i], rtol=1e-12)
 
 
 def test_solution_archive_all_files(

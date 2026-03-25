@@ -26,10 +26,10 @@ Usage:
     >>>
     >>> def process_state(state: SolverState) -> None:
     >>>     if isinstance(state, HasVectors):
-    >>>         # Type checker knows state.x, state.r exist
+    >>> # Type checker knows state.x, state.r exist
     >>>         residual = state.r  # ✅ No type: ignore needed
     >>>     else:
-    >>>         # Handle base state without vectors
+    >>> # Handle base state without vectors
     >>>         pass
 
 References:
@@ -125,7 +125,7 @@ class HasDirectionHistory(Protocol):
         >>>         history = state.direction_history
         >>>         d_vectors = history.d_vectors
         >>>         q_vectors = history.q_vectors
-        >>>         # Compute orthogonalization...
+        >>> # Compute orthogonalization...
         >>>     return w  # No orthogonalization if no history
 
     Theory (Notay 2000):

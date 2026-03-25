@@ -67,9 +67,7 @@ def test_create_scale_matrix_auto_bound(sample_matrix: np.ndarray) -> None:
 def test_create_scale_matrix_explicit_bound(sample_matrix: np.ndarray) -> None:
     """Test matrix normalization with explicit spectral bound."""
     explicit_bound = 10.0
-    scale = create_scale_from_config(
-        "matrix", sample_matrix, spectral_radius_bound=explicit_bound
-    )
+    scale = create_scale_from_config("matrix", sample_matrix, spectral_radius_bound=explicit_bound)
     assert isinstance(scale, MatrixScale)
     assert scale.spectral_radius_bound == explicit_bound
     assert scale.dimension_scale == np.sqrt(3)
@@ -100,9 +98,7 @@ def test_create_scale_spectral_rhs(
     sample_matrix: np.ndarray, sample_rhs_samples: np.ndarray
 ) -> None:
     """Test spectral normalization with RHS samples."""
-    scales = create_scale_from_config(
-        "spectral", sample_matrix, rhs_samples=sample_rhs_samples
-    )
+    scales = create_scale_from_config("spectral", sample_matrix, rhs_samples=sample_rhs_samples)
     assert isinstance(scales, list)
     assert len(scales) == 3
     assert all(isinstance(s, SpectralScale) for s in scales)
@@ -145,9 +141,7 @@ def test_create_scale_spectral_solutions(
 
 def test_create_scale_spectral_missing_samples(sample_matrix: np.ndarray) -> None:
     """Test spectral normalization fails without samples."""
-    with pytest.raises(
-        ValueError, match="requires either rhs_samples or solution_samples"
-    ):
+    with pytest.raises(ValueError, match="requires either rhs_samples or solution_samples"):
         create_scale_from_config("spectral", sample_matrix)
 
 
@@ -157,9 +151,7 @@ def test_create_scale_spectral_both_samples(
     sample_solution_samples: np.ndarray,
 ) -> None:
     """Test spectral normalization fails with both RHS and solution samples."""
-    with pytest.raises(
-        ValueError, match="Cannot provide both rhs_samples and solution_samples"
-    ):
+    with pytest.raises(ValueError, match="Cannot provide both rhs_samples and solution_samples"):
         create_scale_from_config(
             "spectral",
             sample_matrix,

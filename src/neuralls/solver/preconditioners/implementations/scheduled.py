@@ -24,9 +24,7 @@ class ScheduledPreconditioner(ContextualPreconditioner):
         >>> from .ilu import ILUPreconditioner
         >>> from .jacobi import JacobiPreconditioner
         >>> scheduled = ScheduledPreconditioner(
-        ...     primary=ILUPreconditioner(A),
-        ...     fallback=JacobiPreconditioner(A),
-        ...     limit_iters=10
+        ...     primary=ILUPreconditioner(A), fallback=JacobiPreconditioner(A), limit_iters=10
         ... )
     """
 
@@ -66,6 +64,7 @@ class ScheduledPreconditioner(ContextualPreconditioner):
         # Lazy import to avoid circular dependency
         if self._fallback is None:
             from .identity import Identity
+
             self._fallback = Identity()
 
         iteration = context.iteration

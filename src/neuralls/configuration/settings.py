@@ -101,6 +101,7 @@ def build_inference_settings(
     toml_data = load_config(model_config_path, raw=True)
     inference_data = {k: v for k, v in toml_data.items() if k not in _INFERENCE_EXCLUDED}
     from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
+
     settings = InferenceWorkflowConfig.model_validate(inference_data)
     sync_session_root_to_environment = getattr(
         dlkit_io.config,

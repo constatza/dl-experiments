@@ -107,4 +107,3 @@ class TestPCGFCGInterfaceCompatibility:
 
         assert result_pcg.converged
         assert result_fcg.converged
-

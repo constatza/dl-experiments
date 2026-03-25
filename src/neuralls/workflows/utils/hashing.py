@@ -107,7 +107,7 @@ def compute_experiment_output_hash(output_dir: Path | str) -> str:
                     # File might have been deleted between listing and stat
                     hasher.update(b"missing")
 
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         # If we can't list the directory, return a stable error state
         return "error"
 
@@ -159,7 +159,7 @@ def compute_data_files_hash(data_dir: Path | str) -> str:
                 for chunk in iter(lambda: f.read(8192), b""):
                     hasher.update(chunk)
 
-    except (OSError, PermissionError, FileNotFoundError):
+    except OSError, PermissionError, FileNotFoundError:
         # If we can't read files, return stable error state
         return "error"
 
@@ -168,10 +168,10 @@ def compute_data_files_hash(data_dir: Path | str) -> str:
 
 def compute_file_signature(path: Path | str) -> str:
     """Compute a stable SHA-1 signature for a file's contents.
-    
+
     Args:
         path: Path to the file to hash.
-        
+
     Returns:
         SHA-1 hash of the file content, or "missing" if file not found.
     """

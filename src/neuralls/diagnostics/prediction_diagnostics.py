@@ -43,9 +43,7 @@ def save_prediction_samples_to_csv(
     if y_true.shape != y_pred.shape and not (
         y_true.ndim == 1 and y_pred.ndim == 1 and y_true.size == y_pred.size
     ):
-        logger.warning(
-            "Shape mismatch between y_true and y_pred; cannot save samples to CSV."
-        )
+        logger.warning("Shape mismatch between y_true and y_pred; cannot save samples to CSV.")
         return None
 
     num_vectors = y_true.shape[0] if y_true.ndim > 1 else 1
@@ -72,9 +70,7 @@ def save_prediction_samples_to_csv(
 
         error_vec = true_vec - pred_vec
         records = []
-        for t_val, p_val, e_val in zip(
-            true_vec.ravel(), pred_vec.ravel(), error_vec.ravel()
-        ):
+        for t_val, p_val, e_val in zip(true_vec.ravel(), pred_vec.ravel(), error_vec.ravel()):
             records.append(
                 {
                     "y_true": t_val,

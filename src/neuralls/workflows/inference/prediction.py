@@ -39,7 +39,7 @@ def resolve_batch_size(settings: Any) -> int:
     configured = getattr(dataloader, "batch_size", None)
     try:
         return int(configured) if configured is not None else 256
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 256
 
 
@@ -82,7 +82,9 @@ def collect_predictions(
     """
     predictions: list[torch.Tensor] = []
     for batch in iterate_feature_batches(feature_arrays, batch_size):
-        tensor_batch = {k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()}
+        tensor_batch = {
+            k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()
+        }
         result = predictor.predict(**tensor_batch)
         primary = result[0] if isinstance(result, tuple) else result
         predictions.append(primary)
@@ -176,11 +178,7 @@ def run_prediction(
     predictions = process_predictions(raw_preds)
 
     # Extract targets (may be None for some workflows)
-    targets = (
-        next(iter(data.targets.values()))
-        if data.targets
-        else np.zeros_like(predictions)
-    )
+    targets = next(iter(data.targets.values())) if data.targets else np.zeros_like(predictions)
 
     return InferencePredictions(
         predictions={"y_pred": predictions},

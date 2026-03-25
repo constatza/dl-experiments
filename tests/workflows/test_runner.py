@@ -5,7 +5,6 @@ without involving the CLI layer. These are integration tests that verify
 the full workflow logic.
 """
 
-import pytest
 import numpy as np
 import tomli_w
 from pathlib import Path
@@ -14,7 +13,7 @@ from neuralls.workflows.runner import run_experiment_matrix
 import os
 
 
-@patch('neuralls.workflows.runner.train_model')
+@patch("neuralls.workflows.runner.train_model")
 def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> None:
     """Test workflow orchestration without expensive training.
 
@@ -61,13 +60,11 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
             "normalize": "none",
             "shuffle": True,
             "seed": 42,
-            "strategy": [
-                {"name": "random", "samples": 100}
-            ]
+            "strategy": [{"name": "random", "samples": 100}],
         },
         "output": {
             "data_dir": str(data_dir / "processed"),
-        }
+        },
     }
     with open(data_config_path, "wb") as f:
         tomli_w.dump(data_config, f)
@@ -75,18 +72,13 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
     # 3. Create Solver Config in shared solvers directory (NEW FORMAT)
     solver_config_path = solvers_dir / "default.toml"
     solver_config = {
-        "solvers": [
-            {
-                "name": "CG",
-                "type": "none"
-            }
-        ],
+        "solvers": [{"name": "CG", "type": "none"}],
         "general": {
             "rtol": 1e-6,
             "max_iterations": 10,
             "matrix_path": str(matrix_path),  # Required for synthetic benchmarks
             "output_root": str(data_dir / "output"),
-        }
+        },
     }
     with open(solver_config_path, "wb") as f:
         tomli_w.dump(solver_config, f)
@@ -96,72 +88,59 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
 
     model_config_path = models_dir / f"{exp_name}_model.toml"
     model_config = {
-                                "SESSION": {
-                                    "seed": 42,
-                                    "precision": "float64",
-                                    "name": "test_model"
-                                },
-                                "MODEL": {
-                                    "name": "NormScaledConstantWidthFFNN",
-                                    "module_path": "dlkit.nn.ffnn",
-                                    "hidden_size": 2,
-                                    "num_layers": 1
-        },        "TRAINING": {
+        "SESSION": {"seed": 42, "precision": "float64", "name": "test_model"},
+        "MODEL": {
+            "name": "NormScaledConstantWidthFFNN",
+            "module_path": "dlkit.nn.ffnn",
+            "hidden_size": 2,
+            "num_layers": 1,
+        },
+        "TRAINING": {
             "trainer": {
-                    "max_epochs": 1,
-                    "accelerator": "cpu",
-                    "enable_checkpointing": True,
-                    "num_sanity_val_steps": 0,
-                    "limit_train_batches": 1,
-                    "limit_val_batches": 1,
-                    "callbacks": [
-                        {
-                            "name": "ModelCheckpoint",
-                            "filename": "test_ckpt",
-                            "monitor": "val_loss",
-                            "save_top_k": 1,
-                            "every_n_epochs": 1,
-                            "enable_version_counter": False
-                        }
-                    ]
-                },
-            "optimizer": {
-                "lr": 1e-3,
-                "name": "AdamW"
+                "max_epochs": 1,
+                "accelerator": "cpu",
+                "enable_checkpointing": True,
+                "num_sanity_val_steps": 0,
+                "limit_train_batches": 1,
+                "limit_val_batches": 1,
+                "callbacks": [
+                    {
+                        "name": "ModelCheckpoint",
+                        "filename": "test_ckpt",
+                        "monitor": "val_loss",
+                        "save_top_k": 1,
+                        "every_n_epochs": 1,
+                        "enable_version_counter": False,
+                    }
+                ],
             },
+            "optimizer": {"lr": 1e-3, "name": "AdamW"},
             "scheduler": {
                 "name": "ReduceLROnPlateau",
                 "factor": 0.5,
                 "patience": 5,
-                "min_lr": 1e-6
+                "min_lr": 1e-6,
             },
             "metrics": [
                 {
                     "name": "NormalizedVectorNormError",
                     "module_path": "dlkit.core.training.metrics",
                     "norm_ord": 2,
-                    "vector_dim": -1
+                    "vector_dim": -1,
                 }
-            ]
+            ],
         },
-        "DATASET": {
-            "name": "FlexibleDataset"
-        },
+        "DATASET": {"name": "FlexibleDataset"},
         "DATAMODULE": {
             "name": "InMemoryModule",
-            "dataloader": {
-                "num_workers": 0,
-                "batch_size": 2,
-                "pin_memory": False,
-                "shuffle": True
-            }
+            "dataloader": {"num_workers": 0, "batch_size": 2, "pin_memory": False, "shuffle": True},
         },
         "MLFLOW": {"enabled": False},
         "OPTUNA": {"enabled": False},
         "PATHS": {
-             "project_root": str(tmp_path),
-             "results_dir": str(data_dir / "output"),
-        }
+            "project_root": str(tmp_path),
+            "results_dir": str(data_dir / "output"),
+        },
     }
     with open(model_config_path, "wb") as f:
         tomli_w.dump(model_config, f)
@@ -169,33 +148,28 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
     # 5. Create Master Experiment Config (NEW FORMAT with [[experiment]] entries)
     master_config_path = configs_dir / "experiments.toml"
     with open(master_config_path, "w") as f:
-        f.write(f'project_root = ".."\n')
+        f.write('project_root = ".."\n')
         f.write(f'output_dir = "{data_dir / "output"}"\n\n')
-        f.write('[[datasets]]\n')
+        f.write("[[datasets]]\n")
         f.write('id = "test_data_gen"\n')
         f.write('path = "datasets/test_data_gen.toml"\n\n')
-        f.write('[[models]]\n')
+        f.write("[[models]]\n")
         f.write(f'id = "{exp_name}_model"\n')
         f.write(f'path = "models/{exp_name}_model.toml"\n\n')
-        f.write('[[experiment]]\n')
+        f.write("[[experiment]]\n")
         f.write(f'id = "{exp_name}"\n')
-        f.write(f'dataset = "test_data_gen"\n')
+        f.write('dataset = "test_data_gen"\n')
         f.write(f'model = "{exp_name}_model"\n')
 
     # Set GRAPH_CG_OUTPUT_DIR to ensure no contamination (although we passed project_root)
     os.environ["GRAPH_CG_OUTPUT_DIR"] = str(data_dir / "output")
 
     # Mock training to return success
-    mock_train.return_value = MagicMock(
-        experiment_id="test_model",
-        status="Success"
-    )
+    mock_train.return_value = MagicMock(experiment_id="test_model", status="Success")
 
     # 6. Run the flow
     results = run_experiment_matrix(
-        experiments_config_path=master_config_path,
-        force=True,
-        project_root=tmp_path
+        experiments_config_path=master_config_path, force=True, project_root=tmp_path
     )
 
     # Verify workflow behavior
@@ -205,7 +179,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
     assert mock_train.called
 
 
-@patch('neuralls.workflows.runner.train_model')
+@patch("neuralls.workflows.runner.train_model")
 def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path) -> None:
     """Test MLflow integration in workflow without expensive training.
 
@@ -250,32 +224,25 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
             "normalize": "none",
             "shuffle": True,
             "seed": 42,
-            "strategy": [
-                {"name": "random", "samples": 50}
-            ]
+            "strategy": [{"name": "random", "samples": 50}],
         },
         "output": {
             "data_dir": str(data_dir / "processed"),
-        }
+        },
     }
     with open(data_config_path, "wb") as f:
         tomli_w.dump(data_config, f)
 
     # 3. Create Model Config with MLflow ENABLED
     exp_name = "mlflow_experiment"
-    output_root = data_dir / "output"
     model_config_path = models_dir / f"{exp_name}_model.toml"
     model_config = {
-        "SESSION": {
-            "seed": 42,
-            "precision": "float64",
-            "name": "mlflow_test_model"
-        },
+        "SESSION": {"seed": 42, "precision": "float64", "name": "mlflow_test_model"},
         "MODEL": {
             "name": "NormScaledConstantWidthFFNN",
             "module_path": "dlkit.nn.ffnn",
             "hidden_size": 2,
-            "num_layers": 1
+            "num_layers": 1,
         },
         "TRAINING": {
             "trainer": {
@@ -292,34 +259,24 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
                         "monitor": "val_loss",
                         "save_top_k": 1,
                         "every_n_epochs": 1,
-                        "enable_version_counter": False
+                        "enable_version_counter": False,
                     }
-                ]
+                ],
             },
-            "optimizer": {
-                "lr": 1e-3,
-                "name": "AdamW"
-            },
+            "optimizer": {"lr": 1e-3, "name": "AdamW"},
             "metrics": [
                 {
                     "name": "NormalizedVectorNormError",
                     "module_path": "dlkit.core.training.metrics",
                     "norm_ord": 2,
-                    "vector_dim": -1
+                    "vector_dim": -1,
                 }
-            ]
+            ],
         },
-        "DATASET": {
-            "name": "FlexibleDataset"
-        },
+        "DATASET": {"name": "FlexibleDataset"},
         "DATAMODULE": {
             "name": "InMemoryModule",
-            "dataloader": {
-                "num_workers": 0,
-                "batch_size": 2,
-                "pin_memory": False,
-                "shuffle": True
-            }
+            "dataloader": {"num_workers": 0, "batch_size": 2, "pin_memory": False, "shuffle": True},
         },
         "MLFLOW": {
             "enabled": True,
@@ -328,7 +285,7 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
         "PATHS": {
             "project_root": str(tmp_path),
             "results_dir": str(data_dir / "output"),
-        }
+        },
     }
     with open(model_config_path, "wb") as f:
         tomli_w.dump(model_config, f)
@@ -336,33 +293,28 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
     # 4. Create Master Experiment Config
     master_config_path = configs_dir / "experiments.toml"
     with open(master_config_path, "w") as f:
-        f.write(f'project_root = ".."\n')
+        f.write('project_root = ".."\n')
         f.write(f'output_dir = "{data_dir / "output"}"\n\n')
-        f.write('[[datasets]]\n')
+        f.write("[[datasets]]\n")
         f.write('id = "mlflow_test_data"\n')
         f.write('path = "datasets/mlflow_test_data.toml"\n\n')
-        f.write('[[models]]\n')
+        f.write("[[models]]\n")
         f.write(f'id = "{exp_name}_model"\n')
         f.write(f'path = "models/{exp_name}_model.toml"\n\n')
-        f.write('[[experiment]]\n')
+        f.write("[[experiment]]\n")
         f.write(f'id = "{exp_name}"\n')
-        f.write(f'dataset = "mlflow_test_data"\n')
+        f.write('dataset = "mlflow_test_data"\n')
         f.write(f'model = "{exp_name}_model"\n')
 
     # Set GRAPH_CG_OUTPUT_DIR
     os.environ["GRAPH_CG_OUTPUT_DIR"] = str(data_dir / "output")
 
     # Mock training to return success
-    mock_train.return_value = MagicMock(
-        experiment_id="mlflow_test_model",
-        status="Success"
-    )
+    mock_train.return_value = MagicMock(experiment_id="mlflow_test_model", status="Success")
 
     # 5. Run the flow with MLflow enabled
     results = run_experiment_matrix(
-        experiments_config_path=master_config_path,
-        force=True,
-        project_root=tmp_path
+        experiments_config_path=master_config_path, force=True, project_root=tmp_path
     )
 
     # Verify workflow behavior

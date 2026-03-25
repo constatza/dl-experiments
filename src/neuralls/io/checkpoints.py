@@ -8,9 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def get_latest_checkpoint(
-    checkpoint_dir: str | Path, pattern: str = "*.ckpt"
-) -> Path | None:
+def get_latest_checkpoint(checkpoint_dir: str | Path, pattern: str = "*.ckpt") -> Path | None:
     """Find the most recent checkpoint file in directory.
 
     I/O action - scans directory and reads file metadata.

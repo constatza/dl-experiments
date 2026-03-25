@@ -162,7 +162,10 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path) -> None:
     with (
         patch("neuralls.workflows.multi_training.train_model", return_value=ckpt),
         patch("neuralls.workflows.multi_training.register_logged_model"),
-        patch("neuralls.workflows.multi_training.fetch_mlflow_metrics", return_value={"eval/rel_error": 0.1}),
+        patch(
+            "neuralls.workflows.multi_training.fetch_mlflow_metrics",
+            return_value={"eval/rel_error": 0.1},
+        ),
         patch("neuralls.workflows.multi_training.MlflowClient"),
     ):
         result = _train_single(
@@ -244,7 +247,9 @@ def test_train_batch_returns_local_output_dir(valid_experiments_toml: Path, tmp_
     fake_ckpt.touch()
     cfg = ExperimentsConfig.model_validate(load_raw_toml(valid_experiments_toml))
 
-    with patch("neuralls.workflows.multi_training.train_model", return_value=fake_ckpt) as mock_train:
+    with patch(
+        "neuralls.workflows.multi_training.train_model", return_value=fake_ckpt
+    ) as mock_train:
         result = train_batch(cfg=cfg, configs_dir=valid_experiments_toml.parent)
 
     assert mock_train.call_count == 1
@@ -291,7 +296,9 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
         )
     )
 
-    with pytest.raises(ValueError, match="Experiment 'ffnn_test' references dataset id 'missing-dataset'"):
+    with pytest.raises(
+        ValueError, match="Experiment 'ffnn_test' references dataset id 'missing-dataset'"
+    ):
         ExperimentsConfig.model_validate(load_raw_toml(config))
 
 
@@ -313,7 +320,9 @@ def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
         )
     )
 
-    with pytest.raises(ValueError, match="Experiment 'ffnn_test' references model id 'missing-model'"):
+    with pytest.raises(
+        ValueError, match="Experiment 'ffnn_test' references model id 'missing-model'"
+    ):
         ExperimentsConfig.model_validate(load_raw_toml(config))
 
 
@@ -323,5 +332,7 @@ def test_resolve_comparison_config_path_rejects_missing_registry_id(tmp_path: Pa
     config.write_text("")
     cfg = ExperimentsConfig.model_validate(load_raw_toml(config))
 
-    with pytest.raises(ValueError, match="Comparison id 'linear' is not defined in \\[\\[comparisons\\]\\]"):
+    with pytest.raises(
+        ValueError, match="Comparison id 'linear' is not defined in \\[\\[comparisons\\]\\]"
+    ):
         resolve_comparison_config_path(cfg, tmp_path, "linear")

@@ -41,7 +41,7 @@ def _write_comparison_config(path: Path, system_path: Path) -> None:
                 "[general.data]",
                 f'matrix_path = "{system_path}"',
                 f'rhs_path = "{system_path}"',
-                "normalize_system = \"matrix\"",
+                'normalize_system = "matrix"',
                 "",
                 "[[preconditioners]]",
                 'name = "none"',

@@ -43,7 +43,9 @@ class SolverEvent:
 
     Example:
         >>> from neuralls.solver.monitoring.events import EventType
-        >>> event = SolverEvent(type=EventType.CONVERGED, iteration=42, metadata={"final_residual": 1e-8})
+        >>> event = SolverEvent(
+        ...     type=EventType.CONVERGED, iteration=42, metadata={"final_residual": 1e-8}
+        ... )
         >>> event.iteration
         42
         >>> event.metadata["final_residual"]

@@ -122,7 +122,13 @@ class LoggedModelRefConfig(BaseModel):
         """
         if self.latest is not True:
             return self
-        filters = [self.model_name, self.experiment_name, self.experiment_id, self.run_name, self.tags]
+        filters = [
+            self.model_name,
+            self.experiment_name,
+            self.experiment_id,
+            self.run_name,
+            self.tags,
+        ]
         if not any(f is not None for f in filters):
             raise ValueError(
                 "latest=true requires at least one filter "
@@ -144,9 +150,7 @@ class BasePreconditionerConfig(BaseModel):
     """
 
     name: str
-    limit_iters: int = Field(
-        default=-1, description="Iterations to apply; -1 means unlimited."
-    )
+    limit_iters: int = Field(default=-1, description="Iterations to apply; -1 means unlimited.")
     fallback: PreconditionerType = Field(
         default=PreconditionerType.IDENTITY,
         description="Fallback preconditioner type when limited.",
@@ -176,7 +180,7 @@ class IC0PreconditionerConfig(BasePreconditionerConfig):
     type: Literal[PreconditionerType.IC0] = PreconditionerType.IC0
     threshold: float = Field(
         default=1e-14,
-        description="Drop tolerance - entries with |value| < threshold are treated as zeros"
+        description="Drop tolerance - entries with |value| < threshold are treated as zeros",
     )
 
 
@@ -188,9 +192,7 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
     experiment: str | None = None
     config_path: Path | None = None
     data_config_path: Path | None = None
-    limit_iters: int = Field(
-        default=-1, description="Iterations to apply; -1 means unlimited."
-    )
+    limit_iters: int = Field(default=-1, description="Iterations to apply; -1 means unlimited.")
     model_ref: ModelRefConfig | None = None
     resolved_checkpoint_path: Path | None = None
 

@@ -72,11 +72,7 @@ def derive_run_identifier(
 
     # Try workspace run_id
     run_id = workspace.run_id
-    if (
-        isinstance(run_id, str)
-        and run_id
-        and not run_id.lower().startswith("dlkit-session")
-    ):
+    if isinstance(run_id, str) and run_id and not run_id.lower().startswith("dlkit-session"):
         return run_id
 
     # Fallback to model identifier
@@ -143,9 +139,7 @@ def save_predictions_csv(
     )
 
     if csv_paths:
-        logger.info(
-            f"Saved prediction samples to CSV: {[str(p) for p in csv_paths]}"
-        )
+        logger.info(f"Saved prediction samples to CSV: {[str(p) for p in csv_paths]}")
 
     return csv_paths or []
 
@@ -201,16 +195,12 @@ def create_diagnostic_plots(
 
     # Parity and residuals plot
     parity_path = figures_dir / f"parity_residuals_{identifier}.png"
-    plot_parity_and_residuals(
-        y_pred, y_true, sample=0, save_path=parity_path, show=False
-    )
+    plot_parity_and_residuals(y_pred, y_true, sample=0, save_path=parity_path, show=False)
     plot_paths["parity"] = parity_path
 
     # Diagnostics plot
     diagnostic_path = figures_dir / f"diagnostics_{identifier}.png"
-    plot_prediction_diagnostics(
-        y_pred, y_true, sample=0, save_path=diagnostic_path, show=False
-    )
+    plot_prediction_diagnostics(y_pred, y_true, sample=0, save_path=diagnostic_path, show=False)
     plot_paths["diagnostics"] = diagnostic_path
 
     logger.info(f"Saved diagnostic plots to {figures_dir}")
@@ -251,19 +241,13 @@ def save_inference_outputs(
     identifier = f"{dataset_slug}-{run_identifier}"
 
     # Save CSV predictions
-    csv_paths = save_predictions_csv(
-        predictions, workspace.predictions_dir, identifier
-    )
+    csv_paths = save_predictions_csv(predictions, workspace.predictions_dir, identifier)
 
     # Save plots if enabled
     plot_paths_dict = {}
     if save_plots:
-        output_figures_dir = (
-            Path(figures_dir) if figures_dir is not None else workspace.figures_dir
-        )
-        plot_paths_dict = create_diagnostic_plots(
-            predictions, output_figures_dir, identifier
-        )
+        output_figures_dir = Path(figures_dir) if figures_dir is not None else workspace.figures_dir
+        plot_paths_dict = create_diagnostic_plots(predictions, output_figures_dir, identifier)
 
     # Extract metrics
     duration = predictions.metadata.get("duration_seconds", 0.0)

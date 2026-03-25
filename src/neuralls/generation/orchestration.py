@@ -22,7 +22,6 @@ from .trace_utils import (
     _merge_error_traces,
 )
 from .interfaces import ArchiveData
-from ..constants import DEFAULT_RESIDUAL_TRACE_ITERS
 from .source_streams import bind_sources, open_matrix_stream, open_vector_stream
 
 
@@ -93,9 +92,7 @@ def generate_mixture(
     archive_solutions: np.ndarray | None = None,
     archive_rhs: np.ndarray | None = None,
     single_rhs: np.ndarray | None = None,
-) -> tuple[
-    np.ndarray, np.ndarray, ResidualTraceSamples | None, ErrorTraceSamples | None
-]:
+) -> tuple[np.ndarray, np.ndarray, ResidualTraceSamples | None, ErrorTraceSamples | None]:
     """Generate mixed training data from multiple strategies.
 
     Args:
@@ -133,7 +130,7 @@ def generate_mixture(
         ...     seed=42,
         ...     strategy_overrides={
         ...         "krylov": {"krylov_iters": 20},
-        ...     }
+        ...     },
         ... )
         >>> X.shape
         (100, n)
@@ -145,7 +142,7 @@ def generate_mixture(
         ...     seed=42,
         ...     strategy_overrides={
         ...         "residual_traces": {"cg_iters": 10},
-        ...     }
+        ...     },
         ... )
 
         >>> # Generate with single RHS for trace strategies
@@ -181,7 +178,7 @@ def generate_mixture(
         cfg = overrides.get(strategy_name, {}).copy()
         cfg.setdefault("samples", count)
         cfg.setdefault("seed", seed)
-        
+
         archive_data: ArchiveData | None = None
         if archive_solutions is not None:
             archive_data = ArchiveData(solutions=archive_solutions, rhs_vectors=archive_rhs)
@@ -200,9 +197,7 @@ def generate_mixture(
                 single_rhs=single_rhs,
             )
         except ValidationError as e:
-            raise ValueError(
-                f"Invalid configuration for strategy '{strategy_name}': {e}"
-            ) from e
+            raise ValueError(f"Invalid configuration for strategy '{strategy_name}': {e}") from e
 
         if generated.rhs is not None:
             all_features.append(generated.rhs)
@@ -214,9 +209,7 @@ def generate_mixture(
                 _offset_residual_traces(generated.residual_traces, sample_offset)
             )
         if generated.error_traces is not None:
-            error_blocks.append(
-                _offset_error_traces(generated.error_traces, sample_offset)
-            )
+            error_blocks.append(_offset_error_traces(generated.error_traces, sample_offset))
 
         if generated.rhs is not None:
             sample_offset += generated.rhs.shape[0]
@@ -226,9 +219,7 @@ def generate_mixture(
     else:
         X = np.empty((0, A.shape[0]), dtype=np.float64)
         Y = np.empty((0, A.shape[0]), dtype=np.float64)
-    residual_traces = (
-        _merge_residual_traces(residual_blocks) if residual_blocks else None
-    )
+    residual_traces = _merge_residual_traces(residual_blocks) if residual_blocks else None
     error_traces = _merge_error_traces(error_blocks) if error_blocks else None
 
     if shuffle and X.shape[0] > 0:
@@ -467,10 +458,7 @@ def _resolve_final_scale(
 
     # Resolve matrix value scale
     matrix_value_scale = float(scale_values[0])
-    if not all(
-        np.isclose(v, matrix_value_scale, rtol=1e-10, atol=1e-12)
-        for v in scale_values
-    ):
+    if not all(np.isclose(v, matrix_value_scale, rtol=1e-10, atol=1e-12) for v in scale_values):
         logger.warning(
             "Multiple matrix value scales detected across bindings; "
             "persisting sparse pack with value_scale=1.0."
@@ -607,9 +595,7 @@ def build_dataset(
         logger.info(f"  RHS source: {rhs_path}")
 
     # Open streams and bind sources
-    matrix_stream, rhs_stream, bindings = _open_streams(
-        matrix_path, rhs_path, sample_id_regex
-    )
+    matrix_stream, rhs_stream, bindings = _open_streams(matrix_path, rhs_path, sample_id_regex)
     logger.info(
         f"  Matrix samples: {len(matrix_stream.sample_ids)} | System bindings: {len(bindings)}"
     )
@@ -659,7 +645,9 @@ def build_dataset(
                     sparse_acc.append_dense_matrix(cached.matrix_norm, repeats=1)
                     single_matrix_written = True
             else:
-                sparse_acc.append_dense_matrix(cached.matrix_norm, repeats=int(result.rhs_block.shape[0]))
+                sparse_acc.append_dense_matrix(
+                    cached.matrix_norm, repeats=int(result.rhs_block.shape[0])
+                )
 
         matrix_norm_values.append(result.matrix_norm_value)
         matrix_value_scale_values.append(result.matrix_value_scale)

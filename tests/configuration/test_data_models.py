@@ -151,9 +151,7 @@ class TestDataConfigFile:
                 shuffle=True,
                 seed=42,
                 strategy=[
-                    StrategyConfig(
-                        name="solution_archive", samples=-1, solutions_glob="*.txt"
-                    )
+                    StrategyConfig(name="solution_archive", samples=-1, solutions_glob="*.txt")
                 ],
             ),
             output=OutputConfig(data_dir=Path("tests/fixtures/data/processed")),

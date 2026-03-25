@@ -21,8 +21,6 @@ from neuralls.normalization import (
 )
 
 
-
-
 def _expected_trace_systems(samples: int, cg_iters: int, every_n: int = 1) -> int:
     return max(1, samples // trace_rows_per_system(cg_iters, every_n=every_n))
 
@@ -30,7 +28,7 @@ def _expected_trace_systems(samples: int, cg_iters: int, every_n: int = 1) -> in
 def test_residual_strategy_with_archive() -> None:
     """Test residual strategy accepts pre-existing solutions from archive."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     # Create archive solutions
     archive_sols = np.array(
@@ -63,7 +61,7 @@ def test_residual_strategy_with_archive() -> None:
 def test_residual_strategy_archive_validation() -> None:
     """Test residual strategy validates archive has enough samples."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     # Archive with only 1 solution, but we need 2 base systems after integer division
     archive_sols = np.array([[0.5, 0.3]], dtype=np.float64)
@@ -476,8 +474,8 @@ def test_error_strategy_validation(
         rhs, solutions, residuals, error_traces = generate_mixture(
             A=small_spd_matrix,
             mix={"residuals": 1.0},
-                total=8,
-                strategy_overrides={"residuals": {"cg_iters": 3}},
+            total=8,
+            strategy_overrides={"residuals": {"cg_iters": 3}},
             seed=test_seed,
             shuffle=False,
             archive_solutions=insufficient_archive,
@@ -532,9 +530,7 @@ def test_error_strategy_in_generate_mixture(
     assert len(unique_samples) >= 1, "Should have error traces from at least 1 sample"
 
     # Verify residuals is None (normal strategy doesn't produce residual traces)
-    assert residuals is None, (
-        "Residuals should be None when only one strategy produces them"
-    )
+    assert residuals is None, "Residuals should be None when only one strategy produces them"
 
 
 def test_error_strategy_traces_structure(
@@ -576,14 +572,10 @@ def test_error_strategy_traces_structure(
         mask = error_traces.sample_indices == sample_idx
         sample_traces = error_traces.iteration_indices[mask]
 
-        assert len(sample_traces) > 0, (
-            f"Sample {sample_idx} should have at least one trace"
-        )
+        assert len(sample_traces) > 0, f"Sample {sample_idx} should have at least one trace"
 
         # Verify iteration indices are sequential starting from 0
-        assert sample_traces[0] == 0, (
-            f"First iteration for sample {sample_idx} should be 0"
-        )
+        assert sample_traces[0] == 0, f"First iteration for sample {sample_idx} should be 0"
         assert np.all(np.diff(sample_traces) == 1), (
             f"Iteration indices for sample {sample_idx} should be sequential"
         )
@@ -622,7 +614,7 @@ def test_error_strategy_with_zero_iterations(
 def test_eigenvector_forward_basic(tmp_path: Path) -> None:
     """Test eigenvector forward strategy produces exact samples."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
@@ -645,7 +637,7 @@ def test_eigenvector_forward_basic(tmp_path: Path) -> None:
 def test_eigenvector_inverse_machine_precision(tmp_path: Path) -> None:
     """Test eigenvector inverse strategy achieves machine precision."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
@@ -665,7 +657,7 @@ def test_eigenvector_inverse_machine_precision(tmp_path: Path) -> None:
 def test_eigenvector_requires_symmetric(tmp_path: Path) -> None:
     """Test eigenvector strategies reject non-symmetric matrices."""
     A = np.array([[4.0, 1.0], [2.0, 3.0]], dtype=np.float64)  # Asymmetric
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     with pytest.raises(ValueError, match="symmetric"):
         generate_mixture(A=A, mix={"eigenvector_forward": 1.0}, total=2)
@@ -674,12 +666,10 @@ def test_eigenvector_requires_symmetric(tmp_path: Path) -> None:
 def test_eigenvector_count_exceeds_dimension(tmp_path: Path) -> None:
     """Test that requesting more samples than eigenvectors now works via combinations."""
     A = np.eye(3, dtype=np.float64) * 2.0
-    b = np.ones(3, dtype=np.float64)
+    np.ones(3, dtype=np.float64)
 
     # With new implementation, this should work (generates 5 combinations from 3 eigenvectors)
-    rhs, solutions, _, _ = generate_mixture(
-        A=A, mix={"eigenvector_forward": 1.0}, total=5
-    )
+    rhs, solutions, _, _ = generate_mixture(A=A, mix={"eigenvector_forward": 1.0}, total=5)
 
     assert rhs.shape == (5, 3)
     assert solutions.shape == (5, 3)
@@ -694,7 +684,7 @@ def test_eigenvector_count_exceeds_dimension(tmp_path: Path) -> None:
 def test_eigenvector_selection_modes(tmp_path: Path) -> None:
     """Test different eigenvector eigenvalue range selections."""
     A = np.diag([1.0, 2.0, 3.0, 4.0])
-    b = np.ones(4, dtype=np.float64)
+    np.ones(4, dtype=np.float64)
 
     # Test "smallest" mode - use eigenvectors with k smallest eigenvalues
     _, sols_first, _, _ = generate_mixture(
@@ -733,7 +723,7 @@ def test_eigenvector_selection_modes(tmp_path: Path) -> None:
 def test_mixed_strategy_with_eigenvectors(tmp_path: Path) -> None:
     """Test mixing random and eigenvector strategies."""
     A = np.eye(10, dtype=np.float64) * 2.0
-    b = np.ones(10, dtype=np.float64)
+    np.ones(10, dtype=np.float64)
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
@@ -801,7 +791,7 @@ def test_eigenvector_combinations_reproducible(tmp_path: Path) -> None:
 def test_eigenvector_forward_with_combinations(tmp_path: Path) -> None:
     """Test eigenvector_forward with linear combinations."""
     A = np.diag([1.0, 2.0, 3.0, 4.0, 5.0])
-    b = np.ones(5, dtype=np.float64)
+    np.ones(5, dtype=np.float64)
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
@@ -831,7 +821,7 @@ def test_eigenvector_forward_with_combinations(tmp_path: Path) -> None:
 def test_eigenvector_forward_include_eigenvectors(tmp_path: Path) -> None:
     """Test including original eigenvectors in output."""
     A = np.diag([1.0, 2.0, 3.0, 4.0])
-    b = np.ones(4, dtype=np.float64)
+    np.ones(4, dtype=np.float64)
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
@@ -864,7 +854,7 @@ def test_eigenvector_forward_include_eigenvectors(tmp_path: Path) -> None:
 def test_eigenvector_inverse_with_combinations(tmp_path: Path) -> None:
     """Test eigenvector_inverse with combinations as RHS."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
@@ -889,7 +879,7 @@ def test_eigenvector_inverse_with_combinations(tmp_path: Path) -> None:
 def test_eigenvector_validation_num_exceeds_dimension(tmp_path: Path) -> None:
     """Test error when num_eigenvectors > matrix dimension."""
     A = np.eye(3, dtype=np.float64) * 2.0
-    b = np.ones(3, dtype=np.float64)
+    np.ones(3, dtype=np.float64)
 
     with pytest.raises(ValueError, match="must be positive and ≤"):
         generate_mixture(
@@ -903,7 +893,7 @@ def test_eigenvector_validation_num_exceeds_dimension(tmp_path: Path) -> None:
 def test_eigenvector_validation_include_requires_enough_samples(tmp_path: Path) -> None:
     """Test error when include_eigenvectors=True but samples < num_eigenvectors."""
     A = np.eye(5, dtype=np.float64) * 2.0
-    b = np.ones(5, dtype=np.float64)
+    np.ones(5, dtype=np.float64)
 
     with pytest.raises(ValueError, match="must be >="):
         generate_mixture(
@@ -922,7 +912,7 @@ def test_eigenvector_validation_include_requires_enough_samples(tmp_path: Path) 
 def test_eigenvector_forward_rhs_computation_change(tmp_path: Path) -> None:
     """Verify RHS is computed as A @ v (not λ * v) for forward strategy."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     rhs, solutions, _, _ = generate_mixture(
         A=A,
@@ -947,7 +937,7 @@ def test_eigenvector_forward_rhs_computation_change(tmp_path: Path) -> None:
 def test_eigenvector_backward_compatible_defaults(tmp_path: Path) -> None:
     """Test that old configs still work without new parameters."""
     A = np.diag([1.0, 2.0, 3.0])
-    b = np.ones(3, dtype=np.float64)
+    np.ones(3, dtype=np.float64)
 
     # Old-style config (no new parameters)
     rhs, solutions, _, _ = generate_mixture(
@@ -968,29 +958,28 @@ def test_eigenvector_backward_compatible_defaults(tmp_path: Path) -> None:
         rel_residual = np.linalg.norm(residual) / np.linalg.norm(rhs[i])
         assert rel_residual < 1e-14
 
-
-# =============================================================================
-# PYDANTIC VALIDATION TESTS
-# =============================================================================
-
+    # =============================================================================
+    # PYDANTIC VALIDATION TESTS
+    # =============================================================================
 
     def test_pydantic_rejects_unknown_parameters() -> None:
         """Test that Pydantic validation rejects unknown parameters due to extra='forbid'.
-    
+
         Note: The orchestration layer filters out unknown parameters before passing to strategies,
         so this test validates by directly instantiating the config class.
         """
         from neuralls.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
-    
+
         # Try to create a config with an unknown parameter directly
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
             KrylovConfig.model_validate({"samples": 10, "unknown_param": 123})
 
+
 def test_pydantic_rejects_invalid_literal_values() -> None:
     """Test that Pydantic validation rejects invalid Literal values."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     # Try to pass an invalid 'which' value (should be 'smallest', 'largest', or 'both')
     with pytest.raises(ValueError, match="Input should be"):
@@ -1005,7 +994,7 @@ def test_pydantic_rejects_invalid_literal_values() -> None:
 def test_pydantic_requires_rhs_glob_for_rhs_archive() -> None:
     """Test that rhs_glob is required for rhs_archive strategy."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     # Try to use rhs_archive without providing rhs_glob
     with pytest.raises(ValueError, match="Field required"):
@@ -1020,7 +1009,7 @@ def test_pydantic_requires_rhs_glob_for_rhs_archive() -> None:
 def test_pydantic_requires_solutions_glob_for_solution_archive() -> None:
     """Test that solutions_glob is required for solution_archive strategy."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     # Try to use solution_archive without providing solutions_glob
     with pytest.raises(ValueError, match="Field required"):
@@ -1035,7 +1024,7 @@ def test_pydantic_requires_solutions_glob_for_solution_archive() -> None:
 def test_pydantic_validates_residual_iters_type() -> None:
     """Test that Pydantic validates parameter types (cg_iters must be int)."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     # Try to pass a string for cg_iters (should be int)
     with pytest.raises(ValueError, match="Input should be a valid integer"):
@@ -1050,7 +1039,7 @@ def test_pydantic_validates_residual_iters_type() -> None:
 def test_pydantic_validates_krylov_iters_type() -> None:
     """Test that Pydantic validates parameter types (krylov_iters must be int)."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    b = np.array([1.0, 0.0], dtype=np.float64)
+    np.array([1.0, 0.0], dtype=np.float64)
 
     # Try to pass a float for krylov_iters (should be int)
     with pytest.raises(ValueError):

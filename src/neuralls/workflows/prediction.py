@@ -131,7 +131,7 @@ def _resolve_batch_size(settings: Any) -> int:
     configured = getattr(dataloader, "batch_size", None)
     try:
         return int(configured) if configured is not None else 256
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 256
 
 
@@ -143,7 +143,9 @@ def _collect_predictions(
     """Run inference for every feature batch."""
     predictions: list[torch.Tensor] = []
     for batch in _iterate_feature_batches(feature_arrays, batch_size):
-        tensor_batch = {k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()}
+        tensor_batch = {
+            k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()
+        }
         result = predictor.predict(**tensor_batch)
         primary = result[0] if isinstance(result, tuple) else result
         predictions.append(primary)
@@ -237,14 +239,12 @@ def _extract_from_dict(data: dict) -> tuple[np.ndarray, np.ndarray]:
     # Strict validation - fail fast if keys missing
     if EXPECTED_PRED_KEY not in data:
         raise KeyError(
-            f"Missing required key '{EXPECTED_PRED_KEY}'. "
-            f"Available keys: {list(data.keys())}"
+            f"Missing required key '{EXPECTED_PRED_KEY}'. Available keys: {list(data.keys())}"
         )
 
     if EXPECTED_TARGET_KEY not in data:
         raise KeyError(
-            f"Missing required key '{EXPECTED_TARGET_KEY}'. "
-            f"Available keys: {list(data.keys())}"
+            f"Missing required key '{EXPECTED_TARGET_KEY}'. Available keys: {list(data.keys())}"
         )
 
     preds = np.asarray(data[EXPECTED_PRED_KEY]).ravel()
@@ -252,9 +252,7 @@ def _extract_from_dict(data: dict) -> tuple[np.ndarray, np.ndarray]:
 
     # Validate shapes match
     if preds.shape != targets.shape:
-        raise ValueError(
-            f"Shape mismatch: predictions {preds.shape} != targets {targets.shape}"
-        )
+        raise ValueError(f"Shape mismatch: predictions {preds.shape} != targets {targets.shape}")
 
     return preds, targets
 
@@ -279,8 +277,7 @@ def _extract_from_list(data_list: list) -> tuple[np.ndarray, np.ndarray]:
     # Guard: Validate first element is dict
     if not isinstance(data_list[0], dict):
         raise ValueError(
-            f"Invalid list element type: {type(data_list[0]).__name__}. "
-            "Expected list of dicts."
+            f"Invalid list element type: {type(data_list[0]).__name__}. Expected list of dicts."
         )
 
     preds_list = []
@@ -290,20 +287,17 @@ def _extract_from_list(data_list: list) -> tuple[np.ndarray, np.ndarray]:
         # Strict validation per item
         if not isinstance(item, dict):
             raise ValueError(
-                f"Invalid element at index {idx}: {type(item).__name__}. "
-                "Expected dict."
+                f"Invalid element at index {idx}: {type(item).__name__}. Expected dict."
             )
 
         if "preds" not in item:
             raise KeyError(
-                f"Missing 'preds' key in element {idx}. "
-                f"Available keys: {list(item.keys())}"
+                f"Missing 'preds' key in element {idx}. Available keys: {list(item.keys())}"
             )
 
         if "targets" not in item:
             raise KeyError(
-                f"Missing 'targets' key in element {idx}. "
-                f"Available keys: {list(item.keys())}"
+                f"Missing 'targets' key in element {idx}. Available keys: {list(item.keys())}"
             )
 
         preds_list.append(np.asarray(item["preds"]).ravel())
@@ -339,8 +333,7 @@ def _pick_pred_target_arrays(plot_ready: Any) -> tuple[np.ndarray, np.ndarray]:
             return _extract_from_list(plot_ready)
         case _:
             raise ValueError(
-                f"Invalid data type: {type(plot_ready).__name__}. "
-                "Expected dict or list."
+                f"Invalid data type: {type(plot_ready).__name__}. Expected dict or list."
             )
 
 
@@ -358,9 +351,7 @@ def _summarize_vector(values: np.ndarray) -> dict[str, float]:
     }
 
 
-def _log_prediction_diagnostics(
-    y_true: np.ndarray | None, y_pred: np.ndarray | None
-) -> None:
+def _log_prediction_diagnostics(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> None:
     """Emit debug diagnostics comparing prediction and target magnitudes."""
     if y_true is None or y_pred is None:
         return
@@ -458,11 +449,7 @@ def _derive_run_identifier(
             return cp.stem
 
     run_id = getattr(context, "run_id", None)
-    if (
-        isinstance(run_id, str)
-        and run_id
-        and not run_id.lower().startswith("dlkit-session")
-    ):
+    if isinstance(run_id, str) and run_id and not run_id.lower().startswith("dlkit-session"):
         return run_id
 
     return derive_model_identifier(settings, context, config_path)
@@ -558,9 +545,8 @@ def _execute_inference_pipeline(
     # Save synthetic results separately (if applicable)
     if config.synthetic_benchmark and data.metadata.get("source") == "synthetic":
         from neuralls.io.filesystem import sanitize_identifier
-        run_identifier = sanitize_identifier(
-            str(workspace.run_id or config.checkpoint_path.stem)
-        )
+
+        run_identifier = sanitize_identifier(str(workspace.run_id or config.checkpoint_path.stem))
         dataset_slug = sanitize_identifier(str(dataset_id))
         identifier = f"{dataset_slug}-{run_identifier}"
         save_synthetic_predictions(predictions, workspace.predictions_dir, identifier)
@@ -700,6 +686,7 @@ def run_inference(
         elif mlflow_state is not None:
             # Cleanup even if metrics weren't set
             from neuralls.mlflow_utils import finalize_run
+
             finalize_run(
                 mlflow_state,
                 metrics={},

@@ -90,9 +90,7 @@ class CombinedToleranceCriterion(IConvergenceCriterion):
         >>>
         >>> # A-norm convergence for SPD matrix A
         >>> from neuralls.solver.strategies.norms import energy_norm
-        >>> criterion_A = CombinedToleranceCriterion(
-        ...     rtol=1e-6, atol=1e-14, norm=energy_norm(A)
-        ... )
+        >>> criterion_A = CombinedToleranceCriterion(rtol=1e-6, atol=1e-14, norm=energy_norm(A))
     """
 
     rtol: float

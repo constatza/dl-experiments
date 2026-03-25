@@ -15,13 +15,11 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from loguru import logger
 
 from neuralls.io.dataset_storage import (
     load_dense_training_arrays,
     load_matrix_dense_sample,
     load_dataset_manifest,
-    resolve_dataset_paths,
 )
 
 
@@ -48,7 +46,7 @@ def derive_checkpoint_path(
         >>> derive_checkpoint_path(
         ...     "configs/linear.toml",
         ...     "data-configs/test-solutions.toml",
-        ...     "/data/projects/graph-cg/data/output"
+        ...     "/data/projects/graph-cg/data/output",
         ... )
         PosixPath('/data/projects/graph-cg/data/output/test-solutions/ffnn/checkpoints/ffnn.ckpt')
     """
@@ -73,8 +71,6 @@ def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
     Returns:
         Matrix array as float64
     """
-    from neuralls.io.datasets import load_dataset
-
     matrix_path = Path(matrix_path)
 
     # If it's a dataset directory, load first matrix sample from sparse pack.
@@ -82,7 +78,7 @@ def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
         try:
             load_dataset_manifest(matrix_path)
             return load_matrix_dense_sample(matrix_path, sample_index=0)
-        except (FileNotFoundError, ValueError):
+        except FileNotFoundError, ValueError:
             # Fallback: allow direct sparse pack directory path.
             if (matrix_path / "manifest.json").exists() and (matrix_path / "values.npy").exists():
                 return load_matrix_dense_sample(matrix_path.parent, sample_index=0)
@@ -105,8 +101,6 @@ def _load_rhs_file(rhs_path: str | Path) -> np.ndarray:
     Returns:
         RHS vector as float64, reshaped to 1D
     """
-    from neuralls.io.datasets import load_dataset
-
     rhs_path = Path(rhs_path)
 
     def _validate_and_flatten(rhs_array: np.ndarray) -> np.ndarray:
@@ -126,7 +120,7 @@ def _load_rhs_file(rhs_path: str | Path) -> np.ndarray:
             rhs, _ = load_dense_training_arrays(rhs_path)
             b = rhs[0]
             return _validate_and_flatten(b)
-        except (FileNotFoundError, ValueError):
+        except FileNotFoundError, ValueError:
             pass
 
     if rhs_path.name == "rhs.npy" and rhs_path.exists():
@@ -159,9 +153,7 @@ def _ensure_rhs_matches_matrix(A: np.ndarray, b: np.ndarray) -> np.ndarray:
         hint = ""
         if b.size == A.size:
             hint = " (loaded data looks like a flattened matrix; check your RHS path)"
-        raise ValueError(
-            f"RHS length {b.shape[0]} doesn't match matrix size {A.shape[0]}{hint}"
-        )
+        raise ValueError(f"RHS length {b.shape[0]} doesn't match matrix size {A.shape[0]}{hint}")
     return b
 
 
@@ -314,7 +306,7 @@ def list_available_cases(
             }
 
             cases.append(case_info)
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             continue
 
     return sorted(cases, key=lambda x: (x["source_type"], x["dimension"] or 0))

@@ -50,7 +50,7 @@ class RhsArchiveStrategy:
         >>> cfg = {
         ...     "rhs_glob": "/data/rhs_*.txt",
         ...     "samples": 100,
-        ...     "solve_config": {"method": "cg", "rtol": 1e-12, "atol": 1e-15}
+        ...     "solve_config": {"method": "cg", "rtol": 1e-12, "atol": 1e-15},
         ... }
         >>> samples = strategy.generate(matrix, None, cfg=cfg)
 

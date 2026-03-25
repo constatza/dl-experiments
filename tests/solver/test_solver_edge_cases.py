@@ -11,14 +11,13 @@ Test categories:
 5. Initial guess variations
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 import pytest
 from numpy.typing import NDArray
 
 from neuralls.solver.monitoring.trace_mode import TraceMode
-from neuralls.solver.preconditioners import CallablePreconditioner
 
 
 class TestTrivialConvergence:
@@ -44,7 +43,9 @@ class TestTrivialConvergence:
         np.testing.assert_allclose(x, np.zeros_like(b), rtol=rtol, atol=atol)
 
         # Should converge immediately (0 or 1 iterations depending on implementation)
-        assert result.iterations <= 1, f"Expected ≤1 iterations for zero RHS, got {result.iterations}"
+        assert result.iterations <= 1, (
+            f"Expected ≤1 iterations for zero RHS, got {result.iterations}"
+        )
         assert result.converged, "Should converge for zero RHS"
 
     @pytest.mark.parametrize("solver_name", ["fcg", "pcg", "scipy_cg"])
@@ -69,7 +70,9 @@ class TestTrivialConvergence:
         np.testing.assert_allclose(x, x_exact, rtol=rtol, atol=atol)
 
         # Should converge in 0 or 1 iterations
-        assert result.iterations <= 1, f"Expected ≤1 iterations with exact x0, got {result.iterations}"
+        assert result.iterations <= 1, (
+            f"Expected ≤1 iterations with exact x0, got {result.iterations}"
+        )
         assert result.converged, "Should converge when starting at exact solution"
 
     @pytest.mark.parametrize("solver_name", ["fcg", "pcg", "scipy_cg"])
@@ -92,7 +95,9 @@ class TestTrivialConvergence:
         np.testing.assert_allclose(x, b, rtol=rtol, atol=atol)
 
         # Identity matrix should converge in 1 iteration (exact in Krylov theory)
-        assert result.iterations <= 2, f"Expected ≤2 iterations for identity, got {result.iterations}"
+        assert result.iterations <= 2, (
+            f"Expected ≤2 iterations for identity, got {result.iterations}"
+        )
         assert result.converged, "Should converge for identity matrix"
 
 
@@ -119,7 +124,9 @@ class TestIterationLimits:
         )
 
         # Should stop at max iterations
-        assert result.iterations == max_iters, f"Expected {max_iters} iterations, got {result.iterations}"
+        assert result.iterations == max_iters, (
+            f"Expected {max_iters} iterations, got {result.iterations}"
+        )
 
         # May or may not converge (depends on problem)
         # Just verify it stopped at the limit
@@ -201,7 +208,9 @@ class TestToleranceEdgeCases:
 
         # Should converge quickly with loose tolerance
         assert result.converged, "Should converge with loose tolerance"
-        assert result.iterations <= 20, f"Expected quick convergence, got {result.iterations} iterations"
+        assert result.iterations <= 20, (
+            f"Expected quick convergence, got {result.iterations} iterations"
+        )
 
     @pytest.mark.parametrize("solver_name", ["fcg", "pcg", "scipy_cg"])
     def test_tight_rtol_requires_more_iterations(
@@ -296,7 +305,9 @@ class TestInitialGuessVariations:
 
         # Good initial guess (80% of exact solution)
         x0_good = 0.8 * x_exact
-        _, result_good = solver(A, b, x0=x0_good, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL)
+        _, result_good = solver(
+            A, b, x0=x0_good, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL
+        )
 
         # Good guess should need fewer or equal iterations
         assert result_good.iterations <= result_zero.iterations, (
@@ -325,13 +336,17 @@ class TestNumericalEdgeCases:
         A_well = np.diag(np.linspace(1.0, 2.0, n))
         x_well = rng.randn(n)
         b_well = A_well @ x_well  # Generate RHS from exact solution
-        _, result_well = solver(A_well, b_well, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL, maxiter=500)
+        _, result_well = solver(
+            A_well, b_well, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL, maxiter=500
+        )
 
         # Ill-conditioned: diagonal with widely spread eigenvalues (κ ≈ 1e4)
         A_ill = np.diag(np.logspace(-2, 2, n))
         x_ill = rng.randn(n)
         b_ill = A_ill @ x_ill  # Generate RHS from exact solution
-        _, result_ill = solver(A_ill, b_ill, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL, maxiter=500)
+        _, result_ill = solver(
+            A_ill, b_ill, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL, maxiter=500
+        )
 
         # SRP: Only check iteration count comparison (not solution accuracy)
         assert result_ill.iterations >= result_well.iterations, (
@@ -366,8 +381,12 @@ class TestNumericalEdgeCases:
 
         # With Jacobi preconditioner
         _, result_precond = solver(
-            A, b, preconditioner=jacobi_preconditioner_medium,
-            rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL
+            A,
+            b,
+            preconditioner=jacobi_preconditioner_medium,
+            rtol=rtol,
+            atol=atol,
+            trace_mode=TraceMode.MINIMAL,
         )
 
         # SRP: Only check that preconditioner helps with iteration count
@@ -397,9 +416,9 @@ class TestResultConsistency:
         x, result = solver(A, b, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL)
 
         # Check required fields exist and have reasonable values
-        assert hasattr(result, 'converged'), "Result missing 'converged' field"
-        assert hasattr(result, 'iterations'), "Result missing 'iterations' field"
-        assert hasattr(result, 'residual_history'), "Result missing 'residual_history' field"
+        assert hasattr(result, "converged"), "Result missing 'converged' field"
+        assert hasattr(result, "iterations"), "Result missing 'iterations' field"
+        assert hasattr(result, "residual_history"), "Result missing 'residual_history' field"
 
         assert isinstance(result.converged, bool), "converged should be bool"
         assert isinstance(result.iterations, int), "iterations should be int"
@@ -455,7 +474,7 @@ class TestResultConsistency:
         residuals = result.residual_history
         for i in range(1, len(residuals)):
             # Allow 10% increase for numerical reasons (e.g., flexible CG, finite precision)
-            assert residuals[i] <= residuals[i-1] * 1.1, (
+            assert residuals[i] <= residuals[i - 1] * 1.1, (
                 f"Residual increased significantly at iteration {i}: "
-                f"{residuals[i-1]:.2e} → {residuals[i]:.2e}"
+                f"{residuals[i - 1]:.2e} → {residuals[i]:.2e}"
             )

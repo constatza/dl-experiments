@@ -20,9 +20,7 @@ def load_checkpoint_from_toml(config_path: Path) -> Path:
     if candidate is None:
         candidate = content.get("checkpoint_path")
     if not candidate:
-        raise ValueError(
-            f"Missing checkpoint path in {config_path}. Expected checkpoint.path."
-        )
+        raise ValueError(f"Missing checkpoint path in {config_path}. Expected checkpoint.path.")
     return Path(candidate).expanduser().resolve()
 
 
@@ -39,7 +37,9 @@ def _load_solver_checkpoint(solver_config: Path | None) -> Path | None:
         if entry.get("type") != "neural":
             continue
         args = entry.get("args") or {}
-        candidate = entry.get("checkpoint_path") or entry.get("checkpoint") or args.get("checkpoint_path")
+        candidate = (
+            entry.get("checkpoint_path") or entry.get("checkpoint") or args.get("checkpoint_path")
+        )
         if isinstance(candidate, str) and candidate:
             return Path(candidate).expanduser().resolve()
     # 2) Legacy/global neural checkpoint

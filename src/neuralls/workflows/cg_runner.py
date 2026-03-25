@@ -16,7 +16,7 @@ from scipy.linalg import norm
 
 from ..constants import DEFAULT_ATOL, DEFAULT_M_MAX, DEFAULT_RTOL
 from ..solver.factories import flexible_cg, pcg
-from ..solver.models.result import CGComparisonResult, SolverResult
+from ..solver.models.result import CGComparisonResult
 from ..solver.preconditioners.base import (
     ContextualPreconditioner,
     NonLinearPreconditioner,
@@ -78,9 +78,7 @@ def run_cg_comparison(
         preconditioners["none"] = Identity()
 
     # Compute exact solution for error analysis
-    x_exact = np.linalg.solve(
-        A.astype(np.float64, copy=False), b.astype(np.float64, copy=False)
-    )
+    x_exact = np.linalg.solve(A.astype(np.float64, copy=False), b.astype(np.float64, copy=False))
 
     results: dict[str, CGComparisonResult] = {}
 
@@ -130,16 +128,12 @@ def run_cg_comparison(
         else:
             exact_norm = norm(x_exact)
             exact_error = (
-                norm(x_sol - x_exact) / exact_norm
-                if exact_norm != 0
-                else norm(x_sol - x_exact)
+                norm(x_sol - x_exact) / exact_norm if exact_norm != 0 else norm(x_sol - x_exact)
             )
 
             # Extract residual history from iteration history if available
             if info.iteration_history is not None:
-                residual_history: list[float] = (
-                    info.iteration_history.residual_norms.to_list()
-                )
+                residual_history: list[float] = info.iteration_history.residual_norms.to_list()
             else:
                 residual_history = [info.residual]
 
@@ -198,16 +192,12 @@ def format_results_summary(results: dict[str, CGComparisonResult]) -> str:
         res_abs = result.residual_abs
 
         if exact_err is not None:
-            line = (
-                f"- {name:<18} status={status:<4} iters={iters:>3}  rel_res={res:.3e}"
-            )
+            line = f"- {name:<18} status={status:<4} iters={iters:>3}  rel_res={res:.3e}"
             if res_abs is not None:
                 line += f" (abs={res_abs:.3e})"
             line += f"  exact_err={exact_err:.3e}"
         else:
-            line = (
-                f"- {name:<18} status={status:<4} iters={iters:>3}  rel_res={res:.3e}"
-            )
+            line = f"- {name:<18} status={status:<4} iters={iters:>3}  rel_res={res:.3e}"
             if res_abs is not None:
                 line += f" (abs={res_abs:.3e})"
 

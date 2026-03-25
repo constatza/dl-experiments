@@ -55,7 +55,6 @@ class ResidualTraceStrategy:
         Returns:
             GeneratedSamples with residual_traces populated
         """
-
         # Validate and convert to typed config
         config = ResidualTraceConfig(**cfg)
 
@@ -100,7 +99,9 @@ class ResidualTraceStrategy:
         else:
             # Mode 2: Multiple RHS - load solutions from glob, archive, or fail fast.
             sols = provide_solutions(
-                matrix, num_base_systems, rng,
+                matrix,
+                num_base_systems,
+                rng,
                 solutions_glob=config.solutions_glob,
                 archive=archive,
                 shuffle=config.shuffle,
@@ -109,9 +110,7 @@ class ResidualTraceStrategy:
             )
 
             # Layer 2: Transform (compute RHS or load from archive)
-            rhs_provider = HybridInputProvider(
-                archive=archive, field="rhs_vectors", scale=1.0
-            )
+            rhs_provider = HybridInputProvider(archive=archive, field="rhs_vectors", scale=1.0)
             rhs_from_archive = (
                 archive is not None
                 and archive.rhs_vectors is not None
@@ -152,13 +151,19 @@ class ResidualTraceStrategy:
             )
 
             # Extract vectors from iteration history
-            assert info.iteration_history is not None and info.iteration_history.residuals is not None
+            assert (
+                info.iteration_history is not None and info.iteration_history.residuals is not None
+            )
             residual_seq = info.iteration_history.residuals.to_array()
-            solution_seq = info.iteration_history.solutions.to_array() if info.iteration_history.solutions else np.array([])
+            solution_seq = (
+                info.iteration_history.solutions.to_array()
+                if info.iteration_history.solutions
+                else np.array([])
+            )
 
-            residual_seq = residual_seq[::config.every_n]
+            residual_seq = residual_seq[:: config.every_n]
             if solution_seq.size > 0:
-                solution_seq = solution_seq[::config.every_n]
+                solution_seq = solution_seq[:: config.every_n]
             num_pairs = residual_seq.shape[0]
 
             residual_blocks.append(residual_seq)
@@ -183,10 +188,6 @@ class ResidualTraceStrategy:
         return GeneratedSamples(
             matrix=matrix,
             rhs=rhs_samples[:referenced_samples],
-            solutions=(
-                None
-                if sols is None
-                else sols[:referenced_samples]
-            ),
+            solutions=(None if sols is None else sols[:referenced_samples]),
             residual_traces=residual_traces,
         )

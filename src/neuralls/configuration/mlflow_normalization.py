@@ -23,9 +23,7 @@ def _resolve_sqlite_db_path(tracking_uri: str, config_path: Path | None = None) 
 
     raw_path = tracking_uri.replace("sqlite:///", "", 1).strip()
     if not raw_path or raw_path == ":memory:":
-        raise ValueError(
-            "MLflow sqlite tracking URIs must include a filesystem database path."
-        )
+        raise ValueError("MLflow sqlite tracking URIs must include a filesystem database path.")
 
     db_path = Path(raw_path)
     if not db_path.is_absolute():
@@ -46,9 +44,7 @@ def normalize_tracking_uri(
     uri = tracking_uri.strip()
     parsed = urlparse(uri)
     if parsed.scheme not in {"http", "https", "sqlite"}:
-        raise ValueError(
-            "MLflow tracking_uri must use one of: http://, https://, sqlite:///."
-        )
+        raise ValueError("MLflow tracking_uri must use one of: http://, https://, sqlite:///.")
 
     if parsed.scheme in {"http", "https"}:
         if not parsed.netloc:
@@ -165,13 +161,10 @@ def normalize_model_mlflow(raw: dict[str, Any], config_path: Path) -> dict[str, 
     if legacy_sections:
         joined = ", ".join(legacy_sections)
         raise ValueError(
-            "Legacy MLFLOW client/server sections are not supported in model configs: "
-            f"{joined}."
+            f"Legacy MLFLOW client/server sections are not supported in model configs: {joined}."
         )
 
-    infra_fields = [
-        key for key in ("tracking_uri", "artifacts_destination") if key in mlflow_raw
-    ]
+    infra_fields = [key for key in ("tracking_uri", "artifacts_destination") if key in mlflow_raw]
     if infra_fields:
         joined = ", ".join(infra_fields)
         raise ValueError(

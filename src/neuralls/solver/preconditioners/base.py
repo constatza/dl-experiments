@@ -205,9 +205,7 @@ class ContextualPreconditioner(Preconditioner):
 
     Example:
         >>> scheduled = ScheduledPreconditioner(
-        ...     primary=ILUPreconditioner(A),
-        ...     fallback=Identity(),
-        ...     limit_iters=10
+        ...     primary=ILUPreconditioner(A), fallback=Identity(), limit_iters=10
         ... )
         >>> context = PreconditionerContext(iteration=5, ...)
         >>> z = scheduled.apply(residual, context)

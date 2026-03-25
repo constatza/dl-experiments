@@ -16,9 +16,7 @@ from neuralls.solver.factories import flexible_cg, pcg
 from neuralls.solver.monitoring.trace_mode import TraceMode
 from neuralls.solver.preconditioners import ILUPreconditioner
 from tests.benchmarks.exactness.conftest import (
-    BENCHMARK_SIZES,
     ITER_DIFF_THRESHOLD_FCG_PCG,
-    MATRIX_TYPES,
     SOLUTION_COMPARISON_ATOL,
     SOLUTION_COMPARISON_RTOL,
     assert_solutions_match,
@@ -32,7 +30,7 @@ from tests.benchmarks.exactness.conftest import (
 # 6 cases without trace export: sizes [200,500,1000] × matrix_types [tridiagonal,diagonal]
 TEST_CASES = [
     # Export cases (size=100, tridiagonal only) - with and without ILU
-    (100, "tridiagonal", None, True),   # Export FCG traces
+    (100, "tridiagonal", None, True),  # Export FCG traces
     (100, "tridiagonal", "ilu", True),  # Export FCG traces
     # Standard cases (larger sizes, no trace export)
     (200, "tridiagonal", None, False),

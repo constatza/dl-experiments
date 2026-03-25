@@ -11,21 +11,14 @@ import importlib.util
 
 import numpy as np
 import pytest
-from dlkit.tools.config.core.patching import patch_model
-
-# Skip all tests if dlkit has circular import issue
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("dlkit") is None,
-    reason="dlkit circular import issue"
-)
-
 from dlkit import GeneralSettings
 from dlkit.tools.config import (
-    TrainingSettings,
-    ModelComponentSettings as ModelSettings,
     DatasetSettings,
+    ModelComponentSettings as ModelSettings,
     SessionSettings,
+    TrainingSettings,
 )
+from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.config.trainer_settings import TrainerSettings
 
 from neuralls.configuration.dataset import (
@@ -33,6 +26,11 @@ from neuralls.configuration.dataset import (
     create_matrix_feature,
     create_targets_from_array,
     with_dataset_arrays,
+)
+
+# Skip all tests if dlkit has circular import issue
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("dlkit") is None, reason="dlkit circular import issue"
 )
 
 
@@ -59,7 +57,7 @@ def mock_settings(tmp_path: Path) -> GeneralSettings:
     """Create a mock GeneralSettings object for testing."""
     trainer_root = tmp_path / "trainer_root"
     trainer_root.mkdir()
-    
+
     return GeneralSettings(
         SESSION=SessionSettings(seed=42),
         MODEL=ModelSettings(name="LinearModel"),
@@ -84,6 +82,7 @@ class TestCreateFeaturesFromArray:
         assert len(features) == 1
         assert features[0].name == "custom_feature"
 
+
 class TestCreateMatrixFeature:
     """Tests for create_matrix_feature function."""
 
@@ -92,16 +91,16 @@ class TestCreateMatrixFeature:
         assert feature.name == "matrix"
         assert feature is not None
 
+
 class TestCreateTargetsFromArray:
     """Tests for create_targets_from_array function."""
 
-    def test_create_targets_default_name(
-        self, sample_solutions_array: np.ndarray
-    ) -> None:
+    def test_create_targets_default_name(self, sample_solutions_array: np.ndarray) -> None:
         targets = create_targets_from_array(sample_solutions_array)
         assert isinstance(targets, tuple)
         assert len(targets) == 1
         assert targets[0].name == "solutions"
+
 
 class TestWithDatasetArrays:
     """Tests for with_dataset_arrays function."""
@@ -113,9 +112,7 @@ class TestWithDatasetArrays:
         sample_solutions_array: np.ndarray,
     ) -> None:
         """Test dataset injection for standard dataset."""
-        updated = with_dataset_arrays(
-            mock_settings, sample_rhs_array, sample_solutions_array
-        )
+        updated = with_dataset_arrays(mock_settings, sample_rhs_array, sample_solutions_array)
         assert updated.DATASET is not None
         assert hasattr(updated.DATASET, "features")
         assert hasattr(updated.DATASET, "targets")

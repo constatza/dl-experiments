@@ -231,7 +231,9 @@ def comparison_config_path(
     trained = trained_batch_result.results[0]
     run_id = trained.mlflow_run_id
     if run_id is None:
-        tracking_uri = f"sqlite:///{(config_root.parent / 'output' / 'mlruns' / 'mlflow.db').as_posix()}"
+        tracking_uri = (
+            f"sqlite:///{(config_root.parent / 'output' / 'mlruns' / 'mlflow.db').as_posix()}"
+        )
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment("tiny-data")
         with mlflow.start_run(run_name="tiny-linear-fallback-artifact") as run:

@@ -10,7 +10,6 @@ from neuralls.configuration.experiments import (
     ExperimentEntry,
     ExperimentsConfig,
     RegistryEntry,
-    resolve_display_name,
 )
 from neuralls.configuration.preconditioner import NeuralPreconditionerConfig
 from neuralls.io.toml_loader import load_comparison_config, load_raw_toml
