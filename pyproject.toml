@@ -39,6 +39,7 @@ namespaces = false # Set to true if you are using implicit namespace packages
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+src = ["src", "tests"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -75,11 +76,21 @@ dev = [
     "ty>=0.0.22",
 ]
 
+[tool.ty.analysis]
+respect-type-ignore-comments = true
+
 [tool.ty.src]
 include = ["src/neuralls", "tests"]
+respect-ignore-files = true
 
 [tool.ty.environment]
-root = ["./src", "."]
+root = ["src", "."]
+python-version = "3.14"
+python-platform = "all"
+
+[tool.ty.rules]
+redundant-cast = "error"
+unused-type-ignore-comment = "error"
 
 [[tool.ty.overrides]]
 include = ["tests"]
@@ -89,6 +100,10 @@ invalid-argument-type = "ignore"
 invalid-assignment = "ignore"
 invalid-method-override = "ignore"
 unknown-argument = "ignore"
+
+[tool.ty.terminal]
+output-format = "concise"
+error-on-warning = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"

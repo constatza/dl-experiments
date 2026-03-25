@@ -17,7 +17,7 @@ repos:
         files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
       - id: ruff-format
         name: "ruff: format"
-        entry: uv run ruff format --check .
+        entry: uv run ruff format .
         language: system
         pass_filenames: false
         stages: [pre-commit]

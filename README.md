@@ -142,6 +142,8 @@ comparison artifacts.
 ## Testing
 
 ```bash
+uv run ruff check --fix .
+uv run ruff format .
 uv run pytest tests/generation -v
 uv run pytest tests/configuration -v
 uv run pytest tests/solver -v
@@ -182,8 +184,8 @@ repo's `uv` dev dependencies, and Python hooks run through `uv run ...`.
 
 Current hook contract:
 
-- `pre-commit`: `uv-lock` on dependency metadata changes, then Ruff lint and format checks
-- `pre-push`: ty and the fast pytest smoke suite
+- `pre-commit`: `uv-lock` on dependency metadata changes, then Ruff lint and format autofix across `src/` and `tests/`, plus ty checks
+- `pre-push`: the fast pytest smoke suite
 
 For editor diagnostics and language-server features, use ty's language server
 instead of Pyright or Pylance-specific type checking.
