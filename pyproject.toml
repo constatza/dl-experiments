@@ -78,4 +78,4 @@ markers = [
 package = true
 
 [tool.uv.sources]
-dlkit = { path = "../dlkit", editable = true }
+dlkit = { git = "https://github.com/constatza/dlkit.git", branch = "main" }
