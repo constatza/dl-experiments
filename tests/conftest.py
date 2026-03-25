@@ -37,6 +37,17 @@ def _patch_default_paths_for_loaded_modules(
                 monkeypatch.setattr(module, name, value, raising=False)
 
 
+def _patch_dlkit_environment(
+    runtime_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Patch DLKit's imported environment singleton to the per-test root."""
+    from dlkit.tools.config.environment import env as dlkit_env
+
+    monkeypatch.setattr(dlkit_env, "root_dir", runtime_root, raising=False)
+    monkeypatch.setattr(dlkit_env, "internal_dir", str(runtime_root / ".dlkit"), raising=False)
+
+
 @pytest.fixture(scope="session")
 def repo_root() -> Path:
     """Repository root for leak detection."""
@@ -125,6 +136,7 @@ def isolate_default_paths_with_tmp_path(
         monkeypatch.setattr(neuralls_constants, name, value, raising=False)
 
     _patch_default_paths_for_loaded_modules(path_values, monkeypatch)
+    _patch_dlkit_environment(runtime_root, monkeypatch)
 
 
 @pytest.fixture(autouse=True)
