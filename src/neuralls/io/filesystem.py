@@ -115,7 +115,7 @@ def parse_data_dir_name(dir_name: str) -> dict[str, Any]:
             "krylov_percent": None,
         }
 
-    result = {
+    result: dict[str, Any] = {
         "source": parts[0],
         "dimension": None,
         "normalized": parts[-1] == "norm",

@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -1198,9 +1198,11 @@ def create_scale_from_config(
         solution_samples=solution_samples,
     )
     # Convert Sequence to list for return type compatibility
-    if isinstance(result, Sequence) and not isinstance(result, list):
+    if isinstance(result, list):
+        return cast(list[IScale], result)
+    if isinstance(result, Sequence) and not isinstance(result, (IScale, list)):
         return list(result)
-    return result
+    return cast(IScale | None, result)
 
 
 # =============================================================================

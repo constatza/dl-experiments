@@ -12,8 +12,10 @@ Design Principles:
 
 from __future__ import annotations
 
+from importlib import import_module
+from importlib.util import find_spec
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from loguru import logger
@@ -74,6 +76,8 @@ class DLKitPredictor(PredictorPort):
             # Forward pass — predict() uses no_grad internally
             output = self._predictor.predict(input_tensor)
             primary = output[0] if isinstance(output, tuple) else output
+            if not isinstance(primary, torch.Tensor):
+                raise TypeError(f"Unsupported predictor output type: {type(primary).__name__}")
 
             # Extract output (pure function)
             result = extract_model_output(primary)
@@ -124,6 +128,15 @@ class DLKitAdapter(PredictorAdapter):
         ...     # Automatic GPU cleanup on exit
     """
 
+    @staticmethod
+    def _load_dlkit_symbols() -> tuple[Any, Any]:
+        """Load optional DLKit symbols when the dependency is available."""
+        if find_spec("dlkit.interfaces.api") is None:
+            raise ImportError("DLKit not installed. Install with: pip install dlkit")
+        api = import_module("dlkit.interfaces.api")
+        precision = import_module("dlkit.tools.config.precision.strategy")
+        return api.load_model, precision.PrecisionStrategy
+
     def create_predictor(
         self,
         checkpoint_path: Path,
@@ -158,11 +171,9 @@ class DLKitAdapter(PredictorAdapter):
                 "Ensure the path is correct and the file exists."
             )
 
-        try:
-            # Lazy import to avoid hard dependency
-            from dlkit.interfaces.api import load_model
-            from dlkit.tools.config.precision.strategy import PrecisionStrategy
+        load_model, precision_strategy = self._load_dlkit_symbols()
 
+        try:
             logger.debug(f"Loading checkpoint from: {checkpoint_path}")
 
             # Load predictor from DLKit
@@ -170,7 +181,7 @@ class DLKitAdapter(PredictorAdapter):
                 checkpoint_path,
                 device="auto",
                 apply_transforms=False,  # Data pre-normalized
-                precision=PrecisionStrategy.FULL_64,
+                precision=precision_strategy.FULL_64,
             )
 
             # Probe device for prepare_model_input (input tensor placement)
@@ -191,9 +202,6 @@ class DLKitAdapter(PredictorAdapter):
             logger.info(f"Loaded model from {checkpoint_path} on device {device}")
 
             return DLKitPredictor(dlkit_predictor, device)
-
-        except ImportError as e:
-            raise ImportError("DLKit not installed. Install with: pip install dlkit") from e
 
         except (FileNotFoundError, OSError, ValueError, RuntimeError) as e:
             raise RuntimeError(

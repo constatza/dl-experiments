@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import torch
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
@@ -145,11 +146,6 @@ def test_flexible_cg_with_torch_linear_preconditioner(
     spd_system: tuple[NDArray, NDArray, NDArray],
 ) -> None:
     """Integration: FCG using a torch.nn.Linear as neural-like preconditioner."""
-    try:
-        import torch  # type: ignore
-    except ImportError:
-        pytest.skip("torch not available in environment")
-
     A, b, x_true = spd_system
 
     # Baseline without preconditioning

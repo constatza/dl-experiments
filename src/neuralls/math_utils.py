@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import StrEnum
+from importlib import import_module
+from importlib.util import find_spec
 from typing import Any, cast
 
 import numpy as np
+import torch
 from scipy.linalg import norm
 
 
@@ -383,12 +386,7 @@ def _auto_device(device: str | None = None) -> str:
     if device is not None:
         return device
 
-    try:
-        import torch
-
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        return "cpu"
+    return "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def compute_rhs_norm(rhs: np.ndarray) -> float:
@@ -464,12 +462,9 @@ def _to_csc(A: np.ndarray | object) -> object:
     Returns:
         Matrix in CSC format
     """
-    try:
-        from scipy.sparse import csc_matrix, issparse
-
-        if issparse(A):
-            return cast(Any, A).tocsc()
-        else:
-            return csc_matrix(cast(Any, A))
-    except ImportError:
+    if find_spec("scipy.sparse") is None:
         return A
+    sparse = import_module("scipy.sparse")
+    if sparse.issparse(A):
+        return cast(Any, A).tocsc()
+    return sparse.csc_matrix(cast(Any, A))

@@ -149,7 +149,7 @@ class TestPathContext:
         )
 
         with pytest.raises(AttributeError):
-            ctx.project_root = tmp_path / "new"  # type: ignore
+            ctx.project_root = tmp_path / "new"
 
     def test_mlflow_tracking_uri_property(self, tmp_path: Path):
         """Test MLflow tracking URI property derivation."""

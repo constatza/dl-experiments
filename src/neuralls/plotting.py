@@ -292,26 +292,26 @@ def plot_noise_robustness(
         save_path: Optional path to save the plot
         show: Whether to show plot
     """
-    noise_levels = sorted(noise_results.keys(), key=float)
-    methods = set()
+    sorted_levels = sorted(noise_results.items(), key=lambda item: float(item[0]))
+    methods: set[str] = set()
     for level_results in noise_results.values():
         methods.update(level_results.keys())
-    methods = sorted(methods)
+    method_names = sorted(methods)
 
     # Use matplotlib Set1 colormap for consistent colors
     colormap = matplotlib.colormaps["Set1"]
-    colors = colormap(np.linspace(0, 1, max(len(methods), 3)))
-    method_colors = {method: colors[i % len(colors)] for i, method in enumerate(methods)}
+    colors = colormap(np.linspace(0, 1, max(len(method_names), 3)))
+    method_colors = {method: colors[i % len(colors)] for i, method in enumerate(method_names)}
 
     fig = plt.figure(figsize=(12, 8))
 
-    for method in methods:
+    for method in method_names:
         iterations = []
         levels_numeric = []
 
-        for level in noise_levels:
-            if method in noise_results[level]:
-                result = noise_results[level][method]
+        for level, level_results in sorted_levels:
+            if method in level_results:
+                result = level_results[method]
                 # Handle both dict and dataclass results
                 iters = 0
                 if hasattr(result, "iterations"):

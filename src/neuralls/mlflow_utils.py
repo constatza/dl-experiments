@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 
 from .constants import DEFAULT_MLRUNS_DIR, DEFAULT_MLARTIFACTS_DIR, DEFAULT_PROJECT_ROOT
 
-if TYPE_CHECKING:  # pyright: ignore[reportMissingImports]
+if TYPE_CHECKING:
     from mlflow import ActiveRun
 else:
     ActiveRun = Any

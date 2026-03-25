@@ -143,7 +143,7 @@ class TestWorkspaceFactory:
         workspace = factory.create("test", "test")
 
         with pytest.raises(AttributeError):
-            workspace.dataset_id = "new_dataset"  # type: ignore
+            workspace.dataset_id = "new_dataset"
 
     def test_workspace_paths_are_path_objects(self, factory: WorkspaceFactory):
         """Test that all workspace paths are Path objects."""

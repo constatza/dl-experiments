@@ -64,7 +64,7 @@ class TestStrategySpec:
     def test_immutability(self) -> None:
         spec = StrategySpec("random", "random", 100, {})
         with pytest.raises(AttributeError):
-            spec.samples = 200  # type: ignore
+            spec.samples = 200
 
     def test_options_stored(self) -> None:
         options = {"krylov_iters": 15, "scale": 2.0}
@@ -161,7 +161,7 @@ class TestGenerationPlan:
         }
         plan = GenerationPlan(strategies=strategies)
         with pytest.raises(AttributeError):
-            plan.strategies = {}  # type: ignore
+            plan.strategies = {}
 
 
 class TestParsing:

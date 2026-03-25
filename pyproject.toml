@@ -70,20 +70,25 @@ convention = "google"
 [dependency-groups]
 dev = [
     "hypothesis>=6.151.6",
-    "pyright>=1.1.407",
     "pytest>=9.0",
     "ruff>=0.13.1",
+    "ty>=0.0.22",
 ]
 
-[tool.pyright]
-pythonVersion = "3.14"
-typeCheckingMode = "standard"
-venvPath = "."
-venv = ".venv"
-include = [
-    "src/neuralls",
-    "tests",
-]
+[tool.ty.src]
+include = ["src/neuralls", "tests"]
+
+[tool.ty.environment]
+root = ["./src", "."]
+
+[[tool.ty.overrides]]
+include = ["tests"]
+
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-method-override = "ignore"
+unknown-argument = "ignore"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

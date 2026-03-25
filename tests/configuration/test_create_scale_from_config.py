@@ -103,7 +103,7 @@ def test_create_scale_spectral_rhs(
     assert len(scales) == 3
     assert all(isinstance(s, SpectralScale) for s in scales)
 
-    # Type assertion for pyright
+    # Narrow the list element type for the static checker.
     assert isinstance(scales[0], SpectralScale)
 
     # All scales should share same spectral_norm and dimension_scale
@@ -132,7 +132,7 @@ def test_create_scale_spectral_solutions(
 
     # Verify RHS is computed correctly: b = A @ x
     for i, scale in enumerate(scales):
-        assert isinstance(scale, SpectralScale)  # Type assertion for pyright
+        assert isinstance(scale, SpectralScale)
         x = sample_solution_samples[i]
         expected_rhs = sample_matrix @ x
         expected_rhs_norm = np.linalg.norm(expected_rhs)

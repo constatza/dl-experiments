@@ -435,7 +435,7 @@ def _execute_plan(
     has_rhs_archive = rhs_archive_strategy is not None
     has_synthetic_strategies = bool(synthetic_strategies)
 
-    if has_solution_archive and not (has_rhs_archive or has_synthetic_strategies):
+    if solution_archive_strategy is not None and not (has_rhs_archive or has_synthetic_strategies):
         return _execute_solution_archive(context, solution_archive_strategy)
 
     if has_synthetic_strategies or has_solution_archive:
@@ -446,7 +446,7 @@ def _execute_plan(
             solution_archive_strategy=solution_archive_strategy,
         )
 
-    if not has_rhs_archive:
+    if rhs_archive_strategy is None:
         raise ValueError("No generation strategies configured")
 
     return _execute_rhs_archive_only(context, rhs_archive_strategy)

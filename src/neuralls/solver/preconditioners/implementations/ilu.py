@@ -57,17 +57,13 @@ class ILUPreconditioner(LinearPreconditioner):
         # Convert to CSC for efficient factorization
         A_csc = csc_matrix(matrix)
 
-        # Build kwargs dict with only non-None parameters
-        kwargs = {
-            k: v
-            for k, v in {
-                "drop_tol": self._drop_tol,
-                "fill_factor": self._fill_factor,
-            }.items()
-            if v is not None
-        }
-
-        return spilu(A_csc, **kwargs)  # Returns SuperLU object
+        if self._drop_tol is None and self._fill_factor is None:
+            return spilu(A_csc)
+        if self._drop_tol is None:
+            return spilu(A_csc, fill_factor=self._fill_factor)
+        if self._fill_factor is None:
+            return spilu(A_csc, drop_tol=self._drop_tol)
+        return spilu(A_csc, drop_tol=self._drop_tol, fill_factor=self._fill_factor)
 
     def apply(self, residual: NDArray, context: PreconditionerContext | None = None) -> NDArray:
         """Solve (LU) z = r via triangular solves.

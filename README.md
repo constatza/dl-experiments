@@ -146,7 +146,7 @@ uv run pytest tests/generation -v
 uv run pytest tests/configuration -v
 uv run pytest tests/solver -v
 uv run pytest tests/workflows tests/cli -v
-uv run pyright src/neuralls
+uv run ty check
 ```
 
 ## Repo Guide
@@ -183,4 +183,7 @@ repo's `uv` dev dependencies, and Python hooks run through `uv run ...`.
 Current hook contract:
 
 - `pre-commit`: `uv-lock` on dependency metadata changes, then Ruff lint and format checks
-- `pre-push`: Pyright and the fast pytest smoke suite
+- `pre-push`: ty and the fast pytest smoke suite
+
+For editor diagnostics and language-server features, use ty's language server
+instead of Pyright or Pylance-specific type checking.

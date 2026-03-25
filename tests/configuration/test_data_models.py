@@ -167,9 +167,9 @@ class TestDataConfigFile:
         """Test that DataConfigFile is frozen."""
         config = DataConfigFile()
         with pytest.raises((ValidationError, AttributeError)):
-            config.generation.seed = 999  # type: ignore
+            config.generation.seed = 999
 
     def test_data_config_file_forbids_extra_fields(self):
         """Test DataConfigFile rejects unknown extra fields."""
         with pytest.raises(ValidationError):
-            DataConfigFile(custom_field="custom_value")  # type: ignore
+            DataConfigFile(custom_field="custom_value")

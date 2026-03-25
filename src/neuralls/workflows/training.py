@@ -194,20 +194,17 @@ def _resolve_dataset(
     """
     _validate_dataset_section(settings)
     base_dataset = settings.DATASET or DatasetSettings()
-    return cast(
-        GeneralSettings,
-        patch_model(
-            settings,
-            {
-                "DATASET": {
-                    "features": features,
-                    "targets": targets,
-                    "name": base_dataset.name or "FlexibleDataset",
-                    # SparseFeature entries are not compatible with current memmap cache path.
-                    "memmap_cache": False,
-                }
-            },
-        ),
+    return patch_model(
+        settings,
+        {
+            "DATASET": {
+                "features": features,
+                "targets": targets,
+                "name": base_dataset.name or "FlexibleDataset",
+                # SparseFeature entries are not compatible with current memmap cache path.
+                "memmap_cache": False,
+            }
+        },
     )
 
 
@@ -232,19 +229,16 @@ def _configure_output_paths(
     if training_cfg is None or training_cfg.trainer is None:
         raise ValueError("Training settings require TRAINING.trainer.")
 
-    return cast(
-        GeneralSettings,
-        patch_model(
-            settings,
-            {
-                "TRAINING": {
-                    "trainer": {
-                        "default_root_dir": str(output_dir),
-                        "callbacks": list(training_cfg.trainer.callbacks or []),
-                    }
+    return patch_model(
+        settings,
+        {
+            "TRAINING": {
+                "trainer": {
+                    "default_root_dir": str(output_dir),
+                    "callbacks": list(training_cfg.trainer.callbacks or []),
                 }
-            },
-        ),
+            }
+        },
     )
 
 
@@ -258,20 +252,17 @@ def _configure_dataloader_runtime(settings: GeneralSettings) -> GeneralSettings:
     if datamodule_cfg is None or datamodule_cfg.dataloader is None:
         return settings
 
-    return cast(
-        GeneralSettings,
-        patch_model(
-            settings,
-            {
-                "DATAMODULE": {
-                    "dataloader": {
-                        "num_workers": 0,
-                        "persistent_workers": False,
-                        "pin_memory": False,
-                    }
+    return patch_model(
+        settings,
+        {
+            "DATAMODULE": {
+                "dataloader": {
+                    "num_workers": 0,
+                    "persistent_workers": False,
+                    "pin_memory": False,
                 }
-            },
-        ),
+            }
+        },
     )
 
 
@@ -293,7 +284,7 @@ def _configure_mlflow(
             }
         },
     )
-    return cast(GeneralSettings, updated)
+    return updated
 
 
 def _configure_training_pipeline(
@@ -616,8 +607,16 @@ def _extract_evaluation_arrays(
     if predictions_raw is None or targets_raw is None:
         return None
 
-    prediction_keys = list(targets_raw.keys()) if isinstance(targets_raw, Mapping) else []
-    target_keys = list(predictions_raw.keys()) if isinstance(predictions_raw, Mapping) else []
+    prediction_keys = (
+        [key for key in predictions_raw if isinstance(key, str)]
+        if isinstance(predictions_raw, Mapping)
+        else []
+    )
+    target_keys = (
+        [key for key in targets_raw if isinstance(key, str)]
+        if isinstance(targets_raw, Mapping)
+        else []
+    )
 
     y_pred_raw = (
         _select_mapping_value(predictions_raw, _PREDICTION_KEYS, prediction_keys)
@@ -804,10 +803,7 @@ def train_model(
 
         # Step 5: Execute training via DLKit
         if max_epochs is not None:
-            settings = cast(
-                GeneralSettings,
-                patch_model(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}}),
-            )
+            settings = patch_model(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
         with scoped_mlflow_environment(runtime_mlflow_env):
             with parent_run_context(parent_run_id):
                 training_result = cast(
