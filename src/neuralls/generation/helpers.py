@@ -18,7 +18,7 @@ from ..constants import (
     EIGENVECTOR_SELECT_LARGEST,
     EIGENVECTOR_SELECT_RANDOM,
 )
-from .data_types import ScaleMetadata
+from ..types import ScaleMetadata
 
 
 def rng_from_seed(seed: int | None) -> np.random.Generator:

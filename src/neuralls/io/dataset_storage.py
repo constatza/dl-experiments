@@ -16,7 +16,7 @@ from neuralls.constants import (
     RHS_ARRAY_FILENAME,
     SOLUTIONS_ARRAY_FILENAME,
 )
-from neuralls.generation.data_types import ScaleMetadata
+from neuralls.types import ScaleMetadata
 
 
 @dataclass(frozen=True)

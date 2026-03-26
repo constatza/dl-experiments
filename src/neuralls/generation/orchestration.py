@@ -11,7 +11,8 @@ import numpy as np
 from loguru import logger
 from scipy.sparse import csc_matrix
 
-from .data_types import NormalizeType, ScaleMetadata
+from .data_types import NormalizeType
+from ..types import ScaleMetadata
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .helpers import serialize_scale_metadata
