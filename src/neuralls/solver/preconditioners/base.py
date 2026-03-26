@@ -112,6 +112,20 @@ class Preconditioner(ABC):
         """
         ...
 
+    @property
+    def requires_flexible_cg(self) -> bool:
+        """Whether this preconditioner requires the Flexible CG variant.
+
+        Linear static preconditioners (Jacobi, ILU, IC0) return False and
+        work with standard PCG.  Non-linear and contextual preconditioners
+        return True and require Flexible CG, which allows M_k to vary per
+        iteration.
+
+        Returns:
+            False for linear preconditioners; subclasses override to True.
+        """
+        return False
+
     def __call__(self, residual: NDArray) -> NDArray:
         """Make preconditioner callable: precond(r) is alias for precond.apply(r).
 
@@ -189,7 +203,14 @@ class NonLinearPreconditioner(Preconditioner):
     Subclasses just implement apply() - no matrix needed.
     """
 
-    pass
+    @property
+    def requires_flexible_cg(self) -> bool:
+        """Non-linear preconditioners require Flexible CG.
+
+        Returns:
+            True — non-linear preconditioners are not SPD-preserving.
+        """
+        return True
 
 
 class ContextualPreconditioner(Preconditioner):
@@ -210,6 +231,15 @@ class ContextualPreconditioner(Preconditioner):
         >>> context = PreconditionerContext(iteration=5, ...)
         >>> z = scheduled.apply(residual, context)
     """
+
+    @property
+    def requires_flexible_cg(self) -> bool:
+        """Contextual preconditioners require Flexible CG.
+
+        Returns:
+            True — contextual preconditioners change M_k each iteration.
+        """
+        return True
 
     @abstractmethod
     def apply(self, residual: NDArray, context: PreconditionerContext | None = None) -> NDArray:

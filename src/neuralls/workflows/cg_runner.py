@@ -17,11 +17,7 @@ from scipy.linalg import norm
 from ..constants import DEFAULT_ATOL, DEFAULT_M_MAX, DEFAULT_RTOL
 from ..solver.factories import flexible_cg, pcg
 from ..solver.models.result import CGComparisonResult
-from ..solver.preconditioners.base import (
-    ContextualPreconditioner,
-    NonLinearPreconditioner,
-    Preconditioner,
-)
+from ..solver.preconditioners.base import Preconditioner
 from .results import ComparisonRecommendations, RankedRecommendation
 
 
@@ -160,14 +156,11 @@ def run_cg_comparison(
 def _requires_flexible_cg(preconditioner: Preconditioner) -> bool:
     """Check if preconditioner requires flexible CG.
 
-    Flexible CG is required for:
-    - contextual preconditioners that depend on iteration state
-    - non-linear preconditioners such as neural models
+    Delegates to the preconditioner's own knowledge of solver compatibility,
+    following OCP: adding a new preconditioner type never requires updating
+    this function.
     """
-    return isinstance(
-        preconditioner,
-        (ContextualPreconditioner, NonLinearPreconditioner),
-    )
+    return preconditioner.requires_flexible_cg
 
 
 def format_results_summary(results: dict[str, CGComparisonResult]) -> str:
