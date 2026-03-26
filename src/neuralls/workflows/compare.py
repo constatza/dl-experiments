@@ -76,7 +76,7 @@ from ..io.comparison import load_system_arrays
 from neuralls.math_utils import compute_condition_number
 from neuralls.normalization import IScale, create_scale_from_config
 from ..plotting import plot_convergence_comparison, plot_metric_comparison
-from ..solver.preconditioners import (
+from ..assembly.preconditioner import (
     create_preconditioner,
     create_scheduled_preconditioner,
     PreconditionerScheduleConfig,

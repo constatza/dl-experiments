@@ -22,7 +22,7 @@ from neuralls.configuration.preconditioner import (
     PreconditionerType,
     StandardPreconditionerConfig,
 )
-from neuralls.solver.preconditioners.builders import (
+from neuralls.assembly.preconditioner import (
     create_preconditioner,
     create_scheduled_preconditioner,
     PreconditionerScheduleConfig,

@@ -1,7 +1,9 @@
 """Preconditioner factory for TOML workflow.
 
 This module provides a simple factory function for creating preconditioners
-from configuration objects. Used exclusively by the TOML workflow (compare.py).
+from configuration objects. It lives in the assembly layer because it depends
+on both the configuration layer (PreconditionerType, config models) and the
+solver layer (concrete preconditioner classes).
 
 For direct usage, just instantiate preconditioners directly:
     >>> precond = JacobiPreconditioner(matrix)
@@ -25,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from numpy.typing import NDArray
 
-from .implementations import (
+from neuralls.solver.preconditioners.implementations import (
     Identity,
     JacobiPreconditioner,
     ILUPreconditioner,
@@ -33,14 +35,14 @@ from .implementations import (
     ICholeskyPreconditioner,
     NeuralPreconditioner,
 )
-from .base import Preconditioner
-from ...configuration.preconditioner import PreconditionerType
+from neuralls.solver.preconditioners.base import Preconditioner
+from neuralls.configuration.preconditioner import PreconditionerType
 
 if TYPE_CHECKING:
     from neuralls.configuration.preconditioner import (
         ConcretePreconditionerConfig,
     )
-    from .ports import PredictorAdapter
+    from neuralls.solver.preconditioners.ports import PredictorAdapter
 
 
 @dataclass(frozen=True)
@@ -89,7 +91,6 @@ def create_preconditioner(
     Raises:
         ValueError: If preconditioner type is not supported
     """
-    # Special cases with additional config parameters
     from neuralls.configuration.preconditioner import (
         IC0PreconditionerConfig,
         NeuralPreconditionerConfig,
@@ -168,7 +169,7 @@ def create_scheduled_preconditioner(
     if schedule.limit_iters < 0:
         return primary
 
-    from .implementations.scheduled import ScheduledPreconditioner
+    from neuralls.solver.preconditioners.implementations.scheduled import ScheduledPreconditioner
 
     # Create fallback preconditioner based on type
     if schedule.fallback == PreconditionerType.IDENTITY:

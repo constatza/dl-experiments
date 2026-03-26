@@ -227,7 +227,7 @@ def test_adapter_can_be_injected_into_factory(
     PredictorAdapter abstraction, not concrete implementation.
     """
     from neuralls.configuration.preconditioner import NeuralPreconditionerConfig
-    from neuralls.solver.preconditioners.builders import create_preconditioner
+    from neuralls.assembly.preconditioner import create_preconditioner
 
     config = NeuralPreconditionerConfig(
         name="neural",

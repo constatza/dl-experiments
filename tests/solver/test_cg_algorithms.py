@@ -297,7 +297,7 @@ def test_jacobi_factory_preserves_signs() -> None:
     diag = np.diag(A)
 
     # Jacobi preconditioner using factory function
-    from neuralls.solver.preconditioners.builders import create_preconditioner
+    from neuralls.assembly.preconditioner import create_preconditioner
     from neuralls.configuration.preconditioner import StandardPreconditionerConfig
 
     config = StandardPreconditionerConfig(name="jacobi", type="jacobi")  # type: ignore[arg-type]
@@ -355,7 +355,7 @@ def test_jacobi_factory_convergence_with_fcg() -> None:
     )
 
     # With Jacobi preconditioning using factory function
-    from neuralls.solver.preconditioners.builders import create_preconditioner
+    from neuralls.assembly.preconditioner import create_preconditioner
     from neuralls.configuration.preconditioner import StandardPreconditionerConfig
 
     config = StandardPreconditionerConfig(name="jacobi", type="jacobi")  # type: ignore[arg-type]

@@ -1,10 +1,13 @@
 """Preconditioner abstractions and implementations for iterative solvers.
 
-This package provides all preconditioner functionality:
+This package provides the algorithm layer for preconditioning:
 - Base abstractions (Preconditioner, LinearPreconditioner, etc.)
 - Concrete implementations (Identity, Jacobi, ILU, Neural, etc.)
-- Factory function for TOML workflow
 - Framework adapters for neural preconditioners
+
+This package has no dependency on neuralls.configuration.  The TOML-driven
+factory (create_preconditioner) lives in neuralls.assembly.preconditioner,
+which is the explicit glue between configuration and this package.
 
 Public API:
     Base classes:
@@ -24,9 +27,6 @@ Public API:
         - ScheduledPreconditioner: Switch preconditioners based on iteration
         - LinearOperatorPreconditioner: Wrap SciPy LinearOperator
 
-    Factory:
-        - create_preconditioner: Create from TOML configuration
-
     Adapters (for advanced usage):
         - PredictorPort: Framework-agnostic interface
         - PredictorAdapter: Framework adapter protocol
@@ -36,7 +36,8 @@ Example:
     >>> precond = JacobiPreconditioner(matrix)
     >>> z = precond.apply(residual)
     >>>
-    >>> # Factory from TOML
+    >>> # Factory from TOML — import from assembly layer
+    >>> from neuralls.assembly.preconditioner import create_preconditioner
     >>> config = load_comparison_config("comparison.toml")
     >>> precond = create_preconditioner(matrix, config.preconditioner)
 """
@@ -59,11 +60,6 @@ from .implementations import (
 )
 from .callable import CallablePreconditioner
 from .linear_operator import LinearOperatorPreconditioner
-from .builders import (
-    create_preconditioner,
-    create_scheduled_preconditioner,
-    PreconditionerScheduleConfig,
-)
 from .ports import PredictorPort, PredictorAdapter
 
 __all__ = [
@@ -83,10 +79,6 @@ __all__ = [
     "CallablePreconditioner",
     "ScheduledPreconditioner",
     "LinearOperatorPreconditioner",
-    # Factory
-    "create_preconditioner",
-    "create_scheduled_preconditioner",
-    "PreconditionerScheduleConfig",
     # Adapters
     "PredictorPort",
     "PredictorAdapter",
