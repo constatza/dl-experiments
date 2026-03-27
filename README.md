@@ -97,6 +97,7 @@ Read more in:
 
 - [`configs/README.md`](configs/README.md)
 - [`configs/datasets/README.md`](configs/datasets/README.md)
+- [`docs/README.md`](docs/README.md)
 
 ## Basic To Advanced Concepts
 
@@ -165,7 +166,8 @@ touching.
 
 ## Contributor Setup
 
-Contributor workflows expect local hooks and the pinned Python dev toolchain.
+Contributor workflows expect local hooks, Tach, and the pinned Python dev
+toolchain.
 
 ```bash
 uv tool install prek
@@ -184,7 +186,7 @@ repo's `uv` dev dependencies, and Python hooks run through `uv run ...`.
 
 Current hook contract:
 
-- `pre-commit`: `uv-lock` on dependency metadata changes, then Ruff lint and format autofix across `src/` and `tests/`, plus ty checks
+- `pre-commit`: `uv-lock` on dependency metadata changes, then Ruff lint and format autofix across `src/`, `tests/`, and `scripts/`, plus ty and Tach checks
 - `pre-push`: the fast pytest smoke suite
 
 For editor diagnostics and language-server features, use ty's language server

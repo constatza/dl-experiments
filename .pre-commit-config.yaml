@@ -14,21 +14,28 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
-        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
+        files: ^(src/|tests/|scripts/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
       - id: ruff-format
         name: "ruff: format"
         entry: uv run ruff format .
         language: system
         pass_filenames: false
         stages: [pre-commit]
-        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
+        files: ^(src/|tests/|scripts/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
       - id: ty
-        name: "ty: src and tests"
+        name: "ty: src, tests, and scripts"
         entry: uv run ty check
         language: system
         pass_filenames: false
         stages: [pre-commit]
-        files: ^(src/|tests/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
+        files: ^(src/|tests/|scripts/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
+      - id: tach
+        name: "tach: architecture check"
+        entry: uv run tach check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(src/|pyproject\.toml|uv\.lock|tach\.toml|\.pre-commit-config\.yaml|\.github/workflows/|README\.md|docs/README\.md|docs/neuralls/diagrams/)
       - id: pytest-fast
         name: "pytest: fast smoke"
         entry: uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q

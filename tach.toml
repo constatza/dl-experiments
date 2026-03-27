@@ -1,0 +1,119 @@
+source_roots = ["src"]
+root_module = "forbid"
+ignore_type_checking_imports = true
+layers_explicit_depends_on = true
+
+layers = [
+    "cli",
+    "workflows",
+    "bridge",
+    "domain",
+    "support",
+]
+
+[[modules]]
+path = "neuralls"
+depends_on = []
+
+[[modules]]
+path = "neuralls.cli"
+layer = "cli"
+depends_on = [
+    "neuralls.configuration",
+    "neuralls.io",
+    "neuralls.plotting",
+    "neuralls.workflows",
+    "neuralls.workflows.**",
+]
+
+[[modules]]
+path = "neuralls.workflows"
+layer = "workflows"
+depends_on = [
+    "neuralls.assembly",
+    "neuralls.configuration",
+    "neuralls.configuration.**",
+    "neuralls.diagnostics",
+    "neuralls.generation",
+    "neuralls.io",
+    "neuralls.io.**",
+    "neuralls.plotting",
+    "neuralls.solver",
+    "neuralls.solver.**",
+    "neuralls.validation",
+    "neuralls.workflows.**",
+]
+
+[[modules]]
+path = "neuralls.assembly"
+layer = "bridge"
+depends_on = [
+    "neuralls.configuration",
+    "neuralls.configuration.**",
+    "neuralls.solver",
+    "neuralls.solver.**",
+]
+
+[[modules]]
+path = "neuralls.generation"
+layer = "domain"
+depends_on = [
+    "neuralls.generation.**",
+    "neuralls.io",
+    "neuralls.io.**",
+    "neuralls.solver",
+    "neuralls.solver.**",
+]
+
+[[modules]]
+path = "neuralls.solver"
+layer = "domain"
+depends_on = [
+    "neuralls.solver.**",
+]
+
+[[modules]]
+path = "neuralls.diagnostics"
+layer = "domain"
+depends_on = [
+    "neuralls.io",
+    "neuralls.io.**",
+]
+
+[[modules]]
+path = "neuralls.plotting"
+layer = "domain"
+depends_on = [
+    "neuralls.io",
+    "neuralls.io.**",
+    "neuralls.solver.**",
+]
+
+[[modules]]
+path = "neuralls.configuration"
+layer = "support"
+depends_on = [
+    "neuralls.configuration.**",
+]
+
+[[modules]]
+path = "neuralls.io"
+layer = "support"
+depends_on = [
+    "neuralls.configuration",
+    "neuralls.configuration.**",
+    "neuralls.io.**",
+]
+unchecked = true
+
+[[modules]]
+paths = [
+    "neuralls.constants",
+    "neuralls.math_utils",
+    "neuralls.mlflow_utils",
+    "neuralls.normalization",
+    "neuralls.types",
+    "neuralls.validation",
+]
+depends_on = []
+utility = true

@@ -39,7 +39,7 @@ namespaces = false # Set to true if you are using implicit namespace packages
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-src = ["src", "tests"]
+src = ["src", "tests", "scripts"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -73,6 +73,7 @@ dev = [
     "hypothesis>=6.151.6",
     "pytest>=9.0",
     "ruff>=0.13.1",
+    "tach>=0.34.0",
     "ty>=0.0.22",
 ]
 
@@ -80,7 +81,7 @@ dev = [
 respect-type-ignore-comments = true
 
 [tool.ty.src]
-include = ["src/neuralls", "tests"]
+include = ["src/neuralls", "tests", "scripts"]
 respect-ignore-files = true
 
 [tool.ty.environment]

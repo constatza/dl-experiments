@@ -1,0 +1,31 @@
+strict digraph {
+"neuralls.cli";
+"neuralls.configuration";
+"neuralls.io";
+"neuralls.plotting";
+"neuralls.workflows";
+"neuralls.assembly";
+"neuralls.diagnostics";
+"neuralls.generation";
+"neuralls.solver";
+"neuralls.validation";
+"neuralls.cli" -> "neuralls.configuration";
+"neuralls.cli" -> "neuralls.io";
+"neuralls.cli" -> "neuralls.plotting";
+"neuralls.cli" -> "neuralls.workflows";
+"neuralls.io" -> "neuralls.configuration";
+"neuralls.plotting" -> "neuralls.io";
+"neuralls.workflows" -> "neuralls.assembly";
+"neuralls.workflows" -> "neuralls.configuration";
+"neuralls.workflows" -> "neuralls.diagnostics";
+"neuralls.workflows" -> "neuralls.generation";
+"neuralls.workflows" -> "neuralls.io";
+"neuralls.workflows" -> "neuralls.plotting";
+"neuralls.workflows" -> "neuralls.solver";
+"neuralls.workflows" -> "neuralls.validation";
+"neuralls.assembly" -> "neuralls.configuration";
+"neuralls.assembly" -> "neuralls.solver";
+"neuralls.diagnostics" -> "neuralls.io";
+"neuralls.generation" -> "neuralls.io";
+"neuralls.generation" -> "neuralls.solver";
+}

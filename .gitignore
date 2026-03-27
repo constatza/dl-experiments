@@ -184,6 +184,7 @@ mlruns*/
 mlartifacts*/
 data/mlruns/
 data/mlartifacts/
+.tmp/dgraphs/
 *.json
 *.txt
 *.csv

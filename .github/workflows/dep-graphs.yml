@@ -1,0 +1,126 @@
+name: Dependency Graphs
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare-target-matrix:
+    if: github.event_name != 'push' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          version: latest
+          save-cache: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Synchronize dependencies
+        run: uv sync --dev
+
+      - id: targets
+        name: Define graph targets
+        run: |
+          targets='[
+            {"name":"neuralls","dot":"docs/neuralls/diagrams/overview.dot","svg":"overview.svg","path":"src/neuralls"},
+            {"name":"workflows","dot":"docs/neuralls/diagrams/workflows.dot","svg":"workflows.svg","path":"src/neuralls/workflows"},
+            {"name":"solver","dot":"docs/neuralls/diagrams/solver.dot","svg":"solver.svg","path":"src/neuralls/solver"},
+            {"name":"workflows-inference","dot":"docs/neuralls/diagrams/workflows-inference.dot","svg":"workflows-inference.svg","path":"src/neuralls/workflows/inference"},
+            {"name":"solver-preconditioners","dot":"docs/neuralls/diagrams/solver-preconditioners.dot","svg":"solver-preconditioners.svg","path":"src/neuralls/solver/preconditioners"}
+          ]'
+          echo "targets=${targets}" >> "${GITHUB_OUTPUT}"
+
+  render-target-graphs:
+    if: github.event_name != 'push' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: prepare-target-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.prepare-target-matrix.outputs.targets) }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          version: latest
+          save-cache: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install Graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+
+      - name: Synchronize dependencies
+        run: uv sync --dev
+
+      - name: Check Tach boundaries
+        run: uv run tach check
+
+      - name: Regenerate tracked DOT graph for ${{ matrix.target.name }}
+        run: uv run tach show -o ${{ matrix.target.dot }} ${{ matrix.target.path }}
+
+      - name: Render SVG artifact for ${{ matrix.target.name }}
+        run: |
+          mkdir -p .tmp/dgraphs
+          dot -Tsvg ${{ matrix.target.dot }} -o .tmp/dgraphs/${{ matrix.target.svg }}
+
+      - name: Upload SVG artifact for ${{ matrix.target }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-graph-${{ matrix.target.name }}-svg
+          path: .tmp/dgraphs
+          if-no-files-found: error
+
+  verify-tracked-graphs:
+    if: github.event_name != 'push' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: render-target-graphs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          version: latest
+          save-cache: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Synchronize dependencies
+        run: uv sync --dev
+
+      - name: Check Tach boundaries
+        run: uv run tach check
+
+      - name: Regenerate tracked DOT graphs
+        run: |
+          uv run tach show -o docs/neuralls/diagrams/overview.dot src/neuralls
+          uv run tach show -o docs/neuralls/diagrams/workflows.dot src/neuralls/workflows
+          uv run tach show -o docs/neuralls/diagrams/solver.dot src/neuralls/solver
+          uv run tach show -o docs/neuralls/diagrams/workflows-inference.dot src/neuralls/workflows/inference
+          uv run tach show -o docs/neuralls/diagrams/solver-preconditioners.dot src/neuralls/solver/preconditioners
+
+      - name: Verify tracked graphs are up to date
+        run: git diff --exit-code -- docs/neuralls/diagrams
