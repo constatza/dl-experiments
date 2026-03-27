@@ -7,7 +7,7 @@ import importlib.util
 
 import pytest
 from neuralls.configuration.domain import ExperimentWorkspace, RunnableExperiment
-from neuralls.configuration.loader import load_experiment
+from neuralls.io.loader import load_experiment
 from neuralls.constants import (
     EXP_DATA_CONFIG_NAME,
     EXP_MODEL_CONFIG_NAME,

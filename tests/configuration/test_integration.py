@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.configuration.loader import load_experiment
+from neuralls.io.loader import load_experiment
 from neuralls.configuration.domain import (
     ExperimentSpec,
     ExperimentWorkspace,
     RunnableExperiment,
 )
 from neuralls.configuration.paths import PathContext
-from neuralls.configuration.settings import build_settings
+from neuralls.io.toml_loader import build_settings
 
 
 @pytest.fixture

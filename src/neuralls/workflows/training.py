@@ -34,7 +34,7 @@ from neuralls.configuration.mlflow_normalization import (
     build_mlflow_environment,
     scoped_mlflow_environment,
 )
-from neuralls.configuration.loader import load_experiment
+from neuralls.io.loader import load_experiment
 from neuralls.constants import DEFAULT_OUTPUT_DIR
 from neuralls.io.checkpoints import get_latest_checkpoint
 from neuralls.mlflow_utils import MlflowPaths, MlflowRunConfig

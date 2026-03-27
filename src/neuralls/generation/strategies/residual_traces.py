@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, ArchiveData
+from ..interfaces import GeneratedSamples, ArchiveData, TracingSolverCallable
 from ..runner import register_single_rhs_strategy
 from ..strategy_configs import ResidualTraceConfig
 from ..helpers import (
@@ -37,6 +37,7 @@ class ResidualTraceStrategy:
         matrix: np.ndarray,
         *,
         cfg: dict,
+        solver: TracingSolverCallable,
         single_rhs: np.ndarray | None = None,
         archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
@@ -130,24 +131,14 @@ class ResidualTraceStrategy:
         sample_indices: list[np.ndarray] = []
         iteration_indices: list[np.ndarray] = []
 
-        # Import scipy CG solver
-        from ...solver.scipy_wrapper import SciPyCGSolver
-        from ...solver.monitoring.iteration_history import IterationHistory
-        from ...solver.monitoring.trace_mode import TraceMode
-
         for sample_idx, rhs_vec in enumerate(rhs_samples):
-            # Run classical CG (scipy) for fixed number of iterations
-            iteration_history = IterationHistory(mode=TraceMode.FULL)
-            solver = SciPyCGSolver(iteration_history=iteration_history)
-
-            _, info = solver.solve(
-                A=matrix,
-                b=rhs_vec,
-                x0=np.zeros(n, dtype=np.float64),
+            _, info = solver(
+                matrix,
+                rhs_vec,
+                np.zeros(n, dtype=np.float64),
                 maxiter=cg_iters,
-                rtol=1e-20,  # Very tight to prevent early convergence
-                atol=1e-20,  # Very tight to run full iterations
-                trace_mode="full",  # Collect all intermediate vectors
+                rtol=1e-20,
+                atol=1e-20,
             )
 
             # Extract vectors from iteration history

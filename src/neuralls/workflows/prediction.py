@@ -13,7 +13,7 @@ from loguru import logger
 
 from dlkit.tools.io import load_array
 
-from ..configuration.loader import load_experiment
+from ..io.loader import load_experiment
 from neuralls.io.filesystem import derive_model_identifier
 from ..mlflow_utils import build_run_config, open_run
 from ..constants import PREDICTION_NORM_EPSILON

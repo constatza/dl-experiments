@@ -9,6 +9,7 @@ import pytest
 
 from neuralls.generation import run_generation
 from neuralls.generation.helpers import trace_rows_per_system
+from neuralls.generation.interfaces import TracingSolverCallable
 
 
 @pytest.fixture
@@ -40,12 +41,18 @@ def test_residual_trace_registered() -> None:
     assert "residual_traces" in _registry._strategies
 
 
-def test_residual_trace_shapes(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
+def test_residual_trace_shapes(
+    spd_matrix: np.ndarray,
+    single_rhs: np.ndarray,
+    residual_solver: TracingSolverCallable,
+) -> None:
     """RHS output has correct shape and residual_traces is populated."""
     n = spd_matrix.shape[0]
     cfg = {"samples": 2, "cg_iters": 4, "seed": 0}
 
-    result = run_generation("residual_traces", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+    result = run_generation(
+        "residual_traces", spd_matrix, cfg=cfg, solver=residual_solver, single_rhs=single_rhs
+    )
 
     assert result.rhs is not None
     expected_systems = max(1, 2 // trace_rows_per_system(4))
@@ -53,13 +60,19 @@ def test_residual_trace_shapes(spd_matrix: np.ndarray, single_rhs: np.ndarray) -
     assert result.residual_traces is not None
 
 
-def test_residual_trace_trace_count(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
+def test_residual_trace_trace_count(
+    spd_matrix: np.ndarray,
+    single_rhs: np.ndarray,
+    residual_solver: TracingSolverCallable,
+) -> None:
     """Trace strategies size systems from the requested row budget using integer division."""
     requested_rows = 12
     cg_iters = 5
     cfg = {"samples": requested_rows, "cg_iters": cg_iters, "seed": 0}
 
-    result = run_generation("residual_traces", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+    result = run_generation(
+        "residual_traces", spd_matrix, cfg=cfg, solver=residual_solver, single_rhs=single_rhs
+    )
 
     assert result.residual_traces is not None
     total = result.residual_traces.residuals.shape[0]
@@ -68,7 +81,11 @@ def test_residual_trace_trace_count(spd_matrix: np.ndarray, single_rhs: np.ndarr
     assert total == expected_systems * rows_per_system
 
 
-def test_residual_trace_every_n_basic(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
+def test_residual_trace_every_n_basic(
+    spd_matrix: np.ndarray,
+    single_rhs: np.ndarray,
+    residual_solver: TracingSolverCallable,
+) -> None:
     """every_n=2 yields half the trace entries compared to every_n=1.
 
     Uses cg_iters=5 so each sample has 6 residuals (divisible by 2).
@@ -77,8 +94,12 @@ def test_residual_trace_every_n_basic(spd_matrix: np.ndarray, single_rhs: np.nda
     cfg_full = {"samples": 12, "cg_iters": cg_iters, "seed": 0, "every_n": 1}
     cfg_half = {"samples": 6, "cg_iters": cg_iters, "seed": 0, "every_n": 2}
 
-    result_full = run_generation("residual_traces", spd_matrix, cfg=cfg_full, single_rhs=single_rhs)
-    result_half = run_generation("residual_traces", spd_matrix, cfg=cfg_half, single_rhs=single_rhs)
+    result_full = run_generation(
+        "residual_traces", spd_matrix, cfg=cfg_full, solver=residual_solver, single_rhs=single_rhs
+    )
+    result_half = run_generation(
+        "residual_traces", spd_matrix, cfg=cfg_half, solver=residual_solver, single_rhs=single_rhs
+    )
 
     assert result_full.residual_traces is not None
     assert result_half.residual_traces is not None
@@ -87,7 +108,11 @@ def test_residual_trace_every_n_basic(spd_matrix: np.ndarray, single_rhs: np.nda
     assert half_count == full_count // 2
 
 
-def test_residual_trace_every_n_indices(spd_matrix: np.ndarray, single_rhs: np.ndarray) -> None:
+def test_residual_trace_every_n_indices(
+    spd_matrix: np.ndarray,
+    single_rhs: np.ndarray,
+    residual_solver: TracingSolverCallable,
+) -> None:
     """every_n=2 produces iteration_indices 0, 2, 4, ... not 0, 1, 2, ...
 
     Uses cg_iters=5 (6 total residuals), so indices are 0, 2, 4.
@@ -95,7 +120,9 @@ def test_residual_trace_every_n_indices(spd_matrix: np.ndarray, single_rhs: np.n
     cg_iters = 5  # 6 residuals per sample: indices 0..5
     cfg = {"samples": 1, "cg_iters": cg_iters, "seed": 0, "every_n": 2}
 
-    result = run_generation("residual_traces", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+    result = run_generation(
+        "residual_traces", spd_matrix, cfg=cfg, solver=residual_solver, single_rhs=single_rhs
+    )
 
     assert result.residual_traces is not None
     iidx = result.residual_traces.iteration_indices
@@ -111,6 +138,7 @@ def test_residual_trace_every_n_indices(spd_matrix: np.ndarray, single_rhs: np.n
 def test_residual_trace_multi_rhs_shapes(
     spd_matrix: np.ndarray,
     solution_files: tuple[list[Path], str],
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """Multiple-RHS mode: shapes are correct when solutions are loaded from files."""
     n = spd_matrix.shape[0]
@@ -123,7 +151,7 @@ def test_residual_trace_multi_rhs_shapes(
         "solutions_glob": glob_pattern,
     }
 
-    result = run_generation("residual_traces", spd_matrix, cfg=cfg)
+    result = run_generation("residual_traces", spd_matrix, cfg=cfg, solver=residual_solver)
 
     assert result.rhs is not None
     expected_systems = max(1, requested_rows // trace_rows_per_system(4))
@@ -134,6 +162,7 @@ def test_residual_trace_multi_rhs_shapes(
 def test_residual_trace_multi_rhs_trace_count(
     spd_matrix: np.ndarray,
     solution_files: tuple[list[Path], str],
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """Multiple-RHS mode: total trace entries = num_systems × (cg_iters + 1)."""
     files, glob_pattern = solution_files
@@ -146,7 +175,7 @@ def test_residual_trace_multi_rhs_trace_count(
         "solutions_glob": glob_pattern,
     }
 
-    result = run_generation("residual_traces", spd_matrix, cfg=cfg)
+    result = run_generation("residual_traces", spd_matrix, cfg=cfg, solver=residual_solver)
 
     assert result.residual_traces is not None
     total = result.residual_traces.residuals.shape[0]
@@ -158,6 +187,7 @@ def test_residual_trace_multi_rhs_trace_count(
 def test_residual_trace_multi_rhs_every_n(
     spd_matrix: np.ndarray,
     solution_files: tuple[list[Path], str],
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """Multiple-RHS mode: every_n downsampling works for archive-loaded solutions."""
     files, glob_pattern = solution_files
@@ -177,8 +207,12 @@ def test_residual_trace_multi_rhs_every_n(
         "every_n": 2,
     }
 
-    result_full = run_generation("residual_traces", spd_matrix, cfg=cfg_full)
-    result_half = run_generation("residual_traces", spd_matrix, cfg=cfg_half)
+    result_full = run_generation(
+        "residual_traces", spd_matrix, cfg=cfg_full, solver=residual_solver
+    )
+    result_half = run_generation(
+        "residual_traces", spd_matrix, cfg=cfg_half, solver=residual_solver
+    )
 
     assert result_full.residual_traces is not None
     assert result_half.residual_traces is not None
@@ -189,7 +223,9 @@ def test_residual_trace_multi_rhs_every_n(
 
 
 def test_residual_trace_samples_minus_one_requires_finite_source(
-    spd_matrix: np.ndarray, single_rhs: np.ndarray
+    spd_matrix: np.ndarray,
+    single_rhs: np.ndarray,
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """samples=-1 is rejected for single-RHS mode because the source is unbounded."""
     with pytest.raises(ValueError, match="samples=-1"):
@@ -197,5 +233,6 @@ def test_residual_trace_samples_minus_one_requires_finite_source(
             "residual_traces",
             spd_matrix,
             cfg={"samples": -1, "cg_iters": 4, "seed": 0},
+            solver=residual_solver,
             single_rhs=single_rhs,
         )

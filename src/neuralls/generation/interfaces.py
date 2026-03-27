@@ -6,7 +6,27 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
+from numpy.typing import NDArray
+
 from ..normalization import ErrorTraceSamples, ResidualTraceSamples
+
+
+class TracingSolverCallable(Protocol):
+    """Callable that runs a tracing iterative solver.
+
+    The returned second element must have .iteration_history populated.
+    """
+
+    def __call__(
+        self,
+        A: NDArray,
+        b: NDArray,
+        x0: NDArray,
+        *,
+        maxiter: int,
+        rtol: float,
+        atol: float,
+    ) -> tuple[NDArray, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -74,6 +94,7 @@ class SingleRhsGenerationStrategy(Protocol):
         matrix: np.ndarray,
         *,
         cfg: dict[str, Any],
+        solver: TracingSolverCallable,
         single_rhs: np.ndarray | None = None,
         archive: ArchiveData | None = None,
     ) -> GeneratedSamples:

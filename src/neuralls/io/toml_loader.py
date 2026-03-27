@@ -13,11 +13,16 @@ from typing import Any
 
 import tomli_w
 from dlkit.tools.config import TrainingWorkflowSettings
+from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.io import load_settings
+from dlkit.tools.io.config import load_config
+from dlkit.tools import io as dlkit_io
 
 from neuralls.configuration.comparison import ComparisonConfig, parse_comparison_config
 from neuralls.configuration.data_models import DataConfigFile
+from neuralls.configuration.domain import ExperimentWorkspace
 from neuralls.configuration.mlflow_normalization import normalize_model_mlflow
+from neuralls.configuration.paths import PathContext
 
 
 def load_model_config(path: Path) -> TrainingWorkflowSettings:
@@ -92,3 +97,108 @@ def load_raw_toml(path: Path) -> dict[str, Any]:
             return tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise exc
+
+
+def build_settings(
+    model_config_path: Path,
+    workspace: ExperimentWorkspace,
+    path_context: PathContext,
+    force_mlflow_enabled: bool = False,
+    base_settings: Any | None = None,
+) -> Any:
+    """Build dlkit settings with workspace and MLflow paths injected.
+
+    Args:
+        model_config_path: Path to model config TOML.
+        workspace: Experiment workspace with data and run info.
+        path_context: Resolved base paths (source of truth).
+        base_settings: Optional pre-loaded settings instance to reuse.
+
+    Returns:
+        dlkit GeneralSettings with all paths configured.
+    """
+    settings = base_settings if base_settings is not None else load_model_config(model_config_path)
+    if getattr(settings, "MLFLOW", None) is None:
+        settings = patch_model(settings, {"MLFLOW": {}})
+
+    updates: dict[str, Any] = {
+        "TRAINING": {
+            "trainer": {
+                "default_root_dir": workspace.root_dir,
+            }
+        },
+        "PATHS": {
+            "project_root": str(path_context.project_root),
+            "processed_dir": str(path_context.processed_root),
+            "output_dir": str(path_context.output_root),
+        },
+    }
+
+    if getattr(settings, "MLFLOW", None) is not None or force_mlflow_enabled:
+        updates["MLFLOW"] = {}
+
+    settings = patch_model(settings, updates)
+
+    return settings
+
+
+def build_inference_settings(
+    model_config_path: Path,
+    workspace: ExperimentWorkspace,
+    path_context: PathContext,
+    mlflow_run_name: str | None = None,
+    mlflow_experiment_name: str | None = None,
+    force_mlflow_enabled: bool = False,
+) -> Any:
+    """Build dlkit inference settings with workspace and MLflow paths injected.
+
+    Args:
+        model_config_path: Path to model config TOML.
+        workspace: Experiment workspace with data and run info.
+        path_context: Resolved base paths (source of truth).
+        mlflow_run_name: MLflow run name with timestamp (optional).
+
+    Returns:
+        dlkit InferenceWorkflowConfig with all paths configured.
+    """
+    _INFERENCE_EXCLUDED = {"TRAINING", "MLFLOW", "OPTUNA"}
+    toml_data = load_config(model_config_path, raw=True)
+    inference_data = {k: v for k, v in toml_data.items() if k not in _INFERENCE_EXCLUDED}
+    from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
+
+    settings = InferenceWorkflowConfig.model_validate(inference_data)
+    sync_session_root_to_environment = getattr(
+        dlkit_io.config,
+        "_sync_session_root_to_environment",
+    )
+    sync_session_root_to_environment(settings)
+
+    run_name = mlflow_run_name if mlflow_run_name is not None else workspace.run_id
+
+    if not settings.SESSION.inference:
+        settings = patch_model(
+            settings,
+            {
+                "SESSION": {
+                    "inference": True,
+                }
+            },
+        )
+
+    updates: dict[str, Any] = {
+        "PATHS": {
+            "project_root": str(path_context.project_root),
+            "processed_dir": str(path_context.processed_root),
+            "output_dir": str(path_context.output_root),
+        },
+    }
+
+    if getattr(settings, "MLFLOW", None) is not None or force_mlflow_enabled:
+        updates["MLFLOW"] = {
+            "experiment_name": mlflow_experiment_name or workspace.dataset_id,
+            "run_name": run_name,
+        }
+
+    settings = patch_model(settings, updates)
+
+    return settings

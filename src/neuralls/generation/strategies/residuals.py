@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, ArchiveData
+from ..interfaces import GeneratedSamples, ArchiveData, TracingSolverCallable
 from ..runner import register_single_rhs_strategy
 from ..strategy_configs import ResidualErrorConfig
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
@@ -76,6 +76,7 @@ class _BaseResidualsStrategy:
         matrix: np.ndarray,
         *,
         cfg: dict,
+        solver: TracingSolverCallable,
         single_rhs: np.ndarray | None = None,
         archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
@@ -117,20 +118,8 @@ class _BaseResidualsStrategy:
         # Choose mode based on single_rhs parameter
         if single_rhs is not None:
             # Mode 1: Single RHS - run CG multiple times on the SAME RHS
-            # Note: Error traces require true solution, which we don't have in single RHS mode
-            # So we'll solve once to get approximate solution, then use it as "true" for comparison
-            from ...solver.scipy_wrapper import SciPyCGSolver
-
-            # Solve once with high accuracy to get "true" solution
-            solver = SciPyCGSolver()
-            true_sol, _ = solver.solve(
-                A=matrix,
-                b=single_rhs,
-                x0=np.zeros(n, dtype=np.float64),
-                maxiter=10000,
-                rtol=1e-12,
-                atol=1e-12,
-            )
+            # Solve exactly to get "true" solution for error target computation
+            true_sol = np.linalg.solve(matrix, single_rhs)
 
             # Create array of identical RHS and solution vectors
             rhs_samples = np.tile(single_rhs, (num_base_systems, 1))
@@ -166,25 +155,14 @@ class _BaseResidualsStrategy:
         sample_indices: list[np.ndarray] = []
         iteration_indices: list[np.ndarray] = []
 
-        # Import scipy CG solver
-        from ...solver.scipy_wrapper import SciPyCGSolver
-        from ...solver.monitoring.iteration_history import IterationHistory
-        from ...solver.monitoring.trace_mode import TraceMode
-
         for sample_idx, (rhs_vec, true_sol) in enumerate(zip(rhs_samples, sols)):
-            # Run classical CG (scipy) for fixed number of iterations
-            # Use scipy.sparse.linalg.cg wrapper for standard CG implementation
-            iteration_history = IterationHistory(mode=TraceMode.FULL)
-            solver = SciPyCGSolver(iteration_history=iteration_history)
-
-            _, info = solver.solve(
-                A=matrix,
-                b=rhs_vec,
-                x0=np.zeros(n, dtype=np.float64),
+            _, info = solver(
+                matrix,
+                rhs_vec,
+                np.zeros(n, dtype=np.float64),
                 maxiter=cg_iters,
-                rtol=1e-20,  # Very tight to prevent early convergence
-                atol=1e-20,  # Very tight to run full iterations
-                trace_mode="full",  # Collect all intermediate vectors
+                rtol=1e-20,
+                atol=1e-20,
             )
 
             # Extract vectors from iteration history

@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 import tomli_w
 
-from neuralls.configuration.loader import load_experiment
+from neuralls.io.loader import load_experiment
 
 
 def _write_configs(root: Path) -> tuple[Path, Path]:

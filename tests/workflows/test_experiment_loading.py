@@ -68,7 +68,7 @@ class TestTrainingPipelineWithMLflow:
         - Workspace directories are created
         - Output paths are rooted under the requested output directory
         """
-        from neuralls.configuration.loader import load_experiment
+        from neuralls.io.loader import load_experiment
 
         training_setup["tmp_path"]
         data_dir = training_setup["data_dir"]
@@ -178,7 +178,7 @@ class TestTrainingPipelineWithMLflow:
         - Run = model name (with timestamp)
         - Artifacts at mlartifacts/{exp_id}/{run_id}/
         """
-        from neuralls.configuration.loader import load_experiment
+        from neuralls.io.loader import load_experiment
 
         data_dir = training_setup["data_dir"]
         datasets_dir = training_setup["datasets_dir"]
@@ -250,7 +250,7 @@ class TestTrainingPipelineWithMLflow:
 
     def test_mlflow_configuration_injection(self, training_setup: dict) -> None:
         """Verify experiments topology enables runtime MLflow without infra leakage."""
-        from neuralls.configuration.loader import load_experiment
+        from neuralls.io.loader import load_experiment
 
         tmp_path = training_setup["tmp_path"]
         data_dir = training_setup["data_dir"]

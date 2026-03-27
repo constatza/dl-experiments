@@ -21,8 +21,9 @@ from pathlib import Path
 from loguru import logger
 
 from neuralls.configuration.dataset_identity import resolve_dataset_identity
-from neuralls.configuration.loader import load_batch
+from neuralls.io.loader import load_batch
 from neuralls.io.toml_loader import load_data_config
+from neuralls.io.base import load_matrix
 from neuralls.workflows.reporting import ExperimentResult
 from neuralls.workflows.utils.hashing import compute_directory_hash
 from neuralls.generation import process_config
@@ -96,10 +97,12 @@ def run_experiment(
             data_cfg=data_cfg,
             config_path=data_config_path,
         ).name
-        data_dir = process_config(
-            data_cfg.model_dump(mode="python", exclude_none=True),
-            config_path=data_config_path,
-        )
+        data_dict = data_cfg.model_dump(mode="python", exclude_none=True)
+        matrix_path_str = data_dict.get("source", {}).get("matrix_path")
+        if not matrix_path_str:
+            raise ValueError("Missing 'source.matrix_path' in data config")
+        matrix = load_matrix(Path(matrix_path_str))
+        data_dir = process_config(data_dict, matrix, config_path=data_config_path)
         validate_data_exists(
             data_dir,
             [

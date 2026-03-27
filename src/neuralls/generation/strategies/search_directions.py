@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, ArchiveData
+from ..interfaces import GeneratedSamples, ArchiveData, TracingSolverCallable
 from ..runner import register_single_rhs_strategy
 from ..strategy_configs import SearchDirectionsConfig
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
@@ -49,6 +49,7 @@ class SearchDirectionsStrategy:
         matrix: np.ndarray,
         *,
         cfg: dict,
+        solver: TracingSolverCallable,
         single_rhs: np.ndarray | None = None,
         archive: ArchiveData | None = None,
     ) -> GeneratedSamples:
@@ -124,18 +125,14 @@ class SearchDirectionsStrategy:
         sample_indices: list[np.ndarray] = []
         iteration_indices: list[np.ndarray] = []
 
-        from ...solver import pcg
-        from ...solver.monitoring.trace_mode import TraceMode
-
         for sample_idx, rhs_vec in enumerate(rhs_samples):
-            _, info = pcg(
-                A=matrix,
-                b=rhs_vec,
-                x0=np.zeros(n, dtype=np.float64),
+            _, info = solver(
+                matrix,
+                rhs_vec,
+                np.zeros(n, dtype=np.float64),
                 maxiter=cg_iters,
-                rtol=1e-20,  # Very tight to prevent early convergence
-                atol=1e-20,  # Very tight to run full iterations
-                trace_mode=TraceMode.FULL,
+                rtol=1e-20,
+                atol=1e-20,
             )
 
             if info.iteration_history is None or info.iteration_history.directions is None:

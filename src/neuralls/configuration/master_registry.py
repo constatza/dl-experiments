@@ -11,8 +11,6 @@ from neuralls.configuration.experiments import (
     ExperimentsConfig,
     RegistryEntry,
 )
-from neuralls.configuration.preconditioner import NeuralPreconditionerConfig
-from neuralls.io.toml_loader import load_comparison_config, load_raw_toml
 
 
 @dataclass(frozen=True)
@@ -119,40 +117,6 @@ def resolve_comparison_config_path(
         registry_section="comparisons",
     )
     return _resolve_registry_path(config_dir, entry.path)
-
-
-def _validate_comparison_experiment_refs(
-    cfg: ExperimentsConfig,
-    config_dir: Path,
-) -> None:
-    """Reject comparison configs that reference undefined experiment ids."""
-    experiment_ids = {entry.id for entry in cfg.experiments}
-    for entry in cfg.comparisons:
-        comparison_cfg = load_comparison_config(
-            resolve_comparison_config_path(cfg, config_dir, entry.id)
-        )
-        for spec in comparison_cfg.preconditioners:
-            if not isinstance(spec, NeuralPreconditionerConfig):
-                continue
-            experiment_id = spec.experiment
-            if experiment_id is None or experiment_id in experiment_ids:
-                continue
-            raise ValueError(
-                f"Comparison '{entry.id}' neural preconditioner '{spec.name}' "
-                f"references experiment id '{experiment_id}', but [[experiments]] "
-                "does not define it."
-            )
-
-
-def load_validated_master_config(
-    config_path: Path,
-) -> tuple[ExperimentsConfig, Path]:
-    """Load master config and validate all registry-backed references."""
-    raw = load_raw_toml(config_path)
-    cfg = ExperimentsConfig.model_validate(raw)
-    config_dir = config_path.resolve().parent
-    _validate_comparison_experiment_refs(cfg, config_dir)
-    return cfg, config_dir
 
 
 def resolve_experiment_binding(

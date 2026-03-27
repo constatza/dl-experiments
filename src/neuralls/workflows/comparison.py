@@ -21,9 +21,9 @@ from neuralls.configuration.experiments import (
 )
 from neuralls.configuration.master_registry import (
     get_experiment_binding,
-    load_validated_master_config,
     resolve_comparison_config_path,
 )
+from neuralls.io.loader import load_validated_master_config
 from neuralls.configuration.mlflow_normalization import build_mlflow_environment
 from neuralls.configuration.preconditioner import (
     NeuralPreconditionerConfig,

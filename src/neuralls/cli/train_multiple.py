@@ -9,7 +9,7 @@ from pathlib import Path
 import typer
 
 from neuralls.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
-from neuralls.configuration.master_registry import load_validated_master_config
+from neuralls.io.loader import load_validated_master_config
 from neuralls.plotting import plot_metric_comparison
 from neuralls.workflows.multi_training import train_batch
 

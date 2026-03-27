@@ -19,10 +19,56 @@ from ..constants import (
     DEFAULT_SHUFFLE,
 )
 from .plan import GenerationPlan, StrategySpec, parse_generation_plan
-from ..io.base import load_matrix
 from ..constants import DEFAULT_PROCESSED_DATA_DIR
+from .interfaces import TracingSolverCallable
 from .orchestration import build_dataset
 from .runner import run_generation
+from ..solver.scipy_wrapper import SciPyCGSolver
+from ..solver.monitoring.iteration_history import IterationHistory
+from ..solver.monitoring.trace_mode import TraceMode
+from ..solver import pcg
+
+
+def _make_residual_solver() -> TracingSolverCallable:
+    """Construct default tracing solver for residuals / residual_traces strategies."""
+
+    def _solve(
+        A: np.ndarray,
+        b: np.ndarray,
+        x0: np.ndarray,
+        *,
+        maxiter: int,
+        rtol: float,
+        atol: float,
+    ) -> tuple[np.ndarray, Any]:
+        history = IterationHistory(mode=TraceMode.FULL)
+        s = SciPyCGSolver(iteration_history=history)
+        return s.solve(A=A, b=b, x0=x0, maxiter=maxiter, rtol=rtol, atol=atol, trace_mode="full")
+
+    return _solve
+
+
+def _make_direction_solver() -> TracingSolverCallable:
+    """Construct default tracing solver for search_directions strategy."""
+
+    def _solve(
+        A: np.ndarray,
+        b: np.ndarray,
+        x0: np.ndarray,
+        *,
+        maxiter: int,
+        rtol: float,
+        atol: float,
+    ) -> tuple[np.ndarray, Any]:
+        return pcg(
+            A=A, b=b, x0=x0, maxiter=maxiter, rtol=rtol, atol=atol, trace_mode=TraceMode.FULL
+        )
+
+    return _solve
+
+
+_DEFAULT_RESIDUAL_SOLVER: TracingSolverCallable = _make_residual_solver()
+_DEFAULT_DIRECTION_SOLVER: TracingSolverCallable = _make_direction_solver()
 
 
 @dataclass(frozen=True)
@@ -174,7 +220,7 @@ def _coerce_optional_int(value: Any) -> int | None:
 
 def _derive_rhs_from_solution_archive(
     *,
-    matrix_path: str,
+    matrix: np.ndarray,
     solutions_glob: str,
     dataset_dir: Path,
 ) -> Path:
@@ -195,7 +241,6 @@ def _derive_rhs_from_solution_archive(
 
     # Use solution_archive strategy to load one solution and compute RHS
     representative = candidates[0]
-    matrix = load_matrix(Path(matrix_path))
 
     # Load single solution using solution_archive strategy
     samples = run_generation(
@@ -222,6 +267,7 @@ def _resolve_rhs_source(
     context: DataGenerationContext,
     solution_archive_options: Mapping[str, Any] | None,
     provide_rhs_option: Any,
+    matrix: np.ndarray,
 ) -> str | None:
     """Determine RHS path for synthetic generation, allowing provide_rhs overrides."""
     if context.rhs_path:
@@ -247,7 +293,7 @@ def _resolve_rhs_source(
                 "provide_rhs=True requires 'solutions_glob' for the solution_archive strategy."
             )
         generated_path = _derive_rhs_from_solution_archive(
-            matrix_path=context.matrix_path,
+            matrix=matrix,
             solutions_glob=solutions_glob,
             dataset_dir=context.dataset_dir,
         )
@@ -307,6 +353,7 @@ def _execute_synthetic_generation(
     synthetic_strategies: Mapping[str, StrategySpec],
     rhs_archive_strategy: StrategySpec | None,
     solution_archive_strategy: StrategySpec | None,
+    matrix: np.ndarray,
 ) -> Path:
     """Execute mixed generation using new build_dataset() with all strategies."""
     generation_cfg = context.generation_cfg
@@ -365,6 +412,7 @@ def _execute_synthetic_generation(
         if solution_archive_strategy
         else None,
         provide_rhs_option=None,
+        matrix=matrix,
     )
 
     # Use new unified build_dataset()
@@ -382,6 +430,12 @@ def _execute_synthetic_generation(
         shuffle=bool(shuffle_value),
         seed=seed,
         strategy_overrides=strategy_overrides,
+        solver_overrides={
+            "residuals": _DEFAULT_RESIDUAL_SOLVER,
+            "gaussian_residuals": _DEFAULT_RESIDUAL_SOLVER,
+            "residual_traces": _DEFAULT_RESIDUAL_SOLVER,
+            "search_directions": _DEFAULT_DIRECTION_SOLVER,
+        },
     )
     return Path(dataset_path)
 
@@ -426,6 +480,7 @@ def _execute_rhs_archive_only(
 def _execute_plan(
     context: DataGenerationContext,
     plan: GenerationPlan,
+    matrix: np.ndarray,
 ) -> Path:
     rhs_archive_strategy = plan.rhs_archive
     solution_archive_strategy = plan.solution_archive
@@ -444,6 +499,7 @@ def _execute_plan(
             synthetic_strategies=synthetic_strategies,
             rhs_archive_strategy=rhs_archive_strategy,
             solution_archive_strategy=solution_archive_strategy,
+            matrix=matrix,
         )
 
     if rhs_archive_strategy is None:
@@ -452,14 +508,18 @@ def _execute_plan(
     return _execute_rhs_archive_only(context, rhs_archive_strategy)
 
 
-def process_config(config: Mapping[str, Any], config_path: Path | str | None = None) -> Path:
+def process_config(
+    config: Mapping[str, Any],
+    matrix: np.ndarray,
+    config_path: Path | str | None = None,
+) -> Path:
     """Process a data config and execute the declared generation plan.
 
     After generating the main dataset, this checks for a [test] section.
     Dedicated comparison split generation is currently skipped for now.
     """
     context, plan = _build_context(config=config, config_path=config_path)
-    dataset_dir = _execute_plan(context, plan)
+    dataset_dir = _execute_plan(context, plan, matrix)
 
     # Generate comparison data if [test] section is present
     test_config = config.get("test", {})

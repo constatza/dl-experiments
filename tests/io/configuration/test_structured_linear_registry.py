@@ -6,11 +6,9 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-from neuralls.configuration.loader import load_experiment
-from neuralls.configuration.master_registry import (
-    list_experiment_bindings,
-    load_validated_master_config,
-)
+from neuralls.io.loader import load_experiment
+from neuralls.configuration.master_registry import list_experiment_bindings
+from neuralls.io.loader import load_validated_master_config
 from neuralls.io.toml_loader import load_model_config
 
 pytestmark = pytest.mark.skipif(

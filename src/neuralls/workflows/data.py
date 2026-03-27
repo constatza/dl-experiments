@@ -8,8 +8,9 @@ from collections.abc import Mapping
 
 import tomllib
 
-from ..constants import FILE_MODE_READ_BINARY
+from ..constants import FILE_MODE_READ_BINARY, ConfigSections, ConfigKeys
 from ..generation import process_config
+from ..io.base import load_matrix
 
 
 def load_data_config(config_path: Path) -> Mapping[str, Any]:
@@ -55,4 +56,8 @@ def process_data_from_config(
     """
     config = load_data_config(config_path)
     config = _apply_generation_overrides(config)
-    return process_config(config, config_path=config_path)
+    matrix_path = config.get(ConfigSections.SOURCE, {}).get(ConfigKeys.MATRIX_PATH)
+    if not matrix_path:
+        raise ValueError(f"Missing '{ConfigSections.SOURCE}.{ConfigKeys.MATRIX_PATH}' in config")
+    matrix = load_matrix(Path(matrix_path))
+    return process_config(config, matrix, config_path=config_path)

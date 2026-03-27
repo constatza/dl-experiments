@@ -19,17 +19,24 @@ from neuralls.configuration.domain import (
 from neuralls.configuration.experiments import ExperimentsConfig, resolve_display_name
 from neuralls.configuration.master_registry import (
     list_experiment_bindings,
-    load_validated_master_config,
+    resolve_comparison_config_path,
 )
 from neuralls.configuration.paths import build_path_context
+from neuralls.configuration.preconditioner import NeuralPreconditionerConfig
 from neuralls.configuration.services import WorkspaceFactory
-from neuralls.configuration.settings import build_inference_settings, build_settings
 from neuralls.configuration.mlflow_normalization import (
     build_mlflow_environment,
     derive_output_root_from_tracking_uri,
     scoped_mlflow_environment,
 )
-from neuralls.io.toml_loader import load_data_config, load_model_config
+from neuralls.io.toml_loader import (
+    build_inference_settings,
+    build_settings,
+    load_comparison_config,
+    load_data_config,
+    load_model_config,
+    load_raw_toml,
+)
 
 
 @dataclass(frozen=True)
@@ -48,6 +55,40 @@ def _resolve_relative_path(path: Path | None, base_dir: Path) -> Path | None:
     if path.is_absolute():
         return path.resolve()
     return (base_dir / path).resolve()
+
+
+def _validate_comparison_experiment_refs(
+    cfg: ExperimentsConfig,
+    config_dir: Path,
+) -> None:
+    """Reject comparison configs that reference undefined experiment ids."""
+    experiment_ids = {entry.id for entry in cfg.experiments}
+    for entry in cfg.comparisons:
+        comparison_cfg = load_comparison_config(
+            resolve_comparison_config_path(cfg, config_dir, entry.id)
+        )
+        for spec in comparison_cfg.preconditioners:
+            if not isinstance(spec, NeuralPreconditionerConfig):
+                continue
+            experiment_id = spec.experiment
+            if experiment_id is None or experiment_id in experiment_ids:
+                continue
+            raise ValueError(
+                f"Comparison '{entry.id}' neural preconditioner '{spec.name}' "
+                f"references experiment id '{experiment_id}', but [[experiments]] "
+                "does not define it."
+            )
+
+
+def load_validated_master_config(
+    config_path: Path,
+) -> tuple[ExperimentsConfig, Path]:
+    """Load master config and validate all registry-backed references."""
+    raw = load_raw_toml(config_path)
+    cfg = ExperimentsConfig.model_validate(raw)
+    config_dir = config_path.resolve().parent
+    _validate_comparison_experiment_refs(cfg, config_dir)
+    return cfg, config_dir
 
 
 def _load_experiments_config(
@@ -123,17 +164,12 @@ def load_experiment(
 ) -> RunnableExperiment:
     """Load a single experiment configuration.
 
-    This is the MAIN entry point for loading experiments.
-
     Args:
         model_config_path: Path to model config TOML.
         data_config_path: Path to data config TOML.
         output_root: Override for master output directory (optional).
         mode: Workflow mode - "training" or "inference" (default: "training").
-              Training mode loads TrainingWorkflowConfig (requires DATASET/DATAMODULE).
-              Inference mode loads InferenceWorkflowConfig (DATASET/DATAMODULE optional).
-        experiments_config_path: Optional path to experiments TOML for MLflow topology
-              injection. When provided, overrides MLFLOW settings in model config.
+        experiments_config_path: Optional path to experiments TOML for MLflow topology injection.
 
     Returns:
         RunnableExperiment with validated configs and workspace.
@@ -142,15 +178,12 @@ def load_experiment(
         ValueError: If configs are invalid or mode is invalid.
         FileNotFoundError: If config files don't exist.
     """
-    # Validate mode
     if mode not in ("training", "inference"):
         raise ValueError(f"Invalid mode: {mode!r}. Expected 'training' or 'inference'.")
     experiments_cfg = _load_experiments_config(experiments_config_path)
 
-    # 1. Load and validate configs (using existing loaders)
     data_cfg = load_data_config(data_config_path)
 
-    # 2. Resolve base paths (SINGLE SOURCE OF TRUTH)
     resolved_output_root = _resolve_output_override(
         output_root=output_root,
         experiments_cfg=experiments_cfg,
@@ -179,7 +212,6 @@ def load_experiment(
     with scoped_mlflow_environment(mlflow_topology.env):
         model_cfg = load_model_config(model_config_path)
 
-    # 3. Extract identifiers
     if dataset_registry_id is None:
         raise ValueError(
             "dataset_registry_id is required. Pass it from experiments.toml via load_batch()."
@@ -188,7 +220,6 @@ def load_experiment(
     session = getattr(model_cfg, "SESSION", None)
     session_name = getattr(session, "name", None)
     model_name = getattr(getattr(model_cfg, "MODEL", None), "name", None)
-    # Treat dlkit's default "dlkit-session" as unset, prefer MODEL.name for clarity
     if session_name and session_name != "dlkit-session":
         base_name_candidate = session_name
     else:
@@ -200,7 +231,6 @@ def load_experiment(
 
     workspace_run_id = base_name
 
-    # 4. Build experiment spec (use base_name for logical ID)
     resolved_experiment_id = experiment_id or base_name
     resolved_experiment_display_name = resolve_display_name(
         resolved_experiment_id,
@@ -217,14 +247,10 @@ def load_experiment(
         data_config_path=data_config_path,
     )
 
-    # 5. Create workspace
     factory = WorkspaceFactory(path_ctx.output_root, path_ctx.processed_root)
     workspace = factory.create(dataset_id, workspace_run_id)
 
-    # 6. Build settings (mode-specific: training or inference)
     if mode == "inference":
-        # Inference: Use InferenceWorkflowConfig (DATASET/DATAMODULE optional)
-        # Transforms loaded from checkpoint metadata
         settings = build_inference_settings(
             model_config_path=model_config_path,
             workspace=workspace,
@@ -234,7 +260,6 @@ def load_experiment(
         )
         logger.debug("Loaded inference settings (DATASET/DATAMODULE optional)")
     else:
-        # Training: Use TrainingWorkflowConfig (DATASET/DATAMODULE required)
         settings = build_settings(
             model_config_path=model_config_path,
             workspace=workspace,
@@ -254,12 +279,6 @@ def load_experiment(
 def load_batch(master_config_path: Path) -> ExperimentBatch:
     """Load all experiments from master config file.
 
-    Supports format with [[experiment]] entries containing:
-    - id: Experiment identifier
-    - dataset: Dataset registry id (references configs/datasets/{dataset}.toml)
-    - model: Model registry id (references configs/models/{model}.toml)
-    - checkpoint_path: Optional explicit checkpoint path
-
     Args:
         master_config_path: Path to experiments.toml.
 
@@ -275,7 +294,6 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
 
     cfg, config_dir = load_validated_master_config(master_config_path)
 
-    # Resolve global output root
     output_root = cfg.output_dir
     bindings = list_experiment_bindings(cfg, config_dir)
     if not bindings:
@@ -292,7 +310,6 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
         model_path = binding.model_config_path
         checkpoint_path = binding.checkpoint_path
 
-        # Validate paths exist
         if not data_path.exists():
             raise FileNotFoundError(
                 f"Experiment '{experiment_id}': Dataset config not found: {data_path}"
@@ -302,7 +319,6 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
                 f"Experiment '{experiment_id}': Model config not found: {model_path}"
             )
 
-        # Load experiment using main entry point
         experiment = load_experiment(
             model_path,
             data_path,
@@ -338,10 +354,8 @@ def load_batch(master_config_path: Path) -> ExperimentBatch:
 
         resolved_experiments.append(experiment)
 
-    # Determine final output root
     final_output_root = output_root
     if final_output_root is None:
-        # Use first experiment's path context
         first_data_cfg = load_data_config(resolved_experiments[0].spec.data_config_path)
         path_ctx = build_path_context(first_data_cfg)
         final_output_root = path_ctx.output_root

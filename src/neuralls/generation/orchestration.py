@@ -22,7 +22,7 @@ from .trace_utils import (
     _merge_residual_traces,
     _merge_error_traces,
 )
-from .interfaces import ArchiveData
+from .interfaces import ArchiveData, TracingSolverCallable
 from .source_streams import bind_sources, open_matrix_stream, open_vector_stream
 
 
@@ -90,6 +90,7 @@ def generate_mixture(
     seed: int = 42,
     shuffle: bool = True,
     strategy_overrides: Mapping[str, Mapping[str, Any]] | None = None,
+    solver_overrides: dict[str, TracingSolverCallable] | None = None,
     archive_solutions: np.ndarray | None = None,
     archive_rhs: np.ndarray | None = None,
     single_rhs: np.ndarray | None = None,
@@ -194,6 +195,7 @@ def generate_mixture(
                 strategy_name,
                 A,
                 cfg=cfg,
+                solver=solver_overrides.get(strategy_name) if solver_overrides else None,
                 archive=archive_data,
                 single_rhs=single_rhs,
             )
@@ -321,6 +323,7 @@ def _process_binding(
     seed: int,
     shuffle: bool,
     strategy_overrides: dict[str, dict[str, Any]] | None,
+    solver_overrides: dict[str, TracingSolverCallable] | None = None,
 ) -> _BindingResult:
     """Process one matrix-RHS binding and generate samples.
 
@@ -401,6 +404,7 @@ def _process_binding(
         seed=seed,
         shuffle=shuffle,
         strategy_overrides=strategy_overrides,
+        solver_overrides=solver_overrides,
         single_rhs=single_rhs,
     )
 
@@ -561,6 +565,7 @@ def build_dataset(
     shuffle: bool = True,
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
+    solver_overrides: dict[str, TracingSolverCallable] | None = None,
 ) -> str:
     """Build dataset from streamed matrix sources without dense N-matrix materialization.
 
@@ -628,6 +633,7 @@ def build_dataset(
             seed,
             shuffle,
             strategy_overrides,
+            solver_overrides=solver_overrides,
         )
 
         # Skip empty results
