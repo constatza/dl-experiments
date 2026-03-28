@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.configuration.experiments import ComparisonRegistryEntry, ExperimentEntry
-from neuralls.mlflow_utils import MlflowPaths
-from neuralls.workflows.run_specs import (
+from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, ExperimentEntry
+from neuralls.platform.tracking.mlflow import MlflowPaths
+from neuralls.composition.tracking.run_specs import (
     TrainingRunTags,
     build_child_comparison_tags,
     build_comparison_run_spec,

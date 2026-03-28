@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from neuralls.workflows.comparison_run import setup_comparison_tracking
+from neuralls.platform.tracking.comparison_tracking import setup_comparison_tracking
 
 
 def test_setup_comparison_tracking_creates_missing_experiment(tmp_path: Path) -> None:
@@ -13,8 +13,8 @@ def test_setup_comparison_tracking_creates_missing_experiment(tmp_path: Path) ->
     tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
     artifact_dir = str(tmp_path / "artifacts")
     with (
-        patch("neuralls.workflows.comparison_run.mlflow") as mock_mlflow,
-        patch("neuralls.workflows.comparison_run.MlflowClient") as mock_client_cls,
+        patch("neuralls.platform.tracking.comparison_tracking.mlflow") as mock_mlflow,
+        patch("neuralls.platform.tracking.comparison_tracking.MlflowClient") as mock_client_cls,
     ):
         mock_client = mock_client_cls.return_value
         mock_client.get_experiment_by_name.return_value = None
@@ -33,8 +33,8 @@ def test_setup_comparison_tracking_reuses_existing_experiment(tmp_path: Path) ->
     tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
     artifact_dir = str(tmp_path / "artifacts")
     with (
-        patch("neuralls.workflows.comparison_run.mlflow") as mock_mlflow,
-        patch("neuralls.workflows.comparison_run.MlflowClient") as mock_client_cls,
+        patch("neuralls.platform.tracking.comparison_tracking.mlflow") as mock_mlflow,
+        patch("neuralls.platform.tracking.comparison_tracking.MlflowClient") as mock_client_cls,
     ):
         mock_client = mock_client_cls.return_value
         mock_client.get_experiment_by_name.return_value = object()

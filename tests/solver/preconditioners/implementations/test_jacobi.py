@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from neuralls.solver.preconditioners import JacobiPreconditioner
+from neuralls.domain.solver.preconditioners import JacobiPreconditioner
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -64,7 +64,7 @@ def test_jacobi_improves_convergence(
 
         Expected: iterations_jacobi ≤ iterations_identity
     """
-    from neuralls.solver import flexible_cg
+    from neuralls.domain.solver import flexible_cg
 
     A, b, _ = tridiagonal_system_known_solution
     rtol, atol = integration_tolerances

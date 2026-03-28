@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from neuralls.solver.preconditioners import Identity
+from neuralls.domain.solver.preconditioners import Identity
 
 if TYPE_CHECKING:
     from collections.abc import Callable

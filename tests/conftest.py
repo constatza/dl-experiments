@@ -123,7 +123,7 @@ def isolate_default_paths_with_tmp_path(
     for key, value in env_map.items():
         monkeypatch.setenv(key, value)
 
-    from neuralls import constants as neuralls_constants
+    from neuralls.shared import constants as neuralls_constants
 
     path_values = {
         "DEFAULT_OUTPUT_DIR": Path(env_map["GRAPH_CG_OUTPUT_DIR"]).resolve(),
@@ -244,7 +244,7 @@ def sample_dataset_npz(tmp_path, small_spd_matrix, archive_solutions, archive_rh
     """
     dataset_dir = tmp_path / "test-dataset"
     dataset_dir.mkdir()
-    from neuralls.io.dataset_storage import save_dataset
+    from neuralls.platform.storage.datasets import save_dataset
 
     save_dataset(
         dataset_dir=dataset_dir,
@@ -275,7 +275,7 @@ def sample_dataset_with_raw(tmp_path, small_spd_matrix, archive_solutions, archi
     """
     dataset_dir = tmp_path / "test-dataset-with-raw"
     dataset_dir.mkdir()
-    from neuralls.io.dataset_storage import save_dataset
+    from neuralls.platform.storage.datasets import save_dataset
 
     save_dataset(
         dataset_dir=dataset_dir,

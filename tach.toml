@@ -4,11 +4,12 @@ ignore_type_checking_imports = true
 layers_explicit_depends_on = true
 
 layers = [
-    "cli",
-    "workflows",
-    "bridge",
+    "entrypoints",
+    "composition",
+    "application",
+    "platform",
     "domain",
-    "support",
+    "shared",
 ]
 
 [[modules]]
@@ -17,103 +18,105 @@ depends_on = []
 
 [[modules]]
 path = "neuralls.cli"
-layer = "cli"
-depends_on = [
-    "neuralls.configuration",
-    "neuralls.io",
-    "neuralls.plotting",
-    "neuralls.workflows",
-    "neuralls.workflows.**",
-]
+layer = "entrypoints"
+depends_on = ["neuralls.composition", "neuralls.composition.**", "neuralls.shared", "neuralls.shared.**"]
 
 [[modules]]
-path = "neuralls.workflows"
-layer = "workflows"
+path = "neuralls.composition"
+layer = "composition"
 depends_on = [
-    "neuralls.assembly",
-    "neuralls.configuration",
-    "neuralls.configuration.**",
-    "neuralls.diagnostics",
-    "neuralls.generation",
-    "neuralls.io",
-    "neuralls.io.**",
-    "neuralls.plotting",
-    "neuralls.solver",
-    "neuralls.solver.**",
-    "neuralls.validation",
-    "neuralls.workflows.**",
+    "neuralls.composition.**",
+    "neuralls.application",
+    "neuralls.application.**",
+    "neuralls.platform",
+    "neuralls.platform.**",
+    "neuralls.domain",
+    "neuralls.domain.**",
+    "neuralls.shared",
+    "neuralls.shared.**",
 ]
-
-[[modules]]
-path = "neuralls.assembly"
-layer = "bridge"
-depends_on = [
-    "neuralls.configuration",
-    "neuralls.configuration.**",
-    "neuralls.solver",
-    "neuralls.solver.**",
-]
-
-[[modules]]
-path = "neuralls.generation"
-layer = "domain"
-depends_on = [
-    "neuralls.generation.**",
-    "neuralls.io",
-    "neuralls.io.**",
-    "neuralls.solver",
-    "neuralls.solver.**",
-]
-
-[[modules]]
-path = "neuralls.solver"
-layer = "domain"
-depends_on = [
-    "neuralls.solver.**",
-]
-
-[[modules]]
-path = "neuralls.diagnostics"
-layer = "domain"
-depends_on = [
-    "neuralls.io",
-    "neuralls.io.**",
-]
-
-[[modules]]
-path = "neuralls.plotting"
-layer = "domain"
-depends_on = [
-    "neuralls.io",
-    "neuralls.io.**",
-    "neuralls.solver.**",
-]
-
-[[modules]]
-path = "neuralls.configuration"
-layer = "support"
-depends_on = [
-    "neuralls.configuration.**",
-]
-
-[[modules]]
-path = "neuralls.io"
-layer = "support"
-depends_on = [
-    "neuralls.configuration",
-    "neuralls.configuration.**",
-    "neuralls.io.**",
-]
-unchecked = true
 
 [[modules]]
 paths = [
-    "neuralls.constants",
-    "neuralls.math_utils",
-    "neuralls.mlflow_utils",
-    "neuralls.normalization",
-    "neuralls.types",
-    "neuralls.validation",
+    "neuralls.composition.comparison",
+    "neuralls.composition.experiments",
+    "neuralls.composition.generation",
+    "neuralls.composition.inference",
+    "neuralls.composition.preconditioners",
+    "neuralls.composition.tracking",
 ]
-depends_on = []
-utility = true
+layer = "composition"
+depends_on = [
+    "neuralls.composition.**",
+    "neuralls.application",
+    "neuralls.application.**",
+    "neuralls.platform",
+    "neuralls.platform.**",
+    "neuralls.domain",
+    "neuralls.domain.**",
+    "neuralls.shared",
+    "neuralls.shared.**",
+]
+
+[[modules]]
+path = "neuralls.application"
+layer = "application"
+depends_on = ["neuralls.application.**", "neuralls.domain", "neuralls.domain.**", "neuralls.shared", "neuralls.shared.**"]
+
+[[modules]]
+paths = [
+    "neuralls.application.comparison",
+    "neuralls.application.datasets",
+    "neuralls.application.inference",
+    "neuralls.application.training",
+]
+layer = "application"
+depends_on = ["neuralls.application.**", "neuralls.domain", "neuralls.domain.**", "neuralls.shared", "neuralls.shared.**"]
+
+[[modules]]
+path = "neuralls.platform"
+layer = "platform"
+depends_on = ["neuralls.platform.**", "neuralls.domain", "neuralls.domain.**", "neuralls.shared", "neuralls.shared.**"]
+
+[[modules]]
+paths = [
+    "neuralls.platform.config",
+    "neuralls.platform.config.models",
+    "neuralls.platform.dlkit",
+    "neuralls.platform.reporting",
+    "neuralls.platform.storage",
+    "neuralls.platform.tracking",
+]
+layer = "platform"
+depends_on = ["neuralls.platform.**", "neuralls.domain", "neuralls.domain.**", "neuralls.shared", "neuralls.shared.**"]
+
+[[modules]]
+path = "neuralls.domain"
+layer = "domain"
+depends_on = ["neuralls.domain.**", "neuralls.shared", "neuralls.shared.**"]
+
+[[modules]]
+paths = [
+    "neuralls.domain.analysis",
+    "neuralls.domain.generation",
+    "neuralls.domain.generation.strategies",
+    "neuralls.domain.solver",
+    "neuralls.domain.solver.models",
+    "neuralls.domain.solver.monitoring",
+    "neuralls.domain.solver.preconditioners",
+    "neuralls.domain.solver.preconditioners.implementations",
+    "neuralls.domain.solver.strategies",
+    "neuralls.domain.solver.utils",
+]
+layer = "domain"
+depends_on = ["neuralls.domain.**", "neuralls.shared", "neuralls.shared.**"]
+
+[[modules]]
+path = "neuralls.shared"
+layer = "shared"
+depends_on = ["neuralls.shared.**"]
+
+[[modules]]
+path = "neuralls.shared.comparison"
+layer = "shared"
+depends_on = ["neuralls.shared.**"]

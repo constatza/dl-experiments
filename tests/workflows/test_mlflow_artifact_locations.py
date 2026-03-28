@@ -12,12 +12,12 @@ import tomli_w
 from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
-from neuralls.io.dataset_storage import save_dataset
-from neuralls.workflows.comparison import run_comparison
-from neuralls.workflows.diagnostics import compute_diagnostics
-from neuralls.workflows.mlflow_client import log_diagnostics_to_mlflow
-from neuralls.workflows.specs import ComparisonParams
-from neuralls.workflows.training import _log_training_evaluation
+from neuralls.platform.storage.datasets import save_dataset
+from neuralls.composition.experiments.comparison_batch import run_comparison
+from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
+from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
+from neuralls.shared.comparison.specs import ComparisonParams
+from neuralls.composition.experiments.training import _log_training_evaluation
 
 
 def _sqlite_tracking_uri(db_path: Path) -> str:
@@ -215,7 +215,7 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
         )
 
     with patch(
-        "neuralls.workflows.comparison.compare_preconditioners",
+        "neuralls.composition.experiments.comparison_batch.compare_preconditioners",
         side_effect=_fake_compare_preconditioners,
     ):
         outcomes = run_comparison(

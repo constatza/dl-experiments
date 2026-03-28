@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from neuralls.generation import run_generation
-from neuralls.generation.runner import MatrixStrategyRegistration
-from neuralls.generation.strategies.solution_archive import SolutionArchiveStrategy
+from neuralls.domain.generation import run_generation
+from neuralls.domain.generation.runner import MatrixStrategyRegistration
+from neuralls.domain.generation.strategies.solution_archive import SolutionArchiveStrategy
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def solution_files(tmp_path: Path, spd_matrix: np.ndarray) -> tuple[list[Path], 
 
 def test_solution_archive_registered() -> None:
     """SolutionArchiveStrategy is registered under 'solution_archive'."""
-    from neuralls.generation.runner import _registry
+    from neuralls.domain.generation.runner import _registry
 
     assert "solution_archive" in _registry._strategies
     registration = _registry._strategies["solution_archive"]

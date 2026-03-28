@@ -17,25 +17,25 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from neuralls.configuration.preconditioner import (
+from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
     PreconditionerType,
     StandardPreconditionerConfig,
 )
-from neuralls.assembly.preconditioner import (
+from neuralls.composition.preconditioners.factory import (
     create_preconditioner,
     create_scheduled_preconditioner,
     PreconditionerScheduleConfig,
 )
-from neuralls.solver.preconditioners.ports import PredictorAdapter, PredictorPort
-from neuralls.solver.preconditioners import (
+from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.domain.solver.preconditioners import (
     Identity,
     ILUPreconditioner,
     JacobiPreconditioner,
-    NeuralPreconditioner,
     PreconditionerContext,
     ScheduledPreconditioner,
 )
+from neuralls.domain.solver.preconditioners.implementations.neural import NeuralPreconditioner
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

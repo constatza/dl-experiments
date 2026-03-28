@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.generation.transforms import (
+from neuralls.domain.generation.transforms import (
     ComputeRhsTransform,
     EigenvectorCombinationTransform,
     SolveTransform,

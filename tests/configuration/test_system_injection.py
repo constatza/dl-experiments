@@ -6,7 +6,7 @@ from pathlib import Path
 
 import tomli_w
 
-from neuralls.io.loader import load_experiment
+from neuralls.composition.experiments.assembler import load_experiment
 
 
 def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) -> None:

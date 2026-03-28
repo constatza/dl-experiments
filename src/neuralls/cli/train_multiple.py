@@ -3,15 +3,13 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import typer
 
-from neuralls.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
-from neuralls.io.loader import load_validated_master_config
-from neuralls.plotting import plot_metric_comparison
-from neuralls.workflows.multi_training import train_batch
+from neuralls.shared.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
+from neuralls.composition.experiments.assembler import load_validated_master_config
+from neuralls.composition.experiments.multi_training import train_batch, write_metric_report
 
 
 def main(
@@ -43,54 +41,14 @@ def main(
         typer.echo(f"Error during batch training: {exc}", err=True)
         raise typer.Exit(code=EXIT_FAILURE)
 
-    plot_output_dir = output_dir if output_dir is not None else batch.output_dir
-    plot_output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Build (label, value) pairs for the requested metric
-    labels: list[str] = []
-    values: list[float] = []
-    missing: list[str] = []
-
-    for result in batch.results:
-        if metric in result.metrics:
-            labels.append(result.label)
-            values.append(result.metrics[metric])
-        else:
-            missing.append(f"{result.label} ({result.experiment_display_name})")
-
-    if missing:
-        typer.echo(
-            f"Warning: metric '{metric}' missing for experiments: {', '.join(missing)}",
-            err=True,
-        )
-
-    # Build legend: label → "experiment_display_name (run: run_id)"
-    legend = {
-        r.label: (
-            f"{r.experiment_display_name} (run: {r.mlflow_run_id})"
-            if r.mlflow_run_id
-            else r.experiment_display_name
-        )
-        for r in batch.results
-        if r.label in labels
-    }
-
-    if labels:
-        plot_path = plot_output_dir / f"batch_metric_{metric.replace('/', '_')}.png"
-        plot_metric_comparison(
-            labels=labels,
-            values=values,
-            metric_name=metric,
-            legend=legend,
-            save_path=plot_path,
-        )
+    report_dir = write_metric_report(batch, metric=metric, output_dir=output_dir)
+    plot_path = report_dir / f"batch_metric_{metric.replace('/', '_')}.png"
+    if plot_path.exists():
         typer.echo(f"Saved barplot: {plot_path}")
     else:
         typer.echo(f"No data to plot for metric '{metric}'.", err=True)
 
-    # Save label map JSON
-    label_json_path = plot_output_dir / "batch_training_labels.json"
-    label_json_path.write_text(json.dumps(batch.label_map, indent=2))
+    label_json_path = report_dir / "batch_training_labels.json"
     typer.echo(f"Saved label map: {label_json_path}")
 
 

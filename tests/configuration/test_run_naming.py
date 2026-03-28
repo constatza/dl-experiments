@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.io.loader import load_experiment
+from neuralls.composition.experiments.assembler import load_experiment
 
 
 @pytest.fixture

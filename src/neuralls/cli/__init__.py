@@ -1,1 +1,1 @@
-"""Command-line interface scripts for neuralls."""
+"""Command-line entry points for neuralls."""

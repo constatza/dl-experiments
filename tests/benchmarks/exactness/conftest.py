@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from neuralls.solver.strategies.convergence import CombinedToleranceCriterion
+from neuralls.domain.solver.strategies.convergence import CombinedToleranceCriterion
 
 
 # System sizes for benchmarks

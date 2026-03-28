@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.solver.factories import flexible_cg, pcg
+from neuralls.domain.solver.factories import flexible_cg, pcg
 
 
 # =============================================================================

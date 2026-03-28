@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.linalg import norm
 
-from neuralls.solver.factories import flexible_cg as flexible_pcg
+from neuralls.domain.solver.factories import flexible_cg as flexible_pcg
 
 if TYPE_CHECKING:
     from collections.abc import Callable

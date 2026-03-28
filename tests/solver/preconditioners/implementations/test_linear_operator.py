@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.sparse.linalg import LinearOperator
 
-from neuralls.solver.preconditioners import LinearOperatorPreconditioner
+from neuralls.domain.solver.preconditioners import LinearOperatorPreconditioner
 
 
 def test_linear_operator_preconditioner_wraps_scipy() -> None:

@@ -7,14 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
-from neuralls.configuration.preconditioner import (
+from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
     PreconditionerType,
     RegisteredModelRefConfig,
     StandardPreconditionerConfig,
 )
-from neuralls.workflows.model_resolution import (
+from neuralls.composition.experiments.model_resolution import (
     ModelResolution,
     PreconditionerResolutionResult,
     resolve_model_ref,
@@ -39,7 +39,7 @@ def test_resolve_preconditioner_models_keeps_non_neural_specs(tmp_path: Path) ->
     assert resolved == [jacobi]
 
 
-@patch("neuralls.workflows.model_resolution.resolve_model_ref")
+@patch("neuralls.composition.experiments.model_resolution.resolve_model_ref")
 def test_resolve_preconditioner_models_sets_resolved_checkpoint(
     mock_resolve_model_ref,
     tmp_path: Path,
@@ -72,7 +72,7 @@ def test_resolve_preconditioner_models_sets_resolved_checkpoint(
     assert resolved_neural.resolved_checkpoint_path == checkpoint
 
 
-@patch("neuralls.workflows.model_resolution.resolve_model_ref")
+@patch("neuralls.composition.experiments.model_resolution.resolve_model_ref")
 def test_resolve_preconditioner_models_keeps_explicit_checkpoint(
     mock_resolve_model_ref,
     tmp_path: Path,
@@ -115,7 +115,7 @@ def test_resolve_preconditioner_models_requires_model_source(tmp_path: Path) -> 
         )
 
 
-@patch("neuralls.workflows.model_resolution.resolve_model_ref")
+@patch("neuralls.composition.experiments.model_resolution.resolve_model_ref")
 def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
     mock_resolve_model_ref,
     tmp_path: Path,
@@ -142,8 +142,8 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
     assert "Skipping neural preconditioner 'missing-neural'" in resolved.warnings[0]
 
 
-@patch("neuralls.workflows.model_resolution.MlflowClient")
-@patch("neuralls.workflows.model_resolution.search_registered_models")
+@patch("neuralls.composition.experiments.model_resolution.MlflowClient")
+@patch("neuralls.composition.experiments.model_resolution.search_registered_models")
 def test_resolve_model_ref_dataset_placeholder_requires_dataset_alias(
     mock_client_cls,
     mock_search_registered_models,
@@ -168,9 +168,9 @@ def test_resolve_model_ref_dataset_placeholder_requires_dataset_alias(
         )
 
 
-@patch("neuralls.workflows.model_resolution._download_checkpoint_for_run")
-@patch("neuralls.workflows.model_resolution.search_registered_models")
-@patch("neuralls.workflows.model_resolution.MlflowClient")
+@patch("neuralls.composition.experiments.model_resolution._download_checkpoint_for_run")
+@patch("neuralls.composition.experiments.model_resolution.search_registered_models")
+@patch("neuralls.composition.experiments.model_resolution.MlflowClient")
 def test_resolve_model_ref_normalizes_explicit_at_alias(
     mock_client_cls,
     mock_search_registered_models,

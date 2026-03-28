@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight CLI wrapper around neuralls.workflows.prediction.run_inference."""
+"""Lightweight CLI wrapper around neuralls.composition.experiments.inference.run_inference."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ import os
 import typer
 from loguru import logger
 
-from neuralls.constants import (
+from neuralls.shared.constants import (
     DEFAULT_MODEL_CONFIG,
     DEFAULT_DATA_CONFIG,
     DEFAULT_PROJECT_ROOT,
     EXIT_KEYBOARD_INTERRUPT,
 )
-from neuralls.workflows.prediction import run_inference
+from neuralls.composition.experiments.inference import run_inference
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 

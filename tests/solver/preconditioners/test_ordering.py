@@ -32,7 +32,7 @@ def test_preconditioner_ordering(
 
         Expected: iterations_ilu ≤ iterations_jacobi ≤ iterations_identity
     """
-    from neuralls.solver import flexible_cg
+    from neuralls.domain.solver import flexible_cg
 
     A, b, _ = tridiagonal_system_known_solution
     rtol, atol = integration_tolerances

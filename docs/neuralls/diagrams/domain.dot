@@ -1,0 +1,13 @@
+digraph {
+"neuralls.domain" [label="domain" style="bold"];
+"neuralls.domain.analysis" [label="analysis"];
+"neuralls.domain.generation" [label="generation"];
+"neuralls.domain.solver" [label="solver"];
+"neuralls.shared" [label="shared"];
+"neuralls.domain" -> "neuralls.domain.analysis" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.domain" -> "neuralls.domain.generation" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.domain" -> "neuralls.domain.solver" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.domain.generation" -> "neuralls.domain.solver";
+"neuralls.domain.generation" -> "neuralls.shared";
+"neuralls.domain.solver" -> "neuralls.shared";
+}

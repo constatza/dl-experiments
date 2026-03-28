@@ -7,11 +7,11 @@ import tomllib
 import numpy as np
 import pytest
 
-from neuralls.solver.models.config import SolverConfig
-from neuralls.solver.models.result import SolverResult
-from neuralls.solver.monitoring.iteration_history import IterationHistory
-from neuralls.solver.monitoring.trace_mode import TraceMode
-from neuralls.solver.utils.export import (
+from neuralls.domain.solver.models.config import SolverConfig
+from neuralls.domain.solver.models.result import SolverResult
+from neuralls.domain.solver.monitoring.iteration_history import IterationHistory
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver.utils.export import (
     ArrayFormat,
     quick_export,
     save_full_config,

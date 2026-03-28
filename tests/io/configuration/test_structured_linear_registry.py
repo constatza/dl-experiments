@@ -6,10 +6,10 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-from neuralls.io.loader import load_experiment
-from neuralls.configuration.master_registry import list_experiment_bindings
-from neuralls.io.loader import load_validated_master_config
-from neuralls.io.toml_loader import load_model_config
+from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.platform.config.registry import list_experiment_bindings
+from neuralls.composition.experiments.assembler import load_validated_master_config
+from neuralls.platform.config.loaders import load_model_config
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("dlkit") is None,

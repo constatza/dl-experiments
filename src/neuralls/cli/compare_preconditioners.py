@@ -9,14 +9,14 @@ from pathlib import Path
 import typer
 from loguru import logger
 
-from neuralls.constants import (
+from neuralls.shared.constants import (
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_CHECKMARK,
 )
-from neuralls.workflows.comparison import run_comparison_batch
-from neuralls.workflows.results import ComparisonResult
-from neuralls.workflows.specs import (
+from neuralls.composition.experiments.comparison_batch import run_comparison_batch
+from neuralls.shared.comparison.results import ComparisonResult
+from neuralls.shared.comparison.specs import (
     ComparisonOutcome,
     ComparisonParams,
 )

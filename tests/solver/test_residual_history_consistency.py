@@ -8,8 +8,8 @@ This module ensures FCG and PCG log residuals consistently:
 
 import numpy as np
 
-from neuralls.solver.factories import flexible_cg, pcg, scipy_cg
-from neuralls.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver.factories import flexible_cg, pcg, scipy_cg
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 
 
 def test_fcg_pcg_residual_history_length_match() -> None:
@@ -128,7 +128,7 @@ def test_all_solvers_residual_consistency() -> None:
 
 def test_all_solvers_with_preconditioner() -> None:
     """All three solvers must produce identical results with preconditioning."""
-    from neuralls.solver.preconditioners import JacobiPreconditioner
+    from neuralls.domain.solver.preconditioners import JacobiPreconditioner
 
     A = np.diag([2.0, 4.0, 6.0, 8.0])
     b = np.array([1.0, 2.0, 3.0, 4.0])
@@ -173,7 +173,7 @@ def test_all_solvers_with_ilu_preconditioner() -> None:
     This is critical because the original bug report specifically mentioned
     large discrepancies with ILU preconditioner.
     """
-    from neuralls.solver.preconditioners import ILUPreconditioner
+    from neuralls.domain.solver.preconditioners import ILUPreconditioner
 
     # Create a non-trivial SPD matrix (ILU needs more realistic structure)
     np.random.seed(42)

@@ -8,8 +8,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from neuralls.generation.strategies.validated_archive import ValidatedArchiveStrategy
-from neuralls.generation.strategy_configs import ValidatedArchiveConfig
+from neuralls.domain.generation.strategies.validated_archive import ValidatedArchiveStrategy
+from neuralls.domain.generation.strategy_configs import ValidatedArchiveConfig
 
 
 @pytest.fixture
@@ -138,7 +138,9 @@ def test_validated_archive_generate_invalid_warn(
     }
 
     strategy = ValidatedArchiveStrategy()
-    with patch("neuralls.generation.strategies.validated_archive.logger.warning") as mock_warning:
+    with patch(
+        "neuralls.domain.generation.strategies.validated_archive.logger.warning"
+    ) as mock_warning:
         samples = strategy.generate(sample_matrix, cfg=cfg)
 
     assert samples.rhs is not None

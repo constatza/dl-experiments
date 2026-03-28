@@ -8,13 +8,13 @@ from pathlib import Path
 
 import typer
 
-from neuralls.constants import (
+from neuralls.shared.constants import (
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
     SYMBOL_SUCCESS,
     SYMBOL_ERROR,
 )
-from neuralls.workflows.data import process_data_from_config
+from neuralls.composition.generation.process_data import process_data_from_config
 
 
 def main(

@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from neuralls.configuration.experiments import ExperimentsConfig
-from neuralls.configuration.master_registry import resolve_comparison_config_path
-from neuralls.io.toml_loader import load_raw_toml
-from neuralls.workflows.multi_training import (
+from neuralls.platform.config.models.experiments import ExperimentsConfig
+from neuralls.platform.config.registry import resolve_comparison_config_path
+from neuralls.platform.config.loaders import load_raw_toml
+from neuralls.composition.experiments.multi_training import (
     TrainingRunResult,
     _annotate_mlflow_run,
     _collect_batch_metrics,
@@ -160,13 +160,13 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path) -> None:
     )
 
     with (
-        patch("neuralls.workflows.multi_training.train_model", return_value=ckpt),
-        patch("neuralls.workflows.multi_training.register_logged_model"),
+        patch("neuralls.composition.experiments.multi_training.train_model", return_value=ckpt),
+        patch("neuralls.composition.experiments.multi_training.register_logged_model"),
         patch(
-            "neuralls.workflows.multi_training.fetch_mlflow_metrics",
+            "neuralls.composition.experiments.multi_training.fetch_mlflow_metrics",
             return_value={"eval/rel_error": 0.1},
         ),
-        patch("neuralls.workflows.multi_training.MlflowClient"),
+        patch("neuralls.composition.experiments.multi_training.MlflowClient"),
     ):
         result = _train_single(
             experiment_id="exp-1",
@@ -197,8 +197,10 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
 ) -> None:
     """After training, model is registered under experiment_id with model_class tag."""
     with (
-        patch("neuralls.workflows.multi_training.register_logged_model") as mock_register,
-        patch("neuralls.workflows.multi_training.MlflowClient"),
+        patch(
+            "neuralls.composition.experiments.multi_training.register_logged_model"
+        ) as mock_register,
+        patch("neuralls.composition.experiments.multi_training.MlflowClient"),
     ):
         _annotate_mlflow_run(
             label="1",
@@ -248,7 +250,7 @@ def test_train_batch_returns_local_output_dir(valid_experiments_toml: Path, tmp_
     cfg = ExperimentsConfig.model_validate(load_raw_toml(valid_experiments_toml))
 
     with patch(
-        "neuralls.workflows.multi_training.train_model", return_value=fake_ckpt
+        "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
     ) as mock_train:
         result = train_batch(cfg=cfg, configs_dir=valid_experiments_toml.parent)
 

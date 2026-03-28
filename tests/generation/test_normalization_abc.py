@@ -16,7 +16,7 @@ from typing import Literal, cast
 import numpy as np
 import pytest
 
-from neuralls.normalization import (
+from neuralls.shared.normalization import (
     DiagonalScale,
     ErrorTraceSamples,
     LinearSystem,

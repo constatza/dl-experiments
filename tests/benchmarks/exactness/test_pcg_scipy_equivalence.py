@@ -10,8 +10,8 @@ Expected Outcome:
 
 import pytest
 
-from neuralls.solver.factories import pcg, scipy_cg
-from neuralls.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver.factories import pcg, scipy_cg
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 from tests.benchmarks.exactness.conftest import (
     BENCHMARK_SIZES,
     MATRIX_TYPES,

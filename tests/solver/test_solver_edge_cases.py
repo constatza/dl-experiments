@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from neuralls.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 
 
 class TestTrivialConvergence:

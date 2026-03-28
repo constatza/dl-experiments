@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.configuration.data_models import DataConfigFile, OutputConfig
-from neuralls.configuration.paths import (
+from neuralls.platform.config.models.data_models import DataConfigFile, OutputConfig
+from neuralls.platform.config.paths import (
     PathContext,
     build_path_context,
     resolve_output_root,
     resolve_processed_root,
     resolve_project_root,
 )
-from neuralls.constants import (
+from neuralls.shared.constants import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_PROCESSED_DATA_DIR,
     DEFAULT_PROJECT_ROOT,

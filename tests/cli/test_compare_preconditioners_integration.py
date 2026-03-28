@@ -12,9 +12,9 @@ from typer.testing import CliRunner
 import tomli_w
 
 from neuralls.cli.compare_preconditioners import main
-from neuralls.configuration.comparison import ComparisonData, ComparisonGeneral, SolverParams
-from neuralls.workflows.results import ComparisonRecommendations, ComparisonResult
-from neuralls.workflows.specs import ComparisonOutcome, ComparisonParams
+from neuralls.shared.comparison.specs import ComparisonData, ComparisonGeneral, SolverParams
+from neuralls.shared.comparison.results import ComparisonRecommendations, ComparisonResult
+from neuralls.shared.comparison.specs import ComparisonOutcome, ComparisonParams
 
 runner = CliRunner()
 

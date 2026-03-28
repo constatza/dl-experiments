@@ -19,8 +19,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from neuralls.configuration.preconditioner import PreconditionerType
-from neuralls.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.platform.config.models.preconditioner import PreconditionerType
+from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -226,8 +226,8 @@ def test_adapter_can_be_injected_into_factory(
     Validates Dependency Inversion Principle - factory depends on
     PredictorAdapter abstraction, not concrete implementation.
     """
-    from neuralls.configuration.preconditioner import NeuralPreconditionerConfig
-    from neuralls.assembly.preconditioner import create_preconditioner
+    from neuralls.platform.config.models.preconditioner import NeuralPreconditionerConfig
+    from neuralls.composition.preconditioners.factory import create_preconditioner
 
     config = NeuralPreconditionerConfig(
         name="neural",

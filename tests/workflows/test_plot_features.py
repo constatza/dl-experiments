@@ -11,11 +11,11 @@ import pytest
 
 matplotlib.use("Agg")
 
-from neuralls.diagnostics.spectra import plot_condition_numbers
-from neuralls.plotting import plot_convergence_comparison, plot_metric_comparison
-from neuralls.solver.models.result import CGComparisonResult
-from neuralls.workflows.compare import ComparisonPaths, _generate_comparison_plots
-from neuralls.workflows.results import PlotPaths
+from neuralls.domain.analysis.spectra import plot_condition_numbers
+from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
+from neuralls.domain.solver.models.result import CGComparisonResult
+from neuralls.composition.comparison.single_run import ComparisonPaths, _generate_comparison_plots
+from neuralls.shared.comparison.results import PlotPaths
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -316,12 +316,12 @@ def test_generate_comparison_plots_includes_iterations_barplot(
     )
 
     with (
-        patch("neuralls.workflows.compare.plot_convergence_comparison"),
+        patch("neuralls.composition.comparison.single_run.plot_convergence_comparison"),
         patch(
-            "neuralls.workflows.compare.plot_condition_numbers",
+            "neuralls.composition.comparison.single_run.plot_condition_numbers",
             return_value=figures_dir / "conditions.png",
         ),
-        patch("neuralls.workflows.compare.plot_metric_comparison"),
+        patch("neuralls.composition.comparison.single_run.plot_metric_comparison"),
     ):
         result = _generate_comparison_plots(two_result_entries, simple_cond_numbers, paths)
 

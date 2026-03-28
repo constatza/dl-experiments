@@ -8,8 +8,8 @@ from pathlib import Path
 
 import typer
 
-from neuralls.workflows.runner import run_experiment_matrix
-from neuralls.constants import (
+from neuralls.composition.experiments.training_batch import run_experiment_matrix
+from neuralls.shared.constants import (
     DEFAULT_PROJECT_ROOT,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,

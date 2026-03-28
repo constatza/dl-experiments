@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from neuralls.solver.preconditioners import ICholeskyPreconditioner
+from neuralls.domain.solver.preconditioners import ICholeskyPreconditioner
 
 if TYPE_CHECKING:
     pass

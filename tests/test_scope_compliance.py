@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.io.toml_loader import load_comparison_config
+from neuralls.platform.config.loaders import load_comparison_config
 
 from tests.benchmarks.from_file.conftest import DATA_DIR, L_PATH, MATRIX_PATHS, RHS_PATHS
 from tests.scope_policy import new_root_artifact_dirs

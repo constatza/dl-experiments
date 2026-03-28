@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.configuration.mlflow_normalization import (
+from neuralls.platform.config.mlflow import (
     build_mlflow_environment,
     derive_output_root_from_tracking_uri,
     derive_sqlite_artifacts_destination,

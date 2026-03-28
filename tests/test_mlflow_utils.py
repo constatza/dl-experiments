@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.mlflow_utils import (
+from neuralls.platform.tracking.mlflow import (
     DEFAULT_ARTIFACT_SUBDIRS,
     MlflowPaths,
     MlflowRunConfig,

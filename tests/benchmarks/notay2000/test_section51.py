@@ -31,8 +31,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from neuralls.solver import flexible_cg
-from neuralls.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver import flexible_cg
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 
 from .conftest import (
     CASE1_SPEC,

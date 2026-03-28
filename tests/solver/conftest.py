@@ -775,7 +775,7 @@ def solver_factories() -> dict[str, Callable]:
             solver = solver_factories[solver_name]
             x, result = solver(A, b, ...)
     """
-    from neuralls.solver import flexible_cg, pcg, scipy_cg
+    from neuralls.domain.solver import flexible_cg, pcg, scipy_cg
 
     return {
         "fcg": flexible_cg,

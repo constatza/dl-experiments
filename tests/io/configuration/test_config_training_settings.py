@@ -8,7 +8,7 @@ import tomllib
 
 import pytest
 
-from neuralls.io.loader import load_experiment
+from neuralls.composition.experiments.assembler import load_experiment
 
 
 MINIMAL_FFNN_CONFIG = """

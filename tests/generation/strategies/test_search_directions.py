@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.generation import run_generation
-from neuralls.generation.runner import SingleRhsStrategyRegistration, _registry
+from neuralls.domain.generation import run_generation
+from neuralls.domain.generation.runner import SingleRhsStrategyRegistration, _registry
 
 
 @pytest.fixture

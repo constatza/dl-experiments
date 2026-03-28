@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.solver.preconditioners import (
+from neuralls.domain.solver.preconditioners import (
     Identity,
     JacobiPreconditioner,
     PreconditionerContext,

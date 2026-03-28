@@ -18,7 +18,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.solver import (
+from neuralls.domain.solver import (
     PCGSolver,
     FCGSolver,
     TwoTermRecurrenceStrategy,
@@ -27,8 +27,8 @@ from neuralls.solver import (
     TruncatedGramSchmidt,
     Identity,
 )
-from neuralls.solver.factories import flexible_cg, pcg
-from neuralls.solver.models.state import CGState
+from neuralls.domain.solver.factories import flexible_cg, pcg
+from neuralls.domain.solver.models.state import CGState
 
 
 class TestUnifiedCGSolver:
@@ -212,7 +212,7 @@ class TestDirectionStrategies:
 
     def test_two_term_recurrence_computes_beta(self) -> None:
         """Test TwoTermRecurrenceStrategy computes beta correctly."""
-        from neuralls.solver.models.state import CGState
+        from neuralls.domain.solver.models.state import CGState
 
         strategy = TwoTermRecurrenceStrategy()
 
@@ -258,7 +258,7 @@ class TestDirectionStrategies:
 
     def test_orthogonalization_direction_strategy_delegates(self) -> None:
         """Test OrthogonalizationDirectionStrategy delegates to orthog strategy."""
-        from neuralls.solver.models.state import CGState
+        from neuralls.domain.solver.models.state import CGState
 
         # Create orthogonalization strategy
         orthog = PeriodicRestartOrthogonalization(m_max=5)
@@ -307,7 +307,7 @@ class TestBackwardCompatibility:
         self, larger_spd_system: tuple[np.ndarray, np.ndarray, np.ndarray]
     ) -> None:
         """Test that PCGSolver produces same results as factory."""
-        from neuralls.solver import CombinedToleranceCriterion
+        from neuralls.domain.solver import CombinedToleranceCriterion
 
         A, b, x_true = larger_spd_system
 
@@ -328,7 +328,7 @@ class TestBackwardCompatibility:
         self, larger_spd_system: tuple[np.ndarray, np.ndarray, np.ndarray]
     ) -> None:
         """Test that FCGSolver produces same results as factory."""
-        from neuralls.solver import CombinedToleranceCriterion
+        from neuralls.domain.solver import CombinedToleranceCriterion
 
         A, b, x_true = larger_spd_system
 

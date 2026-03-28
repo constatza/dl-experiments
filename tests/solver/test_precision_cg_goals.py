@@ -12,8 +12,8 @@ import pytest
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from neuralls.solver import flexible_cg, pcg
-from neuralls.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver import flexible_cg, pcg
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 
 # Define very strict tolerances for double precision accuracy goals
 DOUBLE_PRECISION_ATOL = 1e-14

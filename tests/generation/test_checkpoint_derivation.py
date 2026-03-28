@@ -10,8 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from neuralls.io.arrays import derive_checkpoint_path
-from neuralls.workflows.utils.paths import extract_model_name
+from neuralls.platform.storage.arrays import derive_checkpoint_path
+from neuralls.platform.storage.filesystem import extract_model_name
 
 
 class TestExtractModelName:

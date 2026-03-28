@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from neuralls.solver.preconditioners import CallablePreconditioner
+from neuralls.domain.solver.preconditioners import CallablePreconditioner
 
 
 def test_callable_preconditioner_wraps_function() -> None:

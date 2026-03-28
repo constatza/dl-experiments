@@ -20,8 +20,8 @@ from typer.models import OptionInfo
 from typer.testing import CliRunner
 
 from neuralls.cli.run_experiments import main
-from neuralls.constants import DEFAULT_PROJECT_ROOT
-from neuralls.workflows.reporting import ExperimentResult
+from neuralls.shared.constants import DEFAULT_PROJECT_ROOT
+from neuralls.shared.training import ExperimentResult
 
 runner = CliRunner()
 

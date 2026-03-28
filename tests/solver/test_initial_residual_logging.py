@@ -2,8 +2,8 @@
 
 import pytest
 import numpy as np
-from neuralls.solver.factories import pcg, scipy_cg
-from neuralls.solver.monitoring.storage import ScalarHistory, VectorHistory
+from neuralls.domain.solver.factories import pcg, scipy_cg
+from neuralls.domain.solver.monitoring.storage import ScalarHistory, VectorHistory
 
 
 def test_scalar_history_prepend():
@@ -89,7 +89,7 @@ def test_scipy_cg_vs_fcg_consistency():
     - residual_history: RELATIVE residuals (||r|| / ||b||)
     - residual_history_abs: ABSOLUTE residuals (||r||)
     """
-    from neuralls.solver.factories import flexible_cg, pcg
+    from neuralls.domain.solver.factories import flexible_cg, pcg
 
     n = 10
     A = np.eye(n) * 2.0 + np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)

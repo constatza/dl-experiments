@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.generation.interfaces import TracingSolverCallable
+from neuralls.domain.generation.interfaces import TracingSolverCallable
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def sample_matrix(spd_matrix: np.ndarray) -> np.ndarray:
 @pytest.fixture
 def residual_solver() -> TracingSolverCallable:
     """Default tracing solver for residuals / residual_traces strategies."""
-    from neuralls.generation.config_processing import _make_residual_solver
+    from neuralls.composition.generation.processing import _make_residual_solver
 
     return _make_residual_solver()
 
@@ -33,6 +33,6 @@ def residual_solver() -> TracingSolverCallable:
 @pytest.fixture
 def direction_solver() -> TracingSolverCallable:
     """Default tracing solver for search_directions strategy."""
-    from neuralls.generation.config_processing import _make_direction_solver
+    from neuralls.composition.generation.processing import _make_direction_solver
 
     return _make_direction_solver()

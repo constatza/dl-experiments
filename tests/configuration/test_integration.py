@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.io.loader import load_experiment
-from neuralls.configuration.domain import (
+from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.shared.workspace import (
     ExperimentSpec,
     ExperimentWorkspace,
     RunnableExperiment,
 )
-from neuralls.configuration.paths import PathContext
-from neuralls.io.toml_loader import build_settings
+from neuralls.platform.config.paths import PathContext
+from neuralls.platform.config.loaders import build_settings
 
 
 @pytest.fixture
@@ -68,7 +68,7 @@ class TestBuildSettings:
         tmp_path: Path,
     ):
         """Test building settings with workspace paths injected."""
-        from neuralls.configuration.domain import ExperimentWorkspace
+        from neuralls.shared.workspace import ExperimentWorkspace
 
         # Create directories for dlkit validation
         root_dir = tmp_path / "root"
@@ -114,7 +114,7 @@ class TestBuildSettings:
         tmp_path: Path,
     ):
         """Runtime MLflow infrastructure should not be stored in settings."""
-        from neuralls.configuration.domain import ExperimentWorkspace
+        from neuralls.shared.workspace import ExperimentWorkspace
 
         workspace = ExperimentWorkspace(
             dataset_id="test",
@@ -255,7 +255,7 @@ class TestLoadExperiment:
         )
 
         # Should use DEFAULT_OUTPUT_DIR from constants
-        from neuralls.constants import DEFAULT_OUTPUT_DIR
+        from neuralls.shared.constants import DEFAULT_OUTPUT_DIR
 
         assert str(DEFAULT_OUTPUT_DIR) in str(experiment.workspace.root_dir)
 

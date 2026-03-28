@@ -334,8 +334,8 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
 
 def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path) -> None:
     """Registry-backed training passes explicit experiment/run names and structured tags."""
-    from neuralls.configuration.domain import ExperimentWorkspace
-    from neuralls.workflows.training import train_model
+    from neuralls.shared.workspace import ExperimentWorkspace
+    from neuralls.composition.experiments.training import train_model
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -367,27 +367,37 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
     training_result = SimpleNamespace(run_id="run-123", metrics={})
 
     with (
-        patch("neuralls.workflows.training.load_experiment", return_value=experiment) as mock_load,
-        patch("neuralls.workflows.training._load_and_prepare_data", return_value=(None, [], [])),
         patch(
-            "neuralls.workflows.training._configure_training_pipeline",
+            "neuralls.composition.experiments.training.load_experiment", return_value=experiment
+        ) as mock_load,
+        patch(
+            "neuralls.composition.experiments.training._load_and_prepare_data",
+            return_value=(None, [], []),
+        ),
+        patch(
+            "neuralls.composition.experiments.training._configure_training_pipeline",
             return_value=(experiment.settings, workspace),
         ),
-        patch("neuralls.workflows.training.execute", return_value=training_result) as mock_execute,
-        patch("neuralls.workflows.training.get_latest_checkpoint", return_value=checkpoint_path),
         patch(
-            "neuralls.workflows.training._resolve_mlflow_logging_config",
+            "neuralls.composition.experiments.training.execute", return_value=training_result
+        ) as mock_execute,
+        patch(
+            "neuralls.composition.experiments.training.get_latest_checkpoint",
+            return_value=checkpoint_path,
+        ),
+        patch(
+            "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
             return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
         ),
         patch(
-            "neuralls.workflows.training._resolve_mlflow_run_ids",
+            "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
             return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
         ),
-        patch("neuralls.workflows.training._log_training_context"),
-        patch("neuralls.workflows.training.write_mlflow_sidecar"),
-        patch("neuralls.workflows.training._stage_training_artifacts"),
-        patch("neuralls.workflows.training._log_training_evaluation"),
-        patch("neuralls.workflows.training.log_artifacts_to_mlflow"),
+        patch("neuralls.composition.experiments.training._log_training_context"),
+        patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),
+        patch("neuralls.composition.experiments.training._stage_training_artifacts"),
+        patch("neuralls.composition.experiments.training._log_training_evaluation"),
+        patch("neuralls.composition.experiments.training.log_artifacts_to_mlflow"),
     ):
         train_model(
             config_path=str(config_path),
@@ -425,8 +435,8 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
     tmp_path: Path,
 ) -> None:
     """Legacy callers without explicit experiment names use dataset display name and no tags."""
-    from neuralls.configuration.domain import ExperimentWorkspace
-    from neuralls.workflows.training import train_model
+    from neuralls.shared.workspace import ExperimentWorkspace
+    from neuralls.composition.experiments.training import train_model
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -457,30 +467,36 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
     )
 
     with (
-        patch("neuralls.workflows.training.load_experiment", return_value=experiment),
-        patch("neuralls.workflows.training._load_and_prepare_data", return_value=(None, [], [])),
+        patch("neuralls.composition.experiments.training.load_experiment", return_value=experiment),
         patch(
-            "neuralls.workflows.training._configure_training_pipeline",
+            "neuralls.composition.experiments.training._load_and_prepare_data",
+            return_value=(None, [], []),
+        ),
+        patch(
+            "neuralls.composition.experiments.training._configure_training_pipeline",
             return_value=(experiment.settings, workspace),
         ),
         patch(
-            "neuralls.workflows.training.execute",
+            "neuralls.composition.experiments.training.execute",
             return_value=SimpleNamespace(run_id="run-123", metrics={}),
         ) as mock_execute,
-        patch("neuralls.workflows.training.get_latest_checkpoint", return_value=checkpoint_path),
         patch(
-            "neuralls.workflows.training._resolve_mlflow_logging_config",
+            "neuralls.composition.experiments.training.get_latest_checkpoint",
+            return_value=checkpoint_path,
+        ),
+        patch(
+            "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
             return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
         ),
         patch(
-            "neuralls.workflows.training._resolve_mlflow_run_ids",
+            "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
             return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
         ),
-        patch("neuralls.workflows.training._log_training_context"),
-        patch("neuralls.workflows.training.write_mlflow_sidecar"),
-        patch("neuralls.workflows.training._stage_training_artifacts"),
-        patch("neuralls.workflows.training._log_training_evaluation"),
-        patch("neuralls.workflows.training.log_artifacts_to_mlflow"),
+        patch("neuralls.composition.experiments.training._log_training_context"),
+        patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),
+        patch("neuralls.composition.experiments.training._stage_training_artifacts"),
+        patch("neuralls.composition.experiments.training._log_training_evaluation"),
+        patch("neuralls.composition.experiments.training.log_artifacts_to_mlflow"),
     ):
         train_model(
             config_path=config_path,
@@ -513,8 +529,8 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         TrainingSettings,
     )
     from dlkit.tools.config.trainer_settings import TrainerSettings
-    from neuralls.configuration.domain import ExperimentWorkspace
-    from neuralls.workflows.training import train_model
+    from neuralls.shared.workspace import ExperimentWorkspace
+    from neuralls.composition.experiments.training import train_model
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -556,30 +572,36 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
     )
 
     with (
-        patch("neuralls.workflows.training.load_experiment", return_value=experiment),
-        patch("neuralls.workflows.training._load_and_prepare_data", return_value=(None, [], [])),
+        patch("neuralls.composition.experiments.training.load_experiment", return_value=experiment),
         patch(
-            "neuralls.workflows.training._configure_training_pipeline",
+            "neuralls.composition.experiments.training._load_and_prepare_data",
+            return_value=(None, [], []),
+        ),
+        patch(
+            "neuralls.composition.experiments.training._configure_training_pipeline",
             return_value=(base_settings, workspace),
         ),
         patch(
-            "neuralls.workflows.training.execute",
+            "neuralls.composition.experiments.training.execute",
             return_value=SimpleNamespace(run_id="run-123", metrics={}),
         ) as mock_execute,
-        patch("neuralls.workflows.training.get_latest_checkpoint", return_value=checkpoint_path),
         patch(
-            "neuralls.workflows.training._resolve_mlflow_logging_config",
+            "neuralls.composition.experiments.training.get_latest_checkpoint",
+            return_value=checkpoint_path,
+        ),
+        patch(
+            "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
             return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
         ),
         patch(
-            "neuralls.workflows.training._resolve_mlflow_run_ids",
+            "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
             return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
         ),
-        patch("neuralls.workflows.training._log_training_context"),
-        patch("neuralls.workflows.training.write_mlflow_sidecar"),
-        patch("neuralls.workflows.training._stage_training_artifacts"),
-        patch("neuralls.workflows.training._log_training_evaluation"),
-        patch("neuralls.workflows.training.log_artifacts_to_mlflow"),
+        patch("neuralls.composition.experiments.training._log_training_context"),
+        patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),
+        patch("neuralls.composition.experiments.training._stage_training_artifacts"),
+        patch("neuralls.composition.experiments.training._log_training_evaluation"),
+        patch("neuralls.composition.experiments.training.log_artifacts_to_mlflow"),
     ):
         train_model(
             config_path=config_path,

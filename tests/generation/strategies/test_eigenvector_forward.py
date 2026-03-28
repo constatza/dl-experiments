@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from neuralls.generation import run_generation
+from neuralls.domain.generation import run_generation
 
 
 def test_eigenvector_forward_registered() -> None:
     """EigenvectorForwardStrategy is registered under 'eigenvector_forward'."""
-    from neuralls.generation.runner import _registry
+    from neuralls.domain.generation.runner import _registry
 
     assert "eigenvector_forward" in _registry._strategies
 

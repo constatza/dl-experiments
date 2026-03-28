@@ -6,8 +6,8 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-from neuralls.configuration.domain import ExperimentWorkspace
-from neuralls.io.loader import load_batch
+from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.composition.experiments.assembler import load_batch
 
 # Skip all tests if dlkit has circular import issue
 pytestmark = pytest.mark.skipif(

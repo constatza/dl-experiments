@@ -12,9 +12,9 @@ Expected Outcome:
 import numpy as np
 import pytest
 
-from neuralls.solver.factories import flexible_cg, pcg
-from neuralls.solver.monitoring.trace_mode import TraceMode
-from neuralls.solver.preconditioners import ILUPreconditioner
+from neuralls.domain.solver.factories import flexible_cg, pcg
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver.preconditioners import ILUPreconditioner
 from tests.benchmarks.exactness.conftest import (
     ITER_DIFF_THRESHOLD_FCG_PCG,
     SOLUTION_COMPARISON_ATOL,

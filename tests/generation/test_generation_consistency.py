@@ -16,8 +16,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from neuralls.generation.orchestration import build_dataset
-from neuralls.io.dataset_storage import (
+from neuralls.composition.generation.dataset_builder import build_dataset
+from neuralls.platform.storage.datasets import (
     load_dense_training_arrays,
     load_matrix_dense_sample,
 )

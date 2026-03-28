@@ -6,8 +6,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.linalg import norm
 
-from neuralls.generation.strategies.random_normal import RandomNormalStrategy
-from neuralls.generation.strategies.krylov import KrylovStrategy
+from neuralls.domain.generation.strategies.random_normal import RandomNormalStrategy
+from neuralls.domain.generation.strategies.krylov import KrylovStrategy
 
 
 def test_normal_strategy_normalization():

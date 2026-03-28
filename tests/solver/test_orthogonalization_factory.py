@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.solver.strategies.orthogonalization import (
+from neuralls.domain.solver.strategies.orthogonalization import (
     ModifiedGramSchmidt,
     PeriodicRestartOrthogonalization,
     TruncatedGramSchmidt,

@@ -6,10 +6,10 @@ import torch
 from numpy.typing import NDArray
 from scipy.sparse.linalg import LinearOperator
 
-from neuralls.solver import flexible_cg, pcg, scipy_cg
-from neuralls.solver.preconditioners import Identity
-from neuralls.workflows import run_cg_comparison
-from neuralls.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver import flexible_cg, pcg, scipy_cg
+from neuralls.domain.solver.preconditioners import Identity
+from neuralls.application.comparison.execution import run_cg_comparison
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 
 # Functional/Integration Test Tolerances
 FUNCTIONAL_ATOL = 1e-6
@@ -297,8 +297,8 @@ def test_jacobi_factory_preserves_signs() -> None:
     diag = np.diag(A)
 
     # Jacobi preconditioner using factory function
-    from neuralls.assembly.preconditioner import create_preconditioner
-    from neuralls.configuration.preconditioner import StandardPreconditionerConfig
+    from neuralls.composition.preconditioners.factory import create_preconditioner
+    from neuralls.platform.config.models.preconditioner import StandardPreconditionerConfig
 
     config = StandardPreconditionerConfig(name="jacobi", type="jacobi")  # type: ignore[arg-type]
     jacobi_precond = create_preconditioner(A, config)
@@ -355,8 +355,8 @@ def test_jacobi_factory_convergence_with_fcg() -> None:
     )
 
     # With Jacobi preconditioning using factory function
-    from neuralls.assembly.preconditioner import create_preconditioner
-    from neuralls.configuration.preconditioner import StandardPreconditionerConfig
+    from neuralls.composition.preconditioners.factory import create_preconditioner
+    from neuralls.platform.config.models.preconditioner import StandardPreconditionerConfig
 
     config = StandardPreconditionerConfig(name="jacobi", type="jacobi")  # type: ignore[arg-type]
     jacobi_precond = create_preconditioner(A, config)

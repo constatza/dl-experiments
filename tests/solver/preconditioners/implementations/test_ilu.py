@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from neuralls.solver.preconditioners import ILUPreconditioner
+from neuralls.domain.solver.preconditioners import ILUPreconditioner
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -78,7 +78,7 @@ def test_ilu_improves_over_jacobi(
 
         Expected: iterations_ilu ≤ iterations_jacobi
     """
-    from neuralls.solver import pcg
+    from neuralls.domain.solver import pcg
 
     A, b, _ = tridiagonal_system_known_solution
     rtol, atol = integration_tolerances
@@ -125,7 +125,7 @@ def test_ilu_on_diagonal_matrix_matches_jacobi(
 
         Expected: iterations_ilu == iterations_jacobi
     """
-    from neuralls.solver import pcg
+    from neuralls.domain.solver import pcg
 
     A, b, _ = diagonal_system_known_solution
     rtol, atol = integration_tolerances

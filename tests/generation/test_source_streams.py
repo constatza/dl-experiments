@@ -4,13 +4,13 @@ from pathlib import Path
 
 import numpy as np
 
-from neuralls.generation.source_streams import (
+from neuralls.domain.generation.source_streams import (
     bind_sources,
     open_matrix_stream,
     open_vector_stream,
 )
-from neuralls.generation.orchestration import build_dataset
-from neuralls.io.dataset_storage import load_dense_training_arrays, resolve_dataset_paths
+from neuralls.composition.generation.dataset_builder import build_dataset
+from neuralls.platform.storage.datasets import load_dense_training_arrays, resolve_dataset_paths
 from dlkit.tools.io.sparse import open_sparse_pack
 
 

@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from neuralls.solver.preconditioners import IC0Preconditioner
+from neuralls.domain.solver.preconditioners import IC0Preconditioner
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -86,7 +86,7 @@ def test_ic0_improves_convergence(
 
         Expected: iterations_ic0 < iterations_identity
     """
-    from neuralls.solver import flexible_cg
+    from neuralls.domain.solver import flexible_cg
 
     A, b, _ = tridiagonal_system_known_solution
     rtol, atol = integration_tolerances
@@ -200,7 +200,7 @@ def test_ic0_compares_favorably_with_jacobi(
 
         Expected: iterations_ic0 <= iterations_jacobi
     """
-    from neuralls.solver import flexible_cg
+    from neuralls.domain.solver import flexible_cg
 
     A, b, _ = tridiagonal_system_known_solution
     rtol, atol = integration_tolerances

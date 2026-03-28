@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from neuralls.solver import flexible_cg, pcg, scipy_cg
+from neuralls.domain.solver import flexible_cg, pcg, scipy_cg
 
 if TYPE_CHECKING:
     from collections.abc import Callable

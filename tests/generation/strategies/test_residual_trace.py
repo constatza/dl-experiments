@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from neuralls.generation import run_generation
-from neuralls.generation.helpers import trace_rows_per_system
-from neuralls.generation.interfaces import TracingSolverCallable
+from neuralls.domain.generation import run_generation
+from neuralls.domain.generation.helpers import trace_rows_per_system
+from neuralls.domain.generation.interfaces import TracingSolverCallable
 
 
 @pytest.fixture
@@ -36,7 +36,7 @@ def solution_files(tmp_path: Path, spd_matrix: np.ndarray) -> tuple[list[Path], 
 
 def test_residual_trace_registered() -> None:
     """ResidualTraceStrategy is registered under 'residual_traces'."""
-    from neuralls.generation.runner import _registry
+    from neuralls.domain.generation.runner import _registry
 
     assert "residual_traces" in _registry._strategies
 

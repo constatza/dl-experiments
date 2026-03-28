@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from neuralls.configuration.data_models import (
+from neuralls.platform.config.models.data_models import (
     DataConfigFile,
     FlowConfig,
     GenerationConfig,

@@ -1,0 +1,34 @@
+digraph {
+"neuralls.cli" [label="cli" style="bold"];
+"neuralls.cli.compare_preconditioners" [label="compare_preconditioners"];
+"neuralls.cli.generate_multiple" [label="generate_multiple"];
+"neuralls.cli.predict" [label="predict"];
+"neuralls.cli.process_data" [label="process_data"];
+"neuralls.cli.run_experiments" [label="run_experiments"];
+"neuralls.cli.train_model" [label="train_model"];
+"neuralls.cli.train_multiple" [label="train_multiple"];
+"neuralls.composition" [label="composition"];
+"neuralls.shared" [label="shared"];
+"neuralls.cli" -> "neuralls.cli.compare_preconditioners" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.cli" -> "neuralls.cli.generate_multiple" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.cli" -> "neuralls.cli.predict" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.cli" -> "neuralls.cli.process_data" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.cli" -> "neuralls.cli.run_experiments" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.cli" -> "neuralls.cli.train_model" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.cli" -> "neuralls.cli.train_multiple" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.cli.compare_preconditioners" -> "neuralls.composition";
+"neuralls.cli.compare_preconditioners" -> "neuralls.shared";
+"neuralls.cli.generate_multiple" -> "neuralls.composition";
+"neuralls.cli.generate_multiple" -> "neuralls.shared";
+"neuralls.cli.predict" -> "neuralls.composition";
+"neuralls.cli.predict" -> "neuralls.shared";
+"neuralls.cli.process_data" -> "neuralls.composition";
+"neuralls.cli.process_data" -> "neuralls.shared";
+"neuralls.cli.run_experiments" -> "neuralls.composition";
+"neuralls.cli.run_experiments" -> "neuralls.shared";
+"neuralls.cli.train_model" -> "neuralls.composition";
+"neuralls.cli.train_model" -> "neuralls.shared";
+"neuralls.cli.train_multiple" -> "neuralls.composition";
+"neuralls.cli.train_multiple" -> "neuralls.shared";
+"neuralls.composition" -> "neuralls.shared";
+}

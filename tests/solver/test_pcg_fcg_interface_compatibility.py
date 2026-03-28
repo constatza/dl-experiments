@@ -11,8 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.solver.factories import flexible_cg, pcg
-from neuralls.solver.strategies.orthogonalization import create_fcg_orthogonalization
+from neuralls.domain.solver.factories import flexible_cg, pcg
+from neuralls.domain.solver.strategies.orthogonalization import create_fcg_orthogonalization
 
 
 @pytest.fixture
@@ -90,7 +90,7 @@ class TestPCGFCGInterfaceCompatibility:
         rhs: np.ndarray,
     ) -> None:
         """Both PCG and FCG solvers should use create_fcg_orthogonalization factory."""
-        from neuralls.solver import PCGSolver, FCGSolver
+        from neuralls.domain.solver import PCGSolver, FCGSolver
 
         # Create orthogonalization strategy
         orthog_strategy = create_fcg_orthogonalization(m_max=15)

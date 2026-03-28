@@ -12,8 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.solver.factories import pcg
-from neuralls.solver.strategies.orthogonalization import (
+from neuralls.domain.solver.factories import pcg
+from neuralls.domain.solver.strategies.orthogonalization import (
     PeriodicRestartOrthogonalization,
     TruncatedGramSchmidt,
 )
@@ -220,7 +220,7 @@ class TestPCGReorthogonalizationInterface:
         rhs: np.ndarray,
     ) -> None:
         """PCG should accept FCG(∞) orthogonalization strategy."""
-        from neuralls.solver import PCGSolver
+        from neuralls.domain.solver import PCGSolver
 
         # PCG with reorthogonalization using reorthogonalization parameter
         # PCGSolver creates CompositeDirectionStrategy internally when reorthogonalization is provided
@@ -235,7 +235,7 @@ class TestPCGReorthogonalizationInterface:
         rhs: np.ndarray,
     ) -> None:
         """PCG should accept TruncatedGramSchmidt strategy."""
-        from neuralls.solver import PCGSolver
+        from neuralls.domain.solver import PCGSolver
 
         # PCG with reorthogonalization using reorthogonalization parameter
         solver = PCGSolver(reorthogonalization=TruncatedGramSchmidt(window_size=15))
@@ -249,7 +249,7 @@ class TestPCGReorthogonalizationInterface:
         rhs: np.ndarray,
     ) -> None:
         """PCG should accept PeriodicRestartOrthogonalization strategy."""
-        from neuralls.solver import PCGSolver
+        from neuralls.domain.solver import PCGSolver
 
         # PCG with reorthogonalization using reorthogonalization parameter
         solver = PCGSolver(reorthogonalization=PeriodicRestartOrthogonalization(m_max=10))

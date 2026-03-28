@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.generation.strategy_configs import SolveConfig
-from neuralls.generation.helpers import _solve_linear_systems
+from neuralls.domain.generation.strategy_configs import SolveConfig
+from neuralls.domain.generation.helpers import _solve_linear_systems
 
 
 @pytest.fixture
@@ -219,7 +219,7 @@ def test_solve_linear_systems_cg_tolerance_effect(
 
 def test_eigenvector_inverse_with_solve_config() -> None:
     """Test EigenvectorInverseStrategy with custom solve config."""
-    from neuralls.generation.strategies.eigenvector import EigenvectorInverseStrategy
+    from neuralls.domain.generation.strategies.eigenvector import EigenvectorInverseStrategy
 
     # Create symmetric matrix
     n = 20

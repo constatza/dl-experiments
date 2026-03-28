@@ -1,4 +1,4 @@
-"""Tests for neuralls.workflows.comparison."""
+"""Tests for neuralls.composition.experiments.comparison_batch."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import tomli_w
 
-from neuralls.configuration.comparison import ComparisonData, ComparisonGeneral, SolverParams
-from neuralls.configuration.preconditioner import (
+from neuralls.shared.comparison.specs import ComparisonData, ComparisonGeneral, SolverParams
+from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
     PreconditionerType,
@@ -18,30 +18,32 @@ from neuralls.configuration.preconditioner import (
     RegisteredModelRefConfig,
     StandardPreconditionerConfig,
 )
-from neuralls.solver.models.result import CGComparisonResult
-from neuralls.workflows.comparison import (
+from neuralls.domain.solver.models.result import CGComparisonResult
+from neuralls.composition.experiments.comparison_batch import (
     _resolve_neural_preconditioners,
     _validate_neural_preconditioner,
     run_comparison,
     run_comparison_batch,
 )
-from neuralls.workflows.comparison_artifacts import (
+from neuralls.platform.reporting.artifacts import (
     coerce_comparison_result_payload,
     extract_array_artifacts,
     serialize_comparison_payload,
 )
-from neuralls.workflows.results import (
+from neuralls.shared.comparison.results import (
     ComparisonRecommendations,
     ComparisonResult,
     PlotPaths,
     RankedRecommendation,
 )
-from neuralls.workflows.specs import ComparisonOutcome, ComparisonParams
+from neuralls.shared.comparison.specs import ComparisonOutcome, ComparisonParams
 
-_LOAD_COMPARISON_CONFIG = "neuralls.workflows.comparison.load_comparison_config"
-_COMPARE_PRECONDITIONERS = "neuralls.workflows.comparison.compare_preconditioners"
-_MLFLOW_MODULE = "neuralls.workflows.comparison.mlflow"
-_SETUP_TRACKING = "neuralls.workflows.comparison.setup_comparison_tracking"
+_LOAD_COMPARISON_CONFIG = "neuralls.composition.experiments.comparison_batch.load_comparison_config"
+_COMPARE_PRECONDITIONERS = (
+    "neuralls.composition.experiments.comparison_batch.compare_preconditioners"
+)
+_MLFLOW_MODULE = "neuralls.composition.experiments.comparison_batch.mlflow"
+_SETUP_TRACKING = "neuralls.composition.experiments.comparison_batch.setup_comparison_tracking"
 
 
 def _write_comparison_config(path: Path) -> None:
@@ -359,7 +361,7 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
         patch(_MLFLOW_MODULE) as mock_mlflow,
         patch(_SETUP_TRACKING),
         patch(
-            "neuralls.workflows.comparison.resolve_preconditioner_models_with_warnings",
+            "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(
                 specs=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)],
                 warnings=(
@@ -402,7 +404,7 @@ def test_run_comparison_fails_if_all_preconditioners_are_skipped(
         patch(_MLFLOW_MODULE) as mock_mlflow,
         patch(_SETUP_TRACKING),
         patch(
-            "neuralls.workflows.comparison.resolve_preconditioner_models_with_warnings",
+            "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(
                 specs=[],
                 warnings=(
@@ -478,7 +480,7 @@ model = "valid-model"
         patch(_MLFLOW_MODULE) as mock_mlflow,
         patch(_SETUP_TRACKING),
         patch(
-            "neuralls.workflows.comparison.resolve_preconditioner_models_with_warnings",
+            "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(specs=cfg.preconditioners, warnings=()),
         ) as mock_resolve_specs,
     ):
@@ -507,7 +509,7 @@ def test_run_comparison_batch_preserves_declared_order(tmp_path: Path) -> None:
         ]
 
     with patch(
-        "neuralls.workflows.comparison.run_comparison",
+        "neuralls.composition.experiments.comparison_batch.run_comparison",
         side_effect=_fake_run_comparison,
     ) as mock_run:
         outcomes = run_comparison_batch(experiments_config, ComparisonParams())

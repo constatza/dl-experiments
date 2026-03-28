@@ -64,7 +64,7 @@ class TestOptunaNestedRuns:
         It confirms that when Optuna is enabled, the configuration supports
         nested runs.
         """
-        from neuralls.io.loader import load_experiment
+        from neuralls.composition.experiments.assembler import load_experiment
 
         data_dir = optuna_training_setup["data_dir"]
         datasets_dir = optuna_training_setup["datasets_dir"]
@@ -170,7 +170,7 @@ class TestOptunaNestedRuns:
 
         This test verifies the configuration supports this hierarchy.
         """
-        from neuralls.io.loader import load_experiment
+        from neuralls.composition.experiments.assembler import load_experiment
 
         data_dir = optuna_training_setup["data_dir"]
         datasets_dir = optuna_training_setup["datasets_dir"]
@@ -249,7 +249,7 @@ class TestOptunaNestedRuns:
         The actual nested run creation happens in dlkit's TrackingDecorator,
         which auto-detects when Optuna is running and creates child runs.
         """
-        from neuralls.io.loader import load_experiment
+        from neuralls.composition.experiments.assembler import load_experiment
 
         data_dir = optuna_training_setup["data_dir"]
         datasets_dir = optuna_training_setup["datasets_dir"]
@@ -325,7 +325,7 @@ class TestOptunaWorkflowReadiness:
         When Optuna runs multiple trials, each trial should have isolated
         artifacts. This is handled by dlkit's run context management.
         """
-        from neuralls.io.loader import load_experiment
+        from neuralls.composition.experiments.assembler import load_experiment
 
         data_dir = optuna_training_setup["data_dir"]
         datasets_dir = optuna_training_setup["datasets_dir"]

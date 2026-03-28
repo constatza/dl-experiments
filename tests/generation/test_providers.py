@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.generation.interfaces import ArchiveData
-from neuralls.generation.providers import (
+from neuralls.domain.generation.interfaces import ArchiveData
+from neuralls.domain.generation.providers import (
     ConstantInputProvider,
     FileInputProvider,
     HybridInputProvider,

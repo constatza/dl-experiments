@@ -36,11 +36,13 @@ jobs:
         name: Define graph targets
         run: |
           targets='[
-            {"name":"neuralls","dot":"docs/neuralls/diagrams/overview.dot","svg":"overview.svg","path":"src/neuralls"},
-            {"name":"workflows","dot":"docs/neuralls/diagrams/workflows.dot","svg":"workflows.svg","path":"src/neuralls/workflows"},
-            {"name":"solver","dot":"docs/neuralls/diagrams/solver.dot","svg":"solver.svg","path":"src/neuralls/solver"},
-            {"name":"workflows-inference","dot":"docs/neuralls/diagrams/workflows-inference.dot","svg":"workflows-inference.svg","path":"src/neuralls/workflows/inference"},
-            {"name":"solver-preconditioners","dot":"docs/neuralls/diagrams/solver-preconditioners.dot","svg":"solver-preconditioners.svg","path":"src/neuralls/solver/preconditioners"}
+            {"name":"overview","dot":"docs/neuralls/diagrams/overview.dot","svg":"overview.svg","root":"neuralls","context":""},
+            {"name":"cli","dot":"docs/neuralls/diagrams/cli.dot","svg":"cli.svg","root":"neuralls.cli","context":"neuralls.composition,neuralls.shared"},
+            {"name":"application","dot":"docs/neuralls/diagrams/application.dot","svg":"application.svg","root":"neuralls.application","context":"neuralls.domain,neuralls.shared"},
+            {"name":"composition","dot":"docs/neuralls/diagrams/composition.dot","svg":"composition.svg","root":"neuralls.composition","context":"neuralls.application,neuralls.platform,neuralls.domain,neuralls.shared"},
+            {"name":"domain","dot":"docs/neuralls/diagrams/domain.dot","svg":"domain.svg","root":"neuralls.domain","context":"neuralls.shared"},
+            {"name":"platform","dot":"docs/neuralls/diagrams/platform.dot","svg":"platform.svg","root":"neuralls.platform","context":"neuralls.domain,neuralls.shared"},
+            {"name":"shared","dot":"docs/neuralls/diagrams/shared.dot","svg":"shared.svg","root":"neuralls.shared","context":""}
           ]'
           echo "targets=${targets}" >> "${GITHUB_OUTPUT}"
 
@@ -76,7 +78,9 @@ jobs:
         run: uv run tach check
 
       - name: Regenerate tracked DOT graph for ${{ matrix.target.name }}
-        run: uv run tach show -o ${{ matrix.target.dot }} ${{ matrix.target.path }}
+        run: |
+          uv run tach map -o /tmp/neuralls-map.json
+          uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json ${{ matrix.target.dot }} ${{ matrix.target.root }} "${{ matrix.target.context }}"
 
       - name: Render SVG artifact for ${{ matrix.target.name }}
         run: |
@@ -116,11 +120,14 @@ jobs:
 
       - name: Regenerate tracked DOT graphs
         run: |
-          uv run tach show -o docs/neuralls/diagrams/overview.dot src/neuralls
-          uv run tach show -o docs/neuralls/diagrams/workflows.dot src/neuralls/workflows
-          uv run tach show -o docs/neuralls/diagrams/solver.dot src/neuralls/solver
-          uv run tach show -o docs/neuralls/diagrams/workflows-inference.dot src/neuralls/workflows/inference
-          uv run tach show -o docs/neuralls/diagrams/solver-preconditioners.dot src/neuralls/solver/preconditioners
+          uv run tach map -o /tmp/neuralls-map.json
+          uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/overview.dot neuralls
+          uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/cli.dot neuralls.cli neuralls.composition,neuralls.shared
+          uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/application.dot neuralls.application neuralls.domain,neuralls.shared
+          uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/composition.dot neuralls.composition neuralls.application,neuralls.platform,neuralls.domain,neuralls.shared
+          uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/domain.dot neuralls.domain neuralls.shared
+          uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/platform.dot neuralls.platform neuralls.domain,neuralls.shared
+          uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/shared.dot neuralls.shared
 
       - name: Verify tracked graphs are up to date
         run: git diff --exit-code -- docs/neuralls/diagrams

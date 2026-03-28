@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from neuralls.generation import run_generation
-from neuralls.generation.runner import MatrixStrategyRegistration
-from neuralls.generation.strategies.rhs_archive import RhsArchiveStrategy
+from neuralls.domain.generation import run_generation
+from neuralls.domain.generation.runner import MatrixStrategyRegistration
+from neuralls.domain.generation.strategies.rhs_archive import RhsArchiveStrategy
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def rhs_files(tmp_path: Path, spd_matrix: np.ndarray) -> tuple[list[Path], str]:
 
 def test_rhs_archive_registered() -> None:
     """RhsArchiveStrategy is registered under 'rhs_archive'."""
-    from neuralls.generation.runner import _registry
+    from neuralls.domain.generation.runner import _registry
 
     assert "rhs_archive" in _registry._strategies
     registration = _registry._strategies["rhs_archive"]

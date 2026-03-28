@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 
-from neuralls.workflows.compare import compare_preconditioners
-from neuralls.io.toml_loader import load_comparison_config
-from neuralls.io.dataset_storage import save_dataset
+from neuralls.composition.comparison.single_run import compare_preconditioners
+from neuralls.platform.config.loaders import load_comparison_config
+from neuralls.platform.storage.datasets import save_dataset
 
 
 def _write_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:

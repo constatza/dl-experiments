@@ -1,38 +1,45 @@
 # Docs
 
 This directory contains curated dependency graphs generated with Tach and the
-hand-maintained architecture graph.
+hand-maintained architecture graph for the clean-split module layout.
 
 - `coupling_graph.dot`: the hand-maintained architectural graph
-- `neuralls/diagrams/overview.dot`: package-level internal graph for `neuralls`
-- `neuralls/diagrams/workflows.dot`: drill-down internal graph for `neuralls.workflows`
-- `neuralls/diagrams/solver.dot`: drill-down internal graph for `neuralls.solver`
-- `neuralls/diagrams/workflows-inference.dot`: deeper hotspot graph for `neuralls.workflows.inference`
-- `neuralls/diagrams/solver-preconditioners.dot`: deeper hotspot graph for `neuralls.solver.preconditioners`
+- `neuralls/diagrams/overview.dot`: direct-submodule overview for the `neuralls` package
+- `neuralls/diagrams/cli.dot`: top-level CLI module view
+- `neuralls/diagrams/application.dot`: lower-level workflow logic under `neuralls.application`
+- `neuralls/diagrams/composition.dot`: assemblers and wiring under `neuralls.composition`
+- `neuralls/diagrams/domain.dot`: pure domain module view under `neuralls.domain`
+- `neuralls/diagrams/platform.dot`: adapters under `neuralls.platform`
+- `neuralls/diagrams/shared.dot`: shared primitives under `neuralls.shared`
 
-The current Tach configuration is intentionally coarse. `overview.dot` is the
-most informative graph today; the narrower subpath targets are kept tracked and
-regenerated in CI, but may remain sparse until the module map is tightened.
+The Tach configuration is aligned to the six-layer split:
+entrypoints, composition, application, platform, domain, and shared utility
+modules.
 
 ## Canonical Generator
 
-Tach is the source of truth for generated dependency graphs and architecture
-checks in this repo. The project-level configuration lives in `tach.toml`.
+Tach is the source of truth for both architecture checks and the underlying
+real dependency map in this repo. The project-level configuration lives in
+`tach.toml`.
 
-Regenerate one curated DOT target directly:
+Regenerate one curated DOT target directly from the actual Tach dependency map:
 
 ```bash
-uv run tach show -o docs/neuralls/diagrams/workflows.dot src/neuralls/workflows
+uv run tach map -o /tmp/neuralls-map.json
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/application.dot neuralls.application neuralls.domain,neuralls.shared
 ```
 
 Regenerate the full curated set under `docs/neuralls/diagrams/`:
 
 ```bash
-uv run tach show -o docs/neuralls/diagrams/overview.dot src/neuralls
-uv run tach show -o docs/neuralls/diagrams/workflows.dot src/neuralls/workflows
-uv run tach show -o docs/neuralls/diagrams/solver.dot src/neuralls/solver
-uv run tach show -o docs/neuralls/diagrams/workflows-inference.dot src/neuralls/workflows/inference
-uv run tach show -o docs/neuralls/diagrams/solver-preconditioners.dot src/neuralls/solver/preconditioners
+uv run tach map -o /tmp/neuralls-map.json
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/overview.dot neuralls
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/cli.dot neuralls.cli neuralls.composition,neuralls.shared
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/application.dot neuralls.application neuralls.domain,neuralls.shared
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/composition.dot neuralls.composition neuralls.application,neuralls.platform,neuralls.domain,neuralls.shared
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/domain.dot neuralls.domain neuralls.shared
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/platform.dot neuralls.platform neuralls.domain,neuralls.shared
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json docs/neuralls/diagrams/shared.dot neuralls.shared
 ```
 
 Check architecture constraints:
@@ -41,11 +48,12 @@ Check architecture constraints:
 uv run tach check
 ```
 
-For ad hoc internal graphs, pass an output path and the included package path
-straight to Tach:
+For ad hoc internal graphs, first generate the root Tach graph, then filter it
+to the package view you want:
 
 ```bash
-uv run tach show -o .tmp/dgraphs/neuralls-assembly.dot src/neuralls/assembly
+uv run tach map -o /tmp/neuralls-map.json
+uv run python scripts/render_actual_dependency_graph.py /tmp/neuralls-map.json .tmp/dgraphs/domain.dot neuralls.domain neuralls.shared
 ```
 
 ## Graph Policy
@@ -58,14 +66,13 @@ artifacts for inspection. SVG is not tracked in git, and PNG is not generated.
 Render a local SVG from a tracked DOT file with Graphviz:
 
 ```bash
-dot -Tsvg docs/neuralls/diagrams/workflows.dot -o .tmp/dgraphs/workflows.svg
+dot -Tsvg docs/neuralls/diagrams/composition.dot -o .tmp/dgraphs/composition.svg
 ```
 
 The maintained graph set is intentionally small:
 
-- one overview graph for the full package
-- selected drill-down graphs for subpackages that developers inspect directly
-- a few depth-4 hotspot graphs for areas where one more level is useful
+- one direct-submodule overview for the whole `neuralls` package
+- one graph for each top-level architectural package
 
 This keeps the graph set stable and readable instead of mirroring the full
 `src/` tree one-to-one.
@@ -74,15 +81,17 @@ This keeps the graph set stable and readable instead of mirroring the full
 
 The curated target set is:
 
-- `docs/neuralls/diagrams/overview.dot` from `src/neuralls`
-- `docs/neuralls/diagrams/workflows.dot` from `src/neuralls/workflows`
-- `docs/neuralls/diagrams/solver.dot` from `src/neuralls/solver`
-- `docs/neuralls/diagrams/workflows-inference.dot` from `src/neuralls/workflows/inference`
-- `docs/neuralls/diagrams/solver-preconditioners.dot` from `src/neuralls/solver/preconditioners`
+- `docs/neuralls/diagrams/overview.dot` from the Tach graph for `src/neuralls`, filtered to direct `neuralls.*` submodules
+- `docs/neuralls/diagrams/cli.dot` from `neuralls.cli`
+- `docs/neuralls/diagrams/application.dot` from `src/neuralls/application`
+- `docs/neuralls/diagrams/composition.dot` from `src/neuralls/composition`
+- `docs/neuralls/diagrams/domain.dot` from `src/neuralls/domain`
+- `docs/neuralls/diagrams/platform.dot` from `src/neuralls/platform`
+- `docs/neuralls/diagrams/shared.dot` from `src/neuralls/shared`
 
-These DOT graphs are generated with `tach show`. The hand-maintained
-`coupling_graph.dot` remains the narrative architecture document and is not
-generated by Tach.
+These DOT graphs are generated from `tach map` output and then aggregated for
+readability. The hand-maintained `coupling_graph.dot` remains the narrative
+architecture document and is not generated by Tach.
 
 ## Temporary Output
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from neuralls.configuration.system import (
+from neuralls.platform.config.models.system import (
     ExperimentNamesConfig,
     MlflowTopologyConfig,
     SystemConfig,

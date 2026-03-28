@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from neuralls.workflows.model_catalog import (
+from neuralls.platform.tracking.model_registry import (
     assign_dataset_alias_to_registered_model,
     build_registered_model_name,
     register_logged_model,
@@ -24,8 +24,8 @@ def test_build_registered_model_name_uses_architecture_only() -> None:
 def mock_mlflow_and_client():
     """Patched mlflow module and MlflowClient for registration tests."""
     with (
-        patch("neuralls.workflows.model_catalog.mlflow") as mock_mlflow,
-        patch("neuralls.workflows.model_catalog.MlflowClient") as mock_client_cls,
+        patch("neuralls.platform.tracking.model_registry.mlflow") as mock_mlflow,
+        patch("neuralls.platform.tracking.model_registry.MlflowClient") as mock_client_cls,
     ):
         mock_mlflow.register_model.return_value.version = "3"
         client = mock_client_cls.return_value
@@ -33,8 +33,8 @@ def mock_mlflow_and_client():
         yield mock_mlflow, client
 
 
-@patch("neuralls.workflows.model_catalog.MlflowClient")
-@patch("neuralls.workflows.model_catalog.mlflow")
+@patch("neuralls.platform.tracking.model_registry.MlflowClient")
+@patch("neuralls.platform.tracking.model_registry.mlflow")
 def test_register_logged_model_applies_aliases_and_tags(
     mock_mlflow: MagicMock,
     mock_client_cls: MagicMock,
@@ -88,8 +88,8 @@ def test_register_logged_model_applies_aliases_and_tags(
     )
 
 
-@patch("neuralls.workflows.model_catalog.MlflowClient")
-@patch("neuralls.workflows.model_catalog.mlflow")
+@patch("neuralls.platform.tracking.model_registry.MlflowClient")
+@patch("neuralls.platform.tracking.model_registry.mlflow")
 def test_register_logged_model_rejects_reserved_alias(
     mock_mlflow: MagicMock,
     _mock_client_cls: MagicMock,
@@ -107,7 +107,7 @@ def test_register_logged_model_rejects_reserved_alias(
         )
 
 
-@patch("neuralls.workflows.model_catalog.MlflowClient")
+@patch("neuralls.platform.tracking.model_registry.MlflowClient")
 def test_assign_dataset_alias_to_registered_model_picks_highest_version(
     mock_client_cls: MagicMock,
     tmp_path: Path,
@@ -148,7 +148,7 @@ def test_assign_dataset_alias_to_registered_model_picks_highest_version(
     )
 
 
-@patch("neuralls.workflows.model_catalog.MlflowClient")
+@patch("neuralls.platform.tracking.model_registry.MlflowClient")
 def test_assign_dataset_alias_to_registered_model_returns_none_when_missing(
     mock_client_cls: MagicMock,
     tmp_path: Path,
@@ -218,9 +218,9 @@ def test_register_logged_model_uses_experiment_id_as_name(
     datetime.fromisoformat(registered_at_value)
 
 
-@patch("neuralls.workflows.model_catalog.logger")
-@patch("neuralls.workflows.model_catalog.MlflowClient")
-@patch("neuralls.workflows.model_catalog.mlflow")
+@patch("neuralls.platform.tracking.model_registry.logger")
+@patch("neuralls.platform.tracking.model_registry.MlflowClient")
+@patch("neuralls.platform.tracking.model_registry.mlflow")
 def test_register_logged_model_warns_when_name_exists(
     mock_mlflow: MagicMock,
     mock_client_cls: MagicMock,
@@ -244,8 +244,8 @@ def test_register_logged_model_warns_when_name_exists(
     mock_logger.warning.assert_called_once()
 
 
-@patch("neuralls.workflows.model_catalog.MlflowClient")
-@patch("neuralls.workflows.model_catalog.mlflow")
+@patch("neuralls.platform.tracking.model_registry.MlflowClient")
+@patch("neuralls.platform.tracking.model_registry.mlflow")
 def test_register_logged_model_always_sets_registered_at(
     mock_mlflow: MagicMock,
     mock_client_cls: MagicMock,
@@ -271,8 +271,8 @@ def test_register_logged_model_always_sets_registered_at(
     datetime.fromisoformat(registered_at_calls[0].kwargs["value"])
 
 
-@patch("neuralls.workflows.model_catalog.MlflowClient")
-@patch("neuralls.workflows.model_catalog.mlflow")
+@patch("neuralls.platform.tracking.model_registry.MlflowClient")
+@patch("neuralls.platform.tracking.model_registry.mlflow")
 def test_register_logged_model_registered_at_not_overridden_by_caller(
     mock_mlflow: MagicMock,
     mock_client_cls: MagicMock,
@@ -303,8 +303,8 @@ def test_register_logged_model_two_experiments_no_alias_collision(
 ) -> None:
     """Two experiments on the same dataset register under separate names without collision."""
     with (
-        patch("neuralls.workflows.model_catalog.mlflow") as mock_mlflow,
-        patch("neuralls.workflows.model_catalog.MlflowClient") as mock_client_cls,
+        patch("neuralls.platform.tracking.model_registry.mlflow") as mock_mlflow,
+        patch("neuralls.platform.tracking.model_registry.MlflowClient") as mock_client_cls,
     ):
         mock_mlflow.register_model.return_value.version = "1"
         client = mock_client_cls.return_value

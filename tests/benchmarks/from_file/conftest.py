@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from neuralls.io.base import load_matrix
+from neuralls.platform.storage.base import load_matrix
 from scipy import linalg
 
 

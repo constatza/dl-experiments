@@ -20,15 +20,15 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from neuralls.solver.models.result import CGComparisonResult
-from neuralls.solver.preconditioners import (
+from neuralls.domain.solver.models.result import CGComparisonResult
+from neuralls.domain.solver.preconditioners import (
     Identity,
     JacobiPreconditioner,
     PreconditionerContext,
     ScheduledPreconditioner,
 )
-from neuralls.solver.preconditioners.base import NonLinearPreconditioner
-from neuralls.workflows.cg_runner import (
+from neuralls.domain.solver.preconditioners.base import NonLinearPreconditioner
+from neuralls.application.comparison.execution import (
     format_results_summary,
     run_cg_comparison,
     summarize_best_combinations,
@@ -203,7 +203,7 @@ def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
     flexible_calls: list[str] = []
     pcg_calls: list[str] = []
 
-    from neuralls.solver.models.result import SolverResult
+    from neuralls.domain.solver.models.result import SolverResult
 
     def fake_flexible_cg(*args: object, **kwargs: object) -> tuple[NDArray, SolverResult]:
         flexible_calls.append("flexible")
@@ -235,8 +235,8 @@ def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
             atol=1e-10,
         )
 
-    monkeypatch.setattr("neuralls.workflows.cg_runner.flexible_cg", fake_flexible_cg)
-    monkeypatch.setattr("neuralls.workflows.cg_runner.pcg", fake_pcg)
+    monkeypatch.setattr("neuralls.application.comparison.execution.flexible_cg", fake_flexible_cg)
+    monkeypatch.setattr("neuralls.application.comparison.execution.pcg", fake_pcg)
 
     results = run_cg_comparison(
         spd_matrix,

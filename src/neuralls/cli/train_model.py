@@ -8,14 +8,14 @@ from pathlib import Path
 
 import typer
 
-from neuralls.constants import (
+from neuralls.shared.constants import (
     DEFAULT_MODEL_CONFIG,
     DEFAULT_DATA_CONFIG,
     DEFAULT_PROJECT_ROOT,
     EXIT_FAILURE,
     EXIT_KEYBOARD_INTERRUPT,
 )
-from neuralls.workflows.training import train_model
+from neuralls.composition.experiments.training import train_model
 
 
 def main(

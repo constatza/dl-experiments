@@ -7,10 +7,9 @@ from pathlib import Path
 
 import typer
 
-from neuralls.configuration.experiments import ExperimentsConfig
-from neuralls.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
-from neuralls.io.toml_loader import load_raw_toml
-from neuralls.workflows.multi_generation import generate_batch
+from neuralls.shared.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
+from neuralls.composition.experiments.assembler import load_validated_master_config
+from neuralls.composition.generation.multi_generation import generate_batch
 
 
 def main(
@@ -21,8 +20,7 @@ def main(
 ) -> None:
     """Materialize the dataset layer without starting training."""
     try:
-        raw = load_raw_toml(config)
-        cfg = ExperimentsConfig.model_validate(raw)
+        cfg, _ = load_validated_master_config(config)
         results = generate_batch(cfg=cfg, configs_dir=config.resolve().parent)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         typer.echo(f"Error during batch generation: {exc}", err=True)

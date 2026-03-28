@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.configuration.data_models import DataConfigFile
-from neuralls.configuration.dataset_identity import (
+from neuralls.platform.config.models.data_models import DataConfigFile
+from neuralls.platform.config.models.dataset_identity import (
     normalize_registry_id,
     resolve_dataset_identity,
     resolve_dataset_identity_from_mapping,

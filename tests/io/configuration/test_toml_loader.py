@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.io.toml_loader import (
+from neuralls.platform.config.loaders import (
     load_data_config,
     load_comparison_config,
     load_raw_toml,

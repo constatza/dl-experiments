@@ -25,9 +25,9 @@ from dlkit.tools.config.mlflow_settings import MLflowSettings
 from dlkit.tools.config.trainer_settings import TrainerSettings
 from dlkit.tools.io.sparse import save_sparse_pack
 
-from neuralls.workflows.artifact_io import TrainingArrays
-from neuralls.workflows.mlflow_client import parent_run_context
-from neuralls.workflows.training import (
+from neuralls.platform.storage.training_artifacts import TrainingArrays
+from neuralls.platform.tracking.mlflow_client import parent_run_context
+from neuralls.composition.experiments.training import (
     _configure_dataloader_runtime,
     _configure_mlflow,
     _configure_output_paths,
@@ -251,9 +251,9 @@ def test_configure_mlflow_returns_new_settings(
     assert training_settings.MLFLOW.run_name is None
 
 
-@patch("neuralls.workflows.training.compute_diagnostics")
-@patch("neuralls.workflows.training.write_diagnostics_figure")
-@patch("neuralls.workflows.training.log_diagnostics_to_mlflow")
+@patch("neuralls.composition.experiments.training.compute_diagnostics")
+@patch("neuralls.composition.experiments.training.write_diagnostics_figure")
+@patch("neuralls.composition.experiments.training.log_diagnostics_to_mlflow")
 def test_log_training_evaluation_orchestration(
     mock_mlflow_log: MagicMock,
     mock_write: MagicMock,
@@ -261,7 +261,7 @@ def test_log_training_evaluation_orchestration(
     tmp_path: Path,
 ) -> None:
     """_log_training_evaluation delegates to diagnostics and figure helpers."""
-    from neuralls.workflows.training import _log_training_evaluation
+    from neuralls.composition.experiments.training import _log_training_evaluation
 
     mock_result = MagicMock()
     mock_result.to_numpy.return_value = {

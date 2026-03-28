@@ -4,13 +4,13 @@ import numpy as np
 import pytest
 from pathlib import Path
 
-from neuralls.generation.orchestration import build_dataset
-from neuralls.io.dataset_storage import (
+from neuralls.composition.generation.dataset_builder import build_dataset
+from neuralls.platform.storage.datasets import (
     load_dataset_manifest,
     load_dense_training_arrays,
     resolve_dataset_paths,
 )
-from neuralls.normalization import load_scale_from_metadata, MatrixScale
+from neuralls.shared.normalization import load_scale_from_metadata, MatrixScale
 from dlkit.tools.io.sparse import open_sparse_pack
 
 

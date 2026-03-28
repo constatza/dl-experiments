@@ -2,12 +2,12 @@
 
 import pytest
 import numpy as np
-from neuralls.solver.factories import flexible_cg, scipy_cg
-from neuralls.solver.preconditioners import (
+from neuralls.domain.solver.factories import flexible_cg, scipy_cg
+from neuralls.domain.solver.preconditioners import (
     ICholeskyPreconditioner,
     IC0Preconditioner,
 )
-from neuralls.solver.monitoring.trace_mode import TraceMode
+from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 from .conftest import (
     IC0_MATRIX_RTOL,
     IC0_MATRIX_ATOL,

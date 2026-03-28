@@ -1,0 +1,26 @@
+digraph {
+"neuralls.shared" [label="shared" style="bold"];
+"neuralls.shared.comparison" [label="comparison"];
+"neuralls.shared.constants" [label="constants"];
+"neuralls.shared.hashing" [label="hashing"];
+"neuralls.shared.inference" [label="inference"];
+"neuralls.shared.math_utils" [label="math_utils"];
+"neuralls.shared.normalization" [label="normalization"];
+"neuralls.shared.training" [label="training"];
+"neuralls.shared.types" [label="types"];
+"neuralls.shared.validation" [label="validation"];
+"neuralls.shared.workspace" [label="workspace"];
+"neuralls.shared" -> "neuralls.shared.comparison" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.constants" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.hashing" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.inference" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.math_utils" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.normalization" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.training" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.types" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.validation" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared" -> "neuralls.shared.workspace" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.shared.comparison" -> "neuralls.shared.workspace";
+"neuralls.shared.constants" -> "neuralls.shared.math_utils";
+"neuralls.shared.normalization" -> "neuralls.shared.math_utils";
+}

@@ -9,11 +9,11 @@ import numpy as np
 import tomli_w
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from neuralls.workflows.runner import run_experiment_matrix
+from neuralls.composition.experiments.training_batch import run_experiment_matrix
 import os
 
 
-@patch("neuralls.workflows.runner.train_model")
+@patch("neuralls.composition.experiments.training_batch.train_model")
 def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> None:
     """Test workflow orchestration without expensive training.
 
@@ -179,7 +179,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
     assert mock_train.called
 
 
-@patch("neuralls.workflows.runner.train_model")
+@patch("neuralls.composition.experiments.training_batch.train_model")
 def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path) -> None:
     """Test MLflow integration in workflow without expensive training.
 

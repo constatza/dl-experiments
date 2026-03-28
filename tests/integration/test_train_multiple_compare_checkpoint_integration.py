@@ -10,13 +10,13 @@ import pytest
 import tomli_w
 import torch
 
-from neuralls.configuration.experiments import ExperimentsConfig
-from neuralls.io.toml_loader import load_raw_toml
-from neuralls.workflows.comparison import run_comparison
-from neuralls.workflows.data import process_data_from_config
-from neuralls.io.dataset_storage import resolve_dataset_paths
-from neuralls.workflows.multi_training import BatchResult, train_batch
-from neuralls.workflows.specs import ComparisonParams
+from neuralls.platform.config.models.experiments import ExperimentsConfig
+from neuralls.platform.config.loaders import load_raw_toml
+from neuralls.composition.experiments.comparison_batch import run_comparison
+from neuralls.composition.generation.process_data import process_data_from_config
+from neuralls.platform.storage.datasets import resolve_dataset_paths
+from neuralls.composition.experiments.multi_training import BatchResult, train_batch
+from neuralls.shared.comparison.specs import ComparisonParams
 
 TEST_MAX_EPOCHS = 1
 TEST_LIMIT_TRAIN_BATCHES = 1

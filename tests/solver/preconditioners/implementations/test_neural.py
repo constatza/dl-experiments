@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from neuralls.solver.preconditioners import NeuralPreconditioner
-from neuralls.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.domain.solver.preconditioners.implementations.neural import NeuralPreconditioner
+from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
 
 
 class DummyPredictor(PredictorPort):

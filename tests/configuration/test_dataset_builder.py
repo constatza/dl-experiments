@@ -21,7 +21,7 @@ from dlkit.tools.config import (
 from dlkit.tools.config.core.patching import patch_model
 from dlkit.tools.config.trainer_settings import TrainerSettings
 
-from neuralls.configuration.dataset import (
+from neuralls.platform.config.models.dataset import (
     create_features_from_array,
     create_matrix_feature,
     create_targets_from_array,

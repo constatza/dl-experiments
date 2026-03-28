@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 
-import neuralls.generation
-from neuralls.generation import run_generation
-from neuralls.generation.runner import _registry
+import neuralls.domain.generation
+from neuralls.domain.generation import run_generation
+from neuralls.domain.generation.runner import _registry
 
 
 EXPECTED_STRATEGIES = {
@@ -35,8 +35,8 @@ EXPECTED_STRATEGIES = {
 
 
 def test_all_strategy_modules_register_on_package_import() -> None:
-    """All strategy names are available after importing neuralls.generation."""
-    assert neuralls.generation.strategies is not None
+    """All strategy names are available after importing neuralls.domain.generation."""
+    assert neuralls.domain.generation.strategies is not None
     assert set(_registry._strategies) == EXPECTED_STRATEGIES
 
 

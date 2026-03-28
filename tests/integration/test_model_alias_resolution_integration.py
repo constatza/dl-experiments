@@ -12,16 +12,16 @@ import mlflow
 import pytest
 from mlflow.tracking import MlflowClient
 
-from neuralls.configuration.preconditioner import (
+from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
     PreconditionerType,
     RegisteredModelRefConfig,
 )
-from neuralls.workflows.model_catalog import (
+from neuralls.platform.tracking.model_registry import (
     assign_dataset_alias_to_registered_model,
     register_logged_model,
 )
-from neuralls.workflows.model_resolution import resolve_model_ref
+from neuralls.composition.experiments.model_resolution import resolve_model_ref
 
 
 pytestmark = [

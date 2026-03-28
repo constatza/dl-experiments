@@ -13,9 +13,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from neuralls.generation import run_generation
-from neuralls.generation.helpers import trace_rows_per_system
-from neuralls.generation.interfaces import TracingSolverCallable
+from neuralls.domain.generation import run_generation
+from neuralls.domain.generation.helpers import trace_rows_per_system
+from neuralls.domain.generation.interfaces import TracingSolverCallable
 
 
 @pytest.fixture
@@ -49,14 +49,14 @@ def solution_files(tmp_path: Path, spd_matrix: np.ndarray) -> tuple[list[Path], 
 
 def test_residuals_strategy_registered() -> None:
     """The primary residual-error trace strategy is registered as 'residuals'."""
-    from neuralls.generation.runner import _registry
+    from neuralls.domain.generation.runner import _registry
 
     assert "residuals" in _registry._strategies
 
 
 def test_gaussian_residuals_strategy_registered() -> None:
     """Gaussian residual traces are available as an explicit strategy."""
-    from neuralls.generation.runner import _registry
+    from neuralls.domain.generation.runner import _registry
 
     assert "gaussian_residuals" in _registry._strategies
 

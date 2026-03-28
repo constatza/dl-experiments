@@ -1,0 +1,1 @@
+"""Pure numerical analysis helpers."""

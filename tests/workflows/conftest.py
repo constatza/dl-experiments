@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.configuration.preconditioner import (
+from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
     PreconditionerType,
     StandardPreconditionerConfig,
 )
-from neuralls.workflows.multi_training import TrainingRunResult
+from neuralls.composition.experiments.multi_training import TrainingRunResult
 
 # ---------------------------------------------------------------------------
 # Named constants

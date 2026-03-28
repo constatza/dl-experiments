@@ -8,13 +8,13 @@ import pytest
 
 from scipy.linalg import eigh
 
-from neuralls.generation import generate_mixture
-from neuralls.generation.helpers import (
+from neuralls.domain.generation import generate_mixture
+from neuralls.domain.generation.helpers import (
     _generate_eigenvector_combinations,
     trace_rows_per_system,
 )
-from neuralls.generation.orchestration import _shuffle_samples
-from neuralls.normalization import (
+from neuralls.domain.generation.orchestration import _shuffle_samples
+from neuralls.shared.normalization import (
     ErrorTraceSamples,
     ResidualTraceSamples,
     apply_normalization,
@@ -968,7 +968,7 @@ def test_eigenvector_backward_compatible_defaults(tmp_path: Path) -> None:
         Note: The orchestration layer filters out unknown parameters before passing to strategies,
         so this test validates by directly instantiating the config class.
         """
-        from neuralls.generation.strategy_configs import KrylovConfig
+        from neuralls.domain.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
 
         # Try to create a config with an unknown parameter directly
