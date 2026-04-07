@@ -102,7 +102,7 @@ class TestOptunaNestedRuns:
             },
             "MODEL": {
                 "name": "OptunaTestModel",
-                "module_path": "dlkit.nn.ffnn",
+                "module_path": "dlkit.nn",
                 "hidden_size": 2,
                 "num_layers": 1,
             },
@@ -199,7 +199,7 @@ class TestOptunaNestedRuns:
             "SESSION": {"seed": 42, "name": "HierarchyModel"},
             "MODEL": {
                 "name": "TestFFNN",
-                "module_path": "dlkit.nn.ffnn",
+                "module_path": "dlkit.nn",
                 "hidden_size": 2,
                 "num_layers": 1,
             },
@@ -275,7 +275,7 @@ class TestOptunaNestedRuns:
             "SESSION": {"seed": 42},
             "MODEL": {
                 "name": "DelegationModel",
-                "module_path": "dlkit.nn.ffnn",
+                "module_path": "dlkit.nn",
                 "hidden_size": 2,
                 "num_layers": 1,
             },
@@ -351,7 +351,7 @@ class TestOptunaWorkflowReadiness:
             "SESSION": {"seed": 42},
             "MODEL": {
                 "name": "IsolationModel",
-                "module_path": "dlkit.nn.ffnn",
+                "module_path": "dlkit.nn",
                 "hidden_size": 2,
                 "num_layers": 1,
             },

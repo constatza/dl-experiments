@@ -21,7 +21,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from dlkit.interfaces.api.domain.models import TrainingResult
+from dlkit.common.results import TrainingResult
 
 
 # ---------------------------------------------------------------------------
@@ -253,18 +253,18 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     This test documents the expected API so _log_training_evaluation() can rely on it.
     Runs a single fast_dev_run training step using DLKit programmatic settings.
     """
-    import dlkit.runtime.workflows.strategies.tracking.uri_resolver as uri_resolver
+    import dlkit.engine.tracking.uri_resolver as uri_resolver
     from dlkit.interfaces.api import execute
-    from dlkit.tools.config import GeneralSettings, SessionSettings
-    from dlkit.tools.config import DataModuleSettings, DatasetSettings, TrainingSettings
-    from dlkit.tools.config.dataloader_settings import DataloaderSettings
-    from dlkit.tools.config.mlflow_settings import MLflowSettings
-    from dlkit.tools.config.trainer_settings import TrainerSettings
-    from dlkit.tools.config.components.model_components import (
+    from dlkit.infrastructure.config import GeneralSettings, SessionSettings
+    from dlkit.infrastructure.config import DataModuleSettings, DatasetSettings, TrainingSettings
+    from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
+    from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+    from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+    from dlkit.infrastructure.config.model_components import (
         ModelComponentSettings,
         MetricComponentSettings,
     )
-    from dlkit.tools.config.data_entries import ValueFeature, ValueTarget
+    from dlkit.infrastructure.config.data_entries import ValueFeature, ValueTarget
 
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
@@ -295,13 +295,13 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
             metrics=(
                 MetricComponentSettings(
                     name="MeanSquaredError",
-                    module_path="dlkit.core.training.metrics",
+                    module_path="dlkit.domain.metrics",
                 ),
             ),
         ),
         MODEL=ModelComponentSettings(
             name="ConstantWidthFFNN",
-            module_path="dlkit.core.models.nn.ffnn.simple",
+            module_path="dlkit.domain.nn.ffnn.simple",
             hidden_size=4,
             num_layers=1,
         ),
@@ -417,12 +417,13 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
     assert load_args[1] == data_config_path
 
     execute_kwargs = mock_execute.call_args.kwargs
-    assert execute_kwargs["experiment_name"] == "Train"
+    overrides = execute_kwargs["overrides"]
+    assert overrides["experiment_name"] == "Train"
     assert re.match(
         r"^Experiment One-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
-        execute_kwargs["run_name"],
+        overrides["run_name"],
     )
-    assert execute_kwargs["tags"] == {
+    assert overrides["tags"] == {
         "phase": "training",
         "experiment_id": "exp-1",
         "dataset_id": "dataset-1",
@@ -509,26 +510,27 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
         )
 
     execute_kwargs = mock_execute.call_args.kwargs
-    assert execute_kwargs["experiment_name"] == "Train"
+    overrides = execute_kwargs["overrides"]
+    assert overrides["experiment_name"] == "Train"
     assert re.match(
         r"^Legacy Experiment-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
-        execute_kwargs["run_name"],
+        overrides["run_name"],
     )
-    assert execute_kwargs["tags"] is None
+    assert overrides["tags"] == {}
 
 
 def test_train_model_max_epochs_override_keeps_original_settings_immutable(
     tmp_path: Path,
 ) -> None:
     """`max_epochs` override patches a fresh settings object before execute()."""
-    from dlkit import GeneralSettings
-    from dlkit.tools.config import (
+    from dlkit.infrastructure.config import GeneralSettings
+    from dlkit.infrastructure.config import (
         DatasetSettings,
         ModelComponentSettings as ModelSettings,
         SessionSettings,
         TrainingSettings,
     )
-    from dlkit.tools.config.trainer_settings import TrainerSettings
+    from dlkit.infrastructure.config.trainer_settings import TrainerSettings
     from neuralls.shared.workspace import ExperimentWorkspace
     from neuralls.composition.experiments.training import train_model
 

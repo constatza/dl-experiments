@@ -9,7 +9,17 @@ linear systems faster. The repo is organized around one practical workflow:
 
 ## Start Here
 
-Install dependencies with `uv`, then use the commands below in order.
+Install dependencies with `uv`, selecting exactly one PyTorch backend extra:
+
+```bash
+uv sync --extra cpu
+uv sync --extra cu128
+uv sync --extra cu130
+```
+
+The `cpu`, `cu128`, and `cu130` extras map to the matching PyTorch wheel
+indexes and are mutually exclusive. After syncing one of them, use the commands
+below in order.
 
 ### 1. Build one dataset
 

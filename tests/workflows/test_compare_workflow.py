@@ -83,7 +83,7 @@ def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
                 "",
                 "[MODEL]",
                 'name = "NormScaledConstantWidthFFNN"',
-                'module_path = "dlkit.nn.ffnn"',
+                'module_path = "dlkit.nn"',
                 "",
                 "[TRAINING.trainer]",
                 "max_epochs = 1",

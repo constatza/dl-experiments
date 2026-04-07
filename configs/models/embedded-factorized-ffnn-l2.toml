@@ -5,7 +5,7 @@ precision = "float64"
 [MODEL]
 # Norm-scaled embedded FFNN with factorized parametric body layers.
 name = "NormScaledEmbeddedFactorizedFFNN"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 hidden_size = 500
 num_layers = 3
 residual = true
@@ -51,12 +51,12 @@ min_lr = 1e-14
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"
-module_path = "dlkit.core.training.functional"
+module_path = "dlkit.domain.losses"
 target_key = "targets.solutions"
 
 [[TRAINING.metrics]]
 name = "NormalizedVectorNormError"
-module_path = "dlkit.core.training.metrics"
+module_path = "dlkit.domain.metrics"
 norm_ord = 2
 vector_dim = -1
 

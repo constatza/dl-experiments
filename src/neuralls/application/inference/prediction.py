@@ -14,9 +14,8 @@ import numpy as np
 import torch
 from loguru import logger
 
-from dlkit.interfaces.api import load_model
-from dlkit.core.postprocessing import stack_batches
-from dlkit.tools.config.precision.strategy import PrecisionStrategy
+from dlkit.interfaces.inference import load_model
+from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 
 from neuralls.shared.inference import InferenceData, InferencePredictions
 
@@ -104,7 +103,11 @@ def process_predictions(
     Returns:
         Flattened prediction array
     """
-    stacked = stack_batches(raw_predictions, mode="stack")
+    normalized = [
+        prediction if prediction.ndim > 0 else prediction.unsqueeze(0)
+        for prediction in raw_predictions
+    ]
+    stacked = torch.cat(normalized, dim=0).detach().cpu().numpy()
     return stacked.ravel()
 
 

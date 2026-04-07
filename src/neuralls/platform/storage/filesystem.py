@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from dlkit import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings
 
 from neuralls.shared.workspace import ExperimentWorkspace
 from neuralls.shared.constants import DEFAULT_OUTPUT_DIR

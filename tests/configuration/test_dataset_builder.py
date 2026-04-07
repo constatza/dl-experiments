@@ -11,15 +11,15 @@ import importlib.util
 
 import numpy as np
 import pytest
-from dlkit import GeneralSettings
-from dlkit.tools.config import (
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import (
     DatasetSettings,
     ModelComponentSettings as ModelSettings,
     SessionSettings,
     TrainingSettings,
 )
-from dlkit.tools.config.core.patching import patch_model
-from dlkit.tools.config.trainer_settings import TrainerSettings
+from dlkit.infrastructure.config.core.patching import patch_model
+from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 
 from neuralls.platform.config.models.dataset import (
     create_features_from_array,

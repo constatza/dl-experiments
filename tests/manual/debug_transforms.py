@@ -36,7 +36,7 @@ def _write_configs(root: Path) -> tuple[Path, Path]:
                 "",
                 "[MODEL]",
                 'name = "DebugModel"',
-                'module_path = "dlkit.nn.ffnn"',
+                'module_path = "dlkit.nn"',
                 "",
                 "[TRAINING]",
                 "[TRAINING.trainer]",

@@ -20,7 +20,7 @@ seed = 42
 
 [MODEL]
 name = "FFNNModel"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]
@@ -43,7 +43,7 @@ seed = 42
 
 [MODEL]
 name = "NormScaledLinearFFNN"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]
@@ -67,7 +67,7 @@ seed = 42
 
 [MODEL]
 name = "GNNModel"
-module_path = "dlkit.nn.gnn"
+module_path = "dlkit.domain.nn.graph"
 
 [TRAINING]
 [TRAINING.trainer]
@@ -230,7 +230,7 @@ seed = 42
 
 [MODEL]
 name = ""
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]
@@ -263,7 +263,7 @@ seed = 42
 
 [MODEL]
 name = "TestModel"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]

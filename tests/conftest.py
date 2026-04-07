@@ -42,7 +42,7 @@ def _patch_dlkit_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Patch DLKit's imported environment singleton to the per-test root."""
-    from dlkit.tools.config.environment import env as dlkit_env
+    from dlkit.infrastructure.config.environment import env as dlkit_env
 
     monkeypatch.setattr(dlkit_env, "root_dir", runtime_root, raising=False)
     monkeypatch.setattr(dlkit_env, "internal_dir", str(runtime_root / ".dlkit"), raising=False)

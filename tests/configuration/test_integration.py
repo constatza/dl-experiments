@@ -27,7 +27,7 @@ seed = 42
 
 [MODEL]
 name = "TestModel"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]

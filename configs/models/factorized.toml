@@ -5,7 +5,7 @@ precision = "float64"
 [MODEL]
 # Factorized linear layer with norm scaling
 name = "NormScaledFactorizedLinear"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 # Checkpoint to resume training from (full training state)
@@ -43,13 +43,13 @@ min_lr = 1e-7
 
 [TRAINING.loss_function]
 name = "relative_energy_norm_loss"
-module_path = "dlkit.core.training.functional"
+module_path = "dlkit.domain.losses"
 target_key = "targets.solutions"
 extra_inputs = [{ key = "features.matrix", arg = "matrix" }]
 
 [[TRAINING.metrics]]
 name = "NormalizedVectorNormError"
-module_path = "dlkit.core.training.metrics"
+module_path = "dlkit.domain.metrics"
 norm_ord = 2
 vector_dim = -1
 

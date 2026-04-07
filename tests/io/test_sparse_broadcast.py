@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from dlkit.tools.io.sparse import open_sparse_pack
+from dlkit.io import open_sparse_pack
 from neuralls.platform.storage.datasets import (
     SparsePackAccumulator,
     resolve_dataset_paths,

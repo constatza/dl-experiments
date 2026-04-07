@@ -120,7 +120,7 @@ def model_config_path(config_root: Path) -> Path:
         },
         "MODEL": {
             "name": "NormScaledLinearFFNN",
-            "module_path": "dlkit.nn.ffnn",
+            "module_path": "dlkit.nn",
         },
         "TRAINING": {
             "trainer": {

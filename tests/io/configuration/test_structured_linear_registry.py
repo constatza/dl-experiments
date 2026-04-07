@@ -24,7 +24,7 @@ precision = "float64"
 
 [MODEL]
 name = "{model_name}"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]

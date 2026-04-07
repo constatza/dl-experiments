@@ -20,7 +20,7 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
 
     model_config = {
         "SESSION": {"name": "SystemInjected"},
-        "MODEL": {"name": "TestModel", "module_path": "dlkit.nn.ffnn"},
+        "MODEL": {"name": "TestModel", "module_path": "dlkit.nn"},
         "TRAINING": {
             "trainer": {"max_epochs": 1, "accelerator": "cpu"},
         },

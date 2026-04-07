@@ -109,7 +109,7 @@ class TestTrainingPipelineWithMLflow:
             },
             "MODEL": {
                 "name": "NormScaledConstantWidthFFNN",
-                "module_path": "dlkit.nn.ffnn",
+                "module_path": "dlkit.nn",
                 "hidden_size": 2,
                 "num_layers": 1,
             },
@@ -126,7 +126,7 @@ class TestTrainingPipelineWithMLflow:
                 "metrics": [
                     {
                         "name": "NormalizedVectorNormError",
-                        "module_path": "dlkit.core.training.metrics",
+                        "module_path": "dlkit.domain.metrics",
                         "norm_ord": 2,
                         "vector_dim": -1,
                     }
@@ -214,7 +214,7 @@ class TestTrainingPipelineWithMLflow:
             "SESSION": {"seed": 42, "name": "NestedTestSession"},
             "MODEL": {
                 "name": "TestFFNN",
-                "module_path": "dlkit.nn.ffnn",
+                "module_path": "dlkit.nn",
                 "hidden_size": 2,
                 "num_layers": 1,
             },
@@ -279,7 +279,7 @@ class TestTrainingPipelineWithMLflow:
             "SESSION": {"seed": 42},
             "MODEL": {
                 "name": "TestModel",
-                "module_path": "dlkit.nn.ffnn",
+                "module_path": "dlkit.nn",
                 "hidden_size": 2,
                 "num_layers": 1,
             },

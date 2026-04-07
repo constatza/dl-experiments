@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 from loguru import logger
 
-from dlkit.tools.io import load_array
+from dlkit.io import load_array
 
 from neuralls.shared.workspace import ExperimentWorkspace
 from neuralls.platform.reporting.synthetic import generate_synthetic_test_case

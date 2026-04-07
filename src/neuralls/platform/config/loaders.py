@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import Any
 
 import tomli_w
-from dlkit.tools.config import TrainingWorkflowSettings
-from dlkit.tools.config.core.patching import patch_model
-from dlkit.tools.io import load_settings
-from dlkit.tools.io.config import load_config
-from dlkit.tools import io as dlkit_io
+from dlkit.infrastructure.config.factories import load_settings
+from dlkit.infrastructure.config.core.patching import patch_model
+from dlkit.infrastructure.config import TrainingWorkflowSettings
+from dlkit.infrastructure.io.config_loader import (
+    _sync_session_root_to_environment,
+    load_config,
+)
 
 from neuralls.platform.config.models.comparison import ComparisonConfig, parse_comparison_config
 from neuralls.platform.config.models.data_models import DataConfigFile
@@ -164,14 +166,10 @@ def build_inference_settings(
     _INFERENCE_EXCLUDED = {"TRAINING", "MLFLOW", "OPTUNA"}
     toml_data = load_config(model_config_path, raw=True)
     inference_data = {k: v for k, v in toml_data.items() if k not in _INFERENCE_EXCLUDED}
-    from dlkit.tools.config.workflow_configs import InferenceWorkflowConfig
+    from dlkit.infrastructure.config.workflow_configs import InferenceWorkflowConfig
 
     settings = InferenceWorkflowConfig.model_validate(inference_data)
-    sync_session_root_to_environment = getattr(
-        dlkit_io.config,
-        "_sync_session_root_to_environment",
-    )
-    sync_session_root_to_environment(settings)
+    _sync_session_root_to_environment(settings)
 
     run_name = mlflow_run_name if mlflow_run_name is not None else workspace.run_id
 

@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from loguru import logger
 
-from dlkit.tools.io import load_array
+from dlkit.io import load_array
 
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.shared.constants import PREDICTION_NORM_EPSILON

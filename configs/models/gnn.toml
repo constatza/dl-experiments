@@ -7,7 +7,7 @@ precision = "float64"
 [MODEL]
 # Model class path - using new dlkit GATv2Projection
 name = "ScaledGATv2Projection"
-module_path = "dlkit.nn.graph"
+module_path = "dlkit.domain.nn.graph"
 hidden_size = 12
 num_layers = 3
 #dropout = 0.1
@@ -38,7 +38,7 @@ min_lr = 1e-14
 
 [TRAINING.loss_function]
 name = "relative_energy_norm_loss"
-module_path = "dlkit.core.training.functional"
+module_path = "dlkit.domain.losses"
 target_key = "targets.solutions"
 extra_inputs = [{ key = "features.matrix", arg = "matrix" }]
 
@@ -54,7 +54,7 @@ enable_version_counter = false
 
 [[TRAINING.metrics]]
 name = "NormalizedVectorNormError"
-module_path = "dlkit.core.training.metrics"
+module_path = "dlkit.domain.metrics"
 norm_ord = 2
 vector_dim = -1
 
@@ -71,7 +71,7 @@ shuffle = true
 [DATASET]
 name = "GraphDataset"
 
-# GraphDataset configuration (dlkit.core.datasets.graph.GraphDataset)
+# GraphDataset configuration (dlkit.engine.data.datasets.graph.GraphDataset)
 #
 # Dataset uses PRE-NORMALIZED data from the data generation pipeline.
 # Data is normalized during generation and saved as split arrays + manifest.

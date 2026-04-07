@@ -11,7 +11,7 @@ from neuralls.platform.storage.datasets import (
     resolve_dataset_paths,
 )
 from neuralls.shared.normalization import load_scale_from_metadata, MatrixScale
-from dlkit.tools.io.sparse import open_sparse_pack
+from dlkit.io import open_sparse_pack
 
 
 @pytest.fixture

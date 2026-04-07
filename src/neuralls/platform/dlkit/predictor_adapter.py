@@ -131,10 +131,10 @@ class DLKitAdapter(PredictorAdapter):
     @staticmethod
     def _load_dlkit_symbols() -> tuple[Any, Any]:
         """Load optional DLKit symbols when the dependency is available."""
-        if find_spec("dlkit.interfaces.api") is None:
+        if find_spec("dlkit.engine.inference.api") is None:
             raise ImportError("DLKit not installed. Install with: pip install dlkit")
-        api = import_module("dlkit.interfaces.api")
-        precision = import_module("dlkit.tools.config.precision.strategy")
+        api = import_module("dlkit.engine.inference.api")
+        precision = import_module("dlkit.infrastructure.precision.strategy")
         return api.load_model, precision.PrecisionStrategy
 
     def create_predictor(

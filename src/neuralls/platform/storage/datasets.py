@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from dlkit.tools.io.sparse import SparseFormat, open_sparse_pack, save_sparse_pack
+from dlkit.io import SparseFormat, open_sparse_pack, save_sparse_pack
 
 from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 from neuralls.domain.generation.ports import DatasetWriterPort

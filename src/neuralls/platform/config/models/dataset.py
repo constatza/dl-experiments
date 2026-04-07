@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from dlkit import GeneralSettings
-from dlkit.tools.config.core.patching import patch_model
-from dlkit.tools.config.data_entries import ValueFeature, ValueTarget
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.core.patching import patch_model
+from dlkit.infrastructure.config.data_entries import ValueFeature, ValueTarget
 
 
 def create_features_from_array(

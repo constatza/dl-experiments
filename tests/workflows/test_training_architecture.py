@@ -11,19 +11,19 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from dlkit import GeneralSettings
-from dlkit.tools.config import (
+from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config import (
     DataModuleSettings,
     DatasetSettings,
     ModelComponentSettings as ModelSettings,
     SessionSettings,
     TrainingSettings,
 )
-from dlkit.tools.config.data_entries import IPathBased
-from dlkit.tools.config.dataloader_settings import DataloaderSettings
-from dlkit.tools.config.mlflow_settings import MLflowSettings
-from dlkit.tools.config.trainer_settings import TrainerSettings
-from dlkit.tools.io.sparse import save_sparse_pack
+from dlkit.infrastructure.config.data_entries import IPathBased
+from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
+from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+from dlkit.io import save_sparse_pack
 
 from neuralls.platform.storage.training_artifacts import TrainingArrays
 from neuralls.platform.tracking.mlflow_client import parent_run_context

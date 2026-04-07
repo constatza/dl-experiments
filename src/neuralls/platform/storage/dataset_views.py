@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from dlkit.tools.io import load_array
+from dlkit.io import load_array
 
 from neuralls.platform.storage.datasets import (
     load_dataset_manifest,

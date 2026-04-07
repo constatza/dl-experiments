@@ -6,7 +6,7 @@ precision = "float64"
 # Plain constant-width FFNN without residual blocks.
 # dlkit does not expose a norm-scaled variant for this architecture.
 name = "ConstantWidthSimpleFFNN"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 hidden_size = 500
 num_layers = 3
 
@@ -51,12 +51,12 @@ min_lr = 1e-14
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"
-module_path = "dlkit.core.training.functional"
+module_path = "dlkit.domain.losses"
 target_key = "targets.solutions"
 
 [[TRAINING.metrics]]
 name = "NormalizedVectorNormError"
-module_path = "dlkit.core.training.metrics"
+module_path = "dlkit.domain.metrics"
 norm_ord = 2
 vector_dim = -1
 

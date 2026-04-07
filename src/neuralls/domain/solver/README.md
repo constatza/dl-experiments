@@ -82,4 +82,6 @@ The DLKit-backed predictor adapter now lives under
 still lives in
 `neuralls.domain.solver.preconditioners.implementations.neural`, but it is not
 re-exported from the aggregate preconditioner package to keep the solver layer
-from depending on platform exports.
+from depending on platform exports. That adapter speaks directly to the current
+DLKit inference runtime under `dlkit.engine.inference`, so solver code remains
+isolated from DLKit's infrastructure and configuration packages.

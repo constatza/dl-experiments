@@ -44,7 +44,7 @@ seed = 42
 
 [MODEL]
 name = "MinimalModel"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]

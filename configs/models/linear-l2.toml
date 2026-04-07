@@ -5,7 +5,7 @@ precision = "float64"
 [MODEL]
 # Single linear layer (no hidden layers)
 name = "NormScaledLinearFFNN"
-module_path = "dlkit.nn.ffnn"
+module_path = "dlkit.nn"
 
 [TRAINING]
 # Checkpoint to resume training from (full training state)
@@ -43,12 +43,12 @@ min_lr = 1e-7
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"
-module_path = "dlkit.core.training.functional"
+module_path = "dlkit.domain.losses"
 target_key = "targets.solutions"
 
 [[TRAINING.metrics]]
 name = "RelativeEnergyNormError"
-module_path = "dlkit.core.training.metrics"
+module_path = "dlkit.domain.metrics"
 extra_inputs = [{ key = "features.matrix", arg = "matrix" }]
 
 [DATASET]

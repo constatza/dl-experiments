@@ -11,7 +11,7 @@ from neuralls.domain.generation.source_streams import (
 )
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.platform.storage.datasets import load_dense_training_arrays, resolve_dataset_paths
-from dlkit.tools.io.sparse import open_sparse_pack
+from dlkit.io import open_sparse_pack
 
 
 def test_open_matrix_stream_from_npy_stack(tmp_path: Path) -> None:

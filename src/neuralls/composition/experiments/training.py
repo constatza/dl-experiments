@@ -10,20 +10,20 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-from dlkit import GeneralSettings
+from dlkit.infrastructure.config import GeneralSettings
 from dlkit.interfaces.api import execute
-from dlkit.tools.config.core.patching import patch_model
-from dlkit.tools.config.data_entries import (
+from dlkit.infrastructure.config.core.patching import patch_model
+from dlkit.infrastructure.config.data_entries import (
     Feature,
     FeatureType,
     SparseFeature,
     Target,
     TargetType,
 )
-from dlkit.tools.config.dataset_settings import DatasetSettings
-from dlkit.tools.io.sparse import PackFiles
+from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.io import PackFiles
 from loguru import logger
 from mlflow.tracking import MlflowClient
 import numpy as np
@@ -99,7 +99,11 @@ def _load_and_prepare_data(
             - targets: List of path-based target configs for DLKit
     """
     arrays = load_training_arrays(workspace.data_dir)
-    dataset_name = settings.DATASET.name if settings.DATASET else None
+    dataset_name = (
+        settings.DATASET.name
+        if settings.DATASET and isinstance(settings.DATASET.name, str)
+        else None
+    )
     features = _create_feature_configs(arrays, dataset_name)
     targets = _create_target_configs(arrays)
     return arrays, features, targets
@@ -809,14 +813,13 @@ def train_model(
             settings = patch_model(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
         with scoped_mlflow_environment(runtime_mlflow_env):
             with parent_run_context(parent_run_id):
-                training_result = cast(
-                    Any,
-                    execute(
-                        settings,
-                        experiment_name=run_config.experiment_name,
-                        run_name=run_config.run_name,
-                        tags=dict(run_config.tags) or None,
-                    ),
+                training_result = execute(
+                    settings,
+                    overrides={
+                        "experiment_name": run_config.experiment_name,
+                        "run_name": run_config.run_name,
+                        "tags": dict(run_config.tags),
+                    },
                 )
 
             # Step 6: Resolve MLflow run metadata and retrieve the checkpoint

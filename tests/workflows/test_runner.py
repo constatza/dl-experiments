@@ -91,7 +91,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
         "SESSION": {"seed": 42, "precision": "float64", "name": "test_model"},
         "MODEL": {
             "name": "NormScaledConstantWidthFFNN",
-            "module_path": "dlkit.nn.ffnn",
+            "module_path": "dlkit.nn",
             "hidden_size": 2,
             "num_layers": 1,
         },
@@ -124,7 +124,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
             "metrics": [
                 {
                     "name": "NormalizedVectorNormError",
-                    "module_path": "dlkit.core.training.metrics",
+                    "module_path": "dlkit.domain.metrics",
                     "norm_ord": 2,
                     "vector_dim": -1,
                 }
@@ -240,7 +240,7 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
         "SESSION": {"seed": 42, "precision": "float64", "name": "mlflow_test_model"},
         "MODEL": {
             "name": "NormScaledConstantWidthFFNN",
-            "module_path": "dlkit.nn.ffnn",
+            "module_path": "dlkit.nn",
             "hidden_size": 2,
             "num_layers": 1,
         },
@@ -267,7 +267,7 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
             "metrics": [
                 {
                     "name": "NormalizedVectorNormError",
-                    "module_path": "dlkit.core.training.metrics",
+                    "module_path": "dlkit.domain.metrics",
                     "norm_ord": 2,
                     "vector_dim": -1,
                 }
