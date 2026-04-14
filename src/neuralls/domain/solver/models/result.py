@@ -16,14 +16,16 @@ Theory:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
     from ..monitoring.event_log import EventLog
     from ..monitoring.iteration_history import IterationHistory
+    from .config import ComparisonGeneral
 
 
 @dataclass
@@ -282,3 +284,114 @@ class IterationContext:
 
     rhs: np.ndarray
     """Right-hand side vector b."""
+
+
+@dataclass(frozen=True)
+class PlotPaths:
+    """Paths to generated diagnostic plots from a comparison workflow.
+
+    Args:
+        convergence: Convergence curve plot.
+        condition_numbers: Condition number bar chart.
+        parity: Parity plot (predicted vs true).
+        residuals: Residual history plot.
+        iterations_barplot: Horizontal bar chart of iteration counts.
+    """
+
+    convergence: Path | None = None
+    condition_numbers: Path | None = None
+    parity: Path | None = None
+    residuals: Path | None = None
+    iterations_barplot: Path | None = None
+
+    @classmethod
+    def from_mapping(cls, mapping: dict[str, Path] | None) -> PlotPaths:
+        """Build typed plot paths from a loose mapping.
+
+        Args:
+            mapping: Dict of plot type → path.
+
+        Returns:
+            PlotPaths with matched fields populated.
+        """
+        if mapping is None:
+            return cls()
+        return cls(
+            convergence=mapping.get("convergence"),
+            condition_numbers=mapping.get("condition_numbers"),
+            parity=mapping.get("parity"),
+            residuals=mapping.get("residuals"),
+            iterations_barplot=mapping.get("iterations_barplot"),
+        )
+
+    def to_mapping(self) -> dict[str, Path]:
+        """Return only populated plot paths.
+
+        Returns:
+            Dict of plot type → path (omits None entries).
+        """
+        values = {
+            "convergence": self.convergence,
+            "condition_numbers": self.condition_numbers,
+            "parity": self.parity,
+            "residuals": self.residuals,
+            "iterations_barplot": self.iterations_barplot,
+        }
+        return {key: path for key, path in values.items() if path is not None}
+
+
+@dataclass(frozen=True)
+class RankedRecommendation:
+    """A single ranked entry from a solver comparison.
+
+    Args:
+        label: Preconditioner/solver label.
+        iterations: Iterations to converge.
+        residual: Final relative residual.
+        residual_abs: Final absolute residual.
+        breakdown: Whether breakdown occurred.
+    """
+
+    label: str
+    iterations: int
+    residual: float
+    residual_abs: float
+    breakdown: bool
+
+
+@dataclass(frozen=True)
+class ComparisonRecommendations:
+    """Ranked recommendations from a comparison run.
+
+    Args:
+        ranked: All converged entries sorted by residual (best first).
+        overall_best: The single best entry, or None if none converged.
+    """
+
+    ranked: tuple[RankedRecommendation, ...] = ()
+    overall_best: RankedRecommendation | None = None
+
+
+@dataclass(frozen=True)
+class ComparisonResult:
+    """Typed result from compare_preconditioners workflow.
+
+    Args:
+        results: Raw CG comparison results keyed by preconditioner name.
+        summary: Formatted text summary of results.
+        solver_params: Solver parameters and data context used.
+        plot_paths: Paths to generated diagnostic plots.
+        preconditioners: Preconditioner names tested.
+        condition_numbers: Condition numbers keyed by preconditioner name.
+        recommendations: Ranked recommendations.
+        output_dir: Root output directory for comparison artifacts.
+    """
+
+    results: dict[str, Any]
+    summary: str
+    solver_params: ComparisonGeneral
+    plot_paths: PlotPaths = field(default_factory=PlotPaths)
+    preconditioners: tuple[str, ...] = ()
+    condition_numbers: dict[str, float] = field(default_factory=dict)
+    recommendations: ComparisonRecommendations = field(default_factory=ComparisonRecommendations)
+    output_dir: Path | None = None

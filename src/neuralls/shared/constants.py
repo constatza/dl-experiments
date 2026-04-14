@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-from .math_utils import MatrixNormType
+from neuralls.shared.types import MatrixNormType
 
 # =============================================================================
 # Exit Codes

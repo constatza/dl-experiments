@@ -11,13 +11,21 @@ Design Principles:
     - Single Responsibility (each class has one purpose)
 """
 
+from .config import ComparisonData, ComparisonGeneral, SolverParams
 from .history import DirectionHistory, ResidualHistory
-from .result import CGComparisonResult, IterationContext, SolverResult
+from .result import (
+    CGComparisonResult,
+    ComparisonRecommendations,
+    ComparisonResult,
+    IterationContext,
+    PlotPaths,
+    RankedRecommendation,
+    SolverResult,
+)
 from .state import CGState, SolverState
 
 __all__ = [
     # State hierarchy
-    "SolverState",
     "SolverState",
     "CGState",
     # History
@@ -27,4 +35,12 @@ __all__ = [
     "SolverResult",
     "CGComparisonResult",
     "IterationContext",
+    "PlotPaths",
+    "RankedRecommendation",
+    "ComparisonRecommendations",
+    "ComparisonResult",
+    # Config
+    "SolverParams",
+    "ComparisonData",
+    "ComparisonGeneral",
 ]
