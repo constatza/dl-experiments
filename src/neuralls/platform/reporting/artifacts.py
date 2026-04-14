@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass, replace
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 import json
 import re
 import shutil
@@ -14,17 +14,88 @@ import numpy as np
 from numpy.typing import NDArray
 import tomli_w
 
-from neuralls.domain.solver.models.result import CGComparisonResult
-from neuralls.shared.comparison.results import (
-    ArrayArtifact,
-    ComparisonArtifactFallback,
-    ComparisonArtifactManifest,
+from neuralls.domain.solver.models.result import (
+    CGComparisonResult,
     ComparisonRecommendations,
     ComparisonResult,
-    FallbackComparisonResultEntry,
     PlotPaths,
     RankedRecommendation,
 )
+
+
+@dataclass(frozen=True)
+class ArrayArtifact:
+    """Reference to a persisted numpy array artifact.
+
+    Args:
+        path: Relative path within the output directory.
+        shape: Array shape tuple.
+        dtype: Numpy dtype string.
+    """
+
+    path: Path
+    shape: tuple[int, ...]
+    dtype: str
+
+
+@dataclass(frozen=True)
+class ComparisonArtifactManifest:
+    """Manifest of files emitted by comparison artifact writing.
+
+    Args:
+        comparison_toml: Path to comparison summary TOML.
+        comparison_json: Path to comparison summary JSON.
+        recommendations_json: Path to ranked recommendations JSON.
+        summary_txt: Path to text summary.
+        config_copy: Path to config file copy.
+        arrays: Tuple of array artifact references.
+    """
+
+    comparison_toml: Path
+    comparison_json: Path
+    recommendations_json: Path
+    summary_txt: Path
+    config_copy: Path
+    arrays: tuple[ArrayArtifact, ...] = ()
+
+
+@dataclass(frozen=True)
+class FallbackComparisonResultEntry:
+    """Minimal typed fallback for artifact writing in tests.
+
+    Args:
+        iterations: Iteration count.
+        residual: Final relative residual.
+        residual_abs: Final absolute residual.
+        error: Error message if failed.
+    """
+
+    iterations: int
+    residual: float
+    residual_abs: float | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class ComparisonArtifactFallback:
+    """Typed fallback source for artifact writing when tests patch the workflow.
+
+    Args:
+        summary: Text summary of results.
+        preconditioners: Preconditioner names.
+        condition_numbers: Condition numbers by preconditioner.
+        plot_paths: Paths to generated plots.
+        recommendations: Ranked recommendations.
+        results: Per-preconditioner fallback result entries.
+    """
+
+    summary: str = ""
+    preconditioners: tuple[str, ...] = ()
+    condition_numbers: dict[str, float] = field(default_factory=dict)
+    plot_paths: PlotPaths = field(default_factory=PlotPaths)
+    recommendations: ComparisonRecommendations = field(default_factory=ComparisonRecommendations)
+    results: dict[str, FallbackComparisonResultEntry] = field(default_factory=dict)
+
 
 type ComparisonArtifactSource = ComparisonResult | ComparisonArtifactFallback
 

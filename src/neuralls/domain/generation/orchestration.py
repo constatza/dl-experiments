@@ -13,7 +13,7 @@ from scipy.sparse import csc_matrix
 
 from .data_types import NormalizeType
 from neuralls.shared.types import ScaleMetadata
-from neuralls.shared.normalization import ErrorTraceSamples, ResidualTraceSamples
+from neuralls.domain.normalization import ErrorTraceSamples, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .helpers import serialize_scale_metadata
 from .trace_utils import (
@@ -345,7 +345,7 @@ def _process_binding(
     Returns:
         BindingResult with generated data blocks
     """
-    from neuralls.shared.math_utils import calculate_matrix_norm
+    from neuralls.domain.linalg import calculate_matrix_norm
 
     # Get or compute normalized matrix
     cached = matrix_cache.get(binding.matrix_sample_id)

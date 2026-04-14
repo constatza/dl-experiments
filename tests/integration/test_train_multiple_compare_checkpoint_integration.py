@@ -16,7 +16,7 @@ from neuralls.composition.experiments.comparison_batch import run_comparison
 from neuralls.composition.generation.process_data import process_data_from_config
 from neuralls.platform.storage.datasets import resolve_dataset_paths
 from neuralls.composition.experiments.multi_training import BatchResult, train_batch
-from neuralls.shared.comparison.specs import ComparisonParams
+from neuralls.composition.comparison.models import ComparisonParams
 
 TEST_MAX_EPOCHS = 1
 TEST_LIMIT_TRAIN_BATCHES = 1

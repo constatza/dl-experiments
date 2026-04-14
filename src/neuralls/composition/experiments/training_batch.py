@@ -24,12 +24,12 @@ from neuralls.platform.config.models.dataset_identity import resolve_dataset_ide
 from neuralls.composition.experiments.assembler import load_batch
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.storage.base import load_matrix
-from neuralls.shared.training import ExperimentResult
-from neuralls.shared.hashing import compute_directory_hash
+from neuralls.application.models import ExperimentResult
+from neuralls.platform.caching import compute_directory_hash
 from neuralls.composition.generation.processing import process_config
 from neuralls.platform.storage.filesystem import extract_model_name
 from neuralls.composition.experiments.training import train_model
-from neuralls.shared.validation import validate_data_exists
+from neuralls.platform.storage.validation import validate_data_exists
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
 from neuralls.shared.constants import (
     DATASET_MANIFEST_FILENAME,

@@ -20,7 +20,7 @@ from ..strategy_configs import ResidualErrorConfig
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
 from ..providers import HybridInputProvider, RandomInputProvider, provide_solutions
 from ..transforms import ComputeRhsTransform
-from neuralls.shared.normalization import ErrorTraceSamples
+from neuralls.domain.normalization import ErrorTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_error_traces
 
 

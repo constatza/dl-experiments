@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from neuralls.shared.normalization import ErrorTraceSamples, ResidualTraceSamples
+from neuralls.domain.normalization import ErrorTraceSamples, ResidualTraceSamples
 from .interfaces import GeneratedSamples, ArchiveData
 
 # =============================================================================

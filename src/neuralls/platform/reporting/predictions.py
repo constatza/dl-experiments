@@ -13,10 +13,10 @@ from typing import Any, cast
 import numpy as np
 from loguru import logger
 
-from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.domain.inference import InferenceOutputs, InferencePredictions
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.reporting.prediction_csv import save_prediction_samples_to_csv
 from neuralls.platform.reporting.synthetic import save_synthetic_results
-from neuralls.shared.inference import InferenceOutputs, InferencePredictions
 from neuralls.platform.reporting.plots import plot_parity_and_residuals, plot_prediction_diagnostics
 from neuralls.platform.storage.filesystem import derive_model_identifier, sanitize_identifier
 from neuralls.platform.tracking.mlflow import build_run_config, finalize_run, open_run

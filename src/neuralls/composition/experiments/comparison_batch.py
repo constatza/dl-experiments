@@ -43,12 +43,12 @@ from neuralls.composition.experiments.model_resolution import (
     ExperimentModelContext,
     resolve_preconditioner_models_with_warnings,
 )
-from neuralls.shared.comparison.results import ComparisonResult
+from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.composition.tracking.run_specs import (
     build_comparison_run_spec,
     build_child_comparison_tags,
 )
-from neuralls.shared.comparison.specs import ComparisonOutcome, ComparisonParams
+from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 
 
 @dataclass(frozen=True)

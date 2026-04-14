@@ -4,11 +4,12 @@ The platform package isolates external integrations and side-effecting helpers.
 
 ## Package Map
 
-- `config/`: config models, registry resolution, and TOML loaders
-- `storage/`: filesystem, workspaces, and storage-facing helpers
+- `config/`: config models (including workspace and preconditioner), registry resolution, and TOML loaders
+- `storage/`: filesystem, workspaces, dataset I/O, and storage validation helpers
 - `tracking/`: MLflow run and client helpers
 - `reporting/`: plotting, artifact staging, and inference output adapters
 - `dlkit/`: DLKit-backed predictor adapter over `dlkit.engine.inference`
+- `caching.py`: directory hashing for workflow cache invalidation
 
 ## Semantic Difference
 

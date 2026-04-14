@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from neuralls.shared.normalization import ErrorTraceSamples, ResidualTraceSamples
+from neuralls.domain.normalization import ErrorTraceSamples, ResidualTraceSamples
 
 
 def _offset_residual_traces(

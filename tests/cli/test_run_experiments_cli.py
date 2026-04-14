@@ -21,7 +21,7 @@ from typer.testing import CliRunner
 
 from neuralls.cli.run_experiments import main
 from neuralls.shared.constants import DEFAULT_PROJECT_ROOT
-from neuralls.shared.training import ExperimentResult
+from neuralls.application.models import ExperimentResult
 
 runner = CliRunner()
 

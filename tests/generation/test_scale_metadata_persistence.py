@@ -10,7 +10,7 @@ from neuralls.platform.storage.datasets import (
     load_dense_training_arrays,
     resolve_dataset_paths,
 )
-from neuralls.shared.normalization import load_scale_from_metadata, MatrixScale
+from neuralls.domain.normalization import load_scale_from_metadata, MatrixScale
 from dlkit.io import open_sparse_pack
 
 

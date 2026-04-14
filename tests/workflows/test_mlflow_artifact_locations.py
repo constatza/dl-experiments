@@ -16,7 +16,7 @@ from neuralls.platform.storage.datasets import save_dataset
 from neuralls.composition.experiments.comparison_batch import run_comparison
 from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
 from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
-from neuralls.shared.comparison.specs import ComparisonParams
+from neuralls.composition.comparison.models import ComparisonParams
 from neuralls.composition.experiments.training import _log_training_evaluation
 
 

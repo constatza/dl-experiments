@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.shared.normalization import (
+from neuralls.domain.normalization import (
     DiagonalScale,
     MatrixScale,
     SpectralScale,

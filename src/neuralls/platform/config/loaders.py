@@ -22,7 +22,7 @@ from dlkit.infrastructure.io.config_loader import (
 
 from neuralls.platform.config.models.comparison import ComparisonConfig, parse_comparison_config
 from neuralls.platform.config.models.data_models import DataConfigFile
-from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.config.mlflow import normalize_model_mlflow
 from neuralls.platform.config.paths import PathContext
 

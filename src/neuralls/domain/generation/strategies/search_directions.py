@@ -20,7 +20,7 @@ from ..strategy_configs import SearchDirectionsConfig
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
 from ..providers import HybridInputProvider
 from ..transforms import ComputeRhsTransform
-from neuralls.shared.normalization import ResidualTraceSamples
+from neuralls.domain.normalization import ResidualTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_residual_traces
 
 

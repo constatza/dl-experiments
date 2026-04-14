@@ -16,7 +16,7 @@ from typing import Any
 
 from dlkit.infrastructure.config import GeneralSettings
 
-from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.shared.constants import DEFAULT_OUTPUT_DIR
 
 

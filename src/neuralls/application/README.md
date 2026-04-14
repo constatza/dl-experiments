@@ -4,10 +4,11 @@ The application package holds use-case logic only.
 
 ## Package Map
 
-- `comparison/execution.py`: CG execution and recommendation logic
+- `comparison/execution.py`: thin redirect to `domain/solver/comparison.py`
 - `inference/prediction.py`: predictor execution over prepared inference data
+- `inference/models.py`: `InferenceConfig` and `InferenceData` DTOs
+- `models.py`: `ExperimentResult` and `TaskResult` reporting DTOs
 - `training/`: reserved package boundary for training use-case services
-- `datasets/`: reserved package boundary for dataset use-case services
 
 ## Semantic Difference
 
@@ -19,5 +20,5 @@ paths, creating MLflow clients, or touching filesystem layout, it belongs in
 ## Boundary
 
 Application modules do not load configs, resolve workspaces, create MLflow
-runs, or touch filesystem layout concerns directly. Cross-layer DTOs no longer
-live here; they live under `neuralls.shared`.
+runs, or touch filesystem layout concerns directly. Cross-layer DTOs that are
+shared across multiple layers live in `domain/` or `shared/`, not here.

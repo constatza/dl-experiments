@@ -14,10 +14,10 @@ from loguru import logger
 
 from dlkit.io import load_array
 
-from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.reporting.synthetic import generate_synthetic_test_case
 from neuralls.platform.config.loaders import load_comparison_config
-from neuralls.shared.inference import InferenceData
+from neuralls.application.inference.models import InferenceData
 from neuralls.shared.constants import RHS_ARRAY_FILENAME, SOLUTIONS_ARRAY_FILENAME
 
 

@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 import numpy as np
 from numpy.typing import NDArray
 
-from neuralls.shared.normalization import ErrorTraceSamples, ResidualTraceSamples
+from neuralls.domain.normalization import ErrorTraceSamples, ResidualTraceSamples
 
 
 class TracingSolverCallable(Protocol):

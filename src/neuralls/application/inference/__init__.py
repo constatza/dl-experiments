@@ -1,18 +1,17 @@
 """Inference use cases."""
 
-from neuralls.application.inference.prediction import create_predictor, run_prediction
-from neuralls.shared.inference import (
+from neuralls.application.inference.models import (
     InferenceConfig,
     InferenceData,
     InferenceOutputs,
     InferencePredictions,
 )
+from neuralls.application.inference.prediction import run_prediction
 
 __all__ = [
     "InferenceConfig",
     "InferenceData",
     "InferenceOutputs",
     "InferencePredictions",
-    "create_predictor",
     "run_prediction",
 ]

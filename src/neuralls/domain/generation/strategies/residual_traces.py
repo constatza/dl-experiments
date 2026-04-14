@@ -23,7 +23,7 @@ from ..helpers import (
 )
 from ..providers import provide_solutions, HybridInputProvider
 from ..transforms import ComputeRhsTransform
-from neuralls.shared.normalization import ResidualTraceSamples
+from neuralls.domain.normalization import ResidualTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_residual_traces
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-from neuralls.shared.workspace import ExperimentWorkspace, RunnableExperiment
+from neuralls.platform.config.models.workspace import ExperimentWorkspace, RunnableExperiment
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.shared.constants import (
     EXP_DATA_CONFIG_NAME,

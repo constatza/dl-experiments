@@ -11,7 +11,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from neuralls.shared.workspace import (
+from neuralls.platform.config.models.workspace import (
     ExperimentBatch,
     ExperimentSpec,
     RunnableExperiment,

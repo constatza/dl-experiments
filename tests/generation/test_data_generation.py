@@ -14,7 +14,7 @@ from neuralls.domain.generation.helpers import (
     trace_rows_per_system,
 )
 from neuralls.domain.generation.orchestration import _shuffle_samples
-from neuralls.shared.normalization import (
+from neuralls.domain.normalization import (
     ErrorTraceSamples,
     ResidualTraceSamples,
     apply_normalization,

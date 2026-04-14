@@ -116,7 +116,3 @@ path = "neuralls.shared"
 layer = "shared"
 depends_on = ["neuralls.shared.**"]
 
-[[modules]]
-path = "neuralls.shared.comparison"
-layer = "shared"
-depends_on = ["neuralls.shared.**"]

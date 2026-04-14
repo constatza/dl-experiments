@@ -207,3 +207,49 @@ class DLKitAdapter(PredictorAdapter):
             raise RuntimeError(
                 f"Failed to load model from {checkpoint_path}: {type(e).__name__}: {e}"
             ) from e
+
+
+def create_predictor(checkpoint_path: Path, settings: Any) -> Any:
+    """Create DLKit predictor from checkpoint with fitted transforms.
+
+    Uses the public DLKit inference API, FULL_64 precision, and
+    checkpoint-based transforms (normalization, scaling, etc.) loaded
+    automatically from checkpoint metadata.
+
+    Args:
+        checkpoint_path: Path to model checkpoint.
+        settings: DLKit GeneralSettings (unused; kept for call-site compatibility).
+
+    Returns:
+        DLKit predictor context manager with fitted transforms enabled.
+    """
+    from dlkit.interfaces.inference import load_model
+    from dlkit.infrastructure.precision.strategy import PrecisionStrategy
+
+    logger.debug(f"Loading checkpoint from: {checkpoint_path}")
+    logger.debug("Using apply_transforms=True with precision=FULL_64")
+
+    return load_model(
+        checkpoint_path,
+        device="auto",
+        apply_transforms=True,
+        precision=PrecisionStrategy.FULL_64,
+    )
+
+
+def resolve_batch_size(settings: Any) -> int:
+    """Resolve batch size from DLKit GeneralSettings.
+
+    Args:
+        settings: DLKit GeneralSettings object.
+
+    Returns:
+        Batch size (defaults to 256 if not configured).
+    """
+    datamodule = getattr(settings, "DATAMODULE", None)
+    dataloader = getattr(datamodule, "dataloader", None) if datamodule else None
+    configured = getattr(dataloader, "batch_size", None)
+    try:
+        return int(configured) if configured is not None else 256
+    except TypeError, ValueError:
+        return 256

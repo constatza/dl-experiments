@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.storage.workspaces import WorkspaceFactory
 
 

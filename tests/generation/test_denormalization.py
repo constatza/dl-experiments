@@ -6,7 +6,7 @@ Verifies that denormalization is the inverse of normalization for all scale type
 import numpy as np
 import pytest
 
-from neuralls.shared.normalization import (
+from neuralls.domain.normalization import (
     LinearSystemBatch,
     make_diagonal_scale,
     make_matrix_scale,

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import tomli_w
 
-from neuralls.shared.comparison.specs import ComparisonData, ComparisonGeneral, SolverParams
+from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
@@ -30,13 +30,13 @@ from neuralls.platform.reporting.artifacts import (
     extract_array_artifacts,
     serialize_comparison_payload,
 )
-from neuralls.shared.comparison.results import (
+from neuralls.domain.solver.models.result import (
     ComparisonRecommendations,
     ComparisonResult,
     PlotPaths,
     RankedRecommendation,
 )
-from neuralls.shared.comparison.specs import ComparisonOutcome, ComparisonParams
+from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 
 _LOAD_COMPARISON_CONFIG = "neuralls.composition.experiments.comparison_batch.load_comparison_config"
 _COMPARE_PRECONDITIONERS = (

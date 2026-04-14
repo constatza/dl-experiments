@@ -28,7 +28,7 @@ from loguru import logger
 from mlflow.tracking import MlflowClient
 import numpy as np
 
-from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.config.models.experiments import ExperimentEntry
 from neuralls.platform.config.mlflow import (
     build_mlflow_environment,

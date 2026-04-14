@@ -164,7 +164,7 @@ def _normalize_matrix_for_generation(
         >>> scale is None  # RHS norms not yet available
         True
     """
-    from neuralls.shared.normalization import create_scale_from_config
+    from neuralls.domain.normalization import create_scale_from_config
 
     # No normalization: return defensive copy
     if normalize_type in ("none", "rhs"):
@@ -175,7 +175,7 @@ def _normalize_matrix_for_generation(
         # Use matrix normalization to get A_norm, but don't return scale yet
         # (we need RHS samples to compute per-sample rhs_norm values)
         dimension = matrix.shape[0]
-        from neuralls.shared.math_utils import calculate_spectral_norm, compute_dim_scale
+        from neuralls.domain.linalg import calculate_spectral_norm, compute_dim_scale
 
         spectral_norm = calculate_spectral_norm(matrix)
         dimension_scale = compute_dim_scale(dimension)

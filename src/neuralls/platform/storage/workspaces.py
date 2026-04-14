@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
 
 class WorkspaceFactory:

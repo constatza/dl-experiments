@@ -73,21 +73,21 @@ from neuralls.platform.config.models.comparison import ComparisonGeneral
 from neuralls.domain.analysis.spectra import compute_condition_numbers, plot_condition_numbers
 from neuralls.platform.storage.filesystem import ensure_dir
 from neuralls.platform.storage.comparison import load_system_arrays
-from neuralls.shared.math_utils import compute_condition_number
-from neuralls.shared.normalization import IScale, create_scale_from_config
+from neuralls.domain.linalg import compute_condition_number
+from neuralls.domain.normalization import IScale, create_scale_from_config
 from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
 from neuralls.composition.preconditioners.factory import (
     create_preconditioner,
     create_scheduled_preconditioner,
     PreconditionerScheduleConfig,
 )
-from neuralls.application.comparison.execution import (
+from neuralls.domain.solver.comparison import (
     format_results_summary,
     run_cg_comparison,
 )
-from neuralls.shared.validation import validate_matrix, validate_rhs_vector
+from neuralls.domain.solver.utils.validation import validate_matrix, validate_rhs_vector
 from neuralls.domain.solver.models.result import CGComparisonResult
-from neuralls.shared.comparison.results import (
+from neuralls.domain.solver.models.result import (
     ComparisonRecommendations,
     ComparisonResult,
     PlotPaths,

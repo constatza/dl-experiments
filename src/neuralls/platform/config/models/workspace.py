@@ -1,4 +1,4 @@
-"""Domain models for the configuration system.
+"""Domain models for the experiment configuration system.
 
 These classes define the core data structures for experiments, strictly separating
 inputs (Specifications) from outputs (Workspaces) and execution contexts.

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from neuralls.composition.experiments.assembler import load_experiment
-from neuralls.shared.workspace import (
+from neuralls.platform.config.models.workspace import (
     ExperimentSpec,
     ExperimentWorkspace,
     RunnableExperiment,
@@ -68,7 +68,7 @@ class TestBuildSettings:
         tmp_path: Path,
     ):
         """Test building settings with workspace paths injected."""
-        from neuralls.shared.workspace import ExperimentWorkspace
+        from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
         # Create directories for dlkit validation
         root_dir = tmp_path / "root"
@@ -114,7 +114,7 @@ class TestBuildSettings:
         tmp_path: Path,
     ):
         """Runtime MLflow infrastructure should not be stored in settings."""
-        from neuralls.shared.workspace import ExperimentWorkspace
+        from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
         workspace = ExperimentWorkspace(
             dataset_id="test",

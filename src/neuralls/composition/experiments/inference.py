@@ -13,6 +13,7 @@ from loguru import logger
 
 from dlkit.io import load_array
 
+from neuralls.application.inference.models import InferenceConfig
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.shared.constants import PREDICTION_NORM_EPSILON
 from neuralls.platform.storage.filesystem import derive_model_identifier
@@ -24,15 +25,12 @@ PREDICTION_ARTIFACTS: tuple[str, ...] = ("figures", "predictions")
 
 @dataclass(frozen=True)
 class InferenceResult:
-    """Type-safe result container for inference execution.
-
-    Replaces untyped dict with explicit fields for inference outputs.
-    Enables IDE support and type checking for result access.
+    """Local result container for the ``run_inference`` public API.
 
     Attributes:
         predictions: Predicted values array
         y_true: True target values array
-        y_pred: Predicted values array (duplicate of predictions for compatibility)
+        y_pred: Predicted values array (same as predictions, kept for compatibility)
         duration_seconds: Elapsed time for inference in seconds
         plot_path: Path to parity/residuals plot or None
         diagnostic_plot_path: Path to diagnostics plot or None
@@ -44,41 +42,6 @@ class InferenceResult:
     duration_seconds: float
     plot_path: Path | None
     diagnostic_plot_path: Path | None
-
-
-@dataclass(frozen=True)
-class InferenceConfig:
-    """Configuration for inference execution.
-
-    Simple frozen dataclass to replace 11-parameter function signature.
-    This is NOT a Pydantic model - just a parameter container for internal use.
-    The actual Pydantic config models (DataConfigFile, etc.) are preserved.
-
-    Attributes:
-        config_path: Path to model configuration file
-        checkpoint_path: Path to model checkpoint (required, validated at runtime)
-        data_config_path: Path to data configuration file (optional)
-        features_path: Path to features file (for standard inference)
-        targets_path: Path to targets file (for standard inference)
-        save_plots: Whether to generate diagnostic plots
-        figures_dir: Custom figures directory (optional)
-        enable_mlflow: Whether to log to MLflow
-        output_root: Custom output root directory (optional)
-        synthetic_benchmark: Use synthetic benchmark data
-        comparison_config_path: Path to comparison config (for synthetic)
-    """
-
-    config_path: Path
-    checkpoint_path: Path | None
-    data_config_path: Path | None = None
-    features_path: Path | None = None
-    targets_path: Path | None = None
-    save_plots: bool = True
-    figures_dir: Path | None = None
-    enable_mlflow: bool = False
-    output_root: Path | None = None
-    synthetic_benchmark: bool = False
-    comparison_config_path: Path | None = None
 
 
 # NOTE: Minimal dataset functions removed - no longer needed with InferenceWorkflowConfig
@@ -519,7 +482,8 @@ def _execute_inference_pipeline(
         Tuple of (predictions, metrics_dict, plot_paths)
     """
     from neuralls.composition.inference.data_loading import load_inference_data
-    from neuralls.application.inference.prediction import create_predictor, run_prediction
+    from neuralls.application.inference.prediction import run_prediction
+    from neuralls.platform.dlkit.predictor_adapter import create_predictor, resolve_batch_size
     from neuralls.platform.reporting.predictions import (
         save_inference_outputs,
         save_synthetic_predictions,
@@ -539,7 +503,7 @@ def _execute_inference_pipeline(
 
     # Run prediction (transforms applied automatically from checkpoint)
     with create_predictor(config.checkpoint_path, settings) as predictor:
-        predictions = run_prediction(predictor, data, settings)
+        predictions = run_prediction(predictor, data, batch_size=resolve_batch_size(settings))
 
     # Save synthetic results separately (if applicable)
     if config.synthetic_benchmark and data.metadata.get("source") == "synthetic":

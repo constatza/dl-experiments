@@ -4,9 +4,12 @@ The domain package contains the pure computational core of `neuralls`.
 
 ## Package Map
 
+- `solver/`: CG solvers, monitoring, strategies, preconditioners, and comparison runner
 - `generation/`: strategy-driven dataset payload generation
-- `solver/`: CG solvers, monitoring, strategies, and preconditioners
 - `analysis/`: pure numerical diagnostics used by higher layers
+- `linalg.py`: pure linear algebra utilities (matrix norms, normalization scale)
+- `normalization.py`: data scaling helpers and normalization ABC
+- `inference.py`: cross-boundary inference DTOs (`InferencePredictions`, `InferenceOutputs`)
 
 ## Semantic Difference
 

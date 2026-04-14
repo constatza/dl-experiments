@@ -5,13 +5,8 @@ The shared package holds cross-layer primitives only.
 ## Package Map
 
 - `constants.py`: package-wide constants and config keys
-- `types.py`: shared numerical metadata types
-- `normalization.py`: normalization helpers and trace containers
-- `workspace.py`: experiment and workspace DTOs
-- `inference.py`: inference DTOs
-- `training.py`: training and batch result DTOs
-- `comparison/`: comparison DTOs and result payload types
-- `hashing.py`, `functional.py`, `math_utils.py`, `validation.py`: pure utility helpers
+- `types.py`: shared numerical metadata types (`ScaleMetadata`, `MatrixNormType`) used by ≥2 layers
+- `functional.py`: pure functional utilities
 
 ## Semantic Difference
 

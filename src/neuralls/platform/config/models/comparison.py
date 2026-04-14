@@ -14,7 +14,7 @@ from neuralls.shared.constants import (
     DEFAULT_ATOL,
     DEFAULT_M_MAX,
 )
-from neuralls.shared.comparison.specs import (
+from neuralls.domain.solver.models.config import (
     ComparisonData,
     ComparisonGeneral,
     SolverParams,

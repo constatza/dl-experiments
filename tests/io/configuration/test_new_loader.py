@@ -6,7 +6,7 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-from neuralls.shared.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.composition.experiments.assembler import load_batch
 
 # Skip all tests if dlkit has circular import issue

@@ -15,10 +15,10 @@ from neuralls.shared.constants import (
     SYMBOL_CHECKMARK,
 )
 from neuralls.composition.experiments.comparison_batch import run_comparison_batch
-from neuralls.shared.comparison.results import ComparisonResult
-from neuralls.shared.comparison.specs import (
+from neuralls.composition.comparison.models import (
     ComparisonOutcome,
     ComparisonParams,
+    ComparisonResult,
 )
 
 os.environ.setdefault("MPLBACKEND", "Agg")

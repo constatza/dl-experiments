@@ -334,7 +334,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
 
 def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path) -> None:
     """Registry-backed training passes explicit experiment/run names and structured tags."""
-    from neuralls.shared.workspace import ExperimentWorkspace
+    from neuralls.platform.config.models.workspace import ExperimentWorkspace
     from neuralls.composition.experiments.training import train_model
 
     config_path = tmp_path / "model.toml"
@@ -436,7 +436,7 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
     tmp_path: Path,
 ) -> None:
     """Legacy callers without explicit experiment names use dataset display name and no tags."""
-    from neuralls.shared.workspace import ExperimentWorkspace
+    from neuralls.platform.config.models.workspace import ExperimentWorkspace
     from neuralls.composition.experiments.training import train_model
 
     config_path = tmp_path / "model.toml"
@@ -531,7 +531,7 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         TrainingSettings,
     )
     from dlkit.infrastructure.config.trainer_settings import TrainerSettings
-    from neuralls.shared.workspace import ExperimentWorkspace
+    from neuralls.platform.config.models.workspace import ExperimentWorkspace
     from neuralls.composition.experiments.training import train_model
 
     config_path = tmp_path / "model.toml"

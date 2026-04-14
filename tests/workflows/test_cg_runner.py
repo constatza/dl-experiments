@@ -28,7 +28,7 @@ from neuralls.domain.solver.preconditioners import (
     ScheduledPreconditioner,
 )
 from neuralls.domain.solver.preconditioners.base import NonLinearPreconditioner
-from neuralls.application.comparison.execution import (
+from neuralls.domain.solver.comparison import (
     format_results_summary,
     run_cg_comparison,
     summarize_best_combinations,
@@ -235,8 +235,8 @@ def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
             atol=1e-10,
         )
 
-    monkeypatch.setattr("neuralls.application.comparison.execution.flexible_cg", fake_flexible_cg)
-    monkeypatch.setattr("neuralls.application.comparison.execution.pcg", fake_pcg)
+    monkeypatch.setattr("neuralls.domain.solver.comparison.flexible_cg", fake_flexible_cg)
+    monkeypatch.setattr("neuralls.domain.solver.comparison.pcg", fake_pcg)
 
     results = run_cg_comparison(
         spd_matrix,
