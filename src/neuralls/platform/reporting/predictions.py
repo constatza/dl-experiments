@@ -29,7 +29,7 @@ def get_session_name(settings: Any) -> str | None:
     """Extract session name from settings.
 
     Args:
-        settings: DLKit GeneralSettings object
+        settings: DLKit workflow settings object
 
     Returns:
         Session name or None if not configured
@@ -54,7 +54,7 @@ def derive_run_identifier(
     4. Model identifier from settings
 
     Args:
-        settings: DLKit GeneralSettings object
+        settings: DLKit workflow settings object
         workspace: Experiment workspace
         checkpoint_path: Path to model checkpoint
         config_path: Path to config file
@@ -88,7 +88,7 @@ def start_mlflow_run(
     """Start MLflow run for inference tracking.
 
     Args:
-        settings: DLKit GeneralSettings object
+        settings: DLKit workflow settings object
         workspace: Experiment workspace
         dataset_id: Dataset identifier
         enable_mlflow: Whether to enable MLflow logging
@@ -223,7 +223,7 @@ def save_inference_outputs(
     Args:
         predictions: Inference predictions with targets
         workspace: Experiment workspace
-        settings: DLKit GeneralSettings object
+        settings: DLKit workflow settings object
         checkpoint_path: Path to model checkpoint
         config_path: Path to config file
         dataset_id: Dataset identifier

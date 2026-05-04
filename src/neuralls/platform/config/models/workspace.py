@@ -82,12 +82,12 @@ class RunnableExperiment:
     Attributes:
         spec: Experiment specification.
         workspace: Filesystem workspace.
-        settings: dlkit GeneralSettings with injected paths.
+        settings: DLKit workflow settings with injected paths.
     """
 
     spec: ExperimentSpec
     workspace: ExperimentWorkspace
-    settings: Any  # dlkit GeneralSettings (avoid import)
+    settings: Any  # DLKit workflow settings (avoid import)
 
 
 @dataclass(frozen=True)

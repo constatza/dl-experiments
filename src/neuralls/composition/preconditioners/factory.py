@@ -9,7 +9,7 @@ For direct usage, just instantiate preconditioners directly:
     >>> precond = JacobiPreconditioner(matrix)
 
 For TOML workflow:
-    >>> config = load_config("solver.toml")
+    >>> config = load_comparison_config("comparison.toml")
     >>> precond = create_preconditioner(matrix, config.preconditioner)
 
 Design:

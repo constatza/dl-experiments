@@ -4,21 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
-from neuralls.platform.config.models.dataset_identity import normalize_registry_id
-from dlkit.interfaces.api.functions.model_logged import (
-    build_logged_model_uri,
-    search_logged_models,
-)
-from dlkit.interfaces.api.functions.model_registry import (
-    build_registered_model_uri,
-    get_model_version,
-    list_model_versions,
-    search_registered_models,
-)
 from loguru import logger
 from mlflow.tracking import MlflowClient
+from mlflow.entities import Run
+
+from neuralls.platform.config.models.dataset_identity import normalize_registry_id
 
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
@@ -53,6 +45,139 @@ class PreconditionerResolutionResult:
 
     specs: list[PreconditionerConfig]
     warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class LoggedModelSearchResult:
+    """Minimal logged-model lookup record for latest-run resolution."""
+
+    run_id: str
+    model_uri: str
+
+
+def build_logged_model_uri(*, run_id: str, artifact_path: str) -> str:
+    """Build a canonical MLflow logged-model URI."""
+    normalized_artifact_path = artifact_path.strip("/")
+    return f"runs:/{run_id}/{normalized_artifact_path}"
+
+
+def build_registered_model_uri(
+    model_name: str,
+    *,
+    version: int | None = None,
+    alias: str | None = None,
+) -> str:
+    """Build a canonical MLflow registered-model URI."""
+    if alias is not None:
+        return f"models:/{model_name}@{alias}"
+    if version is not None:
+        return f"models:/{model_name}/{version}"
+    raise ValueError("Registered model URI requires either alias or version.")
+
+
+def search_registered_models(*, model_name: str, tracking_uri: str) -> list[Any]:
+    """Return matching registered models by exact name."""
+    client = MlflowClient(tracking_uri=tracking_uri)
+    try:
+        return [client.get_registered_model(model_name)]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def list_model_versions(model_name: str, *, tracking_uri: str) -> list[int]:
+    """List registered model versions in ascending integer order."""
+    client = MlflowClient(tracking_uri=tracking_uri)
+    versions = client.search_model_versions(f"name='{model_name}'")
+    return sorted(int(str(version.version)) for version in versions)
+
+
+def get_model_version(*, model_name: str, version: int, tracking_uri: str) -> Any:
+    """Fetch one registered model version from MLflow."""
+    client = MlflowClient(tracking_uri=tracking_uri)
+    return client.get_model_version(model_name, str(version))
+
+
+def _quote_mlflow_value(value: str) -> str:
+    """Escape one string value for MLflow search filters."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _resolve_experiment_ids(
+    *,
+    client: MlflowClient,
+    experiment_name: str | None,
+    experiment_id: str | None,
+) -> list[str]:
+    """Resolve experiment scoping for logged-model lookup."""
+    if experiment_id is not None:
+        return [experiment_id]
+    if experiment_name is not None:
+        experiment = client.get_experiment_by_name(experiment_name)
+        return [experiment.experiment_id] if experiment is not None else []
+    experiments = client.search_experiments()
+    return [experiment.experiment_id for experiment in experiments]
+
+
+def _build_run_filter(*, run_name: str | None, tags: dict[str, str] | None) -> str:
+    """Build an MLflow run filter string for logged-model lookup."""
+    clauses: list[str] = []
+    if run_name is not None:
+        clauses.append(f"attributes.run_name = '{_quote_mlflow_value(run_name)}'")
+    for key, value in sorted((tags or {}).items()):
+        clauses.append(f"tags.`{key}` = '{_quote_mlflow_value(value)}'")
+    return " and ".join(clauses)
+
+
+def _run_matches_model_name(run: Run, model_name: str | None) -> bool:
+    """Best-effort model-name filter for latest logged-model lookup."""
+    if model_name is None:
+        return True
+    tags = run.data.tags or {}
+    if tags.get("model_name") == model_name:
+        return True
+    return tags.get("mlflow.model.name") == model_name
+
+
+def search_logged_models(
+    *,
+    model_name: str | None,
+    experiment_name: str | None,
+    experiment_id: str | None,
+    run_name: str | None,
+    tracking_uri: str,
+    artifact_path: str,
+    tags: dict[str, str] | None,
+    max_results: int,
+) -> list[LoggedModelSearchResult]:
+    """Resolve candidate logged models from MLflow runs ordered newest first."""
+    client = MlflowClient(tracking_uri=tracking_uri)
+    experiment_ids = _resolve_experiment_ids(
+        client=client,
+        experiment_name=experiment_name,
+        experiment_id=experiment_id,
+    )
+    if not experiment_ids:
+        return []
+
+    filter_string = _build_run_filter(run_name=run_name, tags=tags)
+    runs = client.search_runs(
+        experiment_ids=experiment_ids,
+        filter_string=filter_string,
+        run_view_type=1,
+        max_results=max_results,
+        order_by=["attributes.start_time DESC"],
+    )
+    return [
+        LoggedModelSearchResult(
+            run_id=run.info.run_id,
+            model_uri=build_logged_model_uri(
+                run_id=run.info.run_id,
+                artifact_path=artifact_path,
+            ),
+        )
+        for run in runs
+        if _run_matches_model_name(run, model_name)
+    ]
 
 
 def _find_single_checkpoint(root: Path) -> Path:

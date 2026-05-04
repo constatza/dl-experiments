@@ -1,7 +1,7 @@
 """Dataset construction from arrays.
 
 This module provides functions to build dlkit dataset structures (Features and
-Targets) from numpy arrays, and inject them into GeneralSettings objects.
+Targets) from numpy arrays, and inject them into DLKit workflow settings.
 """
 
 from __future__ import annotations
@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.data_entries import ValueFeature, ValueTarget
+from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 
 def create_features_from_array(
@@ -59,12 +59,12 @@ def create_targets_from_array(
 
 
 def with_dataset_arrays(
-    settings: GeneralSettings,
+    settings: WorkflowConfig,
     rhs: np.ndarray,
     solutions: np.ndarray,
     matrix: np.ndarray | None = None,
 ) -> Any:
-    """Inject dataset arrays into GeneralSettings.
+    """Inject dataset arrays into DLKit workflow settings.
 
     Creates Features from RHS (and matrix if provided) and Targets from
     solutions, then injects them into settings via patch_model().
@@ -72,7 +72,7 @@ def with_dataset_arrays(
     For datasets named "GraphDataset", includes matrix in features.
 
     Args:
-        settings: GeneralSettings object to update.
+        settings: DLKit workflow settings object to update.
         rhs: RHS feature array.
         solutions: Target array (solutions).
         matrix: Optional matrix array (included for GraphDataset).

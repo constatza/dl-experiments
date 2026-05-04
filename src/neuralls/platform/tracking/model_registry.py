@@ -12,7 +12,6 @@ from loguru import logger
 from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.models.dataset_identity import normalize_registry_id
-from dlkit.interfaces.api.functions.model_logged import build_logged_model_uri
 
 RESERVED_ALIASES: set[str] = {"latest"}
 
@@ -25,6 +24,12 @@ class RegisteredModelRecord:
     version: int
     model_uri: str
     run_id: str
+
+
+def _build_logged_model_uri(*, run_id: str, artifact_path: str) -> str:
+    """Build a canonical MLflow logged-model URI."""
+    normalized_artifact_path = artifact_path.strip("/")
+    return f"runs:/{run_id}/{normalized_artifact_path}"
 
 
 def build_registered_model_name(model_id: str) -> str:
@@ -73,7 +78,7 @@ def register_logged_model(
     tags: Mapping[str, str] | None = None,
 ) -> RegisteredModelRecord:
     """Register a logged model artifact and attach aliases."""
-    model_uri = build_logged_model_uri(run_id=run_id, artifact_path=artifact_path)
+    model_uri = _build_logged_model_uri(run_id=run_id, artifact_path=artifact_path)
     mlflow.set_tracking_uri(tracking_uri)
     client = MlflowClient(tracking_uri=tracking_uri)
     _warn_existing_registered_model_name(

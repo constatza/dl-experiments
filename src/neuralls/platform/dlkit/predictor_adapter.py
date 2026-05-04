@@ -12,18 +12,18 @@ Design Principles:
 
 from __future__ import annotations
 
-from importlib import import_module
-from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import torch
+from dlkit import load_model
+from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from loguru import logger
 
 from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
 from neuralls.domain.solver.preconditioners.tensor_utils import (
-    prepare_model_input,
     extract_model_output,
+    prepare_model_input,
 )
 
 if TYPE_CHECKING:
@@ -70,18 +70,12 @@ class DLKitPredictor(PredictorPort):
             RuntimeError: If predictor unloaded or GPU error
         """
         try:
-            # Prepare input (pure function)
             input_tensor = prepare_model_input(residual, self._device)
-
-            # Forward pass — predict() uses no_grad internally
             output = self._predictor.predict(input_tensor)
             primary = output[0] if isinstance(output, tuple) else output
             if not isinstance(primary, torch.Tensor):
                 raise TypeError(f"Unsupported predictor output type: {type(primary).__name__}")
-
-            # Extract output (pure function)
-            result = extract_model_output(primary)
-            return result
+            return extract_model_output(primary)
 
         except torch.cuda.OutOfMemoryError as e:
             raise RuntimeError(
@@ -128,15 +122,6 @@ class DLKitAdapter(PredictorAdapter):
         ...     # Automatic GPU cleanup on exit
     """
 
-    @staticmethod
-    def _load_dlkit_symbols() -> tuple[Any, Any]:
-        """Load optional DLKit symbols when the dependency is available."""
-        if find_spec("dlkit.engine.inference.api") is None:
-            raise ImportError("DLKit not installed. Install with: pip install dlkit")
-        api = import_module("dlkit.engine.inference.api")
-        precision = import_module("dlkit.infrastructure.precision.strategy")
-        return api.load_model, precision.PrecisionStrategy
-
     def create_predictor(
         self,
         checkpoint_path: Path,
@@ -156,35 +141,22 @@ class DLKitAdapter(PredictorAdapter):
         Raises:
             FileNotFoundError: If checkpoint doesn't exist
             RuntimeError: If model loading fails
-            ImportError: If DLKit not installed
-
-        Example:
-            >>> adapter = DLKitAdapter()
-            >>> predictor = adapter.create_predictor(Path("model.ckpt"))
-            >>> with predictor:
-            ...     result = predictor.apply(residual)
         """
-        # Validate checkpoint exists
         if not checkpoint_path.exists():
             raise FileNotFoundError(
                 f"Checkpoint not found: {checkpoint_path}. "
                 "Ensure the path is correct and the file exists."
             )
 
-        load_model, precision_strategy = self._load_dlkit_symbols()
-
         try:
             logger.debug(f"Loading checkpoint from: {checkpoint_path}")
-
-            # Load predictor from DLKit
             dlkit_predictor = load_model(
                 checkpoint_path,
                 device="auto",
-                apply_transforms=False,  # Data pre-normalized
-                precision=precision_strategy.FULL_64,
+                apply_transforms=False,
+                precision=PrecisionStrategy.FULL_64,
             )
 
-            # Probe device for prepare_model_input (input tensor placement)
             model = dlkit_predictor.model
             if model is None:
                 raise RuntimeError(
@@ -193,14 +165,11 @@ class DLKitAdapter(PredictorAdapter):
                 )
 
             device_param = next(model.parameters(), None)
-            if device_param is not None:
-                device = str(device_param.device)
-            else:
-                device = "cpu"
+            device = str(device_param.device) if device_param is not None else "cpu"
+            if device_param is None:
                 logger.warning("Model has no parameters, defaulting to CPU")
 
             logger.info(f"Loaded model from {checkpoint_path} on device {device}")
-
             return DLKitPredictor(dlkit_predictor, device)
 
         except (FileNotFoundError, OSError, ValueError, RuntimeError) as e:
@@ -218,17 +187,12 @@ def create_predictor(checkpoint_path: Path, settings: Any) -> Any:
 
     Args:
         checkpoint_path: Path to model checkpoint.
-        settings: DLKit GeneralSettings (unused; kept for call-site compatibility).
+        settings: DLKit workflow settings (unused; kept for call-site compatibility).
 
     Returns:
         DLKit predictor context manager with fitted transforms enabled.
     """
-    from dlkit.interfaces.inference import load_model
-    from dlkit.infrastructure.precision.strategy import PrecisionStrategy
-
     logger.debug(f"Loading checkpoint from: {checkpoint_path}")
-    logger.debug("Using apply_transforms=True with precision=FULL_64")
-
     return load_model(
         checkpoint_path,
         device="auto",
@@ -238,10 +202,10 @@ def create_predictor(checkpoint_path: Path, settings: Any) -> Any:
 
 
 def resolve_batch_size(settings: Any) -> int:
-    """Resolve batch size from DLKit GeneralSettings.
+    """Resolve batch size from DLKit workflow settings.
 
     Args:
-        settings: DLKit GeneralSettings object.
+        settings: DLKit workflow settings object.
 
     Returns:
         Batch size (defaults to 256 if not configured).

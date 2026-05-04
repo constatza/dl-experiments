@@ -6,11 +6,9 @@ in a clear, maintainable way.
 
 from __future__ import annotations
 
-from typing import TypeVar
 from collections.abc import Callable
 
-T = TypeVar("T")
-Transform = Callable[[T], T]
+type Transform[T] = Callable[[T], T]
 
 
 def pipe[T](*transforms: Transform[T]) -> Transform[T]:
@@ -37,10 +35,10 @@ def pipe[T](*transforms: Transform[T]) -> Transform[T]:
         64
 
         >>> # With settings transformations
-        >>> from dlkit.infrastructure.config import GeneralSettings
-        >>> def configure_dataset(settings: GeneralSettings) -> GeneralSettings:
+        >>> from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+        >>> def configure_dataset(settings: TrainingWorkflowConfig) -> TrainingWorkflowConfig:
         ...     return patch_model(settings, {"DATASET": new_dataset})
-        >>> def configure_mlflow(settings: GeneralSettings) -> GeneralSettings:
+        >>> def configure_mlflow(settings: TrainingWorkflowConfig) -> TrainingWorkflowConfig:
         ...     return patch_model(settings, {"MLFLOW": mlflow_config})
         >>> pipeline = pipe(configure_dataset, configure_mlflow)
         >>> updated_settings = pipeline(original_settings)
