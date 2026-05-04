@@ -9,8 +9,8 @@ stopping_criterion = "residual_norm"
 m_max = 20
 
 [general.data]
-matrix_path = "/data/projects/graph-cg/processed/solutions"
-rhs_path = "/data/projects/graph-cg/processed/gaussian-rhs"
+matrix_path = "${GRAPH_CG_PROCESSED_DIR}/solutions"
+rhs_path = "${GRAPH_CG_PROCESSED_DIR}/gaussian-rhs"
 # rhs_index = 0   # Which RHS sample to use (0 = first)
 
 [[preconditioners]]

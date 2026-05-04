@@ -8,9 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
 from neuralls.platform.config.models.experiments import ExperimentsConfig
 from neuralls.platform.config.registry import resolve_comparison_config_path
-from neuralls.platform.config.loaders import load_raw_toml
+from neuralls.platform.config.loaders import load_experiments_config, load_raw_toml
 from neuralls.composition.experiments.multi_training import (
     TrainingRunResult,
     _annotate_mlflow_run,
@@ -87,7 +88,7 @@ def valid_experiments_toml(
                 f'output_dir = "{tmp_path / "output"}"',
                 "",
                 "[mlflow]",
-                f'tracking_uri = "sqlite:///{(tmp_path / "mlruns" / "mlflow.db").as_posix()}"',
+                f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")}"',
                 "",
                 "[[models]]",
                 'id = "ffnn"',
@@ -97,7 +98,7 @@ def valid_experiments_toml(
                 'id = "test-solutions"',
                 'path = "datasets/test-solutions.toml"',
                 "",
-                "[[experiment]]",
+                "[[experiments]]",
                 'id = "ffnn_test"',
                 'model = "ffnn"',
                 'dataset = "test-solutions"',
@@ -130,7 +131,7 @@ def test_resolve_config_paths(
     valid_experiments_toml: Path,
 ) -> None:
     """Registry-backed entries resolve into concrete config files."""
-    cfg = ExperimentsConfig.model_validate(load_raw_toml(valid_experiments_toml))
+    cfg = ExperimentsConfig.model_validate(load_experiments_config(valid_experiments_toml))
     model_path, data_path = _resolve_config_paths(
         cfg.experiments[0],
         tmp_path,
@@ -154,7 +155,7 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path) -> None:
         json.dumps(
             {
                 "run_id": "run-123",
-                "tracking_uri": f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+                "tracking_uri": build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
             }
         )
     )
@@ -205,7 +206,7 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
         _annotate_mlflow_run(
             label="1",
             run_id="run-abc",
-            tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+            tracking_uri=build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
             checkpoint_path=tmp_path / "model.ckpt",
             model_config_path=model_config_with_model_name,
             experiment_id="spectral-energy",
@@ -220,7 +221,7 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
     mock_register.assert_called_once_with(
         run_id="run-abc",
         registered_model_name="spectral-energy",
-        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tracking_uri=build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
         tags={
             "experiment_id": "spectral-energy",
             "dataset_id": "solutions",
@@ -234,9 +235,7 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
 def test_train_batch_raises_for_empty_config(tmp_path: Path) -> None:
     """Training batch rejects configs with no experiments."""
     config = tmp_path / "experiments.toml"
-    config.write_text(
-        f'[mlflow]\ntracking_uri = "sqlite:///{(tmp_path / "mlruns.db").as_posix()}"\n'
-    )
+    config.write_text(f'[mlflow]\ntracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns.db")}"\n')
     cfg = ExperimentsConfig.model_validate(load_raw_toml(config))
     with pytest.raises(ValueError, match="No .* entries found"):
         train_batch(cfg=cfg, configs_dir=tmp_path)
@@ -247,7 +246,7 @@ def test_train_batch_returns_local_output_dir(valid_experiments_toml: Path, tmp_
     fake_ckpt = tmp_path / "ckpt" / "model.ckpt"
     fake_ckpt.parent.mkdir()
     fake_ckpt.touch()
-    cfg = ExperimentsConfig.model_validate(load_raw_toml(valid_experiments_toml))
+    cfg = ExperimentsConfig.model_validate(load_experiments_config(valid_experiments_toml))
 
     with patch(
         "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
@@ -267,7 +266,7 @@ def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -
         "\n".join(
             [
                 "[mlflow]",
-                f'tracking_uri = "sqlite:///{(tmp_path / "mlruns" / "mlflow.db").as_posix()}"',
+                f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")}"',
                 "",
                 "[[comparison_profiles]]",
                 'id = "linear"',
@@ -280,6 +279,32 @@ def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -
         ExperimentsConfig.model_validate(load_raw_toml(config))
 
 
+def test_experiments_config_rejects_legacy_singular_experiment_table(tmp_path: Path) -> None:
+    """Master configs must use only [[experiments]]."""
+    config = tmp_path / "experiments.toml"
+    config.write_text(
+        "\n".join(
+            [
+                "[[models]]",
+                'id = "ffnn"',
+                'path = "models/ffnn.toml"',
+                "",
+                "[[datasets]]",
+                'id = "test-solutions"',
+                'path = "datasets/test-solutions.toml"',
+                "",
+                "[[experiment]]",
+                'id = "ffnn_test"',
+                'model = "ffnn"',
+                'dataset = "test-solutions"',
+            ]
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"\[\[experiment\]\]"):
+        load_experiments_config(config)
+
+
 def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
     """Experiments must reference dataset ids declared in [[datasets]]."""
     config = tmp_path / "experiments.toml"
@@ -290,7 +315,7 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
                 'id = "ffnn"',
                 'path = "models/ffnn.toml"',
                 "",
-                "[[experiment]]",
+                "[[experiments]]",
                 'id = "ffnn_test"',
                 'model = "ffnn"',
                 'dataset = "missing-dataset"',
@@ -314,7 +339,7 @@ def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
                 'id = "test-solutions"',
                 'path = "datasets/test-solutions.toml"',
                 "",
-                "[[experiment]]",
+                "[[experiments]]",
                 'id = "ffnn_test"',
                 'model = "missing-model"',
                 'dataset = "test-solutions"',

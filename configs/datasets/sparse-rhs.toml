@@ -5,7 +5,7 @@
 # Output: sparse-rhs-{normalization}/
 
 [source]
-matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 normalize = "matrix"
@@ -19,4 +19,4 @@ indices = [0, 1, -1]
 values = [90.0, 100.0, -100.0]
 
 [output]
-data_dir = "/data/projects/graph-cg/processed"
+data_dir = "${GRAPH_CG_PROCESSED_DIR}"

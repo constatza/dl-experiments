@@ -5,10 +5,12 @@ from __future__ import annotations
 import importlib
 import os
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, TYPE_CHECKING
 from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri, normalize_tracking_uri
+from neuralls.platform.config.path_utils import resolve_local_path
 from neuralls.shared.constants import (
     DEFAULT_MLARTIFACTS_DIR,
     DEFAULT_MLRUNS_DIR,
@@ -66,9 +68,7 @@ def _normalize_sqlite_uri(uri: str, project_root: Path) -> str:
     """Anchor sqlite URIs to project_root when path is relative."""
     if not uri.startswith("sqlite:///"):
         return uri
-    path = Path(uri.replace("sqlite:///", "", 1))
-    base = path if path.is_absolute() else (project_root / path).resolve()
-    return f"sqlite:///{base.as_posix()}"
+    return normalize_tracking_uri(uri, config_path=project_root / "config.toml")
 
 
 def resolve_mlflow_paths(
@@ -80,13 +80,15 @@ def resolve_mlflow_paths(
     """Resolve tracking/artifact URIs against project and workspace roots."""
     default_tracking = DEFAULT_MLRUNS_DIR / "mlflow.db"
     tracking = _normalize_sqlite_uri(
-        tracking_uri or f"sqlite:///{default_tracking.as_posix()}",
+        tracking_uri or build_sqlite_tracking_uri(default_tracking),
         project_root,
     )
-    artifact_target = Path(artifact_uri) if artifact_uri else DEFAULT_MLARTIFACTS_DIR
-    artifact_root = (
-        artifact_target if artifact_target.is_absolute() else workspace / artifact_target
+    artifact_target = (
+        resolve_local_path(artifact_uri, base_dir=workspace)
+        if artifact_uri
+        else DEFAULT_MLARTIFACTS_DIR
     )
+    artifact_root = artifact_target if artifact_target.is_absolute() else workspace / artifact_target
     return MlflowPaths(tracking_uri=tracking, artifact_uri=str(artifact_root.resolve()))
 
 

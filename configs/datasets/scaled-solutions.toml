@@ -6,7 +6,7 @@
 # Output: scaled-solutions-{normalization}/
 
 [source]
-matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 normalize = "matrix"
@@ -20,4 +20,4 @@ scale = 5.0
 solutions_glob = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]
-data_dir = "/data/projects/graph-cg/processed"
+data_dir = "${GRAPH_CG_PROCESSED_DIR}"

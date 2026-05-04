@@ -4,7 +4,7 @@
 
 
 [source]
-matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 normalize = "matrix"
@@ -18,4 +18,4 @@ mu = 0.0
 sigma = 1.0
 
 [output]
-data_dir = "/data/projects/graph-cg/processed"
+data_dir = "${GRAPH_CG_PROCESSED_DIR}"

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from neuralls.platform.config.path_utils import resolve_local_path
 from neuralls.platform.config.models.experiments import (
     ExperimentEntry,
     ExperimentsConfig,
@@ -30,9 +31,7 @@ class ResolvedExperimentBinding:
 
 def _resolve_registry_path(base_dir: Path, relative_or_absolute: Path) -> Path:
     """Resolve one registry path against the master config directory."""
-    if relative_or_absolute.is_absolute():
-        return relative_or_absolute.resolve()
-    return (base_dir / relative_or_absolute).resolve()
+    return resolve_local_path(relative_or_absolute, base_dir=base_dir)
 
 
 def _lookup_registry_entry(

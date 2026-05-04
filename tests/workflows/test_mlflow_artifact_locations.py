@@ -18,11 +18,12 @@ from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
 from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
 from neuralls.composition.comparison.models import ComparisonParams
 from neuralls.composition.experiments.training import _log_training_evaluation
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
 
 
 def _sqlite_tracking_uri(db_path: Path) -> str:
     """Build sqlite tracking URI from DB path."""
-    return f"sqlite:///{db_path.as_posix()}"
+    return build_sqlite_tracking_uri(db_path)
 
 
 def _ensure_experiment(

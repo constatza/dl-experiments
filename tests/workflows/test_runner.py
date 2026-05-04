@@ -88,7 +88,12 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
 
     model_config_path = models_dir / f"{exp_name}_model.toml"
     model_config = {
-        "SESSION": {"seed": 42, "precision": "float64", "name": "test_model"},
+        "SESSION": {
+            "seed": 42,
+            "workflow": "train",
+            "precision": "float64",
+            "name": "test_model",
+        },
         "MODEL": {
             "name": "NormScaledConstantWidthFFNN",
             "module_path": "dlkit.nn",
@@ -114,12 +119,14 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
                     }
                 ],
             },
-            "optimizer": {"lr": 1e-3, "name": "AdamW"},
-            "scheduler": {
-                "name": "ReduceLROnPlateau",
-                "factor": 0.5,
-                "patience": 5,
-                "min_lr": 1e-6,
+            "optimizer": {
+                "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
+                "default_scheduler": {
+                    "name": "ReduceLROnPlateau",
+                    "factor": 0.5,
+                    "patience": 5,
+                    "min_lr": 1e-6,
+                },
             },
             "metrics": [
                 {
@@ -145,7 +152,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
     with open(model_config_path, "wb") as f:
         tomli_w.dump(model_config, f)
 
-    # 5. Create Master Experiment Config (NEW FORMAT with [[experiment]] entries)
+    # 5. Create master config using [[experiments]] registry entries.
     master_config_path = configs_dir / "experiments.toml"
     with open(master_config_path, "w") as f:
         f.write('project_root = ".."\n')
@@ -156,7 +163,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
         f.write("[[models]]\n")
         f.write(f'id = "{exp_name}_model"\n')
         f.write(f'path = "models/{exp_name}_model.toml"\n\n')
-        f.write("[[experiment]]\n")
+        f.write("[[experiments]]\n")
         f.write(f'id = "{exp_name}"\n')
         f.write('dataset = "test_data_gen"\n')
         f.write(f'model = "{exp_name}_model"\n')
@@ -237,7 +244,12 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
     exp_name = "mlflow_experiment"
     model_config_path = models_dir / f"{exp_name}_model.toml"
     model_config = {
-        "SESSION": {"seed": 42, "precision": "float64", "name": "mlflow_test_model"},
+        "SESSION": {
+            "seed": 42,
+            "workflow": "train",
+            "precision": "float64",
+            "name": "mlflow_test_model",
+        },
         "MODEL": {
             "name": "NormScaledConstantWidthFFNN",
             "module_path": "dlkit.nn",
@@ -263,7 +275,9 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
                     }
                 ],
             },
-            "optimizer": {"lr": 1e-3, "name": "AdamW"},
+            "optimizer": {
+                "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
+            },
             "metrics": [
                 {
                     "name": "NormalizedVectorNormError",
@@ -301,7 +315,7 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
         f.write("[[models]]\n")
         f.write(f'id = "{exp_name}_model"\n')
         f.write(f'path = "models/{exp_name}_model.toml"\n\n')
-        f.write("[[experiment]]\n")
+        f.write("[[experiments]]\n")
         f.write(f'id = "{exp_name}"\n')
         f.write('dataset = "mlflow_test_data"\n')
         f.write(f'model = "{exp_name}_model"\n')

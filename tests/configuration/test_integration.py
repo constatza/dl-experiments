@@ -13,7 +13,7 @@ from neuralls.platform.config.models.workspace import (
     RunnableExperiment,
 )
 from neuralls.platform.config.paths import PathContext
-from neuralls.platform.config.loaders import build_settings
+from neuralls.platform.config.loaders import build_settings, load_model_config
 
 
 @pytest.fixture
@@ -24,6 +24,7 @@ def sample_model_config(tmp_path: Path) -> Path:
 [SESSION]
 name = "test-model"
 seed = 42
+workflow = "train"
 
 [MODEL]
 name = "TestModel"
@@ -32,6 +33,21 @@ module_path = "dlkit.nn"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [DATASET]
 name = "FlexibleDataset"
@@ -61,6 +77,115 @@ normalize = "matrix"
 
 class TestBuildSettings:
     """Tests for build_settings function."""
+
+    def test_load_model_config_loads_explicit_optimization_workflows(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Optimization workflows must declare SESSION.workflow explicitly."""
+        from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
+
+        config_path = tmp_path / "optuna-model.toml"
+        config_path.write_text(
+            """
+[SESSION]
+name = "optuna-model"
+seed = 42
+workflow = "optimize"
+
+[MODEL]
+name = "TestModel"
+module_path = "dlkit.nn"
+
+[TRAINING]
+[TRAINING.trainer]
+max_epochs = 1
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[DATASET]
+name = "FlexibleDataset"
+
+[OPTUNA]
+enabled = true
+n_trials = 2
+"""
+        )
+
+        settings = load_model_config(config_path)
+        assert isinstance(settings, OptimizationWorkflowConfig)
+
+    def test_load_model_config_does_not_promote_optuna_enabled_configs(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Optuna-enabled training configs stay training without explicit optimize workflow."""
+        from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+
+        config_path = tmp_path / "train-optuna-model.toml"
+        config_path.write_text(
+            """
+[SESSION]
+name = "train-optuna-model"
+seed = 42
+workflow = "train"
+
+[MODEL]
+name = "TestModel"
+module_path = "dlkit.nn"
+
+[TRAINING]
+[TRAINING.trainer]
+max_epochs = 1
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[DATASET]
+name = "FlexibleDataset"
+
+[OPTUNA]
+enabled = true
+n_trials = 2
+"""
+        )
+
+        settings = load_model_config(config_path)
+        assert isinstance(settings, TrainingWorkflowConfig)
+
+    def test_load_model_config_rejects_legacy_optimization_section(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Top-level OPTIMIZATION sections are rejected after the hard cutover."""
+        config_path = tmp_path / "legacy-optimization-model.toml"
+        config_path.write_text(
+            """
+[SESSION]
+name = "legacy-optimization-model"
+seed = 42
+workflow = "train"
+
+[MODEL]
+name = "TestModel"
+module_path = "dlkit.nn"
+
+[TRAINING]
+[TRAINING.trainer]
+max_epochs = 1
+
+[OPTIMIZATION]
+
+[[OPTIMIZATION.stages]]
+[OPTIMIZATION.stages.optimizer]
+name = "AdamW"
+lr = 1e-3
+"""
+        )
+
+        with pytest.raises(Exception, match="OPTIMIZATION"):
+            load_model_config(config_path)
 
     def test_build_settings_with_workspace(
         self,
@@ -104,8 +229,9 @@ class TestBuildSettings:
         assert not hasattr(settings.MLFLOW, "server")
 
         # Check PATHS injected
-        assert settings.PATHS.project_root == str(path_ctx.project_root)
-        assert settings.PATHS.processed_dir == str(path_ctx.processed_root)
+        assert settings.PATHS is not None
+        assert getattr(settings.PATHS, "project_root") == str(path_ctx.project_root)
+        assert getattr(settings.PATHS, "processed_dir") == str(path_ctx.processed_root)
         assert settings.PATHS.output_dir == str(path_ctx.output_root)
 
     def test_mlflow_runtime_fields_are_env_only(
@@ -268,9 +394,13 @@ class TestLoadExperiment:
         # Create config without SESSION.name
         model_config = tmp_path / "model_only.toml"
         model_config.write_text("""
+[SESSION]
+seed = 42
+workflow = "train"
+
 [MODEL]
 name = "OnlyModelName"
-module_path = "test.module"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]
@@ -299,9 +429,13 @@ name = "FlexibleDataset"
         # Create config without SESSION.name (dlkit requires MODEL.name)
         model_config = tmp_path / "no_session.toml"
         model_config.write_text("""
+[SESSION]
+seed = 42
+workflow = "train"
+
 [MODEL]
 name = "JustModelName"
-module_path = "test.module"
+module_path = "dlkit.nn"
 
 [TRAINING]
 [TRAINING.trainer]

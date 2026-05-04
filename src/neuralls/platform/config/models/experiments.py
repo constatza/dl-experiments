@@ -57,17 +57,6 @@ class RegistryEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_legacy_key(cls, data: object) -> object:
-        """Accept legacy ``key`` while normalizing to ``id`` immediately."""
-        if not isinstance(data, dict):
-            return data
-        raw = dict(data)
-        if "key" in raw and "id" not in raw:
-            raw["id"] = raw.pop("key")
-        return raw
-
     @property
     def effective_display_name(self) -> str:
         """Return the configured label or fall back to the id."""
@@ -92,17 +81,6 @@ class ExperimentEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_legacy_key(cls, data: object) -> object:
-        """Accept legacy ``key`` while normalizing to ``id`` immediately."""
-        if not isinstance(data, dict):
-            return data
-        raw = dict(data)
-        if "key" in raw and "id" not in raw:
-            raw["id"] = raw.pop("key")
-        return raw
-
     @property
     def effective_display_name(self) -> str:
         """Return the configured label or fall back to the id."""
@@ -125,17 +103,6 @@ class RunEntry(BaseModel):
     data_config_path: str = Field(alias="data_config")
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_legacy_key(cls, data: object) -> object:
-        """Accept legacy ``key`` while normalizing to ``id`` immediately."""
-        if not isinstance(data, dict):
-            return data
-        raw = dict(data)
-        if "key" in raw and "id" not in raw:
-            raw["id"] = raw.pop("key")
-        return raw
 
     @property
     def effective_display_name(self) -> str:
@@ -221,7 +188,7 @@ class ExperimentsConfig(BaseModel):
         models: Model registry entries.
         comparisons: Comparison registry entries.
         experiments: Experiment entries referencing registry ids.
-        run: Legacy direct-path entries.
+        run: Optional direct-path entries.
         project_root: Optional project root path.
         mlflow: MLflow topology config (tracking URI, etc.).
         names: MLflow experiment names for training and comparison.
@@ -241,16 +208,19 @@ class ExperimentsConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_legacy_keys(cls, data: object) -> object:
-        """Support legacy singular table names alongside the new registry schema."""
+    def reject_unsupported_master_config_tables(cls, data: object) -> object:
+        """Reject unsupported master-config table names."""
         if not isinstance(data, dict):
             return data
         raw = dict(data)
-        if "experiment" in raw and "experiments" not in raw:
-            raw["experiments"] = raw["experiment"]
+        if "experiment" in raw:
+            raise ValueError(
+                "Unsupported '[[experiment]]' table. "
+                "Use '[[experiments]]' entries in experiments config."
+            )
         if "comparison_profiles" in raw:
             raise ValueError(
-                "Legacy 'comparison_profiles' is no longer supported. "
+                "Unsupported 'comparison_profiles' table. "
                 "Use [[comparisons]] entries in experiments config."
             )
         return raw

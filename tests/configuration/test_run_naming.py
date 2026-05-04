@@ -17,6 +17,7 @@ def model_config_with_session(tmp_path: Path) -> Path:
 [SESSION]
 name = "MyCustomSession"
 seed = 42
+workflow = "train"
 
 [MODEL]
 name = "FFNNModel"
@@ -25,6 +26,21 @@ module_path = "dlkit.nn"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [DATASET]
 name = "FlexibleDataset"
@@ -40,6 +56,7 @@ def model_config_without_session(tmp_path: Path) -> Path:
     config_content = """
 [SESSION]
 seed = 42
+workflow = "train"
 
 [MODEL]
 name = "NormScaledLinearFFNN"
@@ -48,6 +65,21 @@ module_path = "dlkit.nn"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [DATASET]
 name = "FlexibleDataset"
@@ -64,6 +96,7 @@ def model_config_with_dlkit_default_session(tmp_path: Path) -> Path:
 [SESSION]
 name = "dlkit-session"
 seed = 42
+workflow = "train"
 
 [MODEL]
 name = "GNNModel"
@@ -72,6 +105,21 @@ module_path = "dlkit.domain.nn.graph"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [DATASET]
 name = "FlexibleDataset"
@@ -227,6 +275,7 @@ class TestRunNamingEdgeCases:
         bad_config_content = """
 [SESSION]
 seed = 42
+workflow = "train"
 
 [MODEL]
 name = ""
@@ -235,6 +284,21 @@ module_path = "dlkit.nn"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [DATASET]
 name = "FlexibleDataset"
@@ -260,6 +324,7 @@ name = "FlexibleDataset"
 [SESSION]
 name = "Model_release-alpha"
 seed = 42
+workflow = "train"
 
 [MODEL]
 name = "TestModel"
@@ -268,6 +333,21 @@ module_path = "dlkit.nn"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [DATASET]
 name = "FlexibleDataset"

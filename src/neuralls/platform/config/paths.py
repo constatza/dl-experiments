@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from neuralls.platform.config.models.data_models import DataConfigFile
+from neuralls.platform.config.path_utils import build_sqlite_uri, resolve_root_path
 from neuralls.shared.constants import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_PROCESSED_DATA_DIR,
@@ -36,12 +37,12 @@ class PathContext:
     def mlflow_tracking_uri(self) -> str:
         """MLflow tracking database URI (derived from output_root)."""
         db_path = self.output_root / "mlruns" / "mlflow.db"
-        return f"sqlite:///{db_path.as_posix()}"
+        return build_sqlite_uri(db_path)
 
     @property
     def mlflow_artifact_location(self) -> str:
         """MLflow artifact storage location (derived from output_root)."""
-        return str((self.output_root / "mlartifacts").as_posix())
+        return str((self.output_root / "mlartifacts").resolve())
 
 
 def resolve_project_root(override: Path | str | None = None) -> Path:
@@ -53,9 +54,7 @@ def resolve_project_root(override: Path | str | None = None) -> Path:
     Returns:
         Resolved absolute project root path.
     """
-    if override:
-        return Path(override).resolve()
-    return DEFAULT_PROJECT_ROOT
+    return resolve_root_path(default_root=DEFAULT_PROJECT_ROOT, override=override)
 
 
 def resolve_output_root(override: Path | str | None = None) -> Path:
@@ -74,9 +73,7 @@ def resolve_output_root(override: Path | str | None = None) -> Path:
     Returns:
         Resolved absolute output root path.
     """
-    if override:
-        return Path(override).resolve()
-    return DEFAULT_OUTPUT_DIR
+    return resolve_root_path(default_root=DEFAULT_OUTPUT_DIR, override=override)
 
 
 def resolve_processed_root(
@@ -97,10 +94,7 @@ def resolve_processed_root(
     """
     data_dir = data_cfg.output.data_dir
     if data_dir is not None:
-        path = Path(data_dir)
-        if not path.is_absolute():
-            path = (project_root / path).resolve()
-        return path
+        return resolve_root_path(default_root=project_root, override=data_dir, base_dir=project_root)
     return DEFAULT_PROCESSED_DATA_DIR
 
 

@@ -8,7 +8,7 @@ The platform package isolates external integrations and side-effecting helpers.
 - `storage/`: filesystem, workspaces, dataset I/O, and storage validation helpers
 - `tracking/`: MLflow run and client helpers
 - `reporting/`: plotting, artifact staging, and inference output adapters
-- `dlkit/`: DLKit-backed predictor adapter over `dlkit.engine.inference`
+- `dlkit/`: DLKit-backed predictor adapter
 - `caching.py`: directory hashing for workflow cache invalidation
 
 ## Semantic Difference
@@ -22,6 +22,23 @@ The DLKit integration now maps cleanly onto DLKit's current layer split:
 `dlkit.infrastructure.*` for config and IO, `dlkit.engine.*` for runtime
 training and inference entrypoints, and `dlkit.domain.*` for model, metric,
 and loss namespaces referenced by checked-in configs.
+
+Path normalization now also delegates to DLKit: local filesystem roots use
+`dlkit.infrastructure.io.PathResolver`, while SQLite/file URI handling uses
+DLKit's local URI resolver. `neuralls` keeps only repo-specific policy such as
+placing MLflow artifacts under `mlartifacts/`.
+
+Master experiments configs now accept only `[[experiments]]` for registry-backed
+entries. The singular `[[experiment]]` table is rejected instead of being
+silently normalized.
+
+Current DLKit compatibility note:
+
+- model configs still use `dlkit.nn` as the public-facing namespace
+- local loaders normalize model TOML into workflow-specific DLKit config models
+- MLflow logged-model URI construction is handled locally in `tracking/`
+  because the installed DLKit package no longer exports those registry
+  convenience helpers
 
 ## Boundary
 

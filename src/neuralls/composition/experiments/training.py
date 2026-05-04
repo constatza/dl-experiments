@@ -12,8 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from dlkit.infrastructure.config import GeneralSettings
-from dlkit.interfaces.api import execute
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.data_entries import (
     Feature,
@@ -23,6 +21,12 @@ from dlkit.infrastructure.config.data_entries import (
     TargetType,
 )
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.workflow_configs import (
+    OptimizationWorkflowConfig,
+    TrainingWorkflowConfig,
+)
+from dlkit.interfaces.api import execute
+from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
 from dlkit.io import PackFiles
 from loguru import logger
 from mlflow.tracking import MlflowClient
@@ -32,6 +36,7 @@ from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.config.models.experiments import ExperimentEntry
 from neuralls.platform.config.mlflow import (
     build_mlflow_environment,
+    build_sqlite_tracking_uri,
     scoped_mlflow_environment,
 )
 from neuralls.composition.experiments.assembler import load_experiment
@@ -60,6 +65,7 @@ from neuralls.composition.tracking.run_specs import build_training_run_spec, for
 GRAPH_DATASET_NAME: str = "GraphDataset"
 FLEXIBLE_DATASET_NAME: str = "FlexibleDataset"
 TRAINING_EXPERIMENT_NAME: str = "Train"
+type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 @dataclass(frozen=True)
@@ -78,7 +84,7 @@ class TrainingResult:
 
 
 def _load_and_prepare_data(
-    settings: GeneralSettings,
+    settings: TrainingWorkflowSettings,
     workspace: ExperimentWorkspace,
 ) -> tuple[TrainingArrays, list[FeatureType], list[TargetType]]:
     """Load training data and create Feature/Target configurations.
@@ -89,7 +95,7 @@ def _load_and_prepare_data(
     3. Creates DLKit target entries from file paths
 
     Args:
-        settings: DLKit general settings (used to check dataset type)
+        settings: DLKit training or optimization workflow settings.
         workspace: Experiment workspace (provides data_dir path)
 
     Returns:
@@ -165,11 +171,11 @@ def _create_target_configs(arrays: TrainingArrays) -> list[TargetType]:
     ]
 
 
-def _validate_dataset_section(settings: GeneralSettings) -> None:
+def _validate_dataset_section(settings: TrainingWorkflowSettings) -> None:
     """Validate that DATASET section exists in settings.
 
     Args:
-        settings: DLKit general settings to validate
+        settings: DLKit workflow settings to validate
 
     Raises:
         ValueError: If [DATASET] section missing from config
@@ -179,10 +185,10 @@ def _validate_dataset_section(settings: GeneralSettings) -> None:
 
 
 def _resolve_dataset(
-    settings: GeneralSettings,
+    settings: TrainingWorkflowSettings,
     features: list[FeatureType],
     targets: list[TargetType],
-) -> GeneralSettings:
+) -> TrainingWorkflowSettings:
     """Resolve and apply dataset configurations to settings.
 
     This is a pure transformation that injects file-backed features/targets
@@ -194,7 +200,7 @@ def _resolve_dataset(
         targets: Target configs to inject (from _create_target_configs)
 
     Returns:
-        New GeneralSettings with updated DATASET section
+        New workflow settings with updated DATASET section
 
     Raises:
         ValueError: If DATASET section missing from config
@@ -216,9 +222,9 @@ def _resolve_dataset(
 
 
 def _configure_output_paths(
-    settings: GeneralSettings,
+    settings: TrainingWorkflowSettings,
     output_dir: Path,
-) -> GeneralSettings:
+) -> TrainingWorkflowSettings:
     """Configure training output paths.
 
     This transformation sets:
@@ -230,7 +236,7 @@ def _configure_output_paths(
         output_dir: Workspace root directory (from experiment.workspace.root_dir)
 
     Returns:
-        New GeneralSettings with updated TRAINING section
+        New workflow settings with updated TRAINING section
     """
     training_cfg = settings.TRAINING
     if training_cfg is None or training_cfg.trainer is None:
@@ -249,7 +255,9 @@ def _configure_output_paths(
     )
 
 
-def _configure_dataloader_runtime(settings: GeneralSettings) -> GeneralSettings:
+def _configure_dataloader_runtime(
+    settings: TrainingWorkflowSettings,
+) -> TrainingWorkflowSettings:
     """Configure dataloader for reliable sparse runtime execution.
 
     Sparse pack readers and constrained runtime environments are currently
@@ -274,11 +282,11 @@ def _configure_dataloader_runtime(settings: GeneralSettings) -> GeneralSettings:
 
 
 def _configure_mlflow(
-    settings: GeneralSettings,
+    settings: TrainingWorkflowSettings,
     *,
     mlflow_experiment_name: str,
     mlflow_run_name: str,
-) -> GeneralSettings:
+) -> TrainingWorkflowSettings:
     """Inject concrete MLflow names into training settings."""
     if not settings.MLFLOW:
         return settings
@@ -295,13 +303,13 @@ def _configure_mlflow(
 
 
 def _configure_training_pipeline(
-    settings: GeneralSettings,
+    settings: TrainingWorkflowSettings,
     workspace: ExperimentWorkspace,
     features: list[FeatureType],
     targets: list[TargetType],
     mlflow_experiment_name: str,
     mlflow_run_name: str,
-) -> tuple[GeneralSettings, ExperimentWorkspace]:
+) -> tuple[TrainingWorkflowSettings, ExperimentWorkspace]:
     """Apply all configuration transformations to settings.
 
     This function applies sequential transformations:
@@ -310,7 +318,7 @@ def _configure_training_pipeline(
     3. Configure output paths (checkpoint dir, default root dir)
     4. Inject concrete MLflow experiment/run names into settings
 
-    Each transformation is a pure function that returns new GeneralSettings.
+    Each transformation is a pure function that returns new workflow settings.
     The transformations are independent and can be tested in isolation.
 
     Args:
@@ -338,6 +346,11 @@ def _configure_training_pipeline(
 def _resolve_mlflow_logging_config() -> tuple[str | None, str]:
     """Resolve tracking URI and artifact destination from runtime env."""
     return os.environ.get("MLFLOW_TRACKING_URI"), os.environ.get("MLFLOW_ARTIFACT_URI", "")
+
+
+def _unwrap_execution_result(result: Any) -> Any:
+    """Normalize DLKit execute() results to the underlying training result."""
+    return getattr(result, "training_result", result)
 
 
 def _build_runtime_mlflow_paths(runtime_mlflow_env: Mapping[str, str]) -> MlflowPaths:
@@ -664,7 +677,7 @@ def _resolve_runtime_mlflow_env(output_root: Path | str | None) -> dict[str, str
 
     permanent_root = Path(output_root).resolve() if output_root else DEFAULT_OUTPUT_DIR
     return build_mlflow_environment(
-        tracking_uri=f"sqlite:///{(permanent_root / 'mlruns' / 'mlflow.db').as_posix()}",
+        tracking_uri=build_sqlite_tracking_uri(permanent_root / "mlruns" / "mlflow.db"),
         artifacts_destination=str((permanent_root / "mlartifacts").resolve()),
     )
 
@@ -813,14 +826,15 @@ def train_model(
             settings = patch_model(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
         with scoped_mlflow_environment(runtime_mlflow_env):
             with parent_run_context(parent_run_id):
-                training_result = execute(
+                execution_result = execute(
                     settings,
-                    overrides={
-                        "experiment_name": run_config.experiment_name,
-                        "run_name": run_config.run_name,
-                        "tags": dict(run_config.tags),
-                    },
+                    overrides=ExecutionOverrides(
+                        experiment_name=run_config.experiment_name,
+                        run_name=run_config.run_name,
+                        tags=dict(run_config.tags),
+                    ),
                 )
+                training_result = _unwrap_execution_result(execution_result)
 
             # Step 6: Resolve MLflow run metadata and retrieve the checkpoint
             tracking_uri, artifacts_destination = _resolve_mlflow_logging_config()

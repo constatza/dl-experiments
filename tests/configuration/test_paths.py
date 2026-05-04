@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
 from neuralls.platform.config.models.data_models import DataConfigFile, OutputConfig
 from neuralls.platform.config.paths import (
     PathContext,
@@ -161,7 +162,7 @@ class TestPathContext:
         )
 
         expected_db_path = output_root / "mlruns" / "mlflow.db"
-        expected_uri = f"sqlite:///{expected_db_path.as_posix()}"
+        expected_uri = build_sqlite_tracking_uri(expected_db_path)
 
         assert ctx.mlflow_tracking_uri == expected_uri
 
@@ -175,7 +176,7 @@ class TestPathContext:
         )
 
         expected_artifacts = output_root / "mlartifacts"
-        assert ctx.mlflow_artifact_location == str(expected_artifacts.as_posix())
+        assert ctx.mlflow_artifact_location == str(expected_artifacts.resolve())
 
 
 class TestBuildPathContext:
@@ -262,9 +263,9 @@ class TestBuildPathContext:
         ctx = build_path_context(data_cfg, output_override=output_root)
 
         # MLflow tracking DB should be under output_root
-        expected_tracking = f"sqlite:///{(output_root / 'mlruns' / 'mlflow.db').as_posix()}"
+        expected_tracking = build_sqlite_tracking_uri(output_root / "mlruns" / "mlflow.db")
         assert ctx.mlflow_tracking_uri == expected_tracking
 
         # MLflow artifacts should be under output_root
-        expected_artifacts = str((output_root / "mlartifacts").as_posix())
+        expected_artifacts = str((output_root / "mlartifacts").resolve())
         assert ctx.mlflow_artifact_location == expected_artifacts

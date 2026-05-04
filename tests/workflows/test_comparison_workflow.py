@@ -10,6 +10,7 @@ import numpy as np
 import tomli_w
 
 from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
@@ -47,6 +48,8 @@ _SETUP_TRACKING = "neuralls.composition.experiments.comparison_batch.setup_compa
 
 
 def _write_comparison_config(path: Path) -> None:
+    matrix_path = path.parent / "matrix.npy"
+    rhs_path = path.parent / "rhs.npy"
     path.write_text(
         "\n".join(
             [
@@ -60,8 +63,8 @@ def _write_comparison_config(path: Path) -> None:
                 "m_max = 20",
                 "",
                 "[general.data]",
-                'matrix_path = "/tmp/matrix.npy"',
-                'rhs_path = "/tmp/rhs.npy"',
+                f'matrix_path = "{matrix_path}"',
+                f'rhs_path = "{rhs_path}"',
                 "",
                 "[[preconditioners]]",
                 'name = "none"',
@@ -74,9 +77,7 @@ def _write_comparison_config(path: Path) -> None:
 
 def _write_experiments_config(path: Path, *, with_comparisons: bool = False) -> None:
     payload: dict[str, object] = {
-        "mlflow": {
-            "tracking_uri": f"sqlite:///{(path.parent / 'mlruns' / 'mlflow.db').as_posix()}",
-        },
+        "mlflow": {"tracking_uri": build_sqlite_tracking_uri(path.parent / "mlruns" / "mlflow.db")},
         "names": {
             "training": "neuralls-training",
             "comparison": "Comparisons",
@@ -111,7 +112,7 @@ def _mock_cfg(
     return cfg
 
 
-def _solver_params() -> ComparisonGeneral:
+def _solver_params(tmp_path: Path) -> ComparisonGeneral:
     return ComparisonGeneral(
         params=SolverParams(
             rtol=1.0e-6,
@@ -122,8 +123,8 @@ def _solver_params() -> ComparisonGeneral:
             breakdown_tol=None,
         ),
         data=ComparisonData(
-            matrix_path=Path("/tmp/matrix.npy"),
-            rhs_path=Path("/tmp/rhs.npy"),
+            matrix_path=tmp_path / "matrix.npy",
+            rhs_path=tmp_path / "rhs.npy",
         ),
     )
 
@@ -155,7 +156,7 @@ def _typed_comparison_result(plot_path: Path) -> ComparisonResult:
             )
         },
         summary="ok",
-        solver_params=_solver_params(),
+        solver_params=_solver_params(plot_path.parent),
         plot_paths=PlotPaths(convergence=plot_path),
         preconditioners=("none",),
         condition_numbers={"none": 1.0},
@@ -294,7 +295,7 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
     payload = ComparisonResult(
         results={},
         summary="ok",
-        solver_params=_solver_params(),
+        solver_params=_solver_params(tmp_path),
         preconditioners=("none",),
         plot_paths=PlotPaths(
             convergence=convergence,
@@ -436,14 +437,14 @@ def test_run_comparison_ignores_unrelated_broken_experiments(
         encoding="utf-8",
     )
     (tmp_path / "models" / "valid-model.toml").write_text(
-        "[MODEL]\nname = 'NormScaledLinearFFNN'\nmodule_path = 'test.module'\n",
+        "[MODEL]\nname = 'NormScaledLinearFFNN'\nmodule_path = 'dlkit.nn'\n",
         encoding="utf-8",
     )
     experiments_config = tmp_path / "experiments.toml"
     experiments_config.write_text(
-        """
+        f"""
 [mlflow]
-tracking_uri = "sqlite:///tmp/mlflow.db"
+tracking_uri = "{build_sqlite_tracking_uri(tmp_path / 'mlflow.db')}"
 
 [[datasets]]
 id = "valid-dataset"

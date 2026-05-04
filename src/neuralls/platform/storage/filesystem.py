@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from dlkit.infrastructure.config import GeneralSettings
+from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.shared.constants import DEFAULT_OUTPUT_DIR
@@ -67,7 +67,7 @@ def extract_model_name(model_config_path: Path | str) -> str:
 
 
 def derive_model_identifier(
-    settings: GeneralSettings,
+    settings: WorkflowConfig,
     context: ExperimentWorkspace,
     config_path: str | Path,
 ) -> str:
@@ -82,7 +82,7 @@ def derive_model_identifier(
         4. Config filename stem
 
     Args:
-        settings: General settings
+        settings: DLKit workflow settings
         context: Experiment workspace
         config_path: Path to config file
 

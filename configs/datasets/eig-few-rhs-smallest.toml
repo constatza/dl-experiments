@@ -6,7 +6,7 @@
 # Output: eig-few-rhs-smallest-{normalization}/
 
 [source]
-matrix_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 normalize = "matrix"
@@ -20,4 +20,4 @@ num_eigenvectors = 5
 samples = 6000
 
 [output]
-data_dir = "/data/projects/graph-cg/processed"
+data_dir = "${GRAPH_CG_PROCESSED_DIR}"

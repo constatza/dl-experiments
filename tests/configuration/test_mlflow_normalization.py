@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import sys
 
 import pytest
 
 from neuralls.platform.config.mlflow import (
     build_mlflow_environment,
+    build_sqlite_tracking_uri,
     derive_output_root_from_tracking_uri,
     derive_sqlite_artifacts_destination,
     normalize_artifacts_destination,
@@ -31,7 +33,7 @@ def test_normalize_model_mlflow_rejects_tracking_uri_in_model_config(tmp_path: P
     raw = {
         "MLFLOW": {
             "enabled": True,
-            "tracking_uri": f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}",
+            "tracking_uri": build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db"),
         }
     }
 
@@ -61,8 +63,8 @@ def test_normalize_tracking_uri_resolves_relative_sqlite_path(tmp_path: Path) ->
         config_path=config_path,
     )
 
-    expected_db = (config_path.parent / "../output/mlruns/mlflow.db").resolve()
-    assert normalized == f"sqlite:///{expected_db.as_posix()}"
+    expected_db = (config_path.parent / "output/mlruns/mlflow.db").resolve()
+    assert normalized == build_sqlite_tracking_uri(expected_db)
 
 
 def test_normalize_tracking_uri_rejects_invalid_scheme() -> None:
@@ -84,7 +86,7 @@ def test_normalize_artifacts_destination_resolves_relative_path(tmp_path: Path) 
 
 
 def test_build_mlflow_environment_derives_sqlite_artifact_uri(tmp_path: Path) -> None:
-    tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
+    tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")
 
     env = build_mlflow_environment(tracking_uri=tracking_uri)
 
@@ -100,12 +102,25 @@ def test_build_mlflow_environment_keeps_remote_tracking_without_artifact_uri() -
     assert env == {"MLFLOW_TRACKING_URI": tracking_uri}
 
 
-def test_derive_output_root_from_tracking_uri_uses_sqlite_parent(tmp_path: Path) -> None:
-    tracking_uri = f"sqlite:///{(tmp_path / 'output' / 'mlruns' / 'mlflow.db').as_posix()}"
+def test_derive_output_root_from_tracking_uri_uses_repo_output_root(tmp_path: Path) -> None:
+    tracking_uri = build_sqlite_tracking_uri(tmp_path / "output" / "mlruns" / "mlflow.db")
 
     output_root = derive_output_root_from_tracking_uri(tracking_uri)
 
-    assert output_root == (tmp_path / "output" / "mlruns").resolve()
+    assert output_root == (tmp_path / "output").resolve()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-shaped path test")
+def test_normalize_tracking_uri_accepts_windows_drive_letter_path(tmp_path: Path) -> None:
+    config_path = tmp_path / "configs" / "experiments.toml"
+    config_path.parent.mkdir(parents=True)
+
+    normalized = normalize_tracking_uri(
+        "sqlite:///C:/neuralls/output/mlruns/mlflow.db",
+        config_path=config_path,
+    )
+
+    assert normalized == "sqlite:///C:/neuralls/output/mlruns/mlflow.db"
 
 
 def test_scoped_mlflow_environment_restores_previous_values(

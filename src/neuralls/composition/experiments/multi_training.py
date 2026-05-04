@@ -24,6 +24,7 @@ from neuralls.platform.config.registry import (
 )
 from neuralls.platform.config.mlflow import (
     build_mlflow_environment,
+    derive_output_root_from_tracking_uri,
     is_sqlite_tracking_uri,
     scoped_mlflow_environment,
 )
@@ -121,7 +122,7 @@ def _resolve_config_paths(
     - ``RunEntry`` direct paths resolved relative to ``configs_dir``
 
     Args:
-        experiment: Single ``[[experiment]]`` or ``[[run]]`` entry.
+        experiment: Single ``[[experiments]]`` or ``[[run]]`` entry.
         configs_dir: Parent directory of the experiments TOML.
 
     Returns:
@@ -408,10 +409,10 @@ def train_batch(
         ``BatchResult`` with all run results, label map, and batch output directory.
 
     Raises:
-        ValueError: If the TOML contains no ``[[experiment]]`` entries.
+        ValueError: If the TOML contains no ``[[experiments]]`` or ``[[run]]`` entries.
         FileNotFoundError: If any resolved config path does not exist.
     """
-    # Support both legacy [[run]] direct paths and registry-backed [[experiments]]
+    # Accept both direct [[run]] entries and registry-backed [[experiments]] entries.
     run_entries: list[Any] = list(cfg.run) or list(cfg.experiments)
     if not run_entries:
         raise ValueError("No [[run]] or [[experiments]] entries found in experiments config")
@@ -423,8 +424,12 @@ def train_batch(
     elif cfg.output_dir is not None:
         base_output = cfg.output_dir
     elif is_sqlite_tracking_uri(tracking_uri):
-        db_path = Path(tracking_uri.removeprefix("sqlite:///"))
-        base_output = db_path.parent
+        derived_output = derive_output_root_from_tracking_uri(tracking_uri)
+        if derived_output is None:
+            raise ValueError(
+                "experiments.toml must set output_dir when mlflow.tracking_uri is remote."
+            )
+        base_output = derived_output
     else:
         raise ValueError("experiments.toml must set output_dir when mlflow.tracking_uri is remote.")
 

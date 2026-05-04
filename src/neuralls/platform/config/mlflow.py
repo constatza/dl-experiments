@@ -10,10 +10,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from dlkit.infrastructure.io import url_resolver
+
+from neuralls.platform.config.path_utils import build_sqlite_uri, resolve_local_path
+
 
 def is_sqlite_tracking_uri(uri: str) -> bool:
     """Return True when tracking URI uses the sqlite scheme."""
-    return uri.strip().lower().startswith("sqlite:///")
+    return url_resolver.scheme(uri.strip()) == "sqlite"
 
 
 def _resolve_sqlite_db_path(tracking_uri: str, config_path: Path | None = None) -> Path:
@@ -21,18 +25,16 @@ def _resolve_sqlite_db_path(tracking_uri: str, config_path: Path | None = None) 
     if not is_sqlite_tracking_uri(tracking_uri):
         raise ValueError(f"Expected sqlite tracking URI, got: {tracking_uri!r}")
 
-    raw_path = tracking_uri.replace("sqlite:///", "", 1).strip()
-    if not raw_path or raw_path == ":memory:":
+    uri = tracking_uri.strip()
+    if uri.endswith(":memory:"):
         raise ValueError("MLflow sqlite tracking URIs must include a filesystem database path.")
+    base_dir = config_path.parent if config_path is not None else Path.cwd()
+    return url_resolver.resolve_local_uri(uri, base_dir.resolve())
 
-    db_path = Path(raw_path)
-    if not db_path.is_absolute():
-        if config_path is None:
-            raise ValueError(
-                "Relative sqlite MLflow tracking URIs require a config path for resolution."
-            )
-        db_path = (config_path.parent / db_path).resolve()
-    return db_path
+
+def build_sqlite_tracking_uri(db_path: Path) -> str:
+    """Build a normalized sqlite tracking URI from a local DB path."""
+    return build_sqlite_uri(db_path)
 
 
 def normalize_tracking_uri(
@@ -51,10 +53,10 @@ def normalize_tracking_uri(
             raise ValueError(
                 f"MLflow tracking_uri must include a host for {parsed.scheme} URIs: {uri!r}"
             )
-        return uri
+        return uri.rstrip("/")
 
     db_path = _resolve_sqlite_db_path(uri, config_path)
-    return f"sqlite:///{db_path.as_posix()}"
+    return build_sqlite_tracking_uri(db_path)
 
 
 def normalize_artifacts_destination(
@@ -63,16 +65,8 @@ def normalize_artifacts_destination(
     config_path: Path | None = None,
 ) -> str:
     """Normalize an artifacts destination to an absolute filesystem path."""
-    path = Path(artifacts_destination).expanduser()
-    if not path.is_absolute():
-        if config_path is None:
-            raise ValueError(
-                "Relative MLflow artifacts destinations require a config path for resolution."
-            )
-        path = (config_path.parent / path).resolve()
-    else:
-        path = path.resolve()
-    return str(path)
+    base_dir = config_path.parent if config_path is not None else Path.cwd()
+    return str(resolve_local_path(artifacts_destination, base_dir=base_dir))
 
 
 def derive_sqlite_artifacts_destination(tracking_uri: str) -> str:
@@ -82,12 +76,10 @@ def derive_sqlite_artifacts_destination(tracking_uri: str) -> str:
         raise ValueError(
             f"Cannot derive sqlite artifacts destination from non-sqlite URI: {tracking_uri!r}"
         )
-    db_path = Path(urlparse(normalized).path)
-    if db_path.name in {"", "."}:
-        raise ValueError(
-            f"Invalid sqlite tracking URI path (missing database filename): {tracking_uri!r}"
-        )
-    return str((db_path.parent / "mlartifacts").resolve())
+    db_path = _resolve_sqlite_db_path(normalized)
+    mlruns_dir = db_path.parent
+    output_root = mlruns_dir.parent if mlruns_dir.name == "mlruns" else mlruns_dir
+    return str((output_root / "mlartifacts").resolve())
 
 
 def derive_output_root_from_tracking_uri(
@@ -99,7 +91,9 @@ def derive_output_root_from_tracking_uri(
     normalized = normalize_tracking_uri(tracking_uri, config_path=config_path)
     if not is_sqlite_tracking_uri(normalized):
         return None
-    return _resolve_sqlite_db_path(normalized).parent.resolve()
+    db_path = _resolve_sqlite_db_path(normalized)
+    mlruns_dir = db_path.parent.resolve()
+    return mlruns_dir.parent if mlruns_dir.name == "mlruns" else mlruns_dir
 
 
 def build_mlflow_environment(

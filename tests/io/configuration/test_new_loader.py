@@ -28,7 +28,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
     matrix2_path = project_root / "data" / "matrix2.txt"
     matrix2_path.write_text("2.0\n")
 
-    # Master config (NEW FORMAT: [[experiment]] entries)
+    # Master config uses [[experiments]] registry entries.
     with open(project_root / "configs" / "experiments.toml", "w") as f:
         f.write('project_root = ".."\n')
         f.write(f'output_dir = "{project_root / "output"}"\n\n')
@@ -45,13 +45,13 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write('id = "exp2_model"\n')
         f.write('path = "models/exp2_model.toml"\n\n')
         f.write("# Experiment 1: Full config with explicit checkpoint\n")
-        f.write("[[experiment]]\n")
+        f.write("[[experiments]]\n")
         f.write('id = "exp1"\n')
         f.write('dataset = "exp1_data"\n')
         f.write('model = "exp1_model"\n')
         f.write(f'checkpoint_path = "{project_root / "checkpoints" / "exp1.ckpt"}"\n\n')
         f.write("# Experiment 2: Config without checkpoint (will warn)\n")
-        f.write("[[experiment]]\n")
+        f.write("[[experiments]]\n")
         f.write('id = "exp2"\n')
         f.write('dataset = "exp2_data"\n')
         f.write('model = "exp2_model"\n')
@@ -85,14 +85,20 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write('name = "exp1_model"\n\n')
         f.write("[MODEL]\n")
         f.write('name = "TestModel"\n')
-        f.write('module_path = "test.module"\n')
+        f.write('module_path = "dlkit.nn"\n\n')
+        f.write("[TRAINING]\n")
+        f.write("[TRAINING.trainer]\n")
+        f.write("max_epochs = 1\n")
 
     with open(project_root / "configs" / "models" / "exp2_model.toml", "w") as f:
         f.write("[SESSION]\n")
         f.write('name = "exp2_model"\n\n')
         f.write("[MODEL]\n")
         f.write('name = "TestModel2"\n')
-        f.write('module_path = "test.module2"\n')
+        f.write('module_path = "dlkit.domain.nn.graph"\n\n')
+        f.write("[TRAINING]\n")
+        f.write("[TRAINING.trainer]\n")
+        f.write("max_epochs = 1\n")
 
     return project_root
 
@@ -152,7 +158,7 @@ def test_load_experiments_missing_registry_id(
         f.write("[[models]]\n")
         f.write('id = "exp1_model"\n')
         f.write('path = "models/exp1_model.toml"\n\n')
-        f.write("[[experiment]]\n")
+        f.write("[[experiments]]\n")
         f.write('id = "exp_missing"\n')
         f.write('dataset = "missing_dataset"\n')
         f.write('model = "exp1_model"\n')

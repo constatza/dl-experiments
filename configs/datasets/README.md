@@ -13,13 +13,19 @@ uv run process-data configs/datasets/residuals-100.toml
 Start with one dataset config before moving on to training or registry-wide
 workflows.
 
+The paired Gaussian variant is:
+
+```bash
+uv run process-data configs/datasets/residuals-100-gaussian.toml
+```
+
 ## Minimal Shape
 
 ```toml
 id = "residuals-100"
 
 [source]
-matrix_path = "/path/to/matrix.txt"
+matrix_path = "${GRAPH_CG_RAW_DIR}/matrix.txt"
 
 [generation]
 normalize = "matrix"
@@ -31,7 +37,7 @@ samples = 20000
 cg_iters = 100
 
 [output]
-data_dir = "/path/to/processed"
+data_dir = "${GRAPH_CG_PROCESSED_DIR}"
 ```
 
 ## Strategy Ladder
@@ -73,6 +79,12 @@ For trace strategies, `samples` is a row budget, not a base-system count.
 - `gaussian_residuals` removes archive dependence when Gaussian true solutions
   are acceptable
 
+The checked-in residual dataset pair uses the same matrix, normalization, row
+budget, and CG iteration count for both strategies:
+
+- `residuals-100.toml`: archive-backed `residuals`
+- `residuals-100-gaussian.toml`: random-solution `gaussian_residuals`
+
 ## Important Fields
 
 ### Top-level `id`
@@ -109,6 +121,14 @@ built by combining multiple strategy blocks in order.
 ## Output And Test Metadata
 
 `[output].data_dir` controls where processed datasets land.
+
+Checked-in dataset configs are expected to use:
+
+- `GRAPH_CG_RAW_DIR` for raw matrix and archive roots
+- `GRAPH_CG_PROCESSED_DIR` for processed dataset roots
+
+The loader expands those environment variables and resolves any remaining
+relative paths against the dataset config's own directory.
 
 Optional `[test]` fields can attach evaluation assets such as:
 

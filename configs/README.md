@@ -24,7 +24,7 @@ uv run process-data configs/datasets/residuals-100.toml
 ### 2. Validate one model
 
 ```bash
-uv run train-model configs/models/ffnn-residual-l2.toml \
+uv run train-model configs/models/ffnn-l2.toml \
   --data-config configs/datasets/residuals-100.toml
 ```
 
@@ -47,7 +47,7 @@ family.
 
 ```toml
 project_root = ".."
-output_dir = "/data/projects/graph-cg/data/output"
+output_dir = "${GRAPH_CG_OUTPUT_DIR}"
 
 [names]
 training = "Train"
@@ -58,17 +58,17 @@ id = "residuals-100"
 path = "datasets/residuals-100.toml"
 
 [[models]]
-id = "normscaled-residual-ffnn-l2"
-path = "models/ffnn-residual-l2.toml"
+id = "scaleequivariant-residual-ffnn-l2"
+path = "models/ffnn-l2.toml"
 
 [[comparisons]]
 id = "gaussian"
 path = "comparison/gaussian.toml"
 
 [[experiments]]
-id = "residuals-100-normscaled-residual-ffnn-l2"
+id = "residuals-100-scaleequivariant-residual-ffnn-l2"
 dataset = "residuals-100"
-model = "normscaled-residual-ffnn-l2"
+model = "scaleequivariant-residual-ffnn-l2"
 ```
 
 ## What Lives In Each Config
@@ -87,8 +87,20 @@ Dataset configs define:
 Model configs define:
 
 - DLKit model module and hyperparameters
-- trainer, optimizer, scheduler, and loss settings
+- trainer, loss, and optimizer-policy settings
+- staged optimization under `TRAINING.optimizer.stages`
 - checkpoint callback naming
+
+Checked-in model configs keep `module_path = "dlkit.nn"` as the user-facing
+entrypoint and now define a repo-wide two-stage optimizer program:
+
+- stage 1: AdamW
+- switch: epoch `200`
+- stage 2: LBFGS
+
+Checked-in configs use canonical DLKit syntax: the default scheduler lives
+under `TRAINING.optimizer.default_scheduler`, and any staged program lives
+under `TRAINING.optimizer.stages`.
 
 ### Comparison configs
 
@@ -103,12 +115,24 @@ Comparison configs define:
 Model configs do not define their own `[MLFLOW]` block. Runtime tracking
 settings come from the selected registry or the execution environment.
 
+Model configs must use DLKit's canonical workflow syntax directly. `neuralls`
+does not translate top-level `[OPTIMIZATION]` or infer optimization mode from
+`OPTUNA.enabled`.
+
 The two important roots are:
 
 - `processed_root` for datasets
 - `output_root` for MLflow, checkpoints, and reports
 
-`src/neuralls/configuration/paths.py` resolves both.
+Checked-in configs are now portable by convention:
+
+- `GRAPH_CG_RAW_DIR`: root for raw matrix/archive inputs
+- `GRAPH_CG_PROCESSED_DIR`: root for processed datasets used by training and comparison
+- `GRAPH_CG_OUTPUT_DIR`: root for MLflow, checkpoints, and reports
+
+Local path normalization and sqlite URI handling delegate to DLKit's
+`PathResolver` and local URI helpers. Relative paths are resolved against the
+config file directory instead of assuming a Unix-only working directory layout.
 
 ## What To Read Next
 

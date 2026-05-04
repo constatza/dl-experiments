@@ -26,6 +26,7 @@ from neuralls.platform.config.models.preconditioner import NeuralPreconditionerC
 from neuralls.platform.storage.workspaces import WorkspaceFactory
 from neuralls.platform.config.mlflow import (
     build_mlflow_environment,
+    build_sqlite_tracking_uri,
     derive_output_root_from_tracking_uri,
     scoped_mlflow_environment,
 )
@@ -34,9 +35,10 @@ from neuralls.platform.config.loaders import (
     build_settings,
     load_comparison_config,
     load_data_config,
+    load_experiments_config,
     load_model_config,
-    load_raw_toml,
 )
+from neuralls.platform.config.path_utils import resolve_optional_local_path
 
 
 @dataclass(frozen=True)
@@ -50,11 +52,7 @@ class MlflowTopology:
 
 def _resolve_relative_path(path: Path | None, base_dir: Path) -> Path | None:
     """Resolve an optional path relative to a config directory."""
-    if path is None:
-        return None
-    if path.is_absolute():
-        return path.resolve()
-    return (base_dir / path).resolve()
+    return resolve_optional_local_path(path, base_dir=base_dir)
 
 
 def _validate_comparison_experiment_refs(
@@ -84,7 +82,7 @@ def load_validated_master_config(
     config_path: Path,
 ) -> tuple[ExperimentsConfig, Path]:
     """Load master config and validate all registry-backed references."""
-    raw = load_raw_toml(config_path)
+    raw = load_experiments_config(config_path)
     cfg = ExperimentsConfig.model_validate(raw)
     config_dir = config_path.resolve().parent
     _validate_comparison_experiment_refs(cfg, config_dir)
@@ -126,7 +124,7 @@ def _resolve_output_override(
 def _build_default_mlflow_topology(path_ctx_output_root: Path) -> MlflowTopology:
     """Build default MLflow env rooted under the output directory."""
     env = build_mlflow_environment(
-        tracking_uri=f"sqlite:///{(path_ctx_output_root / 'mlruns' / 'mlflow.db').as_posix()}",
+        tracking_uri=build_sqlite_tracking_uri(path_ctx_output_root / "mlruns" / "mlflow.db"),
         artifacts_destination=str((path_ctx_output_root / "mlartifacts").resolve()),
     )
     return MlflowTopology(env=env, force_enabled=True)

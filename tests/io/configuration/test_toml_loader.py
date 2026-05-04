@@ -12,6 +12,7 @@ import pytest
 from neuralls.platform.config.loaders import (
     load_data_config,
     load_comparison_config,
+    load_experiments_config,
     load_raw_toml,
 )
 
@@ -80,6 +81,59 @@ solutions_path = "{solutions_path}"
         assert config.generation.shuffle is True  # Default
         assert config.generation.seed == 42  # Default
 
+    def test_load_data_config_resolves_relative_paths_against_config_dir(self, tmp_path: Path):
+        """Relative dataset paths are anchored to the config file directory."""
+        config_dir = tmp_path / "configs"
+        data_dir = config_dir / "processed"
+        matrix_path = config_dir / "raw" / "matrix.txt"
+        solutions_glob = config_dir / "raw" / "solutions" / "sol_*.txt"
+        matrix_path.parent.mkdir(parents=True)
+        (config_dir / "raw" / "solutions").mkdir(parents=True)
+        config_file = config_dir / "data.toml"
+        config_file.write_text(
+            """
+[source]
+matrix_path = "raw/matrix.txt"
+
+[[generation.strategy]]
+name = "solution_archive"
+solutions_glob = "raw/solutions/sol_*.txt"
+
+[output]
+data_dir = "processed"
+"""
+        )
+
+        config = load_data_config(config_file)
+
+        assert config.source.matrix_path == str(matrix_path.resolve())
+        assert config.generation.strategy[0].solutions_glob == str(solutions_glob.resolve())
+        assert config.output.data_dir == data_dir.resolve()
+
+    def test_load_data_config_expands_env_placeholders(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """Dataset loader expands env-backed path placeholders."""
+        config_dir = tmp_path / "configs"
+        config_dir.mkdir()
+        raw_root = tmp_path / "raw"
+        processed_root = tmp_path / "processed"
+        monkeypatch.setenv("GRAPH_CG_RAW_DIR", str(raw_root))
+        monkeypatch.setenv("GRAPH_CG_PROCESSED_DIR", str(processed_root))
+        config_file = config_dir / "data.toml"
+        config_file.write_text(
+            """
+[source]
+matrix_path = "${GRAPH_CG_RAW_DIR}/matrix.txt"
+
+[output]
+data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+"""
+        )
+
+        config = load_data_config(config_file)
+
+        assert config.source.matrix_path == str((raw_root / "matrix.txt").resolve())
+        assert config.output.data_dir == processed_root.resolve()
+
     def test_load_data_config_invalid_field(self, tmp_path: Path):
         """Test loading data config with invalid field value."""
         config_file = tmp_path / "data.toml"
@@ -131,6 +185,37 @@ type = "jacobi"
         assert len(config.preconditioners) == 1
         assert config.preconditioners[0].name == "test_solver"
         assert config.preconditioners[0].type == "jacobi"
+
+    def test_load_comparison_config_resolves_relative_paths_against_config_dir(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Comparison loader anchors matrix and RHS paths to the config directory."""
+        config_dir = tmp_path / "configs"
+        config_dir.mkdir()
+        config_file = config_dir / "comparison.toml"
+        config_file.write_text(
+            """
+[general]
+
+[general.params]
+rtol = 1e-6
+atol = 1e-12
+max_iterations = 100
+
+[general.data]
+matrix_path = "matrix.npy"
+rhs_path = "rhs.npy"
+
+[[preconditioners]]
+name = "test_solver"
+type = "jacobi"
+"""
+        )
+
+        config = load_comparison_config(config_file)
+        assert config.general.data.matrix_path == (config_dir / "matrix.npy").resolve()
+        assert config.general.data.rhs_path == (config_dir / "rhs.npy").resolve()
 
     def test_legacy_schema_rejected(self, tmp_path: Path):
         """Legacy solver schema must fail."""
@@ -293,3 +378,29 @@ number = 42
 
         with pytest.raises(tomllib.TOMLDecodeError):
             load_raw_toml(config_file)
+
+
+def test_load_experiments_config_expands_env_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Master config loader expands env placeholders before validation."""
+    config_file = tmp_path / "experiments.toml"
+    output_root = tmp_path / "output"
+    data_cfg = tmp_path / "datasets" / "data.toml"
+    data_cfg.parent.mkdir()
+    data_cfg.write_text("[flow]\n")
+    monkeypatch.setenv("GRAPH_CG_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("GRAPH_CG_DATASET_CFG", str(data_cfg))
+
+    config_file.write_text(
+        """
+output_dir = "${GRAPH_CG_OUTPUT_DIR}"
+
+[[datasets]]
+id = "dataset"
+path = "${GRAPH_CG_DATASET_CFG}"
+"""
+    )
+
+    config = load_experiments_config(config_file)
+
+    assert config["output_dir"] == output_root.resolve()
+    assert config["datasets"][0]["path"] == data_cfg.resolve()

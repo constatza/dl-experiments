@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
 from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, ExperimentEntry
 from neuralls.platform.tracking.mlflow import MlflowPaths
 from neuralls.composition.tracking.run_specs import (
@@ -43,11 +44,15 @@ def test_training_run_spec_name_has_readable_timestamp() -> None:
         display_name="Experiment One",
     )
 
+    workspace_root = Path.cwd() / "workspace"
     spec = build_training_run_spec(
         entry=entry,
         experiment_name="Train",
-        paths=MlflowPaths("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
-        workspace_root=Path("/tmp/workspace"),
+        paths=MlflowPaths(
+            build_sqlite_tracking_uri(Path.cwd() / "mlflow.db"),
+            str((Path.cwd() / "mlartifacts").resolve()),
+        ),
+        workspace_root=workspace_root,
         timestamp="Thu 12 Mar 2026 - 12:00:00",
     )
 

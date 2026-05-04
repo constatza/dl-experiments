@@ -24,3 +24,16 @@ owning concrete IO or MLflow mechanics, that code belongs in `platform`.
 Composition is where config models, platform adapters, workflow DTOs, and
 domain services are connected. Entry modules that still assemble concrete
 collaborators belong here rather than under `application`.
+
+Training orchestration now keeps DLKit's unified `execute()` entrypoint at the
+composition boundary. The loader is responsible for producing the correct
+workflow-specific DLKit config type before invoking DLKit runtime execution.
+
+Model-reference resolution also keeps MLflow URI/model lookup helpers on the
+composition side because the installed DLKit package no longer exposes the
+older convenience functions that previous code imported from `dlkit`.
+
+Master-config assembly now assumes that platform loaders have already expanded
+environment-backed path placeholders and resolved registry-relative paths, so
+composition code works with concrete `Path` values instead of Unix-specific
+string conventions.

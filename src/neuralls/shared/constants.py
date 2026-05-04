@@ -24,8 +24,8 @@ EXIT_KEYBOARD_INTERRUPT = 130
 # Default Paths
 # =============================================================================
 # Dynamically determine project root relative to this file (src/neuralls/constants.py)
-# src/neuralls/constants.py -> src/neuralls -> src -> project_root
-DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+# src/neuralls/shared/constants.py -> src/neuralls/shared -> src/neuralls -> src -> project_root
+DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 def _path_from_env(var_name: str, fallback: Path) -> Path:

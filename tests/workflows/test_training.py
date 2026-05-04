@@ -18,6 +18,8 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
 import torch
 from tensordict import TensorDict
 
@@ -255,7 +257,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     """
     import dlkit.engine.tracking.uri_resolver as uri_resolver
     from dlkit.interfaces.api import execute
-    from dlkit.infrastructure.config import GeneralSettings, SessionSettings
+    from dlkit.infrastructure.config import SessionSettings
     from dlkit.infrastructure.config import DataModuleSettings, DatasetSettings, TrainingSettings
     from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
     from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
@@ -264,6 +266,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
         ModelComponentSettings,
         MetricComponentSettings,
     )
+    from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
     from dlkit.infrastructure.config.data_entries import ValueFeature, ValueTarget
 
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
@@ -273,10 +276,10 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     X = rng.random((n_samples, n_features))
     Y = rng.random((n_samples, n_targets))
 
-    settings = GeneralSettings(
-        SESSION=SessionSettings(name="test_predict_structure", seed=42),
+    settings = TrainingWorkflowConfig(
+        SESSION=SessionSettings(name="test_predict_structure", seed=42, workflow="train"),
         MLFLOW=MLflowSettings(experiment_name="test_predict_structure"),
-        OPTUNA=None,
+        OPTUNA={"enabled": False},
         DATAMODULE=DataModuleSettings(
             dataloader=DataloaderSettings(batch_size=4, num_workers=0),
         ),
@@ -387,11 +390,14 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
-            return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
+            return_value=(
+                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
+                str((tmp_path / "mlartifacts").resolve()),
+            ),
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
-            return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
+            return_value=(build_sqlite_tracking_uri(tmp_path / "mlflow.db"), "mlflow-exp-1", "run-123"),
         ),
         patch("neuralls.composition.experiments.training._log_training_context"),
         patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),
@@ -418,12 +424,12 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
 
     execute_kwargs = mock_execute.call_args.kwargs
     overrides = execute_kwargs["overrides"]
-    assert overrides["experiment_name"] == "Train"
+    assert overrides.experiment_name == "Train"
     assert re.match(
         r"^Experiment One-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
-        overrides["run_name"],
+        overrides.run_name,
     )
-    assert overrides["tags"] == {
+    assert overrides.tags == {
         "phase": "training",
         "experiment_id": "exp-1",
         "dataset_id": "dataset-1",
@@ -487,11 +493,14 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
-            return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
+            return_value=(
+                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
+                str((tmp_path / "mlartifacts").resolve()),
+            ),
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
-            return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
+            return_value=(build_sqlite_tracking_uri(tmp_path / "mlflow.db"), "mlflow-exp-1", "run-123"),
         ),
         patch("neuralls.composition.experiments.training._log_training_context"),
         patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),
@@ -511,12 +520,12 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
 
     execute_kwargs = mock_execute.call_args.kwargs
     overrides = execute_kwargs["overrides"]
-    assert overrides["experiment_name"] == "Train"
+    assert overrides.experiment_name == "Train"
     assert re.match(
         r"^Legacy Experiment-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
-        overrides["run_name"],
+        overrides.run_name,
     )
-    assert overrides["tags"] == {}
+    assert overrides.tags == {}
 
 
 def test_train_model_max_epochs_override_keeps_original_settings_immutable(
@@ -593,11 +602,14 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
-            return_value=("sqlite:////tmp/mlflow.db", "/tmp/mlartifacts"),
+            return_value=(
+                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
+                str((tmp_path / "mlartifacts").resolve()),
+            ),
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
-            return_value=("sqlite:////tmp/mlflow.db", "mlflow-exp-1", "run-123"),
+            return_value=(build_sqlite_tracking_uri(tmp_path / "mlflow.db"), "mlflow-exp-1", "run-123"),
         ),
         patch("neuralls.composition.experiments.training._log_training_context"),
         patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),
@@ -623,3 +635,25 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
     assert base_settings.TRAINING is not None
     assert base_settings.TRAINING.trainer is not None
     assert base_settings.TRAINING.trainer.max_epochs == 1
+
+
+def test_execute_result_unwraps_optimization_result() -> None:
+    """Optimization results are normalized to their nested training result."""
+    from dlkit.common.results import OptimizationResult, TrialRecord
+    from neuralls.composition.experiments.training import _unwrap_execution_result
+
+    training_result = TrainingResult(
+        model_state=None,
+        metrics={"val_loss": 0.1},
+        artifacts={},
+        duration_seconds=1.0,
+    )
+    optimization_result = OptimizationResult(
+        best_trial=TrialRecord(number=1, value=0.1, params={}, state="COMPLETE"),
+        training_result=training_result,
+        study_summary={},
+        duration_seconds=2.0,
+    )
+
+    assert _unwrap_execution_result(training_result) is training_result
+    assert _unwrap_execution_result(optimization_result) is training_result

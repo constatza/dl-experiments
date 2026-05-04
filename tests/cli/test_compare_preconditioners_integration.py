@@ -15,11 +15,12 @@ from neuralls.cli.compare_preconditioners import main
 from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.domain.solver.models.result import ComparisonRecommendations, ComparisonResult
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
 
 runner = CliRunner()
 
 
-def _solver_params() -> ComparisonGeneral:
+def _solver_params(tmp_path: Path) -> ComparisonGeneral:
     return ComparisonGeneral(
         params=SolverParams(
             rtol=1.0e-6,
@@ -30,8 +31,8 @@ def _solver_params() -> ComparisonGeneral:
             breakdown_tol=None,
         ),
         data=ComparisonData(
-            matrix_path=Path("/tmp/matrix.npy"),
-            rhs_path=Path("/tmp/rhs.npy"),
+            matrix_path=tmp_path / "matrix.npy",
+            rhs_path=tmp_path / "rhs.npy",
         ),
     )
 
@@ -40,7 +41,7 @@ def _payload() -> ComparisonResult:
     return ComparisonResult(
         results={},
         summary="ok",
-        solver_params=_solver_params(),
+        solver_params=_solver_params(Path.cwd()),
         preconditioners=("none",),
         recommendations=ComparisonRecommendations(),
     )
@@ -48,9 +49,7 @@ def _payload() -> ComparisonResult:
 
 def _write_experiments_config(path: Path) -> None:
     payload = {
-        "mlflow": {
-            "tracking_uri": f"sqlite:///{(path.parent / 'mlruns' / 'mlflow.db').as_posix()}"
-        },
+        "mlflow": {"tracking_uri": build_sqlite_tracking_uri(path.parent / "mlruns" / "mlflow.db")},
         "comparisons": [{"id": "linear", "path": "comparison/linear.toml"}],
     }
     with path.open("wb") as fh:
@@ -85,7 +84,13 @@ def test_compare_cli_invokes_batch_workflow(mock_run: MagicMock, tmp_path: Path)
             comparison_id="solver",
             comparison_display_name="solver",
             success=True,
-            payload=_payload(),
+            payload=ComparisonResult(
+                results={},
+                summary="ok",
+                solver_params=_solver_params(tmp_path),
+                preconditioners=("none",),
+                recommendations=ComparisonRecommendations(),
+            ),
         )
     ]
     test_app = _build_app()
