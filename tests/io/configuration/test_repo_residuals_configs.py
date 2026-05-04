@@ -23,11 +23,21 @@ def test_residuals_100_dataset_uses_residuals_strategy() -> None:
     assert "solutions_glob" in strategies[0]
 
 
+def test_residuals_100_gaussian_dataset_uses_gaussian_residuals_strategy() -> None:
+    """The Gaussian residual dataset config must sample N(0, 1) true solutions."""
+    config = _load_toml("configs/datasets/residuals-100-gaussian.toml")
+    strategies = config["generation"]["strategy"]
+
+    assert len(strategies) == 1
+    assert strategies[0]["name"] == "gaussian_residuals"
+    assert strategies[0]["samples"] == 20000
+    assert "solutions_glob" not in strategies[0]
+
+
 def test_current_experiment_registries_reference_residuals_dataset() -> None:
-    """Residual experiment registries must point at the residuals dataset config."""
+    """Residual registries must expose both archive and Gaussian residual datasets."""
     registry_paths = [
         "configs/experiments-ffnn.toml",
-        "configs/experiments-ffnn-datasets.toml",
         "configs/experiments-linear.toml",
         "configs/experiments-parametrized.toml",
     ]
@@ -36,15 +46,14 @@ def test_current_experiment_registries_reference_residuals_dataset() -> None:
         config = _load_toml(registry_path)
         datasets = {entry["id"]: entry["path"] for entry in config["datasets"]}
         assert datasets["residuals-100"] == "datasets/residuals-100.toml"
+        assert datasets["residuals-100-gaussian"] == "datasets/residuals-100-gaussian.toml"
 
 
 def test_residual_experiments_use_residuals_100_dataset() -> None:
-    """Every active residual-labelled experiment should train on residual-error data."""
+    """Every active residual-labelled experiment should use one of the residual datasets."""
     registry_paths = [
         "configs/experiments-ffnn.toml",
-        "configs/experiments-ffnn-datasets.toml",
         "configs/experiments-linear.toml",
-        "configs/experiments-parametrized.toml",
     ]
 
     for registry_path in registry_paths:
@@ -57,4 +66,7 @@ def test_residual_experiments_use_residuals_100_dataset() -> None:
         ]
 
         assert residual_experiments
-        assert all(entry["dataset"] == "residuals-100" for entry in residual_experiments)
+        assert all(
+            entry["dataset"] in {"residuals-100", "residuals-100-gaussian"}
+            for entry in residual_experiments
+        )

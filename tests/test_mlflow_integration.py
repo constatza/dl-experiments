@@ -41,6 +41,7 @@ def minimal_model_config(tmp_path: Path, output_root: Path) -> Path:
 [SESSION]
 name = "TestSession"
 seed = 42
+workflow = "train"
 
 [MODEL]
 name = "MinimalModel"
@@ -51,6 +52,21 @@ module_path = "dlkit.nn"
 max_epochs = 1
 accelerator = "cpu"
 devices = 1
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
+lr = 1e-3
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [DATASET]
 name = "FlexibleDataset"

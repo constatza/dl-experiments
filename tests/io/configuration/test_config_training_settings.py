@@ -29,7 +29,7 @@ name = "FlexibleDataset"
 memmap_cache = true
 [MODEL]
 name = "NormScaledConstantWidthFFNN"
-module_path = "test.module"
+module_path = "dlkit.nn"
 """
 
 MINIMAL_LINEAR_CONFIG = """
@@ -48,7 +48,7 @@ name = "FlexibleDataset"
 memmap_cache = true
 [MODEL]
 name = "LinearModel"
-module_path = "test.module"
+module_path = "dlkit.nn"
 """
 
 MINIMAL_GNN_CONFIG = """
@@ -64,7 +64,7 @@ max_epochs = 1
 name = "GraphDataset"
 [MODEL]
 name = "GNNModel"
-module_path = "test.module"
+module_path = "dlkit.domain.nn.graph"
 """
 
 

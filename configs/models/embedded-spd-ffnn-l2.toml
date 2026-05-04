@@ -1,21 +1,26 @@
 [SESSION]
 seed = 42
+workflow = "train"
 precision = "float64"
 
 [MODEL]
-# Norm-scaled embedded FFNN with SPD-constrained body layers.
-name = "NormScaledEmbeddedSPDFFNN"
+# Scale-equivariant embedded FFNN with SPD-constrained body layers.
+name = "ScaleEquivariantEmbeddedSPDFFNN"
 module_path = "dlkit.nn"
+in_features = 504
+out_features = 504
 hidden_size = 500
 num_layers = 3
 residual = true
 
 [TRAINING]
-[TRAINING.lr_tuner]
-min_lr = 1e-5
-max_lr = 1e-1
-num_training = 100
-mode = "linear"
+# Temporary: disable DLKit LR auto-tuning because the current runtime fails in
+# Lightning's LR finder before training can start.
+#[TRAINING.lr_tuner]
+#min_lr = 1e-5
+#max_lr = 1e-1
+#num_training = 100
+#mode = "linear"
 
 [TRAINING.trainer]
 max_epochs = 300
@@ -37,17 +42,28 @@ monitor = "val_loss"
 patience = 60
 mode = "min"
 
-[TRAINING.optimizer]
-lr = 1e-2
-name = "AdamW"
+[[TRAINING.optimizer.stages]]
 
-[TRAINING.scheduler]
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
+lr = 1e-2
+
+[TRAINING.optimizer.stages.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.2
 patience = 5
 cooldown = 10
 threshold = 1e-2
 min_lr = 1e-14
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"

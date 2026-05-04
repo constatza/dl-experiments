@@ -104,6 +104,7 @@ class TestTrainingPipelineWithMLflow:
         model_config = {
             "SESSION": {
                 "seed": 42,
+                "workflow": "train",
                 "precision": "float64",
                 "name": "MLflowTestModel",
             },
@@ -122,7 +123,9 @@ class TestTrainingPipelineWithMLflow:
                     "limit_train_batches": 1,
                     "limit_val_batches": 1,
                 },
-                "optimizer": {"lr": 1e-3, "name": "AdamW"},
+                "optimizer": {
+                    "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
+                },
                 "metrics": [
                     {
                         "name": "NormalizedVectorNormError",
@@ -211,7 +214,7 @@ class TestTrainingPipelineWithMLflow:
 
         model_config_path = models_dir / "nested_test_model.toml"
         model_config = {
-            "SESSION": {"seed": 42, "name": "NestedTestSession"},
+            "SESSION": {"seed": 42, "workflow": "train", "name": "NestedTestSession"},
             "MODEL": {
                 "name": "TestFFNN",
                 "module_path": "dlkit.nn",
@@ -220,7 +223,9 @@ class TestTrainingPipelineWithMLflow:
             },
             "TRAINING": {
                 "trainer": {"max_epochs": 1, "accelerator": "cpu"},
-                "optimizer": {"lr": 1e-3, "name": "AdamW"},
+                "optimizer": {
+                    "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
+                },
             },
             "DATASET": {"name": "FlexibleDataset"},
             "DATAMODULE": {"name": "InMemoryModule"},

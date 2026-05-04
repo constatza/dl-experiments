@@ -1,14 +1,14 @@
-# Default structured-linear registry.
+# Residual registry for archive-backed and Gaussian residual datasets.
 
 project_root = ".."
-output_dir = "/data/projects/graph-cg/data/output"
+output_dir = "${GRAPH_CG_OUTPUT_DIR}"
 
 [names]
 training = "Train"
 comparison = "Comparisons"
 
 # -------
-# Datasets
+# Dataset
 # -------
 
 [[datasets]]
@@ -17,91 +17,9 @@ path = "datasets/residuals-100.toml"
 display_name = "Residual-Error 100"
 
 [[datasets]]
-id = "eig-rhs-smallest"
-path = "datasets/eig-rhs-smallest.toml"
-display_name = "Eig RHS Smallest"
-
-[[datasets]]
-id = "eig-solutions-smallest"
-path = "datasets/eig-solutions-smallest.toml"
-display_name = "Eig Solutions Smallest"
-
-# ------
-# Models
-# ------
-
-[[models]]
-id = "symmetric"
-path = "models/symmetric.toml"
-display_name = "NormScaledSymmetricLinear"
-
-[[models]]
-id = "spd"
-path = "models/spd.toml"
-display_name = "NormScaledSPDLinear"
-
-[[models]]
-id = "factorized"
-path = "models/factorized.toml"
-display_name = "NormScaledFactorizedLinear"
-
-# -----------
-# Experiments
-# -----------
-
-# [[experiments]]
-# id = "eig-rhs-smallest-symmetric"
-# dataset = "eig-rhs-smallest"
-# model = "symmetric"
-# display_name = "Eig RHS Smallest Symmetric"
-
-# [[experiments]]
-# id = "eig-rhs-smallest-spd"
-# dataset = "eig-rhs-smallest"
-# model = "spd"
-# display_name = "Eig RHS Smallest SPD"
-
-[[experiments]]
-id = "eig-rhs-smallest-factorized"
-dataset = "eig-rhs-smallest"
-model = "factorized"
-display_name = "Eig RHS Smallest Factorized"
-
-# [[experiments]]
-# id = "eig-solutions-smallest-symmetric"
-# dataset = "eig-solutions-smallest"
-# model = "symmetric"
-# display_name = "Eig Solutions Smallest Symmetric"
-
-[[experiments]]
-id = "eig-solutions-smallest-spd"
-dataset = "eig-solutions-smallest"
-model = "spd"
-display_name = "Eig Solutions Smallest SPD"
-
-[[experiments]]
-id = "eig-solutions-smallest-factorized"
-dataset = "eig-solutions-smallest"
-model = "factorized"
-display_name = "Eig Solutions Smallest Factorized"
-
-# [[experiments]]
-# id = "residuals-symmetric"
-# dataset = "residuals-100"
-# model = "symmetric"
-# display_name = "Residuals Symmetric"
-
-# [[experiments]]
-# id = "residuals-spd"
-# dataset = "residuals-100"
-# model = "spd"
-# display_name = "Residuals SPD"
-
-[[experiments]]
-id = "residuals-factorized"
-dataset = "residuals-100"
-model = "factorized"
-display_name = "Residual-Error Factorized"
+id = "residuals-100-gaussian"
+path = "datasets/residuals-100-gaussian.toml"
+display_name = "Residual-Error 100 Gaussian"
 
 # -----------
 # Comparisons

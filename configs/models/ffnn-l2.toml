@@ -1,20 +1,24 @@
 [SESSION]
 seed = 42
+workflow = "train"
 precision = "float64"
 
 [MODEL]
-# NormScaled constant-width FFNN optimized with relative L2 loss
-name = "NormScaledConstantWidthFFNN"
+# Simple scale-equivariant constant-width FFNN with residual connections.
+name = "ScaleEquivariantConstantWidthFactorizedFFNN"
 module_path = "dlkit.nn"
-hidden_size = 500
-num_layers = 1
+size = 504
+num_layers = 3
+residual = true
 
 [TRAINING]
-[TRAINING.lr_tuner]
-min_lr = 1e-5
-max_lr = 1e-1
-num_training = 100
-mode = "linear"
+# Temporary: disable DLKit LR auto-tuning because the current runtime fails in
+# Lightning's LR finder before training can start.
+#[TRAINING.lr_tuner]
+#min_lr = 1e-5
+#max_lr = 1e-1
+#num_training = 100
+#mode = "linear"
 
 [TRAINING.trainer]
 max_epochs = 300
@@ -30,15 +34,24 @@ save_weights_only = false
 every_n_epochs = 50
 enable_version_counter = false
 
-[TRAINING.optimizer]
-lr = 1e-2
-name = "AdamW"
+[[TRAINING.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "val_loss"
+patience = 60
+mode = "min"
 
-[TRAINING.scheduler]
+[TRAINING.optimizer.default_optimizer]
+lr = 1e-2
+name = "Muon"
+
+[TRAINING.optimizer.default_scheduler]
 name = "ReduceLROnPlateau"
-factor = 0.5
-patience = 15
+factor = 0.2
+patience = 5
+cooldown = 10
+threshold = 1e-2
 min_lr = 1e-14
+
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"
@@ -46,9 +59,10 @@ module_path = "dlkit.domain.losses"
 target_key = "targets.solutions"
 
 [[TRAINING.metrics]]
-name = "RelativeEnergyNormError"
+name = "NormalizedVectorNormError"
 module_path = "dlkit.domain.metrics"
-extra_inputs = [{ key = "features.matrix", arg = "matrix" }]
+norm_ord = 2
+vector_dim = -1
 
 [DATASET]
 name = "FlexibleDataset"
@@ -62,5 +76,6 @@ num_workers = 0
 batch_size = 32
 pin_memory = true
 shuffle = true
+
 [OPTUNA]
 enabled = false

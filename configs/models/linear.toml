@@ -1,10 +1,11 @@
 [SESSION]
 seed = 42
+workflow = "train"
 precision = "float64"
 
 [MODEL]
 # Single linear layer (no hidden layers)
-name = "NormScaledLinearFFNN"
+name = "LinearNetwork"
 module_path = "dlkit.nn"
 
 [TRAINING]
@@ -30,16 +31,28 @@ save_weights_only = false
 every_n_epochs = 50
 enable_version_counter = false
 
-[TRAINING.optimizer]
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
 lr = 5e-2
 
-[TRAINING.scheduler]
+[TRAINING.optimizer.stages.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
 patience = 10
 cooldown = 5
 threshold = 1e-2
 min_lr = 1e-7
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [TRAINING.loss_function]
 name = "relative_energy_norm_loss"

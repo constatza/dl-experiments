@@ -33,7 +33,7 @@ processed output before training.
 ### 2. Train one model on that dataset
 
 ```bash
-uv run train-model configs/models/ffnn-residual-l2.toml \
+uv run train-model configs/models/ffnn-l2.toml \
   --data-config configs/datasets/residuals-100.toml
 ```
 
@@ -77,7 +77,7 @@ Use the commands in this order as you move from basic to advanced work:
 The repo uses three config layers plus one registry:
 
 - `configs/datasets/*.toml`: how to build or collect processed datasets
-- `configs/models/*.toml`: DLKit model and training settings
+- `configs/models/*.toml`: DLKit model, training, and staged-optimization settings
 - `configs/comparison/*.toml`: solver-comparison inputs and preconditioners
 - `configs/experiments-*.toml`: the registry that ties datasets, models,
   comparisons, MLflow settings, and experiment ids together
@@ -90,17 +90,17 @@ id = "residuals-100"
 path = "datasets/residuals-100.toml"
 
 [[models]]
-id = "normscaled-residual-ffnn-l2"
-path = "models/ffnn-residual-l2.toml"
+id = "scaleequivariant-residual-ffnn-l2"
+path = "models/ffnn-l2.toml"
 
 [[comparisons]]
 id = "gaussian"
 path = "comparison/gaussian.toml"
 
 [[experiments]]
-id = "residuals-100-normscaled-residual-ffnn-l2"
+id = "residuals-100-scaleequivariant-residual-ffnn-l2"
 dataset = "residuals-100"
-model = "normscaled-residual-ffnn-l2"
+model = "scaleequivariant-residual-ffnn-l2"
 ```
 
 Read more in:
@@ -118,6 +118,9 @@ Work with one dataset config and one model config until:
 - the dataset builds successfully
 - the model trains successfully
 - the checkpoint lands in the expected output root
+
+Model configs keep `dlkit.nn` as the readable checked-in model namespace and
+use DLKit's canonical `TRAINING.optimizer` hierarchy for optimizer programs.
 
 ### Intermediate: registry-driven experimentation
 

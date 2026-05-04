@@ -1,15 +1,17 @@
 [SESSION]
 # Random seed for reproducibility
 seed = 42
+workflow = "train"
 # Computation precision preset (e.g., medium, high)
 precision = "float64"
 
 [MODEL]
-# Model class path - using new dlkit GATv2Projection
+# Residual graph attention model.
 name = "ScaledGATv2Projection"
 module_path = "dlkit.domain.nn.graph"
 hidden_size = 12
 num_layers = 3
+residual = true
 #dropout = 0.1
 
 [TRAINING]
@@ -26,15 +28,26 @@ accelerator = "auto"
 enable_checkpointing = true
 enable_version_counter = false
 
-[TRAINING.optimizer]
-# Optimizer name and settings
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "AdamW"
 lr = 1e-3
 
-[TRAINING.scheduler]
+[TRAINING.optimizer.stages.scheduler]
 name = "ReduceLROnPlateau"
 factor = 0.5
 patience = 30
 min_lr = 1e-14
+
+[TRAINING.optimizer.stages.trigger]
+at_epoch = 200
+
+[[TRAINING.optimizer.stages]]
+
+[TRAINING.optimizer.stages.optimizer]
+name = "LBFGS"
+lr = 1.0
 
 [TRAINING.loss_function]
 name = "relative_energy_norm_loss"

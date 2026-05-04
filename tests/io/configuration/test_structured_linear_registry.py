@@ -20,6 +20,7 @@ pytestmark = pytest.mark.skipif(
 MODEL_CONFIG_TEMPLATE = """
 [SESSION]
 seed = 42
+workflow = "train"
 precision = "float64"
 
 [MODEL]
@@ -37,8 +38,9 @@ name = "ModelCheckpoint"
 filename = "{checkpoint_name}"
 monitor = "val_loss"
 
-[TRAINING.optimizer]
+[TRAINING.optimizer.default_optimizer]
 lr = 1e-3
+name = "AdamW"
 
 [DATASET]
 name = "FlexibleDataset"
@@ -142,6 +144,38 @@ def test_structured_linear_model_configs_load(
     settings = load_model_config(model_path)
     assert settings.MODEL is not None
     assert settings.MODEL.name == model_name
+
+
+def test_legacy_optimization_section_is_rejected(tmp_path: Path) -> None:
+    """Hard-cut loaders reject top-level OPTIMIZATION sections."""
+    bad_config = tmp_path / "bad.toml"
+    bad_config.write_text(
+        "\n".join(
+            [
+                "[SESSION]",
+                "seed = 42",
+                'workflow = "train"',
+                "",
+                "[MODEL]",
+                'name = "NormScaledSymmetricLinear"',
+                'module_path = "dlkit.nn"',
+                "",
+                "[TRAINING]",
+                "[TRAINING.trainer]",
+                "max_epochs = 1",
+                "",
+                "[OPTIMIZATION]",
+                "",
+                "[[OPTIMIZATION.stages]]",
+                "[OPTIMIZATION.stages.optimizer]",
+                'name = "AdamW"',
+                "lr = 1e-3",
+            ]
+        )
+    )
+
+    with pytest.raises(Exception, match="OPTIMIZATION"):
+        load_model_config(bad_config)
 
 
 def test_default_structured_linear_registry_has_expected_models_and_experiments(

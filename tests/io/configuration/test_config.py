@@ -33,7 +33,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
     # Exp1 configs
     with open(project_root / "configs" / "experiments" / "exp1" / EXP_MODEL_CONFIG_NAME, "w") as f:
         f.write(
-            '[SESSION]\nname = "exp1_model"\n\n[MODEL]\nname = "TestModel"\nmodule_path = "test.module"'
+            '[SESSION]\nname = "exp1_model"\n\n[MODEL]\nname = "TestModel"\nmodule_path = "dlkit.nn"\n\n[TRAINING]\n[TRAINING.trainer]\nmax_epochs = 1'
         )
     with open(project_root / "configs" / "experiments" / "exp1" / EXP_DATA_CONFIG_NAME, "w") as f:
         f.write('dataconfig = "configs/datasets/exp1_data.toml"')

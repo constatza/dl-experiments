@@ -1,7 +1,7 @@
-# Residuals-only FFNN registry for model-family sweeps.
+# Residual FFNN registry for archive-backed and Gaussian residual sweeps.
 
 project_root = ".."
-output_dir = "/data/projects/graph-cg/data/output"
+output_dir = "${GRAPH_CG_OUTPUT_DIR}"
 
 [names]
 training = "Train"
@@ -16,29 +16,34 @@ id = "residuals-100"
 path = "datasets/residuals-100.toml"
 display_name = "Residual-Error 100"
 
+[[datasets]]
+id = "residuals-100-gaussian"
+path = "datasets/residuals-100-gaussian.toml"
+display_name = "Residual-Error 100 Gaussian"
+
 # ------
 # Models
 # ------
 
 [[models]]
-id = "normscaled-residual-ffnn-l2"
-path = "models/ffnn-residual-l2.toml"
-display_name = "NormScaled | Residual FFNN | L2"
+id = "scaleequivariant-residual-ffnn-l2"
+path = "models/ffnn-l2.toml"
+display_name = "ScaleEquivariant | Residual FFNN | L2"
 
 [[models]]
-id = "normscaled-embedded-factorized-residual-ffnn-l2"
+id = "scaleequivariant-embedded-factorized-residual-ffnn-l2"
 path = "models/embedded-factorized-ffnn-l2.toml"
-display_name = "NormScaled | Embedded Factorized Residual FFNN | L2"
+display_name = "ScaleEquivariant | Embedded Factorized Residual FFNN | L2"
 
 [[models]]
-id = "normscaled-embedded-spd-residual-ffnn-l2"
+id = "scaleequivariant-embedded-spd-residual-ffnn-l2"
 path = "models/embedded-spd-ffnn-l2.toml"
-display_name = "NormScaled | Embedded SPD Residual FFNN | L2"
+display_name = "ScaleEquivariant | Embedded SPD Residual FFNN | L2"
 
 [[models]]
-id = "normscaled-embedded-spd-factorized-residual-ffnn-l2"
+id = "scaleequivariant-embedded-spd-factorized-residual-ffnn-l2"
 path = "models/embedded-spd-factorized-ffnn-l2.toml"
-display_name = "NormScaled | Embedded SPD-Factorized Residual FFNN | L2"
+display_name = "ScaleEquivariant | Embedded SPD-Factorized Residual FFNN | L2"
 
 # -----------
 # Comparisons
@@ -74,25 +79,49 @@ display_name = "Eig Few RHS Smallest"
 # -----------
 
 [[experiments]]
-id = "residuals-100-normscaled-residual-ffnn-l2"
+id = "residuals-100-scaleequivariant-residual-ffnn-l2"
 dataset = "residuals-100"
-model = "normscaled-residual-ffnn-l2"
-display_name = "Residual-Error 100 | NormScaled | Residual FFNN | L2"
+model = "scaleequivariant-residual-ffnn-l2"
+display_name = "Residual-Error 100 | ScaleEquivariant | Residual FFNN | L2"
 
 [[experiments]]
-id = "residuals-100-normscaled-embedded-factorized-residual-ffnn-l2"
-dataset = "residuals-100"
-model = "normscaled-embedded-factorized-residual-ffnn-l2"
-display_name = "Residual-Error 100 | NormScaled | Embedded Factorized Residual FFNN | L2"
+id = "residuals-100-gaussian-scaleequivariant-residual-ffnn-l2"
+dataset = "residuals-100-gaussian"
+model = "scaleequivariant-residual-ffnn-l2"
+display_name = "Residual-Error 100 Gaussian | ScaleEquivariant | Residual FFNN | L2"
 
 [[experiments]]
-id = "residuals-100-normscaled-embedded-spd-residual-ffnn-l2"
+id = "residuals-100-scaleequivariant-embedded-factorized-residual-ffnn-l2"
 dataset = "residuals-100"
-model = "normscaled-embedded-spd-residual-ffnn-l2"
-display_name = "Residual-Error 100 | NormScaled | Embedded SPD Residual FFNN | L2"
+model = "scaleequivariant-embedded-factorized-residual-ffnn-l2"
+display_name = "Residual-Error 100 | ScaleEquivariant | Embedded Factorized Residual FFNN | L2"
 
 [[experiments]]
-id = "residuals-100-normscaled-embedded-spd-factorized-residual-ffnn-l2"
+id = "residuals-100-gaussian-scaleequivariant-embedded-factorized-residual-ffnn-l2"
+dataset = "residuals-100-gaussian"
+model = "scaleequivariant-embedded-factorized-residual-ffnn-l2"
+display_name = "Residual-Error 100 Gaussian | ScaleEquivariant | Embedded Factorized Residual FFNN | L2"
+
+[[experiments]]
+id = "residuals-100-scaleequivariant-embedded-spd-residual-ffnn-l2"
 dataset = "residuals-100"
-model = "normscaled-embedded-spd-factorized-residual-ffnn-l2"
-display_name = "Residual-Error 100 | NormScaled | Embedded SPD-Factorized Residual FFNN | L2"
+model = "scaleequivariant-embedded-spd-residual-ffnn-l2"
+display_name = "Residual-Error 100 | ScaleEquivariant | Embedded SPD Residual FFNN | L2"
+
+[[experiments]]
+id = "residuals-100-gaussian-scaleequivariant-embedded-spd-residual-ffnn-l2"
+dataset = "residuals-100-gaussian"
+model = "scaleequivariant-embedded-spd-residual-ffnn-l2"
+display_name = "Residual-Error 100 Gaussian | ScaleEquivariant | Embedded SPD Residual FFNN | L2"
+
+[[experiments]]
+id = "residuals-100-scaleequivariant-embedded-spd-factorized-residual-ffnn-l2"
+dataset = "residuals-100"
+model = "scaleequivariant-embedded-spd-factorized-residual-ffnn-l2"
+display_name = "Residual-Error 100 | ScaleEquivariant | Embedded SPD-Factorized Residual FFNN | L2"
+
+[[experiments]]
+id = "residuals-100-gaussian-scaleequivariant-embedded-spd-factorized-residual-ffnn-l2"
+dataset = "residuals-100-gaussian"
+model = "scaleequivariant-embedded-spd-factorized-residual-ffnn-l2"
+display_name = "Residual-Error 100 Gaussian | ScaleEquivariant | Embedded SPD-Factorized Residual FFNN | L2"

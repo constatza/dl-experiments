@@ -117,9 +117,10 @@ def model_config_path(config_root: Path) -> Path:
     payload = {
         "SESSION": {
             "seed": 42,
+            "workflow": "train",
         },
         "MODEL": {
-            "name": "NormScaledLinearFFNN",
+            "name": "LinearNetwork",
             "module_path": "dlkit.nn",
         },
         "TRAINING": {
@@ -144,7 +145,10 @@ def model_config_path(config_root: Path) -> Path:
                 ],
             },
             "optimizer": {
-                "lr": 1e-3,
+                "default_optimizer": {
+                    "name": "AdamW",
+                    "lr": 1e-3,
+                },
             },
         },
         "DATASET": {
