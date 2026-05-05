@@ -1,3 +1,5 @@
+id = "eig-few-solutions-largest"
+
 # Few-eigenvector solutions dataset (largest eigenvalues, N=5).
 # Uses a small number of eigenvectors as solutions: b = A @ x (forward mode).
 # Tests preconditioner generalization to low-dimensional eigenvector subspaces.
@@ -6,7 +8,7 @@
 # Output: eig-few-solutions-largest-{normalization}/
 
 [source]
-matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 normalize = "matrix"
@@ -20,4 +22,4 @@ num_eigenvectors = 5
 samples = 6000
 
 [output]
-data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+data_dir = "${NEURALLS_PROCESSED_DIR}"

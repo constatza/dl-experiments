@@ -1,3 +1,5 @@
+id = "scaled-solutions"
+
 # Scaled solutions dataset: existing (A, b, x) pairs multiplied by a fixed scalar.
 # Identity preserved: A @ (scale * x) = scale * b
 # Useful for testing preconditioner generalization across different RHS magnitudes.
@@ -6,7 +8,7 @@
 # Output: scaled-solutions-{normalization}/
 
 [source]
-matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 normalize = "matrix"
@@ -17,7 +19,7 @@ seed = 42
 name = "scaled_solutions"
 samples = -1
 scale = 5.0
-solutions_glob = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]
-data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+data_dir = "${NEURALLS_PROCESSED_DIR}"

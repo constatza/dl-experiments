@@ -1,3 +1,5 @@
+id = "eig-solutions-smallest"
+
 # Test config: Eigenvector-based solution generation (smallest eigenvalues)
 # Uses eigenvectors as solutions, RHS computed as b = λ * v (forward mode)
 # Useful for testing CG performance with high-precision eigenvector-based problems
@@ -7,7 +9,7 @@
 
 
 [source]
-matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 # Spectral normalization preserves eigenvalue properties
@@ -23,4 +25,4 @@ num_eigenvectors = 100
 samples = 6000
 
 [output]
-data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+data_dir = "${NEURALLS_PROCESSED_DIR}"

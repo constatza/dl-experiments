@@ -1,3 +1,5 @@
+id = "residuals-100"
+
 # Residual-error trace dataset built from the spectral solution archive.
 # Loads archived true solutions x_true, computes b = A @ x_true, then records:
 #   residual = r_k
@@ -9,8 +11,8 @@
 
 
 [source]
-matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
-solutions_path = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+solutions_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [generation]
 normalize = "matrix"
@@ -23,7 +25,7 @@ seed = 42
 name = "residuals"
 samples = 20000
 cg_iters = 100
-solutions_glob = "/data/projects/graph-cg/raw/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]
-data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+data_dir = "${NEURALLS_PROCESSED_DIR}"

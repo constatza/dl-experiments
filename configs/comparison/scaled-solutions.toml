@@ -9,8 +9,8 @@ stopping_criterion = "residual_norm"
 m_max = 20
 
 [general.data]
-matrix_path = "${GRAPH_CG_PROCESSED_DIR}/solutions"
-rhs_path = "${GRAPH_CG_PROCESSED_DIR}/scaled-solutions"
+matrix_path = "${NEURALLS_PROCESSED_DIR}/solutions"
+rhs_path = "${NEURALLS_PROCESSED_DIR}/scaled-solutions"
 normalize_system = "matrix"
 
 [[preconditioners]]

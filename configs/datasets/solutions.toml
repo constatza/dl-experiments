@@ -1,3 +1,5 @@
+id = "solutions"
+
 # Test config: Pure solution archive collection (all avae lable solutions)
 # Uses 45x15-displacements UaVectors with pure collection - no synthetic generation
 # Pure solution-to-RHS mapping: b = A @ x for each solution vector
@@ -7,8 +9,8 @@
 
 
 [source]
-matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
-solutions_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+solutions_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [generation]
 normalize = "matrix"
@@ -19,7 +21,7 @@ seed = 42
 [[generation.strategy]]
 name = "solution_archive"
 samples = -1  # Use all available solutions
-solutions_glob = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]
-data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+data_dir = "${NEURALLS_PROCESSED_DIR}"

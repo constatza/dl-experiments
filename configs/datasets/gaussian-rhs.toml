@@ -1,10 +1,12 @@
+id = "gaussian-rhs"
+
 # Gaussian RHS dataset: b ~ N(0, 1), x solved from A x = b
 #
 # Usage: uv run process-data configs/datasets/gaussian-rhs.toml
 
 
 [source]
-matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 normalize = "matrix"
@@ -18,4 +20,4 @@ mu = 0.0
 sigma = 1.0
 
 [output]
-data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+data_dir = "${NEURALLS_PROCESSED_DIR}"

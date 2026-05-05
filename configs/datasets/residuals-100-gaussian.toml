@@ -1,3 +1,5 @@
+id = "residuals-100-gaussian"
+
 # Residual-error trace dataset built from Gaussian N(0, 1) true solutions.
 # Samples x_true ~ N(0, I), computes b = A @ x_true, then records:
 #   residual = r_k
@@ -8,7 +10,7 @@
 # Output: residuals-100-gaussian-{normalization}/
 
 [source]
-matrix_path = "${GRAPH_CG_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
 
 [generation]
 normalize = "matrix"
@@ -23,4 +25,4 @@ samples = 20000
 cg_iters = 100
 
 [output]
-data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+data_dir = "${NEURALLS_PROCESSED_DIR}"
