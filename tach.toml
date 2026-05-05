@@ -39,6 +39,7 @@ depends_on = [
 [[modules]]
 paths = [
     "neuralls.composition.comparison",
+    "neuralls.composition.config",
     "neuralls.composition.experiments",
     "neuralls.composition.generation",
     "neuralls.composition.inference",
@@ -66,7 +67,6 @@ depends_on = ["neuralls.application.**", "neuralls.domain", "neuralls.domain.**"
 [[modules]]
 paths = [
     "neuralls.application.comparison",
-    "neuralls.application.datasets",
     "neuralls.application.inference",
     "neuralls.application.training",
 ]

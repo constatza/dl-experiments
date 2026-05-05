@@ -9,6 +9,7 @@ dependencies = [
     "dlkit",
     "loguru>=0.7.3",
     "numba>=0.63.1",
+    "platformdirs>=4.0",
     "prefect-dask>=0.3.6",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.14.0",
@@ -25,13 +26,7 @@ cu128 = ["torch>=2.8.0,<2.10.0"]
 cu130 = ["torch>=2.8.0,<2.10.0"]
 
 [project.scripts]
-compare-all = "neuralls.cli.compare_preconditioners:run"
-generate-all     = "neuralls.cli.generate_multiple:run"
-predict                 = "neuralls.cli.predict:run"
-process-data            = "neuralls.cli.process_data:run"
-run-experiments         = "neuralls.cli.run_experiments:run"
-train-model             = "neuralls.cli.train_model:run"
-train-all          = "neuralls.cli.train_multiple:run"
+neuralls = "neuralls.cli.main:app"
 
 #[build-system]
 #requires = ["setuptools>=61.0"]

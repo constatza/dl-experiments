@@ -252,5 +252,3 @@ def load_case_data(
             result["metadata"] = json.load(f)
 
     return result
-
-

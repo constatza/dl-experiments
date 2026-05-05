@@ -44,7 +44,9 @@ def test_path_context_mlflow_properties(tmp_path: Path) -> None:
         output_root=output_root,
         processed_root=tmp_path,
     )
-    assert ctx.mlflow_tracking_uri == build_sqlite_tracking_uri(output_root / "mlruns" / "mlflow.db")
+    assert ctx.mlflow_tracking_uri == build_sqlite_tracking_uri(
+        output_root / "mlruns" / "mlflow.db"
+    )
     assert ctx.mlflow_artifact_location == str((output_root / "mlartifacts").resolve())
 
 

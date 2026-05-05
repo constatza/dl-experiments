@@ -264,50 +264,24 @@ class CaseConfig(BaseModel):
     """Top-level case configuration.
 
     Attributes:
-        raw_dir: Raw input root for the case.
-        processed_dir: Processed dataset root for the case.
-        output_dir: Output root for the case.
         datasets: Dataset registry entries.
         models: Model registry entries.
         comparisons: Comparison registry entries.
         experiments: Experiment entries referencing registry ids.
         run: Optional legacy direct-path entries.
-        project_root: Optional project root path.
         mlflow: MLflow topology config (tracking URI, etc.).
         names: MLflow experiment names for training and comparison.
     """
 
-    raw_dir: Path = Field(..., description="Case root for raw matrices and archives")
-    processed_dir: Path = Field(..., description="Case root for processed datasets")
-    output_dir: Path = Field(..., description="Case root for training outputs and MLflow state")
     datasets: list[RegistryEntry] = Field(default_factory=list)
     models: list[RegistryEntry] = Field(default_factory=list)
     comparisons: list[ComparisonRegistryEntry] = Field(default_factory=list)
     experiments: list[ExperimentEntry] = Field(default_factory=list)
     run: list[RunEntry] = Field(default_factory=list)
-    project_root: Path | None = Field(default=None)
     mlflow: MlflowTopologyConfig = Field(default_factory=MlflowTopologyConfig)
     names: ExperimentNamesConfig = Field(default_factory=ExperimentNamesConfig)
 
     model_config = ConfigDict(extra="allow", frozen=True)
-
-    @field_validator("raw_dir", "processed_dir", "output_dir", "project_root", mode="before")
-    @classmethod
-    def _expand_root_paths(cls, v: object, info: ValidationInfo) -> object:
-        """Expand ${NEURALLS_*} placeholders and resolve root directory paths.
-
-        Args:
-            v: Raw value from config field.
-            info: Pydantic validation info carrying context.
-
-        Returns:
-            Resolved absolute path string, or original value if not a string.
-        """
-        if v is None or info.context is None or not isinstance(v, str):
-            return v
-        from neuralls.platform.config.context import ConfigContext, expand_config_path
-
-        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
 
     @model_validator(mode="before")
     @classmethod
@@ -318,8 +292,7 @@ class CaseConfig(BaseModel):
         raw = dict(data)
         if "experiment" in raw:
             raise ValueError(
-                "Unsupported '[[experiment]]' table. "
-                "Use '[[experiments]]' entries in case config."
+                "Unsupported '[[experiment]]' table. Use '[[experiments]]' entries in case config."
             )
         if "comparison_profiles" in raw:
             raise ValueError(

@@ -81,15 +81,16 @@ def resolve_mlflow_paths(
     elif settings is not None:
         tracking = settings.mlflow_tracking_uri
     else:
-        raise ValueError(
-            "tracking_uri is required when NeurallsSettings is not provided."
-        )
+        raise ValueError("tracking_uri is required when NeurallsSettings is not provided.")
     if artifact_uri:
         artifact_target = resolve_local_path(artifact_uri, base_dir=workspace)
-        artifact_root = artifact_target if artifact_target.is_absolute() else workspace / artifact_target
+        artifact_root = (
+            artifact_target if artifact_target.is_absolute() else workspace / artifact_target
+        )
         return MlflowPaths(tracking_uri=tracking, artifact_uri=str(artifact_root.resolve()))
     artifact_location = (
-        settings.mlflow_artifact_location if settings is not None
+        settings.mlflow_artifact_location
+        if settings is not None
         else str(workspace / "mlartifacts")
     )
     return MlflowPaths(tracking_uri=tracking, artifact_uri=artifact_location)

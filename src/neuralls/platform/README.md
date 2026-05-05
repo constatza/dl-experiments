@@ -24,10 +24,12 @@ training and inference entrypoints, and `dlkit.domain.*` for model, metric,
 and loss namespaces referenced by checked-in configs.
 
 Repo-owned config path expansion now lives at the config-model boundary.
-`NeurallsSettings` provides required raw, processed, and output roots, and
-`ConfigContext` passes those roots into Pydantic validators so checked-in TOML
-files can use `${NEURALLS_*}` placeholders without loader-side normalization.
-DLKit-specific workflow assembly is isolated in `config/dlkit_bridge.py`.
+`NeurallsSettings` provides required raw, processed, and output roots after
+profile resolution from `~/.config/neuralls/config.toml` plus any explicit env
+overrides, and `ConfigContext` passes those roots into Pydantic validators so
+checked-in TOML files can use `${NEURALLS_*}` placeholders without loader-side
+normalization. DLKit-specific workflow assembly is isolated in
+`config/dlkit_bridge.py`.
 
 Path normalization now also delegates to DLKit where possible: local
 filesystem roots use `dlkit.infrastructure.io.PathResolver`, while

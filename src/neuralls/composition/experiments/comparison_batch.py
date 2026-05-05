@@ -228,8 +228,8 @@ def _resolve_comparison_topology(
     master_cfg, _ = _load_master_config(experiments_config_path, settings)
     if master_cfg.mlflow.tracking_uri is None:
         env = build_mlflow_environment(
-            tracking_uri=build_sqlite_tracking_uri(master_cfg.output_dir / "mlruns" / "mlflow.db"),
-            artifacts_destination=str((master_cfg.output_dir / "mlartifacts").resolve()),
+            tracking_uri=build_sqlite_tracking_uri(settings.output_dir / "mlruns" / "mlflow.db"),
+            artifacts_destination=str((settings.output_dir / "mlartifacts").resolve()),
         )
     else:
         env = build_mlflow_environment(

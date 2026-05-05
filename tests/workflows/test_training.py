@@ -397,7 +397,11 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
-            return_value=(build_sqlite_tracking_uri(tmp_path / "mlflow.db"), "mlflow-exp-1", "run-123"),
+            return_value=(
+                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
+                "mlflow-exp-1",
+                "run-123",
+            ),
         ),
         patch("neuralls.composition.experiments.training._log_training_context"),
         patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),
@@ -500,7 +504,11 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
-            return_value=(build_sqlite_tracking_uri(tmp_path / "mlflow.db"), "mlflow-exp-1", "run-123"),
+            return_value=(
+                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
+                "mlflow-exp-1",
+                "run-123",
+            ),
         ),
         patch("neuralls.composition.experiments.training._log_training_context"),
         patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),
@@ -609,7 +617,11 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         ),
         patch(
             "neuralls.composition.experiments.training._resolve_mlflow_run_ids",
-            return_value=(build_sqlite_tracking_uri(tmp_path / "mlflow.db"), "mlflow-exp-1", "run-123"),
+            return_value=(
+                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
+                "mlflow-exp-1",
+                "run-123",
+            ),
         ),
         patch("neuralls.composition.experiments.training._log_training_context"),
         patch("neuralls.composition.experiments.training.write_mlflow_sidecar"),

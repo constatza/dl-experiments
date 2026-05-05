@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""Train every experiment in one case config and plot aggregate metrics."""
+"""Train every experiment declared in one case config."""
 
 from __future__ import annotations
 
@@ -7,13 +6,14 @@ from pathlib import Path
 
 import typer
 
-from neuralls.shared.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
+from neuralls.cli.options import EnvFileOption, ProfileOption
 from neuralls.composition.experiments.assembler import load_validated_case_config
 from neuralls.composition.experiments.multi_training import train_batch, write_metric_report
-from neuralls.platform.config.settings import load_case_settings
+from neuralls.composition.config import load_case_settings
+from neuralls.shared.constants import EXIT_FAILURE
 
 
-def main(
+def train_case_batch(
     config: Path = typer.Argument(
         ...,
         help="Path to a case config TOML.",
@@ -24,23 +24,14 @@ def main(
     ),
     output_dir: Path | None = typer.Option(
         None,
-        help=(
-            "Directory for barplot and label JSON. "
-            "Defaults to output_dir/training/ from the case config."
-        ),
+        help=("Directory for the batch plot and label JSON. Defaults to output_dir/training/."),
     ),
-    env_file: Path | None = typer.Option(
-        None,
-        help="Optional env file to load before config resolution.",
-    ),
+    env_file: EnvFileOption = None,
+    profile: ProfileOption = None,
 ) -> None:
-    """Train the registry-defined experiment batch and compare one metric.
-
-    Use this command when you already trust the configs and want a compact
-    batch-training report rather than stepping through single runs.
-    """
+    """Train the registry-defined experiment batch and emit aggregate reporting."""
     try:
-        settings = load_case_settings(config, env_file)
+        settings = load_case_settings(config, env_file, profile=profile)
         cfg, _ = load_validated_case_config(config, settings)
         batch = train_batch(
             cfg=cfg,
@@ -50,7 +41,7 @@ def main(
         )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         typer.echo(f"Error during batch training: {exc}", err=True)
-        raise typer.Exit(code=EXIT_FAILURE)
+        raise typer.Exit(code=EXIT_FAILURE) from exc
 
     report_dir = write_metric_report(batch, metric=metric, output_dir=output_dir)
     plot_path = report_dir / f"batch_metric_{metric.replace('/', '_')}.png"
@@ -59,17 +50,4 @@ def main(
     else:
         typer.echo(f"No data to plot for metric '{metric}'.", err=True)
 
-    label_json_path = report_dir / "batch_training_labels.json"
-    typer.echo(f"Saved label map: {label_json_path}")
-
-
-def run() -> None:
-    """Entry point for pyproject.toml script registration."""
-    typer.run(main)
-
-
-if __name__ == "__main__":
-    try:
-        typer.run(main)
-    except KeyboardInterrupt:
-        raise SystemExit(EXIT_KEYBOARD_INTERRUPT)
+    typer.echo(f"Saved label map: {report_dir / 'batch_training_labels.json'}")

@@ -43,9 +43,6 @@ def test_load_experiment_injects_mlflow_from_case_config(
         tomli_w.dump(data_config, fh)
 
     experiments_config = {
-        "raw_dir": str(neuralls_settings.raw_dir),
-        "processed_dir": str(neuralls_settings.processed_dir),
-        "output_dir": str(neuralls_settings.output_dir),
         "mlflow": {
             "tracking_uri": tracking_uri,
         },

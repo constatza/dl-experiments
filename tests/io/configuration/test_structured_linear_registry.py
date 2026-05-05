@@ -74,11 +74,6 @@ def _write_master_registry(
 ) -> Path:
     """Write a minimal case config with explicit tables."""
     lines = [
-        f'raw_dir = "{path.parent / "raw"}"',
-        f'processed_dir = "{path.parent / "processed"}"',
-        'project_root = ".."',
-        f'output_dir = "{path.parent / "output"}"',
-        "",
         "[mlflow]",
         'tracking_uri = "http://127.0.0.1:5000"',
         "",

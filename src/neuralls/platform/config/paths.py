@@ -57,9 +57,7 @@ def build_path_context(
     """
     output_root = output_override.expanduser().resolve() if output_override else settings.output_dir
     processed_root = (
-        data_cfg.output.data_dir
-        if data_cfg.output.data_dir is not None
-        else settings.processed_dir
+        data_cfg.output.data_dir if data_cfg.output.data_dir is not None else settings.processed_dir
     )
     return PathContext(
         project_root=DEFAULT_PROJECT_ROOT,

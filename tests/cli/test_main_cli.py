@@ -1,0 +1,361 @@
+"""Tests for the public neuralls CLI surface."""
+
+from __future__ import annotations
+
+import inspect
+import tomllib
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from typer.models import ArgumentInfo
+from typer.testing import CliRunner
+
+from neuralls.application.models import ExperimentResult
+from neuralls.cli.compare import compare_case
+from neuralls.cli.generate import generate_case
+from neuralls.cli.generate_single import generate_single
+from neuralls.cli.main import app
+from neuralls.cli.run import run_case_matrix
+from neuralls.cli.train import train_case_batch
+from neuralls.composition.comparison.models import (
+    ComparisonOutcome,
+    ComparisonParams,
+    ComparisonResult,
+)
+from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
+from neuralls.domain.solver.models.result import ComparisonRecommendations
+from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
+
+runner = CliRunner()
+
+
+def _solver_params(tmp_path: Path) -> ComparisonGeneral:
+    return ComparisonGeneral(
+        params=SolverParams(
+            rtol=1.0e-6,
+            atol=1.0e-14,
+            max_iterations=10,
+            stopping_criterion="residual_norm",
+            m_max=20,
+            breakdown_tol=None,
+        ),
+        data=ComparisonData(
+            matrix_path=tmp_path / "matrix.npy",
+            rhs_path=tmp_path / "rhs.npy",
+        ),
+    )
+
+
+def _comparison_payload(tmp_path: Path) -> ComparisonResult:
+    return ComparisonResult(
+        results={},
+        summary="ok",
+        solver_params=_solver_params(tmp_path),
+        preconditioners=("none",),
+        recommendations=ComparisonRecommendations(),
+    )
+
+
+def test_root_help_lists_only_public_commands() -> None:
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    for command in ("config", "generate", "generate-single", "train", "run", "compare"):
+        assert command in result.stdout
+    for legacy in (
+        "compare-all",
+        "generate-all",
+        "process-data",
+        "run-experiments",
+        "train-all",
+        "train-model",
+        "predict",
+    ):
+        assert legacy not in result.stdout
+
+
+def test_config_subcommands_are_exposed_under_root() -> None:
+    result = runner.invoke(app, ["config", "--help"])
+
+    assert result.exit_code == 0
+    for subcommand in ("init", "path", "list", "show", "create", "set", "delete"):
+        assert subcommand in result.stdout
+
+
+def test_project_scripts_only_expose_neuralls() -> None:
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    assert pyproject["project"]["scripts"] == {"neuralls": "neuralls.cli.main:app"}
+
+
+def test_generate_help_shows_batch_mode() -> None:
+    result = runner.invoke(app, ["generate", "--help"])
+
+    assert result.exit_code == 0
+    assert "Path to a case config TOML." in result.stdout
+
+
+def test_generate_single_help_shows_dataset_mode() -> None:
+    result = runner.invoke(app, ["generate-single", "--help"])
+
+    assert result.exit_code == 0
+    assert "Path to a dataset config TOML." in result.stdout
+
+
+def test_generate_signature_uses_batch_case_argument() -> None:
+    parameters = inspect.signature(generate_case).parameters
+    config = parameters["config"].default
+
+    assert isinstance(config, ArgumentInfo)
+    assert config.default is ...
+
+
+@patch("neuralls.cli.generate.generate_batch")
+@patch("neuralls.cli.generate.load_validated_case_config")
+@patch("neuralls.cli.generate.load_case_settings")
+def test_generate_invokes_batch_workflow(
+    mock_load_settings: MagicMock,
+    mock_load_case_config: MagicMock,
+    mock_generate_batch: MagicMock,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "case.toml"
+    config.write_text("", encoding="utf-8")
+    settings = MagicMock()
+    cfg = MagicMock()
+    mock_load_settings.return_value = settings
+    mock_load_case_config.return_value = (cfg, MagicMock())
+    mock_generate_batch.return_value = [
+        MagicMock(dataset_id="residuals", output_dir=tmp_path / "out")
+    ]
+
+    result = runner.invoke(app, ["generate", str(config)])
+
+    assert result.exit_code == 0
+    mock_load_settings.assert_called_once_with(config, None, profile=None)
+    mock_load_case_config.assert_called_once_with(config, settings)
+    mock_generate_batch.assert_called_once_with(
+        cfg=cfg,
+        configs_dir=config.resolve().parent,
+        settings=settings,
+    )
+
+
+@patch("neuralls.cli.generate.generate_batch")
+@patch("neuralls.cli.generate.load_validated_case_config")
+@patch("neuralls.cli.generate.load_case_settings")
+def test_generate_fails_for_case_config_without_datasets(
+    mock_load_settings: MagicMock,
+    mock_load_case_config: MagicMock,
+    mock_generate_batch: MagicMock,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "case.toml"
+    config.write_text("", encoding="utf-8")
+    settings = MagicMock()
+    cfg = MagicMock(datasets=[])
+    mock_load_settings.return_value = settings
+    mock_load_case_config.return_value = (cfg, MagicMock())
+
+    result = runner.invoke(app, ["generate", str(config)])
+
+    assert result.exit_code != 0
+    assert "does not define any [[datasets]]" in result.stderr
+    mock_generate_batch.assert_not_called()
+
+
+def test_generate_fails_for_dataset_config_without_single_subcommand(tmp_path: Path) -> None:
+    config = tmp_path / "dataset.toml"
+    config.write_text(
+        "\n".join(
+            [
+                "[source]",
+                'matrix_path = "/tmp/matrix.txt"',
+                "",
+                "[generation]",
+                "shuffle = true",
+                "",
+                "[output]",
+                'data_dir = "/tmp/processed"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["generate", str(config)])
+
+    assert result.exit_code != 0
+    assert "Use 'neuralls generate-single" in result.stderr
+
+
+def test_generate_single_signature_uses_dataset_argument_and_case_option() -> None:
+    parameters = inspect.signature(generate_single).parameters
+    config = parameters["config"].default
+
+    assert isinstance(config, ArgumentInfo)
+    assert config.default is ...
+
+
+@patch("neuralls.cli.generate_single.process_data_from_config")
+@patch("neuralls.cli.generate_single.load_case_settings")
+def test_generate_single_invokes_single_dataset_workflow(
+    mock_load_settings: MagicMock,
+    mock_process_data: MagicMock,
+    tmp_path: Path,
+) -> None:
+    dataset_config = tmp_path / "dataset.toml"
+    case_config = tmp_path / "case.toml"
+    output_dir = tmp_path / "processed" / "dataset"
+    output_dir.mkdir(parents=True)
+    (output_dir / "manifest.json").write_text("{}", encoding="utf-8")
+    dataset_config.write_text("", encoding="utf-8")
+    case_config.write_text("", encoding="utf-8")
+    settings = MagicMock()
+    mock_load_settings.return_value = settings
+    mock_process_data.return_value = output_dir
+
+    result = runner.invoke(
+        app,
+        ["generate-single", str(dataset_config), "--case-config", str(case_config)],
+    )
+
+    assert result.exit_code == 0
+    mock_load_settings.assert_called_once_with(case_config, None, profile=None)
+    mock_process_data.assert_called_once_with(dataset_config, settings)
+    assert "Data processing complete!" in result.stdout
+
+
+def test_generate_single_requires_case_config(tmp_path: Path, monkeypatch) -> None:
+    dataset_config = tmp_path / "dataset.toml"
+    dataset_config.write_text("", encoding="utf-8")
+    monkeypatch.delenv("NEURALLS_CASE_CONFIG", raising=False)
+
+    result = runner.invoke(app, ["generate-single", str(dataset_config)])
+
+    assert result.exit_code != 0
+    assert "This command requires a case config." in result.stderr
+
+
+def test_train_signature_uses_batch_case_argument() -> None:
+    parameters = inspect.signature(train_case_batch).parameters
+    config = parameters["config"].default
+
+    assert isinstance(config, ArgumentInfo)
+    assert config.default is ...
+
+
+@patch("neuralls.cli.train.write_metric_report")
+@patch("neuralls.cli.train.train_batch")
+@patch("neuralls.cli.train.load_validated_case_config")
+@patch("neuralls.cli.train.load_case_settings")
+def test_train_invokes_batch_workflow(
+    mock_load_settings: MagicMock,
+    mock_load_case_config: MagicMock,
+    mock_train_batch: MagicMock,
+    mock_write_metric_report: MagicMock,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "case.toml"
+    config.write_text("", encoding="utf-8")
+    settings = MagicMock()
+    cfg = MagicMock()
+    batch = MagicMock()
+    report_dir = tmp_path / "training"
+    report_dir.mkdir()
+    mock_load_settings.return_value = settings
+    mock_load_case_config.return_value = (cfg, MagicMock())
+    mock_train_batch.return_value = batch
+    mock_write_metric_report.return_value = report_dir
+
+    result = runner.invoke(app, ["train", str(config)])
+
+    assert result.exit_code == 0
+    mock_load_settings.assert_called_once_with(config, None, profile=None)
+    mock_load_case_config.assert_called_once_with(config, settings)
+    mock_train_batch.assert_called_once_with(
+        cfg=cfg,
+        configs_dir=config.resolve().parent,
+        settings=settings,
+        output_root=None,
+    )
+    mock_write_metric_report.assert_called_once_with(
+        batch, metric="eval/rel_error", output_dir=None
+    )
+
+
+def test_run_signature_uses_batch_case_argument() -> None:
+    parameters = inspect.signature(run_case_matrix).parameters
+    config = parameters["config"].default
+
+    assert isinstance(config, ArgumentInfo)
+    assert config.default is ...
+
+
+@patch("neuralls.cli.run.run_experiment_matrix")
+@patch("neuralls.cli.run.load_case_settings")
+def test_run_invokes_batch_workflow(
+    mock_load_settings: MagicMock,
+    mock_run_experiment_matrix: MagicMock,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "case.toml"
+    config.write_text("", encoding="utf-8")
+    settings = MagicMock()
+    mock_load_settings.return_value = settings
+    mock_run_experiment_matrix.return_value = [
+        ExperimentResult(experiment_id="exp-1", experiment_display_name="exp-1", status="Success"),
+    ]
+
+    result = runner.invoke(app, ["run", str(config)])
+
+    assert result.exit_code == 0
+    mock_load_settings.assert_called_once_with(config, None, profile=None)
+    mock_run_experiment_matrix.assert_called_once()
+    call_kwargs = mock_run_experiment_matrix.call_args.kwargs
+    assert call_kwargs["experiments_config_path"] == config
+    assert call_kwargs["settings"] == settings
+    assert call_kwargs["force"] is False
+    assert call_kwargs["max_epochs"] is None
+
+
+def test_compare_signature_uses_batch_case_argument() -> None:
+    parameters = inspect.signature(compare_case).parameters
+    config = parameters["config"].default
+
+    assert isinstance(config, ArgumentInfo)
+    assert config.default is ...
+
+
+@patch("neuralls.cli.compare.run_comparison_batch")
+@patch("neuralls.cli.compare.load_case_settings")
+def test_compare_invokes_batch_workflow(
+    mock_load_settings: MagicMock,
+    mock_run_comparison_batch: MagicMock,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "case.toml"
+    config.write_text(
+        "[mlflow]\n"
+        f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")}"\n',
+        encoding="utf-8",
+    )
+    settings = MagicMock()
+    mock_load_settings.return_value = settings
+    mock_run_comparison_batch.return_value = [
+        ComparisonOutcome(
+            comparison_id="solver",
+            comparison_display_name="solver",
+            success=True,
+            payload=_comparison_payload(tmp_path),
+        )
+    ]
+
+    result = runner.invoke(app, ["compare", str(config)])
+
+    assert result.exit_code == 0
+    mock_load_settings.assert_called_once_with(config, None, profile=None)
+    mock_run_comparison_batch.assert_called_once()
+    assert mock_run_comparison_batch.call_args.args[0] == config
+    assert isinstance(mock_run_comparison_batch.call_args.args[1], ComparisonParams)
+    assert mock_run_comparison_batch.call_args.args[2] == settings

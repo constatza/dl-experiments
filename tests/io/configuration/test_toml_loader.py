@@ -25,7 +25,9 @@ def test_load_data_config_resolves_paths(
     """Dataset loader expands NEURALLS placeholders into absolute paths."""
     config = load_data_config(minimal_data_config_toml, neuralls_settings)
     assert config.id == "test-dataset"
-    assert config.source.matrix_path == str((neuralls_settings.raw_dir / "matrix.mtx").resolve())
+    assert config.source.matrix_path == str(
+        (neuralls_settings.processed_dir / "matrix.mtx").resolve()
+    )
 
 
 def test_load_data_config_requires_id(
@@ -76,8 +78,8 @@ def test_load_comparison_config_resolves_paths(
 rtol = 1e-6
 
 [general.data]
-matrix_path = "${NEURALLS_RAW_DIR}/matrix.npy"
-rhs_path = "${NEURALLS_RAW_DIR}/rhs.npy"
+matrix_path = "${NEURALLS_PROCESSED_DIR}/matrix.npy"
+rhs_path = "${NEURALLS_PROCESSED_DIR}/rhs.npy"
 
 [[preconditioners]]
 name = "jacobi"
@@ -85,8 +87,11 @@ type = "jacobi"
 """
     )
     config = load_comparison_config(config_file, neuralls_settings)
-    assert config.general.data.matrix_path == (neuralls_settings.raw_dir / "matrix.npy").resolve()
-    assert config.general.data.rhs_path == (neuralls_settings.raw_dir / "rhs.npy").resolve()
+    assert (
+        config.general.data.matrix_path
+        == (neuralls_settings.processed_dir / "matrix.npy").resolve()
+    )
+    assert config.general.data.rhs_path == (neuralls_settings.processed_dir / "rhs.npy").resolve()
 
 
 def test_load_case_config_returns_typed_model(
@@ -95,14 +100,12 @@ def test_load_case_config_returns_typed_model(
 ) -> None:
     """Case loader returns CaseConfig directly."""
     dataset_cfg = tmp_path / "dataset.toml"
-    dataset_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "${NEURALLS_RAW_DIR}/matrix.mtx"\n')
+    dataset_cfg.write_text(
+        'id = "dataset"\n[source]\nmatrix_path = "${NEURALLS_PROCESSED_DIR}/matrix.mtx"\n'
+    )
     config_file = tmp_path / "experiments.toml"
     config_file.write_text(
         f"""
-raw_dir = "${{NEURALLS_RAW_DIR}}"
-processed_dir = "${{NEURALLS_PROCESSED_DIR}}"
-output_dir = "${{NEURALLS_OUTPUT_DIR}}"
-
 [[datasets]]
 id = "dataset"
 path = "{dataset_cfg}"
@@ -110,9 +113,6 @@ path = "{dataset_cfg}"
     )
     config = load_case_config(config_file, neuralls_settings)
     assert isinstance(config, CaseConfig)
-    assert config.raw_dir == neuralls_settings.raw_dir
-    assert config.processed_dir == neuralls_settings.processed_dir
-    assert config.output_dir == neuralls_settings.output_dir
     assert config.datasets[0].path == dataset_cfg.resolve()
 
 

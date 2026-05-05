@@ -85,10 +85,6 @@ def valid_experiments_toml(
     path.write_text(
         "\n".join(
             [
-                f'raw_dir = "{tmp_path / "raw"}"',
-                f'processed_dir = "{tmp_path / "processed"}"',
-                f'output_dir = "{tmp_path / "output"}"',
-                "",
                 "[mlflow]",
                 f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")}"',
                 "",
@@ -242,10 +238,6 @@ def test_train_batch_raises_for_empty_config(tmp_path: Path, neuralls_settings) 
     config.write_text(
         "\n".join(
             [
-                f'raw_dir = "{tmp_path / "raw"}"',
-                f'processed_dir = "{tmp_path / "processed"}"',
-                f'output_dir = "{tmp_path / "output"}"',
-                "",
                 "[mlflow]",
                 f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns.db")}"',
             ]
@@ -278,7 +270,7 @@ def test_train_batch_returns_local_output_dir(
 
     assert mock_train.call_count == 1
     assert mock_train.call_args.kwargs["mlflow_experiment_name"] == "Train"
-    assert result.output_dir == (tmp_path / "output" / "training")
+    assert result.output_dir == (tmp_path / "training")
     assert result.label_map["1"]["experiment_id"] == "ffnn_test"
 
 
@@ -288,10 +280,6 @@ def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -
     config.write_text(
         "\n".join(
             [
-                f'raw_dir = "{tmp_path / "raw"}"',
-                f'processed_dir = "{tmp_path / "processed"}"',
-                f'output_dir = "{tmp_path / "output"}"',
-                "",
                 "[mlflow]",
                 f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")}"',
                 "",
@@ -314,9 +302,6 @@ def test_experiments_config_rejects_legacy_singular_experiment_table(
     config.write_text(
         "\n".join(
             [
-                f'raw_dir = "{tmp_path / "raw"}"',
-                f'processed_dir = "{tmp_path / "processed"}"',
-                f'output_dir = "{tmp_path / "output"}"',
                 "[[models]]",
                 'id = "ffnn"',
                 'path = "models/ffnn.toml"',
@@ -343,9 +328,6 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
     config.write_text(
         "\n".join(
             [
-                f'raw_dir = "{tmp_path / "raw"}"',
-                f'processed_dir = "{tmp_path / "processed"}"',
-                f'output_dir = "{tmp_path / "output"}"',
                 "[[models]]",
                 'id = "ffnn"',
                 'path = "models/ffnn.toml"',
@@ -370,9 +352,6 @@ def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
     config.write_text(
         "\n".join(
             [
-                f'raw_dir = "{tmp_path / "raw"}"',
-                f'processed_dir = "{tmp_path / "processed"}"',
-                f'output_dir = "{tmp_path / "output"}"',
                 "[[datasets]]",
                 'id = "test-solutions"',
                 'path = "datasets/test-solutions.toml"',
@@ -394,15 +373,7 @@ def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
 def test_resolve_comparison_config_path_rejects_missing_registry_id(tmp_path: Path) -> None:
     """Comparison ids are resolved strictly through [[comparisons]]."""
     config = tmp_path / "experiments.toml"
-    config.write_text(
-        "\n".join(
-            [
-                f'raw_dir = "{tmp_path / "raw"}"',
-                f'processed_dir = "{tmp_path / "processed"}"',
-                f'output_dir = "{tmp_path / "output"}"',
-            ]
-        )
-    )
+    config.write_text("\n".join([]))
     cfg = ExperimentsConfig.model_validate(load_raw_toml(config))
 
     with pytest.raises(

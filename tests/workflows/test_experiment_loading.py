@@ -316,9 +316,6 @@ class TestTrainingPipelineWithMLflow:
         experiments_config_path = tmp_path / "experiments.toml"
         custom_output_root = data_dir / "custom_output"
         experiments_config = {
-            "raw_dir": str(training_setup["raw_dir"]),
-            "processed_dir": str(data_dir / "processed"),
-            "output_dir": str(custom_output_root),
             "mlflow": {
                 "tracking_uri": f"sqlite:///{(custom_output_root / 'mlruns' / 'mlflow.db').as_posix()}",
             },

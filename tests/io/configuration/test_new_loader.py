@@ -30,10 +30,6 @@ def temp_config_structure(tmp_path: Path) -> Path:
 
     # Case config uses [[experiments]] registry entries.
     with open(project_root / "configs" / "experiments.toml", "w") as f:
-        f.write(f'raw_dir = "{project_root / "data"}"\n')
-        f.write(f'processed_dir = "{project_root / "data" / "processed"}"\n')
-        f.write('project_root = ".."\n')
-        f.write(f'output_dir = "{project_root / "output"}"\n\n')
         f.write("[[datasets]]\n")
         f.write('id = "exp1_data"\n')
         f.write('path = "datasets/exp1_data.toml"\n\n')
@@ -155,10 +151,6 @@ def test_load_experiments_missing_registry_id(
 
     # Create experiments.toml with reference to non-existent dataset
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
-        f.write(f'raw_dir = "{temp_config_structure / "data"}"\n')
-        f.write(f'processed_dir = "{temp_config_structure / "data" / "processed"}"\n')
-        f.write('project_root = ".."\n')
-        f.write(f'output_dir = "{temp_config_structure / "output"}"\n\n')
         f.write("[[models]]\n")
         f.write('id = "exp1_model"\n')
         f.write('path = "models/exp1_model.toml"\n\n')
@@ -229,10 +221,7 @@ def test_load_experiments_no_experiments(
 
     # Create empty experiments.toml
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
-        f.write(f'raw_dir = "{temp_config_structure / "data"}"\n')
-        f.write(f'processed_dir = "{temp_config_structure / "data" / "processed"}"\n')
-        f.write('project_root = ".."\n')
-        f.write(f'output_dir = "{temp_config_structure / "output"}"\n')
+        f.write("")
 
     with pytest.raises(ValueError, match="No experiments defined"):
         load_batch(

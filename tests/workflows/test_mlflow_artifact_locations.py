@@ -132,9 +132,6 @@ def _write_experiments_config(path: Path, output_root: Path) -> str:
     """Write sqlite-only experiments topology and return tracking URI."""
     tracking_uri = _sqlite_tracking_uri(output_root / "mlruns" / "mlflow.db")
     payload = {
-        "raw_dir": str(path.parent / "raw"),
-        "processed_dir": str(path.parent / "processed"),
-        "output_dir": str(output_root),
         "mlflow": {
             "tracking_uri": tracking_uri,
         },

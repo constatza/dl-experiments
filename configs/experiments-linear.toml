@@ -1,10 +1,5 @@
 # Residual linear registry for archive-backed and Gaussian residual sweeps.
 
-raw_dir = "${NEURALLS_RAW_DIR}"
-processed_dir = "${NEURALLS_PROCESSED_DIR}"
-project_root = ".."
-output_dir = "${NEURALLS_OUTPUT_DIR}"
-
 [names]
 training = "Train"
 comparison = "Comparisons"

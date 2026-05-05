@@ -426,17 +426,17 @@ def train_batch(
     tracking_uri = cfg.mlflow.tracking_uri
     if output_root is not None:
         base_output = Path(output_root)
-    elif cfg.output_dir is not None:
-        base_output = cfg.output_dir
     elif tracking_uri is not None and is_sqlite_tracking_uri(tracking_uri):
         derived_output = derive_output_root_from_tracking_uri(tracking_uri)
         if derived_output is None:
-            raise ValueError(
-                "Case config must set output_dir when mlflow.tracking_uri is remote."
-            )
+            raise ValueError("MLflow tracking_uri must resolve to a local sqlite database path.")
         base_output = derived_output
+    elif tracking_uri is None:
+        base_output = settings.output_dir
     else:
-        raise ValueError("Case config must define output_dir or a sqlite mlflow.tracking_uri.")
+        raise ValueError(
+            "Runtime settings must define output_dir when mlflow.tracking_uri is remote."
+        )
 
     if tracking_uri is None:
         training_mlflow_env = build_mlflow_environment(

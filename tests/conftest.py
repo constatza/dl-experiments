@@ -111,18 +111,8 @@ def isolate_default_paths_with_tmp_path(
     """Force all default artifact paths into pytest temp storage."""
     case_config_path = runtime_root / "case.toml"
     case_config_path.parent.mkdir(parents=True, exist_ok=True)
-    case_config_path.write_text(
-        "\n".join(
-            [
-                f'raw_dir = "{(runtime_root / "raw").resolve()}"',
-                f'processed_dir = "{processed_root.resolve()}"',
-                f'output_dir = "{output_root.resolve()}"',
-            ]
-        ),
-        encoding="utf-8",
-    )
+    case_config_path.write_text("", encoding="utf-8")
     env_map = {
-        "NEURALLS_RAW_DIR": str(runtime_root / "raw"),
         "NEURALLS_PROCESSED_DIR": str(processed_root),
         "NEURALLS_OUTPUT_DIR": str(output_root),
         "NEURALLS_CASE_CONFIG": str(case_config_path),
@@ -133,7 +123,7 @@ def isolate_default_paths_with_tmp_path(
         "DLKIT_ROOT_DIR": str(runtime_root),
         "DLKIT_INTERNAL_DIR": str(runtime_root / ".dlkit"),
     }
-    Path(env_map["NEURALLS_RAW_DIR"]).mkdir(parents=True, exist_ok=True)
+    (runtime_root / "raw").mkdir(parents=True, exist_ok=True)
     for key, value in env_map.items():
         monkeypatch.setenv(key, value)
 
@@ -154,14 +144,15 @@ def isolate_default_paths_with_tmp_path(
 
 
 @pytest.fixture
-def neuralls_settings(runtime_root: Path, processed_root: Path, output_root: Path) -> NeurallsSettings:
+def neuralls_settings(
+    runtime_root: Path, processed_root: Path, output_root: Path
+) -> NeurallsSettings:
     """Resolved settings fixture backed by per-test temporary roots."""
     raw = runtime_root / "raw"
     for directory in (raw, processed_root, output_root):
         directory.mkdir(parents=True, exist_ok=True)
     return NeurallsSettings(
         _env_file=[],
-        raw_dir=raw,
         processed_dir=processed_root,
         output_dir=output_root,
     )
@@ -178,18 +169,20 @@ def config_context(neuralls_settings: NeurallsSettings, tmp_path: Path) -> Confi
 @pytest.fixture
 def minimal_data_config_toml(
     tmp_path: Path,
-    neuralls_settings: NeurallsSettings,
+    runtime_root: Path,
 ) -> Path:
     """Minimal valid dataset config for loader and processing tests."""
     config_path = tmp_path / "test.toml"
-    matrix_path = neuralls_settings.raw_dir / "matrix.mtx"
+    processed = runtime_root / "processed"
+    processed.mkdir(parents=True, exist_ok=True)
+    matrix_path = processed / "matrix.mtx"
     matrix_path.touch()
     config_path.write_text(
         """
 id = "test-dataset"
 
 [source]
-matrix_path = "${NEURALLS_RAW_DIR}/matrix.mtx"
+matrix_path = "${NEURALLS_PROCESSED_DIR}/matrix.mtx"
 
 [generation]
 

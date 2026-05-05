@@ -150,6 +150,7 @@ def _resolve_solution_archive_path(
 
     return None
 
+
 def _derive_rhs_from_solution_archive(
     *,
     matrix: np.ndarray,

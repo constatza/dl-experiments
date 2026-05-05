@@ -126,19 +126,17 @@ def _resolve_output_override(
     output_root: Path | None,
     case_cfg: CaseConfig | None,
     case_config_path: Path | None,
+    neuralls_settings: NeurallsSettings,
 ) -> Path | None:
     """Resolve output root from explicit override or case config."""
     if output_root is not None:
         return output_root.resolve()
     if case_cfg is None or case_config_path is None:
-        return None
+        return neuralls_settings.output_dir
 
-    resolved_output = _resolve_relative_path(case_cfg.output_dir, case_config_path.parent)
-    if resolved_output is not None:
-        return resolved_output
     tracking_uri = case_cfg.mlflow.tracking_uri
     if tracking_uri is None:
-        return None
+        return neuralls_settings.output_dir
     return derive_output_root_from_tracking_uri(tracking_uri, config_path=case_config_path)
 
 
@@ -154,14 +152,12 @@ def _build_default_mlflow_topology(path_ctx_output_root: Path) -> MlflowTopology
 def _build_case_mlflow_topology(
     case_cfg: CaseConfig,
     case_config_path: Path,
+    neuralls_settings: NeurallsSettings,
 ) -> MlflowTopology:
     """Build MLflow env from case config or derive it from output_dir."""
     tracking_uri = case_cfg.mlflow.tracking_uri
     if tracking_uri is None:
-        resolved_output = _resolve_relative_path(case_cfg.output_dir, case_config_path.parent)
-        if resolved_output is None:
-            raise ValueError("Case config must define output_dir to derive local MLflow paths.")
-        return _build_default_mlflow_topology(resolved_output)
+        return _build_default_mlflow_topology(neuralls_settings.output_dir)
     env = build_mlflow_environment(
         tracking_uri=tracking_uri,
         artifacts_destination=case_cfg.mlflow.artifacts_destination,
@@ -219,6 +215,7 @@ def load_experiment(
         output_root=output_root,
         case_cfg=case_cfg,
         case_config_path=resolved_case_config_path,
+        neuralls_settings=neuralls_settings,
     )
     path_ctx = build_path_context(
         data_cfg,
@@ -229,6 +226,7 @@ def load_experiment(
         _build_case_mlflow_topology(
             case_cfg,
             resolved_case_config_path,
+            neuralls_settings,
         )
         if case_cfg is not None and resolved_case_config_path is not None
         else _build_default_mlflow_topology(path_ctx.output_root)
@@ -330,7 +328,7 @@ def load_batch(
 
     cfg, config_dir = load_validated_case_config(case_config_path, neuralls_settings)
 
-    output_root = cfg.output_dir
+    output_root = neuralls_settings.output_dir
     bindings = list_experiment_bindings(cfg, config_dir)
     if not bindings:
         raise ValueError(

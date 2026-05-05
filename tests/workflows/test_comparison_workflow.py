@@ -77,9 +77,6 @@ def _write_comparison_config(path: Path) -> None:
 
 def _write_experiments_config(path: Path, *, with_comparisons: bool = False) -> None:
     payload: dict[str, object] = {
-        "raw_dir": str(path.parent / "raw"),
-        "processed_dir": str(path.parent / "processed"),
-        "output_dir": str(path.parent / "output"),
         "mlflow": {"tracking_uri": build_sqlite_tracking_uri(path.parent / "mlruns" / "mlflow.db")},
         "names": {
             "training": "neuralls-training",
@@ -446,12 +443,8 @@ def test_run_comparison_ignores_unrelated_broken_experiments(
     experiments_config = tmp_path / "experiments.toml"
     experiments_config.write_text(
         f"""
-raw_dir = "{tmp_path / 'raw'}"
-processed_dir = "{tmp_path / 'processed'}"
-output_dir = "{tmp_path / 'output'}"
-
 [mlflow]
-tracking_uri = "{build_sqlite_tracking_uri(tmp_path / 'mlflow.db')}"
+tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlflow.db")}"
 
 [[datasets]]
 id = "valid-dataset"

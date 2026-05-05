@@ -57,7 +57,7 @@ def expand_config_path(value: str, ctx: ConfigContext) -> str:
     if m := _GRAPH_CG_RE.search(value):
         raise ValueError(
             f"Stale placeholder '{m.group()}' in config. "
-            "Rename GRAPH_CG_* → NEURALLS_* (see .env.example)."
+            "Rename GRAPH_CG_* → NEURALLS_* (see docs/env-reference.md)."
         )
 
     def _sub(m: re.Match[str]) -> str:
@@ -66,7 +66,7 @@ def expand_config_path(value: str, ctx: ConfigContext) -> str:
         if val is None:
             raise ValueError(
                 f"Unknown placeholder '${{NEURALLS_{m.group(1)}}}'. "
-                "Available: RAW_DIR, PROCESSED_DIR, OUTPUT_DIR."
+                "Available: PROCESSED_DIR, OUTPUT_DIR."
             )
         return str(val)
 
@@ -84,7 +84,9 @@ def expand_config_glob(value: str, ctx: ConfigContext) -> str:
             suffix = value[i:]
             if not prefix:
                 return str(ctx.config_dir / suffix)
-            resolved_prefix = expand_config_path(prefix, ctx) if prefix.strip() else str(ctx.config_dir)
+            resolved_prefix = (
+                expand_config_path(prefix, ctx) if prefix.strip() else str(ctx.config_dir)
+            )
             if prefix.endswith(("/", "\\")):
                 return str(Path(resolved_prefix) / suffix)
             return f"{resolved_prefix}{suffix}"

@@ -190,10 +190,6 @@ def runs_config_path(
     path.write_text(
         "\n".join(
             [
-                f'raw_dir = "{config_root.parent / "raw"}"',
-                f'processed_dir = "{processed_root}"',
-                f'output_dir = "{output_root}"',
-                "",
                 "[mlflow]",
                 f'tracking_uri = "{tracking_uri}"',
                 "",

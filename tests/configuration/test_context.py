@@ -10,10 +10,10 @@ from neuralls.platform.config.context import expand_config_glob, expand_config_p
 from neuralls.platform.config.settings import NeurallsSettings
 
 
-def test_expand_neuralls_raw_dir(config_context, neuralls_settings: NeurallsSettings) -> None:
-    """`${NEURALLS_RAW_DIR}` expands to the settings raw root."""
-    value = expand_config_path("${NEURALLS_RAW_DIR}/matrix.mtx", config_context)
-    assert value == str((neuralls_settings.raw_dir / "matrix.mtx").resolve())
+def test_expand_neuralls_raw_dir_is_unknown(config_context) -> None:
+    """`${NEURALLS_RAW_DIR}` is no longer a valid settings placeholder."""
+    with pytest.raises(ValueError, match="PROCESSED_DIR, OUTPUT_DIR"):
+        expand_config_path("${NEURALLS_RAW_DIR}/matrix.mtx", config_context)
 
 
 def test_expand_neuralls_output_dir(
@@ -33,7 +33,7 @@ def test_expand_graph_cg_raises_with_migration_hint(config_context) -> None:
 
 def test_expand_unknown_neuralls_raises(config_context) -> None:
     """Unknown placeholders are rejected."""
-    with pytest.raises(ValueError, match="RAW_DIR, PROCESSED_DIR, OUTPUT_DIR"):
+    with pytest.raises(ValueError, match="PROCESSED_DIR, OUTPUT_DIR"):
         expand_config_path("${NEURALLS_UNKNOWN}/matrix.mtx", config_context)
 
 
@@ -64,5 +64,5 @@ def test_glob_wildcard_preserved(
     neuralls_settings: NeurallsSettings,
 ) -> None:
     """Glob suffixes are preserved after prefix resolution."""
-    value = expand_config_glob("${NEURALLS_RAW_DIR}/*.mtx", config_context)
-    assert value == str(neuralls_settings.raw_dir / "*.mtx")
+    value = expand_config_glob("${NEURALLS_OUTPUT_DIR}/*.mtx", config_context)
+    assert value == str(neuralls_settings.output_dir / "*.mtx")

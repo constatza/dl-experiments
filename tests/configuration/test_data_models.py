@@ -67,9 +67,7 @@ def test_data_config_file_round_trip() -> None:
             normalize="matrix",
             shuffle=True,
             seed=42,
-            strategy=[
-                StrategyConfig(name="solution_archive", samples=-1, solutions_glob="*.txt")
-            ],
+            strategy=[StrategyConfig(name="solution_archive", samples=-1, solutions_glob="*.txt")],
         ),
         output=OutputConfig(data_dir=Path("tests/fixtures/data/processed")),
         test=DataTestConfig(solutions_path="tests/fixtures/data/test_solutions.txt"),

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Run every comparison profile declared in one case config."""
 
 from __future__ import annotations
@@ -9,40 +8,34 @@ from pathlib import Path
 import typer
 from loguru import logger
 
-from neuralls.shared.constants import (
-    EXIT_FAILURE,
-    EXIT_KEYBOARD_INTERRUPT,
-    SYMBOL_CHECKMARK,
-)
-from neuralls.composition.experiments.comparison_batch import run_comparison_batch
-from neuralls.platform.config.settings import load_case_settings
+from neuralls.cli.options import EnvFileOption, ProfileOption
 from neuralls.composition.comparison.models import (
     ComparisonOutcome,
     ComparisonParams,
     ComparisonResult,
 )
+from neuralls.composition.experiments.comparison_batch import run_comparison_batch
+from neuralls.composition.config import load_case_settings
+from neuralls.shared.constants import EXIT_FAILURE, SYMBOL_CHECKMARK
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 
 def _log_comparison_results(result: ComparisonResult) -> None:
-    preconditioners = result.preconditioners
-    summary = result.summary
-
-    logger.info(f"Available preconditioners: {preconditioners}")
-    if summary:
+    logger.info(f"Available preconditioners: {result.preconditioners}")
+    if result.summary:
         logger.info("=" * 60)
-        logger.info(summary)
+        logger.info(result.summary)
         logger.info("=" * 60)
 
 
 def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
-    successful = [o for o in outcomes if o.success]
-    failed = [o for o in outcomes if not o.success]
+    successful = [outcome for outcome in outcomes if outcome.success]
+    failed = [outcome for outcome in outcomes if not outcome.success]
+
     for outcome in outcomes:
-        label = outcome.comparison_display_name
         logger.info("=" * 80)
-        logger.info(f"Comparison: {label}")
+        logger.info(f"Comparison: {outcome.comparison_display_name}")
         logger.info("=" * 80)
         for warning in outcome.warnings:
             logger.warning(warning)
@@ -60,42 +53,27 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
     logger.info(f"Failed: {len(failed)}")
     if failed:
         for item in failed:
-            logger.error(f"  ✗ {item.comparison_id}: {item.error}")
+            logger.error(f"  x {item.comparison_id}: {item.error}")
         raise typer.Exit(code=EXIT_FAILURE)
-    logger.info(f"\n{SYMBOL_CHECKMARK} All comparisons completed successfully!")
+    logger.info(f"{SYMBOL_CHECKMARK} All comparisons completed successfully!")
 
 
-def main(
+def compare_case(
     config: Path = typer.Argument(
         ...,
         help="Path to a case config TOML.",
     ),
-    env_file: Path | None = typer.Option(
-        None,
-        help="Optional env file to load before config resolution.",
-    ),
+    env_file: EnvFileOption = None,
+    profile: ProfileOption = None,
 ) -> None:
     """Benchmark classical and neural preconditioners for one case config."""
     params = ComparisonParams()
 
     try:
-        settings = load_case_settings(config, env_file)
+        settings = load_case_settings(config, env_file, profile=profile)
         outcomes = run_comparison_batch(config, params, settings)
     except (ValueError, KeyError) as exc:
         logger.error(str(exc))
         raise typer.Exit(code=EXIT_FAILURE) from exc
 
     _log_outcomes(outcomes)
-
-
-def run() -> None:
-    """Entry point for pyproject.toml script registration."""
-    typer.run(main)
-
-
-if __name__ == "__main__":
-    try:
-        typer.run(main)
-    except KeyboardInterrupt:
-        logger.info("\nInterrupted by user")
-        raise SystemExit(EXIT_KEYBOARD_INTERRUPT)

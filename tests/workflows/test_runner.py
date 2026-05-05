@@ -160,10 +160,6 @@ def test_run_experiments_full_flow(
     # 5. Create master config using [[experiments]] registry entries.
     master_config_path = configs_dir / "experiments.toml"
     with open(master_config_path, "w") as f:
-        f.write(f'raw_dir = "{raw_dir}"\n')
-        f.write(f'processed_dir = "{data_dir / "processed"}"\n')
-        f.write('project_root = ".."\n')
-        f.write(f'output_dir = "{data_dir / "output"}"\n\n')
         f.write("[[datasets]]\n")
         f.write('id = "test_data_gen"\n')
         f.write('path = "datasets/test_data_gen.toml"\n\n')
@@ -322,10 +318,6 @@ def test_run_experiment_matrix_with_mlflow(
     # 4. Create Master Experiment Config
     master_config_path = configs_dir / "experiments.toml"
     with open(master_config_path, "w") as f:
-        f.write(f'raw_dir = "{raw_dir}"\n')
-        f.write(f'processed_dir = "{data_dir / "processed"}"\n')
-        f.write('project_root = ".."\n')
-        f.write(f'output_dir = "{data_dir / "output"}"\n\n')
         f.write("[[datasets]]\n")
         f.write('id = "mlflow_test_data"\n')
         f.write('path = "datasets/mlflow_test_data.toml"\n\n')
