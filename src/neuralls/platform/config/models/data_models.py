@@ -9,22 +9,10 @@ from __future__ import annotations
 from typing import Literal
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import model_validator
 
-
-class FlowConfig(BaseModel):
-    """Validates [flow] section from data config.
-
-    This section typically contains flow-level metadata.
-    Usually empty but kept for future extensibility.
-    """
-
-    dataset: str | None = Field(
-        default=None,
-        description="Dataset name or identifier",
-    )
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
+from neuralls.platform.config.context import ConfigContext, expand_config_glob, expand_config_path
 
 
 class SourceConfig(BaseModel):
@@ -68,6 +56,38 @@ class SourceConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    @field_validator("case_path", "matrix_path", mode="before")
+    @classmethod
+    def _expand_plain_paths(cls, v: str | None, info: ValidationInfo) -> str | None:
+        """Expand plain path placeholders and resolve to absolute paths.
+
+        Args:
+            v: Raw string value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or None if v is None.
+        """
+        if v is None or info.context is None:
+            return v
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
+    @field_validator("rhs_path", "solutions_path", "rhs_pattern", mode="before")
+    @classmethod
+    def _expand_glob_paths(cls, v: str | None, info: ValidationInfo) -> str | None:
+        """Expand glob path placeholders, preserving wildcard characters.
+
+        Args:
+            v: Raw glob expression from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Glob expression with prefix resolved to absolute path, or None if v is None.
+        """
+        if v is None or info.context is None:
+            return v
+        return expand_config_glob(v, ConfigContext.from_pydantic_context(info.context))
+
 
 class StrategyConfig(BaseModel):
     """Validates [[generation.strategy]] entry from data config.
@@ -104,6 +124,36 @@ class StrategyConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow", frozen=True)  # Allow strategy-specific parameters
 
+    @field_validator("solutions_glob", "rhs_glob", mode="before")
+    @classmethod
+    def _expand_globs(cls, v: str | None, info: ValidationInfo) -> str | None:
+        """Expand glob path placeholders, preserving wildcard characters.
+
+        Args:
+            v: Raw glob expression from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Glob expression with prefix resolved to absolute path, or None if v is None.
+        """
+        if v is None or info.context is None:
+            return v
+        return expand_config_glob(v, ConfigContext.from_pydantic_context(info.context))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_extra_archive_paths(cls, data: object, info: ValidationInfo) -> object:
+        """Expand extra rhs_path / solutions_path keys when strategy extras use them."""
+        if not isinstance(data, dict) or info.context is None:
+            return data
+        expanded = dict(data)
+        ctx = ConfigContext.from_pydantic_context(info.context)
+        for key in ("rhs_path", "solutions_path"):
+            value = expanded.get(key)
+            if isinstance(value, str):
+                expanded[key] = expand_config_glob(value, ctx)
+        return expanded
+
 
 class GenerationConfig(BaseModel):
     """Validates [generation] section from data config.
@@ -128,12 +178,34 @@ class GenerationConfig(BaseModel):
         description="Total number of samples (legacy, use strategy.samples)",
         ge=1,
     )
+    rhs_archive_glob: str | None = Field(
+        default=None,
+        description="Optional generation-level RHS archive glob",
+    )
+    cg_tolerance: float | None = Field(
+        default=None,
+        description="Optional generation-level CG tolerance override",
+        gt=0.0,
+    )
+    cg_max_iters: int | None = Field(
+        default=None,
+        description="Optional generation-level CG iteration override",
+        ge=1,
+    )
     strategy: list[StrategyConfig] = Field(
         default_factory=list,
         description="List of generation strategies",
     )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator("rhs_archive_glob", mode="before")
+    @classmethod
+    def _expand_rhs_archive_glob(cls, v: str | None, info: ValidationInfo) -> str | None:
+        """Expand generation-level RHS archive globs."""
+        if v is None or info.context is None:
+            return v
+        return expand_config_glob(v, ConfigContext.from_pydantic_context(info.context))
 
 
 class OutputConfig(BaseModel):
@@ -162,6 +234,24 @@ class OutputConfig(BaseModel):
         description="Numeric dtype for persisted arrays",
     )
 
+    @field_validator("data_dir", mode="before")
+    @classmethod
+    def _expand_data_dir(cls, v: object, info: ValidationInfo) -> object:
+        """Expand data_dir placeholder and resolve to absolute path.
+
+        Args:
+            v: Raw value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or original value if not a string.
+        """
+        if v is None or info.context is None:
+            return v
+        if not isinstance(v, str):
+            return v
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
 
 class DataTestConfig(BaseModel):
     """Validates [test] section from data config.
@@ -180,6 +270,22 @@ class DataTestConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    @field_validator("solutions_path", "rhs_path", mode="before")
+    @classmethod
+    def _expand_glob_paths(cls, v: str | None, info: ValidationInfo) -> str | None:
+        """Expand glob path placeholders, preserving wildcard characters.
+
+        Args:
+            v: Raw glob expression from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Glob expression with prefix resolved to absolute path, or None if v is None.
+        """
+        if v is None or info.context is None:
+            return v
+        return expand_config_glob(v, ConfigContext.from_pydantic_context(info.context))
+
 
 class DataConfigFile(BaseModel):
     """Complete data config TOML structure with validation.
@@ -188,10 +294,7 @@ class DataConfigFile(BaseModel):
     used for data generation and collection workflows.
     """
 
-    flow: FlowConfig = Field(
-        default_factory=FlowConfig,
-        description="Flow metadata",
-    )
+    id: str = Field(..., min_length=1, description="Stable dataset identifier")
     source: SourceConfig = Field(
         default_factory=SourceConfig,
         description="Source data locations",

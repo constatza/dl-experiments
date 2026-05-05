@@ -1,11 +1,11 @@
-"""Pydantic models for the master experiments registry."""
+"""Pydantic models for the top-level case config."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
 def resolve_display_name(entity_id: str, display_name: str | None) -> str:
@@ -24,9 +24,36 @@ class MlflowTopologyConfig(BaseModel):
         artifacts_destination: Optional artifacts root for local sqlite tracking.
     """
 
-    tracking_uri: str = Field(default="http://127.0.0.1:5000", min_length=1)
+    tracking_uri: str | None = None
     artifacts_destination: str | None = None
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator("tracking_uri", "artifacts_destination", mode="before")
+    @classmethod
+    def _expand_if_placeholder(cls, v: str | None, info: ValidationInfo) -> str | None:
+        """Expand ${NEURALLS_*} placeholders only; plain URIs pass through unchanged.
+
+        Args:
+            v: Raw string value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Expanded path string if v contains a placeholder, otherwise v unchanged.
+        """
+        if v is None or info.context is None or "${" not in v:
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
+    @model_validator(mode="after")
+    def validate_topology(self) -> MlflowTopologyConfig:
+        """Reject ambiguous partial topology definitions."""
+        if self.artifacts_destination is not None and self.tracking_uri is None:
+            raise ValueError(
+                "Case config [mlflow] cannot set artifacts_destination without tracking_uri."
+            )
+        return self
 
 
 class ExperimentNamesConfig(BaseModel):
@@ -46,7 +73,7 @@ class RegistryEntry(BaseModel):
     """Single registry entry with an explicit config path.
 
     Attributes:
-        id: Stable lookup id used by the master registry.
+        id: Stable lookup id used by the case config registry.
         path: Relative or absolute config path.
         display_name: Optional human-facing label.
     """
@@ -57,6 +84,24 @@ class RegistryEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    @field_validator("path", mode="before")
+    @classmethod
+    def _expand_path(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ${NEURALLS_*} placeholders and resolve to absolute path.
+
+        Args:
+            v: Raw value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or original value if not a string.
+        """
+        if info.context is None or not isinstance(v, str):
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
     @property
     def effective_display_name(self) -> str:
         """Return the configured label or fall back to the id."""
@@ -64,7 +109,7 @@ class RegistryEntry(BaseModel):
 
 
 class ExperimentEntry(BaseModel):
-    """Single experiment entry from the ``[[experiments]]`` TOML table.
+    """Single experiment entry from the ``[[experiments]]`` case table.
 
     Attributes:
         id: Stable experiment identifier.
@@ -81,6 +126,24 @@ class ExperimentEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
+    @field_validator("checkpoint_path", mode="before")
+    @classmethod
+    def _expand_checkpoint_path(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ${NEURALLS_*} placeholders and resolve checkpoint path.
+
+        Args:
+            v: Raw value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or original value if not a string.
+        """
+        if v is None or info.context is None or not isinstance(v, str):
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
     @property
     def effective_display_name(self) -> str:
         """Return the configured label or fall back to the id."""
@@ -93,7 +156,7 @@ class RunEntry(BaseModel):
     Uses direct relative config paths instead of short name references.
 
     Attributes:
-        id: Stable identifier for the run.
+        id: Stable identifier for the legacy direct-path run.
         model_config_path: Relative path to model config.
         data_config_path: Relative path to data config.
     """
@@ -103,6 +166,24 @@ class RunEntry(BaseModel):
     data_config_path: str = Field(alias="data_config")
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    @field_validator("model_config_path", "data_config_path", mode="before")
+    @classmethod
+    def _expand_config_paths(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ${NEURALLS_*} placeholders and resolve config paths.
+
+        Args:
+            v: Raw value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or original value if not a string.
+        """
+        if info.context is None or not isinstance(v, str):
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
 
     @property
     def effective_display_name(self) -> str:
@@ -127,7 +208,7 @@ def _dedupe_ids(kind: str, entries: Sequence[RegistryEntry]) -> None:
     duplicates = sorted({entry.id for entry in entries if entry.id in seen or seen.add(entry.id)})
     if duplicates:
         joined = ", ".join(duplicates)
-        raise ValueError(f"Duplicate {kind} ids in experiments config: {joined}.")
+        raise ValueError(f"Duplicate {kind} ids in case config: {joined}.")
 
 
 def _dedupe_experiment_ids(entries: list[ExperimentEntry]) -> None:
@@ -136,7 +217,7 @@ def _dedupe_experiment_ids(entries: list[ExperimentEntry]) -> None:
     duplicates = sorted({entry.id for entry in entries if entry.id in seen or seen.add(entry.id)})
     if duplicates:
         joined = ", ".join(duplicates)
-        raise ValueError(f"Duplicate experiment ids in experiments config: {joined}.")
+        raise ValueError(f"Duplicate experiment ids in case config: {joined}.")
 
 
 def _registry_ids(entries: list[RegistryEntry]) -> set[str]:
@@ -179,22 +260,26 @@ def _validate_experiment_registry_refs(
             )
 
 
-class ExperimentsConfig(BaseModel):
-    """Top-level master registry configuration.
+class CaseConfig(BaseModel):
+    """Top-level case configuration.
 
     Attributes:
-        output_dir: Training output directory (optional; derived from mlflow if absent).
+        raw_dir: Raw input root for the case.
+        processed_dir: Processed dataset root for the case.
+        output_dir: Output root for the case.
         datasets: Dataset registry entries.
         models: Model registry entries.
         comparisons: Comparison registry entries.
         experiments: Experiment entries referencing registry ids.
-        run: Optional direct-path entries.
+        run: Optional legacy direct-path entries.
         project_root: Optional project root path.
         mlflow: MLflow topology config (tracking URI, etc.).
         names: MLflow experiment names for training and comparison.
     """
 
-    output_dir: Path | None = Field(default=None, description="Training output directory")
+    raw_dir: Path = Field(..., description="Case root for raw matrices and archives")
+    processed_dir: Path = Field(..., description="Case root for processed datasets")
+    output_dir: Path = Field(..., description="Case root for training outputs and MLflow state")
     datasets: list[RegistryEntry] = Field(default_factory=list)
     models: list[RegistryEntry] = Field(default_factory=list)
     comparisons: list[ComparisonRegistryEntry] = Field(default_factory=list)
@@ -206,27 +291,45 @@ class ExperimentsConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow", frozen=True)
 
+    @field_validator("raw_dir", "processed_dir", "output_dir", "project_root", mode="before")
+    @classmethod
+    def _expand_root_paths(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ${NEURALLS_*} placeholders and resolve root directory paths.
+
+        Args:
+            v: Raw value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or original value if not a string.
+        """
+        if v is None or info.context is None or not isinstance(v, str):
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
     @model_validator(mode="before")
     @classmethod
-    def reject_unsupported_master_config_tables(cls, data: object) -> object:
-        """Reject unsupported master-config table names."""
+    def reject_unsupported_case_config_tables(cls, data: object) -> object:
+        """Reject unsupported case-config table names."""
         if not isinstance(data, dict):
             return data
         raw = dict(data)
         if "experiment" in raw:
             raise ValueError(
                 "Unsupported '[[experiment]]' table. "
-                "Use '[[experiments]]' entries in experiments config."
+                "Use '[[experiments]]' entries in case config."
             )
         if "comparison_profiles" in raw:
             raise ValueError(
                 "Unsupported 'comparison_profiles' table. "
-                "Use [[comparisons]] entries in experiments config."
+                "Use [[comparisons]] entries in case config."
             )
         return raw
 
     @model_validator(mode="after")
-    def validate_unique_ids(self) -> ExperimentsConfig:
+    def validate_unique_ids(self) -> CaseConfig:
         """Reject duplicate ids across registry collections."""
         _dedupe_ids("dataset registry", self.datasets)
         _dedupe_ids("model registry", self.models)
@@ -242,3 +345,6 @@ class ExperimentsConfig(BaseModel):
             experiment_ids={e.id for e in self.experiments},
         )
         return self
+
+
+ExperimentsConfig = CaseConfig

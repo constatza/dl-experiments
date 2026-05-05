@@ -1,7 +1,7 @@
 """Legacy runtime topology models.
 
-Runtime topology now lives in ``experiments.toml``. This module remains as a
-compatibility re-export surface for internal imports.
+Runtime topology now lives in the top-level case config. This module remains as
+a compatibility re-export surface for internal imports.
 """
 
 from __future__ import annotations

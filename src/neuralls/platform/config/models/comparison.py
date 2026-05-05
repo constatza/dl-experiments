@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 from pydantic import model_validator
 
 from neuralls.shared.constants import (
@@ -19,6 +19,7 @@ from neuralls.domain.solver.models.config import (
     ComparisonGeneral,
     SolverParams,
 )
+from neuralls.platform.config.context import ConfigContext
 from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
     PreconditionerConfig,
@@ -46,7 +47,7 @@ class _SolverParamsModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class _ComparisonDataModel(BaseModel):
+class ComparisonDataModel(BaseModel):
     matrix_path: Path
     rhs_path: Path
     rhs_index: int = 0
@@ -54,10 +55,20 @@ class _ComparisonDataModel(BaseModel):
     normalize_system: NormalizeSystem = "matrix"
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    @field_validator("matrix_path", "rhs_path", mode="before")
+    @classmethod
+    def _expand_paths(cls, v: object, info: ValidationInfo) -> object:
+        if not isinstance(v, str) or info.context is None:
+            return v
+        from neuralls.platform.config.context import expand_config_path
+
+        ctx = ConfigContext.from_pydantic_context(info.context)
+        return expand_config_path(v, ctx)
+
 
 class _ComparisonGeneralModel(BaseModel):
     params: _SolverParamsModel
-    data: _ComparisonDataModel
+    data: ComparisonDataModel
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
@@ -113,26 +124,26 @@ class _ComparisonConfigModel(BaseModel):
         return self
 
 
-def parse_comparison_config(raw: dict[str, object]) -> ComparisonConfig:
-    """Parse the current comparison TOML payload."""
-    parsed = _ComparisonConfigModel.model_validate(raw)
+def parse_comparison_config(
+    raw: dict[str, object],
+    context: ConfigContext,
+) -> ComparisonConfig:
+    """Parse comparison TOML payload into a ComparisonConfig domain model.
+
+    Args:
+        raw: Deserialized TOML dict for the comparison config file.
+        context: ConfigContext for expanding ${NEURALLS_*} path placeholders.
+
+    Returns:
+        Fully validated ComparisonConfig domain model.
+    """
+    parsed = _ComparisonConfigModel.model_validate(raw, context=context.as_pydantic_context())
+    data = parsed.general.data
+    params = parsed.general.params
     return ComparisonConfig(
         general=ComparisonGeneral(
-            params=SolverParams(
-                rtol=parsed.general.params.rtol,
-                atol=parsed.general.params.atol,
-                max_iterations=parsed.general.params.max_iterations,
-                stopping_criterion=parsed.general.params.stopping_criterion,
-                m_max=parsed.general.params.m_max,
-                breakdown_tol=parsed.general.params.breakdown_tol,
-            ),
-            data=ComparisonData(
-                matrix_path=parsed.general.data.matrix_path,
-                rhs_path=parsed.general.data.rhs_path,
-                rhs_index=parsed.general.data.rhs_index,
-                dataset_alias=parsed.general.data.dataset_alias,
-                normalize_system=parsed.general.data.normalize_system,
-            ),
+            params=SolverParams(**params.model_dump()),
+            data=ComparisonData(**data.model_dump()),
         ),
         preconditioners=tuple(parsed.preconditioners),
     )

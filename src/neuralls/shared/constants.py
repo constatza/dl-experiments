@@ -6,7 +6,6 @@ maintainability and avoid duplication.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -26,38 +25,6 @@ EXIT_KEYBOARD_INTERRUPT = 130
 # Dynamically determine project root relative to this file (src/neuralls/constants.py)
 # src/neuralls/shared/constants.py -> src/neuralls/shared -> src/neuralls -> src -> project_root
 DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-
-
-def _path_from_env(var_name: str, fallback: Path) -> Path:
-    """Resolve default path from env override when present."""
-    value = os.getenv(var_name)
-    if value:
-        return Path(value).expanduser().resolve()
-    return fallback
-
-
-DEFAULT_PROCESSED_DATA_DIR = _path_from_env(
-    "GRAPH_CG_PROCESSED_DIR", DEFAULT_PROJECT_ROOT / "data" / "processed"
-)
-DEFAULT_OUTPUT_DIR = _path_from_env("GRAPH_CG_OUTPUT_DIR", DEFAULT_PROJECT_ROOT / "data" / "output")
-DEFAULT_FIGURES_DIR = _path_from_env(
-    "GRAPH_CG_FIGURES_DIR", DEFAULT_PROJECT_ROOT / "data" / "figures"
-)
-DEFAULT_CHECKPOINTS_DIR = DEFAULT_OUTPUT_DIR / "checkpoints"
-DEFAULT_MLRUNS_DIR = _path_from_env("GRAPH_CG_MLRUNS_DIR", DEFAULT_PROJECT_ROOT / "data" / "mlruns")
-DEFAULT_MLARTIFACTS_DIR = _path_from_env(
-    "GRAPH_CG_MLARTIFACTS_DIR", DEFAULT_PROJECT_ROOT / "data" / "mlartifacts"
-)
-
-# Legacy compatibility - these match old common.py constants
-DEFAULT_PROCESSED_DIR = str(DEFAULT_PROCESSED_DATA_DIR)
-DEFAULT_RESULTS_DIR = str(DEFAULT_OUTPUT_DIR)
-DEFAULT_FIGURES_DIR_STR = str(DEFAULT_FIGURES_DIR)
-
-# Default configuration file paths (relative to graph-cg root)
-DEFAULT_MODEL_CONFIG = "configs/experiments/default/linear.toml"
-DEFAULT_DATA_CONFIG = "configs/datasets/collect-504-solutions.toml"
-DEFAULT_EXPERIMENTS_CONFIG = "configs/experiments.toml"
 
 # Default Experiment Config Filenames
 EXP_MODEL_CONFIG_NAME = "linear.toml"

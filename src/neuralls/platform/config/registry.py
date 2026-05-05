@@ -1,4 +1,4 @@
-"""Master registry resolution helpers."""
+"""Case-config registry resolution helpers."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 
 from neuralls.platform.config.path_utils import resolve_local_path
 from neuralls.platform.config.models.experiments import (
+    CaseConfig,
     ExperimentEntry,
-    ExperimentsConfig,
     RegistryEntry,
 )
 
@@ -30,7 +30,7 @@ class ResolvedExperimentBinding:
 
 
 def _resolve_registry_path(base_dir: Path, relative_or_absolute: Path) -> Path:
-    """Resolve one registry path against the master config directory."""
+    """Resolve one registry path against the case config directory."""
     return resolve_local_path(relative_or_absolute, base_dir=base_dir)
 
 
@@ -69,13 +69,13 @@ def _require_registry_entry(
 
 
 def resolve_dataset_config_path(
-    cfg: ExperimentsConfig,
+    cfg: CaseConfig,
     config_dir: Path,
     dataset_id: str,
     *,
     experiment_id: str | None = None,
 ) -> Path:
-    """Resolve a dataset config path from the master registry."""
+    """Resolve a dataset config path from the case registry."""
     entry = _require_registry_entry(
         cfg.datasets,
         registry_id=dataset_id,
@@ -87,13 +87,13 @@ def resolve_dataset_config_path(
 
 
 def resolve_model_config_path(
-    cfg: ExperimentsConfig,
+    cfg: CaseConfig,
     config_dir: Path,
     model_id: str,
     *,
     experiment_id: str | None = None,
 ) -> Path:
-    """Resolve a model config path from the master registry."""
+    """Resolve a model config path from the case registry."""
     entry = _require_registry_entry(
         cfg.models,
         registry_id=model_id,
@@ -105,11 +105,11 @@ def resolve_model_config_path(
 
 
 def resolve_comparison_config_path(
-    cfg: ExperimentsConfig,
+    cfg: CaseConfig,
     config_dir: Path,
     comparison_id: str,
 ) -> Path:
-    """Resolve a comparison config path from the master registry."""
+    """Resolve a comparison config path from the case registry."""
     entry = _require_registry_entry(
         cfg.comparisons,
         registry_id=comparison_id,
@@ -119,7 +119,7 @@ def resolve_comparison_config_path(
 
 
 def resolve_experiment_binding(
-    cfg: ExperimentsConfig,
+    cfg: CaseConfig,
     config_dir: Path,
     entry: ExperimentEntry,
 ) -> ResolvedExperimentBinding:
@@ -166,7 +166,7 @@ def resolve_experiment_binding(
 
 
 def get_experiment_binding(
-    cfg: ExperimentsConfig,
+    cfg: CaseConfig,
     config_dir: Path,
     experiment_id: str,
 ) -> ResolvedExperimentBinding:
@@ -174,11 +174,11 @@ def get_experiment_binding(
     for entry in cfg.experiments:
         if entry.id == experiment_id:
             return resolve_experiment_binding(cfg, config_dir, entry)
-    raise KeyError(f"Experiment '{experiment_id}' not found in master registry.")
+    raise KeyError(f"Experiment '{experiment_id}' not found in case config registry.")
 
 
 def list_experiment_bindings(
-    cfg: ExperimentsConfig,
+    cfg: CaseConfig,
     config_dir: Path,
 ) -> list[ResolvedExperimentBinding]:
     """Resolve all experiment entries with concrete config paths."""

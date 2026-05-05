@@ -8,7 +8,6 @@ Functions in this module perform I/O operations and are not pure.
 
 from __future__ import annotations
 
-import os
 import re
 import tomllib
 from pathlib import Path
@@ -17,7 +16,6 @@ from typing import Any
 from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
-from neuralls.shared.constants import DEFAULT_OUTPUT_DIR
 
 
 def sanitize_identifier(value: str, default: str = "run") -> str:
@@ -163,20 +161,6 @@ def parse_data_dir_name(dir_name: str) -> dict[str, Any]:
                 pass
 
     return result
-
-
-def resolve_output_root(paths_cfg: dict[str, str] | None) -> Path:
-    """Resolve base output root from config or environment."""
-    if paths_cfg:
-        configured = paths_cfg.get("output_root") or paths_cfg.get("output_dir")
-        if configured:
-            return Path(configured).expanduser().resolve()
-
-    env_override = os.getenv("GRAPH_CG_OUTPUT_DIR")
-    if env_override:
-        return Path(env_override).expanduser().resolve()
-
-    return DEFAULT_OUTPUT_DIR
 
 
 def prepare_experiment_outputs(

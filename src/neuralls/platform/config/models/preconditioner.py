@@ -10,7 +10,7 @@ from enum import StrEnum
 from typing import Literal, Any, Annotated
 from pathlib import Path
 
-from pydantic import TypeAdapter, BeforeValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import TypeAdapter, BeforeValidator, BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
 class PreconditionerType(StrEnum):
@@ -195,6 +195,24 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
     limit_iters: int = Field(default=-1, description="Iterations to apply; -1 means unlimited.")
     model_ref: ModelRefConfig | None = None
     resolved_checkpoint_path: Path | None = None
+
+    @field_validator("checkpoint_path", "config_path", "data_config_path", mode="before")
+    @classmethod
+    def _expand_paths(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ${NEURALLS_*} placeholders and resolve neural preconditioner paths.
+
+        Args:
+            v: Raw value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or original value if not a string.
+        """
+        if v is None or info.context is None or not isinstance(v, str):
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
 
 
 ConcretePreconditionerConfig = (

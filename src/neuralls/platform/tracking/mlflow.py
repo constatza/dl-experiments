@@ -9,13 +9,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from neuralls.platform.config.mlflow import build_sqlite_tracking_uri, normalize_tracking_uri
+from neuralls.platform.config.mlflow import normalize_tracking_uri
 from neuralls.platform.config.path_utils import resolve_local_path
-from neuralls.shared.constants import (
-    DEFAULT_MLARTIFACTS_DIR,
-    DEFAULT_MLRUNS_DIR,
-    DEFAULT_PROJECT_ROOT,
-)
+from neuralls.platform.config.settings import NeurallsSettings
+from neuralls.shared.constants import DEFAULT_PROJECT_ROOT
 
 if TYPE_CHECKING:
     from mlflow import ActiveRun
@@ -76,20 +73,26 @@ def resolve_mlflow_paths(
     artifact_uri: str | None,
     project_root: Path,
     workspace: Path,
+    settings: NeurallsSettings | None = None,
 ) -> MlflowPaths:
     """Resolve tracking/artifact URIs against project and workspace roots."""
-    default_tracking = DEFAULT_MLRUNS_DIR / "mlflow.db"
-    tracking = _normalize_sqlite_uri(
-        tracking_uri or build_sqlite_tracking_uri(default_tracking),
-        project_root,
+    if tracking_uri:
+        tracking = _normalize_sqlite_uri(tracking_uri, project_root)
+    elif settings is not None:
+        tracking = settings.mlflow_tracking_uri
+    else:
+        raise ValueError(
+            "tracking_uri is required when NeurallsSettings is not provided."
+        )
+    if artifact_uri:
+        artifact_target = resolve_local_path(artifact_uri, base_dir=workspace)
+        artifact_root = artifact_target if artifact_target.is_absolute() else workspace / artifact_target
+        return MlflowPaths(tracking_uri=tracking, artifact_uri=str(artifact_root.resolve()))
+    artifact_location = (
+        settings.mlflow_artifact_location if settings is not None
+        else str(workspace / "mlartifacts")
     )
-    artifact_target = (
-        resolve_local_path(artifact_uri, base_dir=workspace)
-        if artifact_uri
-        else DEFAULT_MLARTIFACTS_DIR
-    )
-    artifact_root = artifact_target if artifact_target.is_absolute() else workspace / artifact_target
-    return MlflowPaths(tracking_uri=tracking, artifact_uri=str(artifact_root.resolve()))
+    return MlflowPaths(tracking_uri=tracking, artifact_uri=artifact_location)
 
 
 def build_run_config(
