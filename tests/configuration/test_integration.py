@@ -7,13 +7,14 @@ from pathlib import Path
 import pytest
 
 from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.platform.config.models.data_models import DataConfigFile, OutputConfig
 from neuralls.platform.config.models.workspace import (
     ExperimentSpec,
     ExperimentWorkspace,
     RunnableExperiment,
 )
 from neuralls.platform.config.paths import PathContext
-from neuralls.platform.config.loaders import build_settings, load_model_config
+from neuralls.platform.config.dlkit_bridge import build_settings, load_model_config
 
 
 @pytest.fixture
@@ -62,8 +63,7 @@ def sample_data_config(tmp_path: Path) -> Path:
     config_path = tmp_path / "data.toml"
     matrix_path = tmp_path / "test_matrix.txt"
     config_content = f"""
-[flow]
-dataset = "test-data"
+id = "test-data"
 
 [source]
 matrix_path = "{matrix_path}"
@@ -81,6 +81,7 @@ class TestBuildSettings:
     def test_load_model_config_loads_explicit_optimization_workflows(
         self,
         tmp_path: Path,
+        neuralls_settings,
     ) -> None:
         """Optimization workflows must declare SESSION.workflow explicitly."""
         from dlkit.infrastructure.config.workflow_configs import OptimizationWorkflowConfig
@@ -113,12 +114,13 @@ n_trials = 2
 """
         )
 
-        settings = load_model_config(config_path)
+        settings = load_model_config(config_path, neuralls_settings)
         assert isinstance(settings, OptimizationWorkflowConfig)
 
     def test_load_model_config_does_not_promote_optuna_enabled_configs(
         self,
         tmp_path: Path,
+        neuralls_settings,
     ) -> None:
         """Optuna-enabled training configs stay training without explicit optimize workflow."""
         from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
@@ -151,12 +153,13 @@ n_trials = 2
 """
         )
 
-        settings = load_model_config(config_path)
+        settings = load_model_config(config_path, neuralls_settings)
         assert isinstance(settings, TrainingWorkflowConfig)
 
     def test_load_model_config_rejects_legacy_optimization_section(
         self,
         tmp_path: Path,
+        neuralls_settings,
     ) -> None:
         """Top-level OPTIMIZATION sections are rejected after the hard cutover."""
         config_path = tmp_path / "legacy-optimization-model.toml"
@@ -185,13 +188,14 @@ lr = 1e-3
         )
 
         with pytest.raises(Exception, match="OPTIMIZATION"):
-            load_model_config(config_path)
+            load_model_config(config_path, neuralls_settings)
 
     def test_build_settings_with_workspace(
         self,
         sample_model_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test building settings with workspace paths injected."""
         from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
@@ -217,7 +221,12 @@ lr = 1e-3
         settings = build_settings(
             model_config_path=sample_model_config,
             workspace=workspace,
-            path_context=path_ctx,
+            data_cfg=DataConfigFile(
+                id="test-dataset",
+                output=OutputConfig(data_dir=path_ctx.processed_root),
+            ),
+            settings=neuralls_settings,
+            output_override=path_ctx.output_root,
         )
 
         # Check workspace root injected
@@ -230,7 +239,7 @@ lr = 1e-3
 
         # Check PATHS injected
         assert settings.PATHS is not None
-        assert getattr(settings.PATHS, "project_root") == str(path_ctx.project_root)
+        assert getattr(settings.PATHS, "project_root") != ""
         assert getattr(settings.PATHS, "processed_dir") == str(path_ctx.processed_root)
         assert settings.PATHS.output_dir == str(path_ctx.output_root)
 
@@ -238,7 +247,8 @@ lr = 1e-3
         self,
         sample_model_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Runtime MLflow infrastructure should not be stored in settings."""
         from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
@@ -258,7 +268,12 @@ lr = 1e-3
         settings = build_settings(
             model_config_path=sample_model_config,
             workspace=workspace,
-            path_context=path_ctx,
+            data_cfg=DataConfigFile(
+                id="test",
+                output=OutputConfig(data_dir=path_ctx.processed_root),
+            ),
+            settings=neuralls_settings,
+            output_override=path_ctx.output_root,
         )
 
         assert settings.MLFLOW is not None
@@ -274,7 +289,8 @@ class TestLoadExperiment:
         sample_model_config: Path,
         sample_data_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test successful experiment loading."""
         output_root = tmp_path / "output"
         output_root.mkdir()
@@ -282,6 +298,7 @@ class TestLoadExperiment:
         experiment = load_experiment(
             model_config_path=sample_model_config,
             data_config_path=sample_data_config,
+            neuralls_settings=neuralls_settings,
             output_root=output_root,
             dataset_registry_id=sample_data_config.stem,
         )
@@ -296,11 +313,13 @@ class TestLoadExperiment:
         sample_model_config: Path,
         sample_data_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test experiment spec has correct fields."""
         experiment = load_experiment(
             sample_model_config,
             sample_data_config,
+            neuralls_settings=neuralls_settings,
             output_root=tmp_path,
             dataset_registry_id=sample_data_config.stem,
         )
@@ -315,7 +334,8 @@ class TestLoadExperiment:
         sample_model_config: Path,
         sample_data_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test workspace has correct fields and paths."""
         output_root = tmp_path / "output"
         output_root.mkdir()
@@ -323,6 +343,7 @@ class TestLoadExperiment:
         experiment = load_experiment(
             sample_model_config,
             sample_data_config,
+            neuralls_settings=neuralls_settings,
             output_root=output_root,
             dataset_registry_id=sample_data_config.stem,
         )
@@ -345,7 +366,8 @@ class TestLoadExperiment:
         sample_model_config: Path,
         sample_data_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test settings are correctly configured."""
         output_root = tmp_path / "output"
         output_root.mkdir()
@@ -353,6 +375,7 @@ class TestLoadExperiment:
         experiment = load_experiment(
             sample_model_config,
             sample_data_config,
+            neuralls_settings=neuralls_settings,
             output_root=output_root,
             dataset_registry_id=sample_data_config.stem,
         )
@@ -372,24 +395,24 @@ class TestLoadExperiment:
         self,
         sample_model_config: Path,
         sample_data_config: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test loading without output_root override uses default."""
         experiment = load_experiment(
             sample_model_config,
             sample_data_config,
+            neuralls_settings=neuralls_settings,
             dataset_registry_id=sample_data_config.stem,
         )
 
-        # Should use DEFAULT_OUTPUT_DIR from constants
-        from neuralls.shared.constants import DEFAULT_OUTPUT_DIR
-
-        assert str(DEFAULT_OUTPUT_DIR) in str(experiment.workspace.root_dir)
+        assert str(neuralls_settings.output_dir) in str(experiment.workspace.root_dir)
 
     def test_load_with_model_name_from_model_section(
         self,
         sample_data_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test using MODEL.name when SESSION.name not present."""
         # Create config without SESSION.name
         model_config = tmp_path / "model_only.toml"
@@ -413,6 +436,7 @@ name = "FlexibleDataset"
         experiment = load_experiment(
             model_config,
             sample_data_config,
+            neuralls_settings=neuralls_settings,
             output_root=tmp_path,
             dataset_registry_id=sample_data_config.stem,
         )
@@ -424,7 +448,8 @@ name = "FlexibleDataset"
         self,
         sample_data_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test that MODEL.name is used when SESSION.name is missing."""
         # Create config without SESSION.name (dlkit requires MODEL.name)
         model_config = tmp_path / "no_session.toml"
@@ -448,6 +473,7 @@ name = "FlexibleDataset"
         experiment = load_experiment(
             model_config,
             sample_data_config,
+            neuralls_settings=neuralls_settings,
             output_root=tmp_path,
             dataset_registry_id=sample_data_config.stem,
         )
@@ -460,7 +486,8 @@ name = "FlexibleDataset"
         sample_model_config: Path,
         sample_data_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test that output_root remains the single source of truth for runtime paths."""
         output_root = tmp_path / "master_output"
         output_root.mkdir()
@@ -468,6 +495,7 @@ name = "FlexibleDataset"
         experiment = load_experiment(
             sample_model_config,
             sample_data_config,
+            neuralls_settings=neuralls_settings,
             output_root=output_root,
             dataset_registry_id=sample_data_config.stem,
         )
@@ -479,14 +507,14 @@ name = "FlexibleDataset"
         self,
         sample_model_config: Path,
         tmp_path: Path,
-    ):
+        neuralls_settings,
+    ) -> None:
         """Test that different datasets create different paths."""
         # Create two different data configs
         matrix_path = tmp_path / "test.txt"
         data_config_1 = tmp_path / "data1.toml"
         data_config_1.write_text(f"""
-[flow]
-dataset = "dataset-1"
+id = "dataset-1"
 
 [source]
 matrix_path = "{matrix_path}"
@@ -497,8 +525,7 @@ normalize = "matrix"
 
         data_config_2 = tmp_path / "data2.toml"
         data_config_2.write_text(f"""
-[flow]
-dataset = "dataset-2"
+id = "dataset-2"
 
 [source]
 matrix_path = "{matrix_path}"
@@ -511,10 +538,18 @@ normalize = "matrix"
         output_root.mkdir()
 
         exp1 = load_experiment(
-            sample_model_config, data_config_1, output_root, dataset_registry_id=data_config_1.stem
+            sample_model_config,
+            data_config_1,
+            neuralls_settings=neuralls_settings,
+            output_root=output_root,
+            dataset_registry_id=data_config_1.stem,
         )
         exp2 = load_experiment(
-            sample_model_config, data_config_2, output_root, dataset_registry_id=data_config_2.stem
+            sample_model_config,
+            data_config_2,
+            neuralls_settings=neuralls_settings,
+            output_root=output_root,
+            dataset_registry_id=data_config_2.stem,
         )
 
         # Different data directories

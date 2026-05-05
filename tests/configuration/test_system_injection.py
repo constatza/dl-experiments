@@ -1,4 +1,4 @@
-"""Tests for experiments-config-driven MLflow injection."""
+"""Tests for case-config-driven MLflow injection."""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ import tomli_w
 from neuralls.composition.experiments.assembler import load_experiment
 
 
-def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) -> None:
+def test_load_experiment_injects_mlflow_from_case_config(
+    tmp_path: Path,
+    neuralls_settings,
+) -> None:
     """Model configs without [MLFLOW] get runtime-injected topology."""
     model_path = tmp_path / "model.toml"
     data_path = tmp_path / "data.toml"
@@ -31,6 +34,7 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
         tomli_w.dump(model_config, fh)
 
     data_config = {
+        "id": "system-injected-data",
         "source": {},
         "generation": {},
         "output": {"data_dir": str(tmp_path / "processed/system-injected-data")},
@@ -39,6 +43,9 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
         tomli_w.dump(data_config, fh)
 
     experiments_config = {
+        "raw_dir": str(neuralls_settings.raw_dir),
+        "processed_dir": str(neuralls_settings.processed_dir),
+        "output_dir": str(neuralls_settings.output_dir),
         "mlflow": {
             "tracking_uri": tracking_uri,
         },
@@ -53,7 +60,8 @@ def test_load_experiment_injects_mlflow_from_experiments_config(tmp_path: Path) 
     experiment = load_experiment(
         model_config_path=model_path,
         data_config_path=data_path,
-        experiments_config_path=experiments_path,
+        neuralls_settings=neuralls_settings,
+        case_config_path=experiments_path,
         dataset_registry_id=data_path.stem,
     )
 

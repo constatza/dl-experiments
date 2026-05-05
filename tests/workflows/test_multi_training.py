@@ -70,7 +70,7 @@ def dataset_config_file(tmp_path: Path) -> Path:
     datasets_dir = tmp_path / "datasets"
     datasets_dir.mkdir()
     path = datasets_dir / "test-solutions.toml"
-    path.write_text("")
+    path.write_text('id = "test-solutions"\n')
     return path
 
 
@@ -85,6 +85,8 @@ def valid_experiments_toml(
     path.write_text(
         "\n".join(
             [
+                f'raw_dir = "{tmp_path / "raw"}"',
+                f'processed_dir = "{tmp_path / "processed"}"',
                 f'output_dir = "{tmp_path / "output"}"',
                 "",
                 "[mlflow]",
@@ -129,9 +131,10 @@ def test_resolve_config_paths(
     model_config_file: Path,
     dataset_config_file: Path,
     valid_experiments_toml: Path,
+    neuralls_settings,
 ) -> None:
     """Registry-backed entries resolve into concrete config files."""
-    cfg = ExperimentsConfig.model_validate(load_experiments_config(valid_experiments_toml))
+    cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
     model_path, data_path = _resolve_config_paths(
         cfg.experiments[0],
         tmp_path,
@@ -141,12 +144,12 @@ def test_resolve_config_paths(
     assert data_path == dataset_config_file
 
 
-def test_train_single_reads_sidecar_and_metrics(tmp_path: Path) -> None:
+def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_settings) -> None:
     """Single training run returns the training checkpoint and MLflow metadata."""
     model_cfg = tmp_path / "model.toml"
     model_cfg.write_text("[MODEL]\nname = 'NormScaledLinearFFNN'\n")
     data_cfg = tmp_path / "dataset.toml"
-    data_cfg.write_text("")
+    data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
     ckpt_dir = tmp_path / "ckpt"
     ckpt_dir.mkdir()
     ckpt = ckpt_dir / "model.ckpt"
@@ -170,6 +173,7 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path) -> None:
         patch("neuralls.composition.experiments.multi_training.MlflowClient"),
     ):
         result = _train_single(
+            settings=neuralls_settings,
             experiment_id="exp-1",
             experiment_display_name="exp-1",
             model_config_path=model_cfg,
@@ -232,26 +236,45 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
     )
 
 
-def test_train_batch_raises_for_empty_config(tmp_path: Path) -> None:
+def test_train_batch_raises_for_empty_config(tmp_path: Path, neuralls_settings) -> None:
     """Training batch rejects configs with no experiments."""
     config = tmp_path / "experiments.toml"
-    config.write_text(f'[mlflow]\ntracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns.db")}"\n')
+    config.write_text(
+        "\n".join(
+            [
+                f'raw_dir = "{tmp_path / "raw"}"',
+                f'processed_dir = "{tmp_path / "processed"}"',
+                f'output_dir = "{tmp_path / "output"}"',
+                "",
+                "[mlflow]",
+                f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns.db")}"',
+            ]
+        )
+    )
     cfg = ExperimentsConfig.model_validate(load_raw_toml(config))
     with pytest.raises(ValueError, match="No .* entries found"):
-        train_batch(cfg=cfg, configs_dir=tmp_path)
+        train_batch(cfg=cfg, configs_dir=tmp_path, settings=neuralls_settings)
 
 
-def test_train_batch_returns_local_output_dir(valid_experiments_toml: Path, tmp_path: Path) -> None:
+def test_train_batch_returns_local_output_dir(
+    valid_experiments_toml: Path,
+    tmp_path: Path,
+    neuralls_settings,
+) -> None:
     """Batch output is a local training directory and no batch comparison run is opened."""
     fake_ckpt = tmp_path / "ckpt" / "model.ckpt"
     fake_ckpt.parent.mkdir()
     fake_ckpt.touch()
-    cfg = ExperimentsConfig.model_validate(load_experiments_config(valid_experiments_toml))
+    cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
 
     with patch(
         "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
     ) as mock_train:
-        result = train_batch(cfg=cfg, configs_dir=valid_experiments_toml.parent)
+        result = train_batch(
+            cfg=cfg,
+            configs_dir=valid_experiments_toml.parent,
+            settings=neuralls_settings,
+        )
 
     assert mock_train.call_count == 1
     assert mock_train.call_args.kwargs["mlflow_experiment_name"] == "Train"
@@ -265,6 +288,10 @@ def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -
     config.write_text(
         "\n".join(
             [
+                f'raw_dir = "{tmp_path / "raw"}"',
+                f'processed_dir = "{tmp_path / "processed"}"',
+                f'output_dir = "{tmp_path / "output"}"',
+                "",
                 "[mlflow]",
                 f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")}"',
                 "",
@@ -279,12 +306,17 @@ def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -
         ExperimentsConfig.model_validate(load_raw_toml(config))
 
 
-def test_experiments_config_rejects_legacy_singular_experiment_table(tmp_path: Path) -> None:
+def test_experiments_config_rejects_legacy_singular_experiment_table(
+    tmp_path: Path, neuralls_settings
+) -> None:
     """Master configs must use only [[experiments]]."""
     config = tmp_path / "experiments.toml"
     config.write_text(
         "\n".join(
             [
+                f'raw_dir = "{tmp_path / "raw"}"',
+                f'processed_dir = "{tmp_path / "processed"}"',
+                f'output_dir = "{tmp_path / "output"}"',
                 "[[models]]",
                 'id = "ffnn"',
                 'path = "models/ffnn.toml"',
@@ -302,7 +334,7 @@ def test_experiments_config_rejects_legacy_singular_experiment_table(tmp_path: P
     )
 
     with pytest.raises(ValueError, match=r"\[\[experiment\]\]"):
-        load_experiments_config(config)
+        load_experiments_config(config, neuralls_settings)
 
 
 def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
@@ -311,6 +343,9 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
     config.write_text(
         "\n".join(
             [
+                f'raw_dir = "{tmp_path / "raw"}"',
+                f'processed_dir = "{tmp_path / "processed"}"',
+                f'output_dir = "{tmp_path / "output"}"',
                 "[[models]]",
                 'id = "ffnn"',
                 'path = "models/ffnn.toml"',
@@ -335,6 +370,9 @@ def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
     config.write_text(
         "\n".join(
             [
+                f'raw_dir = "{tmp_path / "raw"}"',
+                f'processed_dir = "{tmp_path / "processed"}"',
+                f'output_dir = "{tmp_path / "output"}"',
                 "[[datasets]]",
                 'id = "test-solutions"',
                 'path = "datasets/test-solutions.toml"',
@@ -356,7 +394,15 @@ def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
 def test_resolve_comparison_config_path_rejects_missing_registry_id(tmp_path: Path) -> None:
     """Comparison ids are resolved strictly through [[comparisons]]."""
     config = tmp_path / "experiments.toml"
-    config.write_text("")
+    config.write_text(
+        "\n".join(
+            [
+                f'raw_dir = "{tmp_path / "raw"}"',
+                f'processed_dir = "{tmp_path / "processed"}"',
+                f'output_dir = "{tmp_path / "output"}"',
+            ]
+        )
+    )
     cfg = ExperimentsConfig.model_validate(load_raw_toml(config))
 
     with pytest.raises(

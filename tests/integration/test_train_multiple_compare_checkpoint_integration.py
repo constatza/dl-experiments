@@ -91,6 +91,7 @@ def data_config_path(
     matrix_path, rhs_path = raw_system_files
     path = config_root / "datasets" / "tiny-data.toml"
     payload = {
+        "id": "tiny-data",
         "source": {
             "matrix_path": str(matrix_path),
             "rhs_path": str(rhs_path),
@@ -181,6 +182,7 @@ def runs_config_path(
     model_config_path: Path,
     data_config_path: Path,
     output_root: Path,
+    processed_root: Path,
 ) -> Path:
     """Run matrix with a single model+dataset pair."""
     tracking_uri = f"sqlite:///{(output_root / 'mlruns' / 'mlflow.db').as_posix()}"
@@ -188,6 +190,10 @@ def runs_config_path(
     path.write_text(
         "\n".join(
             [
+                f'raw_dir = "{config_root.parent / "raw"}"',
+                f'processed_dir = "{processed_root}"',
+                f'output_dir = "{output_root}"',
+                "",
                 "[mlflow]",
                 f'tracking_uri = "{tracking_uri}"',
                 "",
@@ -213,15 +219,20 @@ def trained_batch_result(
     processed_root: Path,
     output_root: Path,
     monkeypatch: pytest.MonkeyPatch,
+    neuralls_settings,
 ) -> BatchResult:
     """Execute train_batch once for this integration scenario."""
     tracking_uri = f"sqlite:///{(output_root / 'mlruns' / 'mlflow.db').as_posix()}"
     monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
     monkeypatch.setenv("MLFLOW_ARTIFACT_URI", str((output_root / "mlartifacts").resolve()))
     monkeypatch.chdir(runs_config_path.parent.parent)
-    process_data_from_config(data_config_path)
+    process_data_from_config(data_config_path, neuralls_settings)
     cfg = ExperimentsConfig.model_validate(load_raw_toml(runs_config_path))
-    batch_result = train_batch(cfg=cfg, configs_dir=runs_config_path.parent)
+    batch_result = train_batch(
+        cfg=cfg,
+        configs_dir=runs_config_path.parent,
+        settings=neuralls_settings,
+    )
     assert len(batch_result.results) == 1, "Integration test must train exactly one network."
     return batch_result
 

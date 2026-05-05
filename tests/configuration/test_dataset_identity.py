@@ -26,9 +26,10 @@ def test_resolve_dataset_identity_requires_top_level_id_in_mapping() -> None:
         )
 
 
-def test_resolve_dataset_identity_falls_back_to_path_stem() -> None:
+def test_resolve_dataset_identity_uses_explicit_id() -> None:
     data_cfg = DataConfigFile.model_validate(
         {
+            "id": "solutions",
             "source": {},
             "generation": {},
             "output": {"data_dir": "tests/fixtures/data/processed/solutions"},

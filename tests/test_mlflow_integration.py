@@ -81,8 +81,7 @@ def minimal_data_config(tmp_path: Path) -> Path:
     config_path = tmp_path / "test-dataset.toml"
     matrix_path = tmp_path / "dummy_matrix.txt"
     config_content = f"""
-[flow]
-dataset = "test-dataset"
+id = "test-dataset"
 
 [source]
 matrix_path = "{matrix_path}"
@@ -353,8 +352,7 @@ class TestMLflowPathResolution:
         matrix_b = tmp_path / "dummy_B.txt"
         data_config_1 = tmp_path / "dataset-A.toml"
         data_config_1.write_text(f"""
-[flow]
-dataset = "dataset-A"
+id = "dataset-A"
 
 [source]
 matrix_path = "{matrix_a}"
@@ -365,8 +363,7 @@ normalize = "matrix"
 
         data_config_2 = tmp_path / "dataset-B.toml"
         data_config_2.write_text(f"""
-[flow]
-dataset = "dataset-B"
+id = "dataset-B"
 
 [source]
 matrix_path = "{matrix_b}"

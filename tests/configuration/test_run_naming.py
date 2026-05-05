@@ -134,8 +134,7 @@ def sample_data_config(tmp_path: Path) -> Path:
     config_path = tmp_path / "test-dataset.toml"
     matrix_path = tmp_path / "test_matrix.txt"
     config_content = f"""
-[flow]
-dataset = "test-data"
+id = "test-data"
 
 [source]
 matrix_path = "{matrix_path}"
@@ -155,11 +154,13 @@ class TestRunNaming:
         model_config_without_session: Path,
         sample_data_config: Path,
         tmp_path: Path,
+        neuralls_settings,
     ):
         """Verify run_id is exactly the model name with no timestamp suffix."""
         experiment = load_experiment(
             model_config_without_session,
             sample_data_config,
+            neuralls_settings,
             output_root=tmp_path / "output",
             dataset_registry_id=sample_data_config.stem,
         )
@@ -171,11 +172,13 @@ class TestRunNaming:
         model_config_with_session: Path,
         sample_data_config: Path,
         tmp_path: Path,
+        neuralls_settings,
     ):
         """Verify SESSION.name takes precedence over MODEL.name."""
         experiment = load_experiment(
             model_config_with_session,
             sample_data_config,
+            neuralls_settings,
             output_root=tmp_path / "output",
             dataset_registry_id=sample_data_config.stem,
         )
@@ -187,11 +190,13 @@ class TestRunNaming:
         model_config_with_dlkit_default_session: Path,
         sample_data_config: Path,
         tmp_path: Path,
+        neuralls_settings,
     ):
         """Verify dlkit-session default is treated as unset, uses MODEL.name."""
         experiment = load_experiment(
             model_config_with_dlkit_default_session,
             sample_data_config,
+            neuralls_settings,
             output_root=tmp_path / "output",
             dataset_registry_id=sample_data_config.stem,
         )
@@ -203,17 +208,20 @@ class TestRunNaming:
         model_config_without_session: Path,
         sample_data_config: Path,
         tmp_path: Path,
+        neuralls_settings,
     ):
         """Verify the same config always produces the same run_id."""
         exp1 = load_experiment(
             model_config_without_session,
             sample_data_config,
+            neuralls_settings,
             output_root=tmp_path / "output1",
             dataset_registry_id=sample_data_config.stem,
         )
         exp2 = load_experiment(
             model_config_without_session,
             sample_data_config,
+            neuralls_settings,
             output_root=tmp_path / "output2",
             dataset_registry_id=sample_data_config.stem,
         )
@@ -225,11 +233,13 @@ class TestRunNaming:
         model_config_without_session: Path,
         sample_data_config: Path,
         tmp_path: Path,
+        neuralls_settings,
     ):
         """Verify ExperimentSpec.id and workspace.run_id are both the base name."""
         experiment = load_experiment(
             model_config_without_session,
             sample_data_config,
+            neuralls_settings,
             output_root=tmp_path / "output",
             dataset_registry_id=sample_data_config.stem,
         )
@@ -243,6 +253,7 @@ class TestRunNaming:
         model_config_without_session: Path,
         sample_data_config: Path,
         tmp_path: Path,
+        neuralls_settings,
     ):
         """Verify workspace directories incorporate the run_id."""
         output_root = tmp_path / "output"
@@ -250,6 +261,7 @@ class TestRunNaming:
         experiment = load_experiment(
             model_config_without_session,
             sample_data_config,
+            neuralls_settings,
             output_root=output_root,
             dataset_registry_id=sample_data_config.stem,
         )
@@ -269,6 +281,7 @@ class TestRunNamingEdgeCases:
         self,
         sample_data_config: Path,
         tmp_path: Path,
+        neuralls_settings,
     ):
         """Verify error when MODEL.name is empty string."""
         bad_config = tmp_path / "bad_model.toml"
@@ -309,6 +322,7 @@ name = "FlexibleDataset"
             load_experiment(
                 bad_config,
                 sample_data_config,
+                neuralls_settings,
                 output_root=tmp_path / "output",
                 dataset_registry_id=sample_data_config.stem,
             )
@@ -317,6 +331,7 @@ name = "FlexibleDataset"
         self,
         sample_data_config: Path,
         tmp_path: Path,
+        neuralls_settings,
     ):
         """Verify run_id preserves special characters from model name."""
         special_config = tmp_path / "special_model.toml"
@@ -357,6 +372,7 @@ name = "FlexibleDataset"
         experiment = load_experiment(
             special_config,
             sample_data_config,
+            neuralls_settings,
             output_root=tmp_path / "output",
             dataset_registry_id=sample_data_config.stem,
         )

@@ -60,12 +60,10 @@ def _write_data_config(path: Path, data_root: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                "[flow]",
-                'dataset = "test-dataset"',
+                'id = "test-dataset"',
                 "",
                 "[output]",
                 f'data_dir = "{data_root}"',
-                f'output_root = "{data_root}"',
                 "",
             ]
         ),
@@ -116,7 +114,7 @@ def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
     )
 
 
-def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
+def test_compare_preconditioners_workflow(tmp_path: Path, neuralls_settings) -> None:
     """End-to-end check that compare_preconditioners loads config and data."""
     A = np.array([[4.0, -1.0], [-1.0, 3.0]], dtype=np.float64)
     b = np.array([1.0, 2.0], dtype=np.float64)
@@ -135,7 +133,7 @@ def test_compare_preconditioners_workflow(tmp_path: Path) -> None:
     checkpoint_dir.mkdir()
     _write_model_config(model_cfg, checkpoint_dir)
 
-    comparison_cfg_model = load_comparison_config(comparison_cfg)
+    comparison_cfg_model = load_comparison_config(comparison_cfg, neuralls_settings)
     results = compare_preconditioners(
         general_params=comparison_cfg_model.general,
         preconditioner_configs=comparison_cfg_model.preconditioners,

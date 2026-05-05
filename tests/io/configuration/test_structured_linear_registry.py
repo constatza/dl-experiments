@@ -9,7 +9,7 @@ import pytest
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.platform.config.registry import list_experiment_bindings
 from neuralls.composition.experiments.assembler import load_validated_master_config
-from neuralls.platform.config.loaders import load_model_config
+from neuralls.platform.config.dlkit_bridge import load_model_config
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("dlkit") is None,
@@ -72,8 +72,10 @@ def _write_master_registry(
     models: list[tuple[str, str]],
     experiments: list[tuple[str, str, str]],
 ) -> Path:
-    """Write a minimal experiments registry with explicit tables."""
+    """Write a minimal case config with explicit tables."""
     lines = [
+        f'raw_dir = "{path.parent / "raw"}"',
+        f'processed_dir = "{path.parent / "processed"}"',
         'project_root = ".."',
         f'output_dir = "{path.parent / "output"}"',
         "",
@@ -133,6 +135,7 @@ def test_structured_linear_model_configs_load(
     tmp_path: Path,
     config_name: str,
     model_name: str,
+    neuralls_settings,
 ) -> None:
     """Structured linear model configs parse through dlkit."""
     model_path = _write_model_config(
@@ -141,12 +144,12 @@ def test_structured_linear_model_configs_load(
         checkpoint_name=config_name.removesuffix(".toml"),
     )
 
-    settings = load_model_config(model_path)
+    settings = load_model_config(model_path, neuralls_settings)
     assert settings.MODEL is not None
     assert settings.MODEL.name == model_name
 
 
-def test_legacy_optimization_section_is_rejected(tmp_path: Path) -> None:
+def test_legacy_optimization_section_is_rejected(tmp_path: Path, neuralls_settings) -> None:
     """Hard-cut loaders reject top-level OPTIMIZATION sections."""
     bad_config = tmp_path / "bad.toml"
     bad_config.write_text(
@@ -175,7 +178,7 @@ def test_legacy_optimization_section_is_rejected(tmp_path: Path) -> None:
     )
 
     with pytest.raises(Exception, match="OPTIMIZATION"):
-        load_model_config(bad_config)
+        load_model_config(bad_config, neuralls_settings)
 
 
 def test_default_structured_linear_registry_has_expected_models_and_experiments(
@@ -276,7 +279,7 @@ def test_load_experiment_supports_structured_linear_model(tmp_path: Path) -> Non
     output_root = tmp_path / "output"
     output_root.mkdir()
     data_config_path = tmp_path / "data.toml"
-    data_config_path.write_text('[flow]\ndataset = "dummy_dataset"\n')
+    data_config_path.write_text('id = "dummy_dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
     model_config_path = _write_model_config(
         tmp_path / "symmetric.toml",
         model_name="NormScaledSymmetricLinear",

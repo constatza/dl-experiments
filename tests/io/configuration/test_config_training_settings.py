@@ -101,7 +101,7 @@ def test_training_sections_round_trip(tmp_path: Path, config_content_template: s
 
     # Create dummy data config
     data_path = tmp_path / "data.toml"
-    data_path.write_text('[flow]\ndataset="dummy_dataset"')
+    data_path.write_text('id="dummy_dataset"\n[source]\nmatrix_path="matrix.txt"\n')
 
     experiment = load_experiment(
         config_path,

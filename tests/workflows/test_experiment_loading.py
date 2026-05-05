@@ -59,7 +59,11 @@ def training_setup(tmp_path: Path) -> dict:
 class TestTrainingPipelineWithMLflow:
     """End-to-end tests for training pipeline with MLflow."""
 
-    def test_full_training_pipeline_with_mlflow(self, training_setup: dict) -> None:
+    def test_full_training_pipeline_with_mlflow(
+        self,
+        training_setup: dict,
+        neuralls_settings,
+    ) -> None:
         """End-to-end test: config load → training → MLflow logging → artifacts.
 
         Note: This test verifies the configuration is correct for MLflow but
@@ -80,6 +84,7 @@ class TestTrainingPipelineWithMLflow:
         # Create data config
         data_config_path = datasets_dir / "mlflow_test_data.toml"
         data_config = {
+            "id": "mlflow_test_data",
             "source": {
                 "matrix_path": str(matrix_path),
                 "rhs_path": str(rhs_path),
@@ -157,6 +162,7 @@ class TestTrainingPipelineWithMLflow:
         experiment = load_experiment(
             model_config_path,
             data_config_path,
+            neuralls_settings=neuralls_settings,
             output_root=output_root,
             dataset_registry_id=data_config_path.stem,
         )
@@ -173,7 +179,11 @@ class TestTrainingPipelineWithMLflow:
         assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
         assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 
-    def test_mlflow_nested_structure_ready(self, training_setup: dict) -> None:
+    def test_mlflow_nested_structure_ready(
+        self,
+        training_setup: dict,
+        neuralls_settings,
+    ) -> None:
         """Verify MLflow is configured for nested runs structure.
 
         Tests that the configuration supports the hierarchical structure:
@@ -192,6 +202,7 @@ class TestTrainingPipelineWithMLflow:
         # Create data config
         data_config_path = datasets_dir / "nested_test_data.toml"
         data_config = {
+            "id": "nested_test_data",
             "source": {
                 "matrix_path": str(matrix_path),
                 "rhs_path": str(rhs_path),
@@ -239,6 +250,7 @@ class TestTrainingPipelineWithMLflow:
         experiment = load_experiment(
             model_config_path,
             data_config_path,
+            neuralls_settings=neuralls_settings,
             output_root=output_root,
             dataset_registry_id=data_config_path.stem,
         )
@@ -253,7 +265,11 @@ class TestTrainingPipelineWithMLflow:
 
         assert experiment.settings.PATHS.output_dir == str(output_root)
 
-    def test_mlflow_configuration_injection(self, training_setup: dict) -> None:
+    def test_mlflow_configuration_injection(
+        self,
+        training_setup: dict,
+        neuralls_settings,
+    ) -> None:
         """Verify experiments topology enables runtime MLflow without infra leakage."""
         from neuralls.composition.experiments.assembler import load_experiment
 
@@ -267,6 +283,7 @@ class TestTrainingPipelineWithMLflow:
         # Create minimal configs
         data_config_path = datasets_dir / "injection_test.toml"
         data_config = {
+            "id": "injection_test",
             "source": {"matrix_path": str(matrix_path), "rhs_path": str(rhs_path)},
             "generation": {
                 "normalize": "none",
@@ -299,6 +316,8 @@ class TestTrainingPipelineWithMLflow:
         experiments_config_path = tmp_path / "experiments.toml"
         custom_output_root = data_dir / "custom_output"
         experiments_config = {
+            "raw_dir": str(training_setup["raw_dir"]),
+            "processed_dir": str(data_dir / "processed"),
             "output_dir": str(custom_output_root),
             "mlflow": {
                 "tracking_uri": f"sqlite:///{(custom_output_root / 'mlruns' / 'mlflow.db').as_posix()}",
@@ -323,7 +342,8 @@ class TestTrainingPipelineWithMLflow:
         experiment = load_experiment(
             model_config_path,
             data_config_path,
-            experiments_config_path=experiments_config_path,
+            neuralls_settings=neuralls_settings,
+            case_config_path=experiments_config_path,
             dataset_registry_id=data_config_path.stem,
         )
 

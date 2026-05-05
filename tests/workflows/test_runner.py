@@ -14,7 +14,11 @@ import os
 
 
 @patch("neuralls.composition.experiments.training_batch.train_model")
-def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> None:
+def test_run_experiments_full_flow(
+    mock_train: MagicMock,
+    tmp_path: Path,
+    neuralls_settings,
+) -> None:
     """Test workflow orchestration without expensive training.
 
     Verifies the complete workflow from configuration loading through
@@ -52,6 +56,7 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
     # 2. Create Data Config in shared datasets directory (NEW FORMAT)
     data_config_path = datasets_dir / "test_data_gen.toml"
     data_config = {
+        "id": "test_data_gen",
         "source": {
             "matrix_path": str(matrix_path),
             "rhs_path": str(rhs_path),
@@ -155,6 +160,8 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
     # 5. Create master config using [[experiments]] registry entries.
     master_config_path = configs_dir / "experiments.toml"
     with open(master_config_path, "w") as f:
+        f.write(f'raw_dir = "{raw_dir}"\n')
+        f.write(f'processed_dir = "{data_dir / "processed"}"\n')
         f.write('project_root = ".."\n')
         f.write(f'output_dir = "{data_dir / "output"}"\n\n')
         f.write("[[datasets]]\n")
@@ -168,15 +175,18 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
         f.write('dataset = "test_data_gen"\n')
         f.write(f'model = "{exp_name}_model"\n')
 
-    # Set GRAPH_CG_OUTPUT_DIR to ensure no contamination (although we passed project_root)
-    os.environ["GRAPH_CG_OUTPUT_DIR"] = str(data_dir / "output")
+    # Set NEURALLS_OUTPUT_DIR to ensure no contamination (although we passed project_root)
+    os.environ["NEURALLS_OUTPUT_DIR"] = str(data_dir / "output")
 
     # Mock training to return success
     mock_train.return_value = MagicMock(experiment_id="test_model", status="Success")
 
     # 6. Run the flow
     results = run_experiment_matrix(
-        experiments_config_path=master_config_path, force=True, project_root=tmp_path
+        experiments_config_path=master_config_path,
+        settings=neuralls_settings,
+        force=True,
+        project_root=tmp_path,
     )
 
     # Verify workflow behavior
@@ -187,7 +197,11 @@ def test_run_experiments_full_flow(mock_train: MagicMock, tmp_path: Path) -> Non
 
 
 @patch("neuralls.composition.experiments.training_batch.train_model")
-def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path) -> None:
+def test_run_experiment_matrix_with_mlflow(
+    mock_train: MagicMock,
+    tmp_path: Path,
+    neuralls_settings,
+) -> None:
     """Test MLflow integration in workflow without expensive training.
 
     Verifies MLflow experiment/run creation and artifact paths,
@@ -223,6 +237,7 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
     # 2. Create Data Config
     data_config_path = datasets_dir / "mlflow_test_data.toml"
     data_config = {
+        "id": "mlflow_test_data",
         "source": {
             "matrix_path": str(matrix_path),
             "rhs_path": str(rhs_path),
@@ -307,6 +322,8 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
     # 4. Create Master Experiment Config
     master_config_path = configs_dir / "experiments.toml"
     with open(master_config_path, "w") as f:
+        f.write(f'raw_dir = "{raw_dir}"\n')
+        f.write(f'processed_dir = "{data_dir / "processed"}"\n')
         f.write('project_root = ".."\n')
         f.write(f'output_dir = "{data_dir / "output"}"\n\n')
         f.write("[[datasets]]\n")
@@ -320,15 +337,18 @@ def test_run_experiment_matrix_with_mlflow(mock_train: MagicMock, tmp_path: Path
         f.write('dataset = "mlflow_test_data"\n')
         f.write(f'model = "{exp_name}_model"\n')
 
-    # Set GRAPH_CG_OUTPUT_DIR
-    os.environ["GRAPH_CG_OUTPUT_DIR"] = str(data_dir / "output")
+    # Set NEURALLS_OUTPUT_DIR
+    os.environ["NEURALLS_OUTPUT_DIR"] = str(data_dir / "output")
 
     # Mock training to return success
     mock_train.return_value = MagicMock(experiment_id="mlflow_test_model", status="Success")
 
     # 5. Run the flow with MLflow enabled
     results = run_experiment_matrix(
-        experiments_config_path=master_config_path, force=True, project_root=tmp_path
+        experiments_config_path=master_config_path,
+        settings=neuralls_settings,
+        force=True,
+        project_root=tmp_path,
     )
 
     # Verify workflow behavior

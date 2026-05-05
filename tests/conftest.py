@@ -11,6 +11,8 @@ import numpy as np
 import pytest
 from loguru import logger
 
+from neuralls.platform.config.context import ConfigContext
+from neuralls.platform.config.settings import NeurallsSettings
 from tests.scope_policy import new_root_artifact_dirs, root_artifact_dirs
 
 
@@ -107,12 +109,23 @@ def isolate_default_paths_with_tmp_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Force all default artifact paths into pytest temp storage."""
+    case_config_path = runtime_root / "case.toml"
+    case_config_path.parent.mkdir(parents=True, exist_ok=True)
+    case_config_path.write_text(
+        "\n".join(
+            [
+                f'raw_dir = "{(runtime_root / "raw").resolve()}"',
+                f'processed_dir = "{processed_root.resolve()}"',
+                f'output_dir = "{output_root.resolve()}"',
+            ]
+        ),
+        encoding="utf-8",
+    )
     env_map = {
-        "GRAPH_CG_OUTPUT_DIR": str(output_root),
-        "GRAPH_CG_PROCESSED_DIR": str(processed_root),
-        "GRAPH_CG_FIGURES_DIR": str(figures_root),
-        "GRAPH_CG_MLRUNS_DIR": str(mlflow_tracking_dir),
-        "GRAPH_CG_MLARTIFACTS_DIR": str(mlflow_artifact_dir),
+        "NEURALLS_RAW_DIR": str(runtime_root / "raw"),
+        "NEURALLS_PROCESSED_DIR": str(processed_root),
+        "NEURALLS_OUTPUT_DIR": str(output_root),
+        "NEURALLS_CASE_CONFIG": str(case_config_path),
         # Force DLKit test artifacts away from repository-level tests/artifacts/.
         "DLKIT_TEST_MODE": "1",
         "DLKIT_TEST_ARTIFACT_ROOT": str(runtime_root / "dlkit_artifacts"),
@@ -120,23 +133,70 @@ def isolate_default_paths_with_tmp_path(
         "DLKIT_ROOT_DIR": str(runtime_root),
         "DLKIT_INTERNAL_DIR": str(runtime_root / ".dlkit"),
     }
+    Path(env_map["NEURALLS_RAW_DIR"]).mkdir(parents=True, exist_ok=True)
     for key, value in env_map.items():
         monkeypatch.setenv(key, value)
 
     from neuralls.shared import constants as neuralls_constants
 
     path_values = {
-        "DEFAULT_OUTPUT_DIR": Path(env_map["GRAPH_CG_OUTPUT_DIR"]).resolve(),
-        "DEFAULT_PROCESSED_DATA_DIR": Path(env_map["GRAPH_CG_PROCESSED_DIR"]).resolve(),
-        "DEFAULT_FIGURES_DIR": Path(env_map["GRAPH_CG_FIGURES_DIR"]).resolve(),
-        "DEFAULT_MLRUNS_DIR": Path(env_map["GRAPH_CG_MLRUNS_DIR"]).resolve(),
-        "DEFAULT_MLARTIFACTS_DIR": Path(env_map["GRAPH_CG_MLARTIFACTS_DIR"]).resolve(),
+        "DEFAULT_OUTPUT_DIR": Path(env_map["NEURALLS_OUTPUT_DIR"]).resolve(),
+        "DEFAULT_PROCESSED_DATA_DIR": Path(env_map["NEURALLS_PROCESSED_DIR"]).resolve(),
+        "DEFAULT_FIGURES_DIR": figures_root.resolve(),
+        "DEFAULT_MLRUNS_DIR": mlflow_tracking_dir.resolve(),
+        "DEFAULT_MLARTIFACTS_DIR": mlflow_artifact_dir.resolve(),
     }
     for name, value in path_values.items():
         monkeypatch.setattr(neuralls_constants, name, value, raising=False)
 
     _patch_default_paths_for_loaded_modules(path_values, monkeypatch)
     _patch_dlkit_environment(runtime_root, monkeypatch)
+
+
+@pytest.fixture
+def neuralls_settings(runtime_root: Path, processed_root: Path, output_root: Path) -> NeurallsSettings:
+    """Resolved settings fixture backed by per-test temporary roots."""
+    raw = runtime_root / "raw"
+    for directory in (raw, processed_root, output_root):
+        directory.mkdir(parents=True, exist_ok=True)
+    return NeurallsSettings(
+        _env_file=[],
+        raw_dir=raw,
+        processed_dir=processed_root,
+        output_dir=output_root,
+    )
+
+
+@pytest.fixture
+def config_context(neuralls_settings: NeurallsSettings, tmp_path: Path) -> ConfigContext:
+    """Config context fixture anchored to a temporary config path."""
+    config_path = tmp_path / "config.toml"
+    config_path.touch()
+    return ConfigContext(config_path=config_path, settings=neuralls_settings)
+
+
+@pytest.fixture
+def minimal_data_config_toml(
+    tmp_path: Path,
+    neuralls_settings: NeurallsSettings,
+) -> Path:
+    """Minimal valid dataset config for loader and processing tests."""
+    config_path = tmp_path / "test.toml"
+    matrix_path = neuralls_settings.raw_dir / "matrix.mtx"
+    matrix_path.touch()
+    config_path.write_text(
+        """
+id = "test-dataset"
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/matrix.mtx"
+
+[generation]
+
+[output]
+""".strip()
+    )
+    return config_path
 
 
 @pytest.fixture(autouse=True)

@@ -48,9 +48,9 @@ def temp_config_structure(tmp_path: Path) -> Path:
 
     # Dataset configs
     with open(project_root / "configs" / "datasets" / "exp1_data.toml", "w") as f:
-        f.write('[flow]\ndataset="exp1_data_dataset"')
+        f.write('id="exp1_data_dataset"\n[source]\nmatrix_path="matrix.txt"\n')
     with open(project_root / "configs" / "datasets" / "default_data.toml", "w") as f:
-        f.write('[flow]\ndataset="default_data_dataset"')
+        f.write('id="default_data_dataset"\n[source]\nmatrix_path="matrix.txt"\n')
 
     return project_root
 

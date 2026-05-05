@@ -132,11 +132,15 @@ def test_start_run_and_logging(dummy_mlflow: DummyMlflow, tmp_path: Path) -> Non
     assert dummy_mlflow.logged_metrics == [(run.info.run_id, {"loss": 1.0}, 2)]
 
 
-def test_finalize_run_ends_started_run(dummy_mlflow: DummyMlflow, tmp_path: Path) -> None:
+def test_finalize_run_ends_started_run(
+    dummy_mlflow: DummyMlflow,
+    tmp_path: Path,
+    neuralls_settings,
+) -> None:
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
     (workspace_root / "figures").mkdir()
-    paths = resolve_mlflow_paths(None, None, tmp_path, workspace_root)
+    paths = resolve_mlflow_paths(None, None, tmp_path, workspace_root, settings=neuralls_settings)
     config = MlflowRunConfig(
         experiment_name="exp",
         run_name="run",

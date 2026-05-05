@@ -1,4 +1,4 @@
-"""Tests for the new experiment-centric configuration loader."""
+"""Tests for the case-centric configuration loader."""
 
 from __future__ import annotations
 
@@ -28,8 +28,10 @@ def temp_config_structure(tmp_path: Path) -> Path:
     matrix2_path = project_root / "data" / "matrix2.txt"
     matrix2_path.write_text("2.0\n")
 
-    # Master config uses [[experiments]] registry entries.
+    # Case config uses [[experiments]] registry entries.
     with open(project_root / "configs" / "experiments.toml", "w") as f:
+        f.write(f'raw_dir = "{project_root / "data"}"\n')
+        f.write(f'processed_dir = "{project_root / "data" / "processed"}"\n')
         f.write('project_root = ".."\n')
         f.write(f'output_dir = "{project_root / "output"}"\n\n')
         f.write("[[datasets]]\n")
@@ -58,7 +60,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
 
     # Dataset configs
     with open(project_root / "configs" / "datasets" / "exp1_data.toml", "w") as f:
-        f.write("[flow]\n\n")
+        f.write('id = "exp1_data"\n\n')
         f.write("[source]\n")
         f.write(f'matrix_path = "{matrix_path}"\n\n')
         f.write("[generation]\n")
@@ -69,7 +71,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write(f'data_dir = "{project_root / "data" / "processed"}"\n')
 
     with open(project_root / "configs" / "datasets" / "exp2_data.toml", "w") as f:
-        f.write("[flow]\n\n")
+        f.write('id = "exp2_data"\n\n')
         f.write("[source]\n")
         f.write(f'matrix_path = "{matrix2_path}"\n\n')
         f.write("[generation]\n")
@@ -108,7 +110,7 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     monkeypatch.chdir(temp_config_structure)
 
     batch = load_batch(
-        master_config_path=temp_config_structure / "configs" / "experiments.toml",
+        case_config_path=temp_config_structure / "configs" / "experiments.toml",
     )
 
     assert len(batch.experiments) == 2
@@ -153,6 +155,8 @@ def test_load_experiments_missing_registry_id(
 
     # Create experiments.toml with reference to non-existent dataset
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
+        f.write(f'raw_dir = "{temp_config_structure / "data"}"\n')
+        f.write(f'processed_dir = "{temp_config_structure / "data" / "processed"}"\n')
         f.write('project_root = ".."\n')
         f.write(f'output_dir = "{temp_config_structure / "output"}"\n\n')
         f.write("[[models]]\n")
@@ -167,7 +171,7 @@ def test_load_experiments_missing_registry_id(
         ValueError, match="Experiment 'exp_missing' references dataset id 'missing_dataset'"
     ):
         load_batch(
-            master_config_path=temp_config_structure / "configs" / "experiments.toml",
+            case_config_path=temp_config_structure / "configs" / "experiments.toml",
         )
 
 
@@ -213,7 +217,7 @@ def test_load_experiments_rejects_unknown_comparison_experiment_reference(
         match="Comparison 'linear' neural preconditioner 'bound-neural' references experiment id 'missing-exp'",
     ):
         load_batch(
-            master_config_path=temp_config_structure / "configs" / "experiments.toml",
+            case_config_path=temp_config_structure / "configs" / "experiments.toml",
         )
 
 
@@ -225,10 +229,12 @@ def test_load_experiments_no_experiments(
 
     # Create empty experiments.toml
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
+        f.write(f'raw_dir = "{temp_config_structure / "data"}"\n')
+        f.write(f'processed_dir = "{temp_config_structure / "data" / "processed"}"\n')
         f.write('project_root = ".."\n')
         f.write(f'output_dir = "{temp_config_structure / "output"}"\n')
 
     with pytest.raises(ValueError, match="No experiments defined"):
         load_batch(
-            master_config_path=temp_config_structure / "configs" / "experiments.toml",
+            case_config_path=temp_config_structure / "configs" / "experiments.toml",
         )

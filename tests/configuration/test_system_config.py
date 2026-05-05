@@ -20,13 +20,14 @@ def test_system_config_minimal_valid() -> None:
             tracking_uri=f"sqlite:///{(Path('tests') / 'fixtures' / 'system.db').as_posix()}"
         )
     )
+    assert config.mlflow.tracking_uri is not None
     assert config.mlflow.tracking_uri.endswith("tests/fixtures/system.db")
     assert config.names == ExperimentNamesConfig()
 
 
-def test_system_config_uses_default_tracking_uri() -> None:
+def test_system_config_allows_missing_tracking_uri() -> None:
     config = SystemConfig(mlflow=MlflowTopologyConfig())
-    assert config.mlflow.tracking_uri == MlflowTopologyConfig().tracking_uri
+    assert config.mlflow.tracking_uri is None
 
 
 def test_system_config_is_frozen() -> None:
