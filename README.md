@@ -9,8 +9,9 @@ It supports three common workflows:
 - compare neural and classical preconditioners under a shared benchmark setup
 
 The project is organized around a **case config**: one top-level TOML file that
-declares the datasets, models, comparisons, runtime roots, and experiment
-registrations for a single experiment family.
+declares the datasets, models, comparisons, and experiment registrations for a
+single experiment family. Machine-specific roots live outside the repo in the
+user config directory.
 
 ## What You Need
 
@@ -18,7 +19,7 @@ registrations for a single experiment family.
 - one PyTorch backend extra selected at install time
 - access to your own raw matrix data, processed dataset root, and output root
 
-Install the environment with exactly one backend:
+Install the project environment with exactly one backend:
 
 ```bash
 uv sync --extra cpu
@@ -26,15 +27,23 @@ uv sync --extra cu128
 uv sync --extra cu130
 ```
 
+Install the published CLI from a Git source with the same backend extras:
+
+```bash
+uv tool install 'neuralls[cpu] @ git+https://github.com/<owner>/<repo>'
+uv tool install 'neuralls[cu128] @ git+https://github.com/<owner>/<repo>'
+uvx --from 'neuralls[cpu] @ git+https://github.com/<owner>/<repo>' neuralls --help
+```
+
 ## Quickstart
 
 The shortest useful path for a new user is:
 
 1. select or create one case config
-2. point the case at your machine-specific data roots
-3. build one dataset
-4. train one model
-5. scale up to a full case run
+2. configure machine-specific data roots once
+3. generate one case's datasets
+4. train one case batch
+5. run or compare a full case
 
 ### 1. Choose a case config
 
@@ -49,30 +58,95 @@ Those files are **case configs** even though the filenames still say
 
 ### 2. Set machine-specific roots
 
-Every case config must resolve three runtime roots:
+Profiles are defined in the user config file:
+
+```text
+~/.config/neuralls/config.toml
+```
+
+That file is the persistent machine-specific config store. `neuralls config`
+is the CLI for creating, updating, listing, and selecting profiles inside it.
+You can also edit `~/.config/neuralls/config.toml` manually as long as it
+follows the expected TOML structure.
+
+Set up the active machine profile once:
+
+```bash
+uv run neuralls config init
+uv run neuralls config create default --raw-dir /data/raw --processed-dir /data/processed --output-dir /data/output
+```
+
+Example profile file:
+
+```toml
+[default]
+raw_dir = "/data/raw"
+processed_dir = "/data/processed"
+output_dir = "/data/output"
+
+[profiles.laptop]
+raw_dir = "/mnt/external/raw"
+processed_dir = "/mnt/external/processed"
+output_dir = "/home/archer/laptop-output"
+```
+
+Profile format rules:
+
+- `[default]` defines the fallback profile used when no named profile is selected
+- `[profiles.<name>]` defines a named profile such as `laptop` or `windows`
+- every profile must define `raw_dir`, `processed_dir`, and `output_dir`
+- paths are expanded with `~` and normalized to absolute paths at load time
+
+You can manage the same file either way:
+
+```bash
+uv run neuralls config path
+uv run neuralls config list
+uv run neuralls config show
+uv run neuralls config create laptop --raw-dir /mnt/external/raw --processed-dir /mnt/external/processed --output-dir /home/archer/laptop-output
+uv run neuralls config set output-dir /new/output laptop
+uv run neuralls config delete laptop
+```
+
+or by editing `~/.config/neuralls/config.toml` directly.
+
+If you want a starter file instead of answering prompts immediately, use:
+
+```bash
+uv run neuralls config init
+```
+
+That writes a commented template to `~/.config/neuralls/config.toml`. `config create`
+is non-interactive and requires explicit `--raw-dir`, `--processed-dir`, and
+`--output-dir` flags.
+
+Profiles provide:
 
 - `raw_dir`
 - `processed_dir`
 - `output_dir`
 
-Checked-in examples keep those fields portable by using placeholders:
+Profile selection works like this:
 
-```toml
-raw_dir = "${NEURALLS_RAW_DIR}"
-processed_dir = "${NEURALLS_PROCESSED_DIR}"
-output_dir = "${NEURALLS_OUTPUT_DIR}"
-```
+1. `--profile <name>` picks a named profile for one command
+2. `NEURALLS_PROFILE=<name>` picks a named profile from the environment
+3. otherwise `default` is used
 
-You can provide those values in one of three explicit ways:
+Root overrides work after profile selection:
 
-1. export `NEURALLS_RAW_DIR`, `NEURALLS_PROCESSED_DIR`, and `NEURALLS_OUTPUT_DIR`
-2. pass `--env-file <path>`
-3. set `NEURALLS_ENV_FILE` to an env file path
+1. process env vars such as `NEURALLS_OUTPUT_DIR`
+2. `--env-file <path>`
+3. `NEURALLS_ENV_FILE=<path>`
+4. the selected profile in `~/.config/neuralls/config.toml`
+
+`config set` overwrites the existing field value in place for an existing
+profile. `config delete NAME` removes a named profile; `default` cannot be
+deleted.
 
 `neuralls` does **not** auto-discover `.env`, `.env.local`, or a repo root.
 There is no hidden cwd-based configuration search.
 
-Example env file:
+Example env file override:
 
 ```dotenv
 NEURALLS_RAW_DIR=D:/neuralls/raw
@@ -82,49 +156,47 @@ NEURALLS_OUTPUT_DIR=D:/neuralls/output
 
 On Windows, prefer forward slashes in env-file paths.
 
-### 3. Build one dataset
+### 3. Generate datasets
 
-Commands that start from a dataset or model config must also be told which case
-to use. Pass it explicitly with `--case-config`, or set
-`NEURALLS_CASE_CONFIG`.
+Use the batch form for a full case, or `generate-single` when you want to
+inspect one dataset config directly.
 
 ```bash
-uv run process-data configs/datasets/residuals-100.toml \
+uv run neuralls generate configs/experiments-ffnn.toml --env-file .env.windows
+uv run neuralls generate-single configs/datasets/residuals-100.toml \
   --case-config configs/experiments-ffnn.toml \
   --env-file .env.windows
 ```
 
-This validates one dataset config and writes the processed dataset under the
-resolved processed root.
+The batch form materializes every dataset referenced by the case config under
+the resolved processed root. The `generate-single` form restores the one-dataset path
+when you want to validate one dataset config in isolation.
 
-### 4. Train one model
-
-```bash
-uv run train-model configs/models/ffnn-l2.toml \
-  --data-config configs/datasets/residuals-100.toml \
-  --case-config configs/experiments-ffnn.toml \
-  --env-file .env.windows
-```
-
-Use this path first when validating a model, a dataset, and one training setup
-before running a larger batch.
-
-### 5. Run a full case
+### 4. Train one case batch
 
 ```bash
-uv run run-experiments --config configs/experiments-ffnn.toml \
-  --env-file .env.windows
+uv run neuralls train configs/experiments-ffnn.toml --env-file .env.windows
 ```
 
-This executes the experiments declared in the selected case config, reusing
-processed datasets and writing outputs under the resolved output root.
+This trains every experiment declared in the case config and writes aggregate
+training outputs under the resolved output root.
+
+### 5. Run or compare a full case
+
+```bash
+uv run neuralls run configs/experiments-ffnn.toml --env-file .env.windows
+uv run neuralls compare configs/experiments-ffnn.toml --env-file .env.windows
+```
+
+`neuralls run` generates datasets as needed and trains the full experiment
+matrix. `neuralls compare` benchmarks the configured solver setups for the same
+case.
 
 ## Case Configs
 
 A case config is the authoritative persisted config source for a run family.
 It can contain:
 
-- runtime roots: `raw_dir`, `processed_dir`, `output_dir`
 - dataset registry entries under `[[datasets]]`
 - model registry entries under `[[models]]`
 - comparison registry entries under `[[comparisons]]`
@@ -135,10 +207,6 @@ It can contain:
 Minimal example:
 
 ```toml
-raw_dir = "${NEURALLS_RAW_DIR}"
-processed_dir = "${NEURALLS_PROCESSED_DIR}"
-output_dir = "${NEURALLS_OUTPUT_DIR}"
-
 [[datasets]]
 id = "residuals-100"
 path = "datasets/residuals-100.toml"
@@ -163,32 +231,25 @@ Important behavior:
 - relative paths inside the case config resolve against the case file location
 - `${NEURALLS_*}` placeholders are expanded from resolved settings
 - if `[mlflow]` is omitted, local SQLite tracking and local artifact paths are
-  derived from `output_dir`
+  derived from the active settings `output_dir`
 
 ## Command Reference
 
 | Goal | Command |
 | --- | --- |
-| Build one dataset | `uv run process-data <dataset.toml> --case-config <case.toml>` |
-| Build all datasets in one case | `uv run generate-all <case.toml>` |
-| Train one model | `uv run train-model <model.toml> --data-config <dataset.toml> --case-config <case.toml>` |
-| Train all experiments in one case | `uv run run-experiments --config <case.toml>` |
-| Train a batch workflow | `uv run train-all <case.toml>` |
-| Compare solver setups for one case | `uv run compare-all <case.toml>` |
-| Run inference | `uv run predict --config <model.toml> --data-config <dataset.toml> --case-config <case.toml>` |
-
-Case-selection rules are intentionally narrow:
-
-1. explicit `--case-config`
-2. `NEURALLS_CASE_CONFIG`
-3. otherwise fail
+| Manage machine profiles | `uv run neuralls config ...` |
+| Generate all datasets in one case | `uv run neuralls generate <case.toml>` |
+| Generate one dataset config | `uv run neuralls generate-single <dataset.toml> --case-config <case.toml>` |
+| Train all experiments in one case | `uv run neuralls train <case.toml>` |
+| Generate datasets and train the full case | `uv run neuralls run <case.toml>` |
+| Compare solver setups for one case | `uv run neuralls compare <case.toml>` |
 
 Root-resolution rules are also explicit:
 
 1. process env vars
 2. `--env-file`
 3. `NEURALLS_ENV_FILE`
-4. the case config's `raw_dir`, `processed_dir`, and `output_dir`
+4. the selected profile from `~/.config/neuralls/config.toml`
 5. otherwise fail
 
 There are no other fallbacks.
@@ -230,7 +291,7 @@ datasets, checkpoints, and MLflow state into the new roots.
 
 If you need to work below the CLI layer:
 
-- `src/neuralls/cli/`: Typer entry points
+- `src/neuralls/cli/`: the `neuralls` root CLI plus config and case-batch commands
 - `src/neuralls/composition/`: workflow assembly and orchestration
 - `src/neuralls/application/`: use-case logic
 - `src/neuralls/platform/`: config, storage, tracking, DLKit integration

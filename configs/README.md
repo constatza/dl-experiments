@@ -1,45 +1,46 @@
 # Configuration Guide
 
-The repo uses one case config to move users from a single local run to a full
-experiment batch.
+The public CLI is case-oriented. One case config drives the batch workflows for
+dataset generation, training, full execution, and comparison.
 
 ## Start With The Right File
 
-Choose the config type that matches the task:
+Choose the config type that matches the case you want to run:
 
-- `datasets/*.toml`: build one processed dataset
-- `models/*.toml`: train one model
+- `datasets/*.toml`: define one dataset source or generation strategy
+- `models/*.toml`: define one model architecture and trainer setup
 - `comparison/*.toml`: define one solver benchmark profile
 - `experiments-*.toml`: case configs that tie datasets, models, comparisons,
   MLflow, and experiment ids together
 
 ## Recommended Progression
 
-### 1. Validate one dataset
+### 1. Configure one machine profile
 
 ```bash
-uv run process-data configs/datasets/residuals-100.toml \
+uv run neuralls config init
+uv run neuralls config create default --raw-dir /data/raw --processed-dir /data/processed --output-dir /data/output
+```
+
+### 2. Generate datasets
+
+```bash
+uv run neuralls generate configs/experiments-ffnn.toml
+uv run neuralls generate-single configs/datasets/residuals-100.toml \
   --case-config configs/experiments-ffnn.toml
 ```
 
-### 2. Validate one model
+### 3. Train the case batch
 
 ```bash
-uv run train-model configs/models/ffnn-l2.toml \
-  --data-config configs/datasets/residuals-100.toml \
-  --case-config configs/experiments-ffnn.toml
+uv run neuralls train configs/experiments-ffnn.toml
 ```
 
-### 3. Move to a case config
+### 4. Run or compare the same case
 
 ```bash
-uv run run-experiments --config configs/experiments-ffnn.toml
-```
-
-### 4. Benchmark with the same case config
-
-```bash
-uv run compare-all configs/experiments-ffnn.toml
+uv run neuralls run configs/experiments-ffnn.toml
+uv run neuralls compare configs/experiments-ffnn.toml
 ```
 
 ## Case Anatomy
@@ -47,11 +48,6 @@ uv run compare-all configs/experiments-ffnn.toml
 Each `experiments-*.toml` file is a case config for one experiment family.
 
 ```toml
-raw_dir = "${NEURALLS_RAW_DIR}"
-processed_dir = "${NEURALLS_PROCESSED_DIR}"
-project_root = ".."
-output_dir = "${NEURALLS_OUTPUT_DIR}"
-
 [names]
 training = "Train"
 comparison = "Comparisons"
@@ -122,23 +118,28 @@ Model configs must use DLKit's canonical workflow syntax directly. `neuralls`
 does not translate top-level `[OPTIMIZATION]` or infer optimization mode from
 `OPTUNA.enabled`.
 
-The two important roots are:
+## Machine Roots
 
-- `processed_root` for datasets
-- `output_root` for MLflow, checkpoints, and reports
+Case configs contain experiment structure only. Machine-specific roots live in
+the user config directory and are managed with `neuralls config`.
 
-Checked-in configs are portable by convention and use `NEURALLS_*` environment
-variables. Set these in one explicit env file passed with `--env-file`, expose
-them through `NEURALLS_ENV_FILE`, or export them in the shell. `.env.example`
-documents the supported keys and the explicit-loading model.
+Set up once per machine:
 
-- `NEURALLS_RAW_DIR`: root for raw matrix/archive inputs
-- `NEURALLS_PROCESSED_DIR`: root for processed datasets used by training and comparison
-- `NEURALLS_OUTPUT_DIR`: root for MLflow, checkpoints, and reports
+```bash
+uv run neuralls config create default --raw-dir /data/raw --processed-dir /data/processed --output-dir /data/output
+```
 
-Case configs are the authoritative persisted source. Env files are optional
-override layers for machine-specific roots rather than ambient cwd state.
-`neuralls` does not auto-discover `.env` or `.env.local`.
+Select a named profile at runtime with `--profile NAME` or
+`NEURALLS_PROFILE=NAME`.
+
+Profiles provide three roots:
+
+- `raw_dir`: raw matrix and archive inputs
+- `processed_dir`: processed datasets used by training and comparison
+- `output_dir`: MLflow, checkpoints, figures, and reports
+
+Explicit `--env-file` or `NEURALLS_ENV_FILE` still override the active profile
+for one invocation. `neuralls` does not auto-discover `.env` or `.env.local`.
 
 Local path normalization and sqlite URI handling delegate to DLKit's
 `PathResolver` and local URI helpers. Relative paths are resolved against the
