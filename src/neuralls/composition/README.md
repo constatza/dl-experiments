@@ -25,6 +25,11 @@ Composition is where config models, platform adapters, workflow DTOs, and
 domain services are connected. Entry modules that still assemble concrete
 collaborators belong here rather than under `application`.
 
+CLI entry points now create `NeurallsSettings` and pass them top-down into
+composition. Dataset generation, training, comparison, and inference assembly
+all expect resolved settings instead of reading environment variables or
+normalizing config paths locally.
+
 Training orchestration now keeps DLKit's unified `execute()` entrypoint at the
 composition boundary. The loader is responsible for producing the correct
 workflow-specific DLKit config type before invoking DLKit runtime execution.
@@ -33,7 +38,7 @@ Model-reference resolution also keeps MLflow URI/model lookup helpers on the
 composition side because the installed DLKit package no longer exposes the
 older convenience functions that previous code imported from `dlkit`.
 
-Master-config assembly now assumes that platform loaders have already expanded
+Case-config assembly now assumes that platform loaders have already expanded
 environment-backed path placeholders and resolved registry-relative paths, so
 composition code works with concrete `Path` values instead of Unix-specific
 string conventions.

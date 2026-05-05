@@ -1,6 +1,6 @@
 # Configuration Guide
 
-The repo uses one registry to move users from a single local run to a full
+The repo uses one case config to move users from a single local run to a full
 experiment batch.
 
 ## Start With The Right File
@@ -10,44 +10,47 @@ Choose the config type that matches the task:
 - `datasets/*.toml`: build one processed dataset
 - `models/*.toml`: train one model
 - `comparison/*.toml`: define one solver benchmark profile
-- `experiments-*.toml`: tie datasets, models, comparisons, MLflow, and
-  experiment ids together
+- `experiments-*.toml`: case configs that tie datasets, models, comparisons,
+  MLflow, and experiment ids together
 
 ## Recommended Progression
 
 ### 1. Validate one dataset
 
 ```bash
-uv run process-data configs/datasets/residuals-100.toml
+uv run process-data configs/datasets/residuals-100.toml \
+  --case-config configs/experiments-ffnn.toml
 ```
 
 ### 2. Validate one model
 
 ```bash
 uv run train-model configs/models/ffnn-l2.toml \
-  --data-config configs/datasets/residuals-100.toml
+  --data-config configs/datasets/residuals-100.toml \
+  --case-config configs/experiments-ffnn.toml
 ```
 
-### 3. Move to a registry
+### 3. Move to a case config
 
 ```bash
 uv run run-experiments --config configs/experiments-ffnn.toml
 ```
 
-### 4. Benchmark with the same registry
+### 4. Benchmark with the same case config
 
 ```bash
 uv run compare-all configs/experiments-ffnn.toml
 ```
 
-## Registry Anatomy
+## Case Anatomy
 
-Each `experiments-*.toml` file is the discoverability layer for one experiment
-family.
+Each `experiments-*.toml` file is a case config for one experiment family.
 
 ```toml
+raw_dir = "${NEURALLS_RAW_DIR}"
+processed_dir = "${NEURALLS_PROCESSED_DIR}"
 project_root = ".."
-output_dir = "${GRAPH_CG_OUTPUT_DIR}"
+output_dir = "${NEURALLS_OUTPUT_DIR}"
 
 [names]
 training = "Train"
@@ -113,7 +116,7 @@ Comparison configs define:
 ## MLflow And Paths
 
 Model configs do not define their own `[MLFLOW]` block. Runtime tracking
-settings come from the selected registry or the execution environment.
+settings come from the selected case config or the execution environment.
 
 Model configs must use DLKit's canonical workflow syntax directly. `neuralls`
 does not translate top-level `[OPTIMIZATION]` or infer optimization mode from
@@ -124,11 +127,18 @@ The two important roots are:
 - `processed_root` for datasets
 - `output_root` for MLflow, checkpoints, and reports
 
-Checked-in configs are now portable by convention:
+Checked-in configs are portable by convention and use `NEURALLS_*` environment
+variables. Set these in one explicit env file passed with `--env-file`, expose
+them through `NEURALLS_ENV_FILE`, or export them in the shell. `.env.example`
+documents the supported keys and the explicit-loading model.
 
-- `GRAPH_CG_RAW_DIR`: root for raw matrix/archive inputs
-- `GRAPH_CG_PROCESSED_DIR`: root for processed datasets used by training and comparison
-- `GRAPH_CG_OUTPUT_DIR`: root for MLflow, checkpoints, and reports
+- `NEURALLS_RAW_DIR`: root for raw matrix/archive inputs
+- `NEURALLS_PROCESSED_DIR`: root for processed datasets used by training and comparison
+- `NEURALLS_OUTPUT_DIR`: root for MLflow, checkpoints, and reports
+
+Case configs are the authoritative persisted source. Env files are optional
+override layers for machine-specific roots rather than ambient cwd state.
+`neuralls` does not auto-discover `.env` or `.env.local`.
 
 Local path normalization and sqlite URI handling delegate to DLKit's
 `PathResolver` and local URI helpers. Relative paths are resolved against the

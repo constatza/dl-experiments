@@ -1,15 +1,24 @@
 # neuralls
 
-neuralls trains neural models that help Conjugate Gradient solve graph-structured
-linear systems faster. The repo is organized around one practical workflow:
+`neuralls` is a research and experimentation toolkit for learning neural
+preconditioners for Conjugate Gradient on graph-structured linear systems.
+It supports three common workflows:
 
-1. build or collect a dataset
-2. train one model or a registry of models
-3. compare neural and classical preconditioners on benchmark systems
+- build processed datasets from raw matrices and archives
+- train one model or a full case-defined batch of experiments
+- compare neural and classical preconditioners under a shared benchmark setup
 
-## Start Here
+The project is organized around a **case config**: one top-level TOML file that
+declares the datasets, models, comparisons, runtime roots, and experiment
+registrations for a single experiment family.
 
-Install dependencies with `uv`, selecting exactly one PyTorch backend extra:
+## What You Need
+
+- Python managed with [`uv`](https://docs.astral.sh/uv/)
+- one PyTorch backend extra selected at install time
+- access to your own raw matrix data, processed dataset root, and output root
+
+Install the environment with exactly one backend:
 
 ```bash
 uv sync --extra cpu
@@ -17,74 +26,119 @@ uv sync --extra cu128
 uv sync --extra cu130
 ```
 
-The `cpu`, `cu128`, and `cu130` extras map to the matching PyTorch wheel
-indexes and are mutually exclusive. After syncing one of them, use the commands
-below in order.
+## Quickstart
 
-### 1. Build one dataset
+The shortest useful path for a new user is:
 
-```bash
-uv run process-data configs/datasets/residuals-100.toml
+1. select or create one case config
+2. point the case at your machine-specific data roots
+3. build one dataset
+4. train one model
+5. scale up to a full case run
+
+### 1. Choose a case config
+
+Checked-in examples currently live under names such as:
+
+- `configs/experiments-ffnn.toml`
+- `configs/experiments-linear.toml`
+- `configs/experiments-parametrized.toml`
+
+Those files are **case configs** even though the filenames still say
+`experiments-*`. The generic conceptual name is `case.toml`.
+
+### 2. Set machine-specific roots
+
+Every case config must resolve three runtime roots:
+
+- `raw_dir`
+- `processed_dir`
+- `output_dir`
+
+Checked-in examples keep those fields portable by using placeholders:
+
+```toml
+raw_dir = "${NEURALLS_RAW_DIR}"
+processed_dir = "${NEURALLS_PROCESSED_DIR}"
+output_dir = "${NEURALLS_OUTPUT_DIR}"
 ```
 
-Use this first when you want to validate one dataset config and inspect the
-processed output before training.
+You can provide those values in one of three explicit ways:
 
-### 2. Train one model on that dataset
+1. export `NEURALLS_RAW_DIR`, `NEURALLS_PROCESSED_DIR`, and `NEURALLS_OUTPUT_DIR`
+2. pass `--env-file <path>`
+3. set `NEURALLS_ENV_FILE` to an env file path
+
+`neuralls` does **not** auto-discover `.env`, `.env.local`, or a repo root.
+There is no hidden cwd-based configuration search.
+
+Example env file:
+
+```dotenv
+NEURALLS_RAW_DIR=D:/neuralls/raw
+NEURALLS_PROCESSED_DIR=D:/neuralls/processed
+NEURALLS_OUTPUT_DIR=D:/neuralls/output
+```
+
+On Windows, prefer forward slashes in env-file paths.
+
+### 3. Build one dataset
+
+Commands that start from a dataset or model config must also be told which case
+to use. Pass it explicitly with `--case-config`, or set
+`NEURALLS_CASE_CONFIG`.
+
+```bash
+uv run process-data configs/datasets/residuals-100.toml \
+  --case-config configs/experiments-ffnn.toml \
+  --env-file .env.windows
+```
+
+This validates one dataset config and writes the processed dataset under the
+resolved processed root.
+
+### 4. Train one model
 
 ```bash
 uv run train-model configs/models/ffnn-l2.toml \
-  --data-config configs/datasets/residuals-100.toml
+  --data-config configs/datasets/residuals-100.toml \
+  --case-config configs/experiments-ffnn.toml \
+  --env-file .env.windows
 ```
 
-This is the fastest path for checking whether one model and one dataset fit
-together cleanly.
+Use this path first when validating a model, a dataset, and one training setup
+before running a larger batch.
 
-### 3. Scale up to a full registry run
+### 5. Run a full case
 
 ```bash
-uv run run-experiments --config configs/experiments-ffnn.toml
+uv run run-experiments --config configs/experiments-ffnn.toml \
+  --env-file .env.windows
 ```
 
-This command builds the datasets referenced by the registry, reuses cached
-outputs where possible, and trains every declared experiment.
+This executes the experiments declared in the selected case config, reusing
+processed datasets and writing outputs under the resolved output root.
 
-### 4. Compare preconditioners
+## Case Configs
 
-```bash
-uv run compare-all configs/experiments-ffnn.toml
-```
+A case config is the authoritative persisted config source for a run family.
+It can contain:
 
-This runs the comparison profiles declared in the selected registry and reports
-how neural and classical preconditioners behave on the configured systems.
+- runtime roots: `raw_dir`, `processed_dir`, `output_dir`
+- dataset registry entries under `[[datasets]]`
+- model registry entries under `[[models]]`
+- comparison registry entries under `[[comparisons]]`
+- experiment registrations under `[[experiments]]`
+- optional `[mlflow]` topology
+- optional display names under `[names]`
 
-## Command Ladder
-
-Use the commands in this order as you move from basic to advanced work:
-
-| Level | Goal | Command |
-| --- | --- | --- |
-| Basic | Build one dataset | `uv run process-data <dataset.toml>` |
-| Basic | Train one model | `uv run train-model <model.toml> --data-config <dataset.toml>` |
-| Intermediate | Build every dataset in a registry | `uv run generate-all <registry.toml>` |
-| Intermediate | Train every experiment in a registry | `uv run run-experiments --config <registry.toml>` |
-| Intermediate | Train a batch and compare one metric | `uv run train-all <registry.toml>` |
-| Advanced | Run solver comparisons | `uv run compare-all <registry.toml>` |
-| Advanced | Run inference or synthetic evaluation | `uv run predict --config <model.toml> --data-config <dataset.toml>` |
-
-## Configuration Map
-
-The repo uses three config layers plus one registry:
-
-- `configs/datasets/*.toml`: how to build or collect processed datasets
-- `configs/models/*.toml`: DLKit model, training, and staged-optimization settings
-- `configs/comparison/*.toml`: solver-comparison inputs and preconditioners
-- `configs/experiments-*.toml`: the registry that ties datasets, models,
-  comparisons, MLflow settings, and experiment ids together
-
-Example registry shape:
+Minimal example:
 
 ```toml
+raw_dir = "${NEURALLS_RAW_DIR}"
+processed_dir = "${NEURALLS_PROCESSED_DIR}"
+output_dir = "${NEURALLS_OUTPUT_DIR}"
+
 [[datasets]]
 id = "residuals-100"
 path = "datasets/residuals-100.toml"
@@ -103,84 +157,92 @@ dataset = "residuals-100"
 model = "scaleequivariant-residual-ffnn-l2"
 ```
 
-Read more in:
+Important behavior:
 
-- [`configs/README.md`](configs/README.md)
-- [`configs/datasets/README.md`](configs/datasets/README.md)
-- [`docs/README.md`](docs/README.md)
+- `[[experiments]]` remains the table name for per-run registrations
+- relative paths inside the case config resolve against the case file location
+- `${NEURALLS_*}` placeholders are expanded from resolved settings
+- if `[mlflow]` is omitted, local SQLite tracking and local artifact paths are
+  derived from `output_dir`
 
-## Basic To Advanced Concepts
+## Command Reference
 
-### Basic: single dataset, single model
+| Goal | Command |
+| --- | --- |
+| Build one dataset | `uv run process-data <dataset.toml> --case-config <case.toml>` |
+| Build all datasets in one case | `uv run generate-all <case.toml>` |
+| Train one model | `uv run train-model <model.toml> --data-config <dataset.toml> --case-config <case.toml>` |
+| Train all experiments in one case | `uv run run-experiments --config <case.toml>` |
+| Train a batch workflow | `uv run train-all <case.toml>` |
+| Compare solver setups for one case | `uv run compare-all <case.toml>` |
+| Run inference | `uv run predict --config <model.toml> --data-config <dataset.toml> --case-config <case.toml>` |
 
-Work with one dataset config and one model config until:
+Case-selection rules are intentionally narrow:
 
-- the dataset builds successfully
-- the model trains successfully
-- the checkpoint lands in the expected output root
+1. explicit `--case-config`
+2. `NEURALLS_CASE_CONFIG`
+3. otherwise fail
 
-Model configs keep `dlkit.nn` as the readable checked-in model namespace and
-use DLKit's canonical `TRAINING.optimizer` hierarchy for optimizer programs.
+Root-resolution rules are also explicit:
 
-### Intermediate: registry-driven experimentation
+1. process env vars
+2. `--env-file`
+3. `NEURALLS_ENV_FILE`
+4. the case config's `raw_dir`, `processed_dir`, and `output_dir`
+5. otherwise fail
 
-Move to a registry when you want:
+There are no other fallbacks.
 
-- repeatable experiment ids
-- one place for MLflow topology
-- batch dataset generation
-- batch training across multiple model and dataset combinations
+## Configuration Layout
 
-### Advanced: solver and workflow internals
+The repo uses one case layer and three lower-level config families:
 
-Once the outer workflow is stable, the repo opens into three deeper packages:
+- `configs/datasets/*.toml`: dataset generation and input-source definitions
+- `configs/models/*.toml`: DLKit model, trainer, loss, and optimizer settings
+- `configs/comparison/*.toml`: solver comparison inputs and preconditioners
+- `configs/experiments-*.toml`: case configs tying all of the above together
 
-- [`src/neuralls/generation/README.md`](src/neuralls/generation/README.md):
-  dataset strategy internals
-- [`src/neuralls/solver/README.md`](src/neuralls/solver/README.md):
-  PCG, FCG, monitoring, and preconditioners
-- [`src/neuralls/workflows/README.md`](src/neuralls/workflows/README.md):
-  batch orchestration and comparison pipelines
+Use the narrowest config that matches the task:
 
-## Output Layout
+- debugging data generation: start with a dataset config
+- validating one architecture: add one model config
+- running repeatable experiment batches: move to a case config
 
-Two roots matter:
+Additional guidance:
 
-- `processed_root`: generated datasets
-- `output_root`: MLflow tracking, checkpoints, reports, and artifacts
+- [Configuration Guide](configs/README.md)
+- [Dataset Config Guide](configs/datasets/README.md)
+- [Architecture Docs](docs/README.md)
 
-The selected registry and path helpers in `src/neuralls/configuration/paths.py`
-determine those locations. `output_root` is the source of truth for training and
-comparison artifacts.
+## Outputs
 
-## Testing
+Two roots matter operationally:
 
-```bash
-uv run ruff check --fix .
-uv run ruff format .
-uv run pytest tests/generation -v
-uv run pytest tests/configuration -v
-uv run pytest tests/solver -v
-uv run pytest tests/workflows tests/cli -v
-uv run ty check
-```
+- `processed_dir`: generated datasets used by training and comparison
+- `output_dir`: MLflow tracking, model checkpoints, figures, reports, and
+  artifacts
 
-## Repo Guide
+`neuralls` does not migrate external data for you. Moving to a new machine
+means you are responsible for copying any required raw datasets, processed
+datasets, checkpoints, and MLflow state into the new roots.
 
-- `src/neuralls/cli/`: user-facing commands
-- `src/neuralls/configuration/`: typed config loading and workspace resolution
-- `src/neuralls/generation/`: dataset creation strategies and processing
-- `src/neuralls/solver/`: CG solvers, monitoring, and preconditioners
-- `src/neuralls/workflows/`: orchestration for training, prediction, and comparison
+## Repository Guide
 
-If you are new to the repo, stay on the command ladder above. If you are
-changing internals, start with the package README that matches the layer you are
-touching.
+If you need to work below the CLI layer:
 
-## Contributor Setup
+- `src/neuralls/cli/`: Typer entry points
+- `src/neuralls/composition/`: workflow assembly and orchestration
+- `src/neuralls/application/`: use-case logic
+- `src/neuralls/platform/`: config, storage, tracking, DLKit integration
+- `src/neuralls/domain/`: generation, solver logic, analysis, normalization
+- `src/neuralls/shared/`: constants, shared types, functional helpers
 
-Contributor workflows expect local hooks, Tach, and the pinned Python dev
-toolchain.
+Module-level architecture notes live alongside the code under the corresponding
+package directories.
+
+## Development
+
+Install the development toolchain:
 
 ```bash
 uv tool install prek
@@ -188,19 +250,14 @@ uv sync --dev
 prek install -t pre-commit -t pre-push
 ```
 
-You can also install `prek` with your OS package manager instead of `uv tool`.
+Useful verification commands:
 
-Contributor setup is not complete until `prek` is installed and the git hooks
-are registered. Developer workflows are expected to use local `pre-commit` and
-`pre-push` hooks; CI remains an independent enforcement layer.
+```bash
+uv run ruff check src tests
+uv run ty check src/ tests/
+uv run pytest
+```
 
-`prek` is only the hook runner here. Python tool versions are pinned in this
-repo's `uv` dev dependencies, and Python hooks run through `uv run ...`.
-
-Current hook contract:
-
-- `pre-commit`: `uv-lock` on dependency metadata changes, then Ruff lint and format autofix across `src/`, `tests/`, and `scripts/`, plus ty and Tach checks
-- `pre-push`: the fast pytest smoke suite
-
-For editor diagnostics and language-server features, use ty's language server
-instead of Pyright or Pylance-specific type checking.
+The repository uses local hooks plus CI. Ruff is the linting baseline, `ty` is
+the type-checking baseline, and `uv run ...` is the expected entrypoint for
+Python tooling.

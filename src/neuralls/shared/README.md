@@ -15,10 +15,6 @@ packages. A module belongs here when it is pure, dependency-light, and used by
 multiple layers. If a helper is specific to one owner package, it should live
 with that owner instead of becoming generic by convenience.
 
-Default path constants in `constants.py` point at the repository root and
-remain overrideable via environment variables so platform and composition
-layers can relocate outputs without assuming a Unix filesystem layout.
-
 ## Boundary
 
 Shared code must stay dependency-free with respect to the other architectural

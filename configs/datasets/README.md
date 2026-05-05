@@ -7,16 +7,18 @@ data?
 ## First Successful Run
 
 ```bash
-uv run process-data configs/datasets/residuals-100.toml
+uv run process-data configs/datasets/residuals-100.toml \
+  --case-config configs/experiments-ffnn.toml
 ```
 
-Start with one dataset config before moving on to training or registry-wide
+Start with one dataset config before moving on to training or case-wide
 workflows.
 
 The paired Gaussian variant is:
 
 ```bash
-uv run process-data configs/datasets/residuals-100-gaussian.toml
+uv run process-data configs/datasets/residuals-100-gaussian.toml \
+  --case-config configs/experiments-ffnn.toml
 ```
 
 ## Minimal Shape
@@ -25,7 +27,7 @@ uv run process-data configs/datasets/residuals-100-gaussian.toml
 id = "residuals-100"
 
 [source]
-matrix_path = "${GRAPH_CG_RAW_DIR}/matrix.txt"
+matrix_path = "${NEURALLS_RAW_DIR}/matrix.txt"
 
 [generation]
 normalize = "matrix"
@@ -37,7 +39,7 @@ samples = 20000
 cg_iters = 100
 
 [output]
-data_dir = "${GRAPH_CG_PROCESSED_DIR}"
+data_dir = "${NEURALLS_PROCESSED_DIR}"
 ```
 
 ## Strategy Ladder
@@ -124,11 +126,14 @@ built by combining multiple strategy blocks in order.
 
 Checked-in dataset configs are expected to use:
 
-- `GRAPH_CG_RAW_DIR` for raw matrix and archive roots
-- `GRAPH_CG_PROCESSED_DIR` for processed dataset roots
+- `NEURALLS_RAW_DIR` for raw matrix and archive roots
+- `NEURALLS_PROCESSED_DIR` for processed dataset roots
 
-The loader expands those environment variables and resolves any remaining
-relative paths against the dataset config's own directory.
+Set these variables through exported env vars, `--env-file`, or
+`NEURALLS_ENV_FILE` for the selected case. The loader expands those
+environment variables and resolves any remaining relative paths against the
+dataset config's own directory. There is no cwd-based `.env` or `.env.local`
+discovery.
 
 Optional `[test]` fields can attach evaluation assets such as:
 
@@ -143,5 +148,5 @@ These are used later by comparison and inference workflows.
 After the dataset builds:
 
 1. train one model with `train-model`
-2. move to an experiments registry
+2. move to a case config
 3. run `compare-all` once the trained checkpoint exists

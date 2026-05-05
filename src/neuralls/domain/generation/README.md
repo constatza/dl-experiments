@@ -11,12 +11,13 @@ first and only then drop into the package internals.
 Build one dataset from one config:
 
 ```bash
-uv run process-data configs/datasets/residuals-100.toml
+uv run process-data configs/datasets/residuals-100.toml \
+  --case-config configs/experiments-ffnn.toml
 ```
 
 ### Intermediate
 
-Build every dataset declared in one registry:
+Build every dataset declared in one case config:
 
 ```bash
 uv run generate-all configs/experiments-ffnn.toml
