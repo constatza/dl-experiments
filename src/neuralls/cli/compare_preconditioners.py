@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run every comparison profile declared in one registry."""
+"""Run every comparison profile declared in one case config."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from neuralls.shared.constants import (
     SYMBOL_CHECKMARK,
 )
 from neuralls.composition.experiments.comparison_batch import run_comparison_batch
+from neuralls.platform.config.settings import load_case_settings
 from neuralls.composition.comparison.models import (
     ComparisonOutcome,
     ComparisonParams,
@@ -67,14 +68,19 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
 def main(
     config: Path = typer.Argument(
         ...,
-        help="Path to an experiments registry TOML.",
+        help="Path to a case config TOML.",
+    ),
+    env_file: Path | None = typer.Option(
+        None,
+        help="Optional env file to load before config resolution.",
     ),
 ) -> None:
-    """Benchmark classical and neural preconditioners for one registry."""
+    """Benchmark classical and neural preconditioners for one case config."""
     params = ComparisonParams()
 
     try:
-        outcomes = run_comparison_batch(config, params)
+        settings = load_case_settings(config, env_file)
+        outcomes = run_comparison_batch(config, params, settings)
     except (ValueError, KeyError) as exc:
         logger.error(str(exc))
         raise typer.Exit(code=EXIT_FAILURE) from exc

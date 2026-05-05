@@ -12,21 +12,24 @@ import typer
 from loguru import logger
 
 from neuralls.shared.constants import (
-    DEFAULT_MODEL_CONFIG,
-    DEFAULT_DATA_CONFIG,
-    DEFAULT_PROJECT_ROOT,
     EXIT_KEYBOARD_INTERRUPT,
 )
 from neuralls.composition.experiments.inference import run_inference
+from neuralls.platform.config.settings import CASE_CONFIG_ENV_VAR, load_case_settings
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 
 def main(
-    config: Path = typer.Option(None, help="Path to config file"),
+    config: Path = typer.Option(..., help="Path to model config file"),
     data_config: Path = typer.Option(
-        None,
+        ...,
         help="Path to data config providing dataset metadata",
+    ),
+    case_config: Path | None = typer.Option(
+        None,
+        "--case-config",
+        help="Path to case config TOML.",
     ),
     checkpoint: Path | None = typer.Option(None, help="Override checkpoint path"),
     features: Path | None = typer.Option(
@@ -51,18 +54,29 @@ def main(
         None,
         help="Path to comparison config (used for matrix path in synthetic mode)",
     ),
+    env_file: Path | None = typer.Option(
+        None,
+        help="Optional env file to load before config resolution.",
+    ),
 ) -> None:
     """Run inference using a DLKit configuration."""
-    # Resolve defaults
-    if config is None:
-        config = DEFAULT_PROJECT_ROOT / DEFAULT_MODEL_CONFIG
-    if data_config is None:
-        data_config = DEFAULT_PROJECT_ROOT / DEFAULT_DATA_CONFIG
-
     logger.info(f"Loading configuration from: {config}")
+    resolved_case_config = case_config
+    if resolved_case_config is None:
+        configured = os.getenv(CASE_CONFIG_ENV_VAR)
+        if configured is not None and configured.strip():
+            resolved_case_config = Path(configured)
+    if resolved_case_config is None:
+        raise typer.BadParameter(
+            "This command requires a case config. Pass --case-config or set "
+            "NEURALLS_CASE_CONFIG."
+        )
+    settings = load_case_settings(resolved_case_config, env_file)
 
     results = run_inference(
         config_path=config,
+        settings=settings,
+        case_config_path=resolved_case_config,
         data_config_path=data_config,
         checkpoint_path=checkpoint,
         features_path=features,

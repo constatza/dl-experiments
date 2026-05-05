@@ -15,6 +15,7 @@ from dlkit.io import load_array
 
 from neuralls.application.inference.models import InferenceConfig
 from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.shared.constants import PREDICTION_NORM_EPSILON
 from neuralls.platform.storage.filesystem import derive_model_identifier
 from neuralls.platform.tracking.mlflow import build_run_config, open_run
@@ -434,7 +435,11 @@ def _validate_inference_config(config: InferenceConfig) -> None:
         raise ValueError("No checkpoint path specified")
 
 
-def _load_experiment_settings(config: InferenceConfig) -> tuple[Any, Any, str]:
+def _load_experiment_settings(
+    config: InferenceConfig,
+    settings: NeurallsSettings,
+    case_config_path: Path | None = None,
+) -> tuple[Any, Any, str]:
     """Load experiment configuration in inference mode.
 
     Args:
@@ -454,6 +459,8 @@ def _load_experiment_settings(config: InferenceConfig) -> tuple[Any, Any, str]:
     experiment = load_experiment(
         config.config_path,
         config.data_config_path,
+        settings,
+        case_config_path=case_config_path,
         output_root=config.output_root,
         mode="inference",
         dataset_registry_id=dataset_registry_id,
@@ -466,6 +473,7 @@ def _load_experiment_settings(config: InferenceConfig) -> tuple[Any, Any, str]:
 
 def _execute_inference_pipeline(
     config: InferenceConfig,
+    runtime_settings: NeurallsSettings,
     settings: Any,
     workspace: Any,
     dataset_id: str,
@@ -495,6 +503,7 @@ def _execute_inference_pipeline(
     # Load data (strategy pattern: standard vs synthetic)
     data = load_inference_data(
         workspace=workspace,
+        settings=runtime_settings,
         features_path=config.features_path,
         targets_path=config.targets_path,
         synthetic_benchmark=config.synthetic_benchmark,
@@ -557,6 +566,8 @@ def _build_inference_result(
 def run_inference(
     *,
     config_path: str | Path,
+    settings: NeurallsSettings | None = None,
+    case_config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
     checkpoint_path: str | Path | None = None,
     features_path: str | Path | None = None,
@@ -593,6 +604,8 @@ def run_inference(
         ValueError: If no checkpoint path or no data available
         FileNotFoundError: If required files don't exist
     """
+    resolved_case_config_path = Path(case_config_path) if case_config_path else None
+    settings = require_settings(settings, case_config_path=resolved_case_config_path)
     from neuralls.platform.reporting.predictions import (
         finalize_mlflow_run,
         start_mlflow_run,
@@ -617,11 +630,15 @@ def run_inference(
     _validate_inference_config(config)
 
     # 2. Load experiment settings
-    settings, workspace, dataset_id = _load_experiment_settings(config)
+    experiment_settings, workspace, dataset_id = _load_experiment_settings(
+        config,
+        settings,
+        case_config_path=resolved_case_config_path,
+    )
 
     # 3. Start MLflow run (if enabled)
     mlflow_state = start_mlflow_run(
-        settings,
+        experiment_settings,
         workspace,
         dataset_id,
         config.enable_mlflow,
@@ -633,7 +650,7 @@ def run_inference(
     try:
         # 4. Execute inference pipeline
         predictions, metrics, plot_paths = _execute_inference_pipeline(
-            config, settings, workspace, dataset_id
+            config, settings, experiment_settings, workspace, dataset_id
         )
 
         # 5. Build typed result

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the registry-defined data generation and training matrix."""
+"""Run the case-defined data generation and training matrix."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 
 from neuralls.composition.experiments.training_batch import run_experiment_matrix
+from neuralls.platform.config.settings import load_case_settings
 from neuralls.shared.constants import (
     DEFAULT_PROJECT_ROOT,
     EXIT_FAILURE,
@@ -21,7 +22,7 @@ def main(
         ...,
         "--config",
         "-c",
-        help="Path to an experiments registry TOML.",
+        help="Path to a case config TOML.",
     ),
     force: bool = typer.Option(
         False,
@@ -33,11 +34,15 @@ def main(
         None,
         help="Override max training epochs (for quick tests)",
     ),
+    env_file: Path | None = typer.Option(
+        None,
+        help="Optional env file to load before config resolution.",
+    ),
 ) -> None:
-    """Generate datasets and train all experiments in one registry.
+    """Generate datasets and train all experiments in one case config.
 
     This is the basic batch workflow:
-    1. load one experiments registry
+    1. load one case config
     2. build each referenced dataset once
     3. train each experiment unless a checkpoint already exists
 
@@ -48,13 +53,15 @@ def main(
         raise typer.Exit(code=EXIT_FAILURE)
 
     try:
-        print(f"Training experiments from: {config}")
+        settings = load_case_settings(config, env_file)
+        print(f"Training experiments from case config: {config}")
         if force:
             print("Force mode enabled: will retrain even if checkpoints exist")
         print()
 
         results = run_experiment_matrix(
             experiments_config_path=config,
+            settings=settings,
             force=force,
             project_root=DEFAULT_PROJECT_ROOT,
             max_epochs=max_epochs,

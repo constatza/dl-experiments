@@ -12,8 +12,8 @@ from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
 from neuralls.platform.config.models.experiments import (
+    CaseConfig,
     ExperimentEntry,
-    ExperimentsConfig,
     RegistryEntry,
     RunEntry,
     resolve_display_name,
@@ -29,6 +29,7 @@ from neuralls.platform.config.mlflow import (
     scoped_mlflow_environment,
 )
 from neuralls.platform.config.loaders import load_data_config
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.plots import plot_metric_comparison
 from neuralls.platform.reporting.predictions import read_mlflow_sidecar
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
@@ -113,7 +114,7 @@ def _make_label_map(
 def _resolve_config_paths(
     experiment: Any,
     configs_dir: Path,
-    cfg: ExperimentsConfig | None = None,
+    cfg: CaseConfig | None = None,
 ) -> tuple[Path, Path]:
     """Resolve model and dataset config paths from an experiment or run entry.
 
@@ -138,14 +139,14 @@ def _resolve_config_paths(
     elif isinstance(experiment, dict):
         if cfg is None:
             raise ValueError(
-                "Registry-backed experiment resolution requires a validated experiments config."
+                "Registry-backed experiment resolution requires a validated case config."
             )
         model_path = resolve_model_config_path(cfg, configs_dir, experiment["model"])
         dataset_path = resolve_dataset_config_path(cfg, configs_dir, experiment["dataset"])
     else:
         if cfg is None:
             raise ValueError(
-                "Registry-backed experiment resolution requires a validated experiments config."
+                "Registry-backed experiment resolution requires a validated case config."
             )
         model_path = resolve_model_config_path(
             cfg,
@@ -278,6 +279,7 @@ def _annotate_mlflow_run(
 
 
 def _train_single(
+    settings: NeurallsSettings | None,
     experiment_id: str,
     experiment_display_name: str,
     model_config_path: Path,
@@ -305,9 +307,11 @@ def _train_single(
         ``TrainingRunResult`` with checkpoint path, run ID, and metrics.
     """
     logger.info(f"[{label}] Training experiment: {experiment_display_name}")
+    settings = require_settings(settings)
 
     checkpoint_path = train_model(
         config_path=model_config_path,
+        settings=settings,
         data_config_path=data_config_path,
         output_root=output_root,
         experiment_id=experiment_id,
@@ -318,7 +322,7 @@ def _train_single(
         model_display_name=model_display_name,
         mlflow_experiment_name=mlflow_experiment_name,
     )
-    data_cfg = load_data_config(data_config_path)
+    data_cfg = load_data_config(data_config_path, settings)
     dataset_id = resolve_dataset_identity(
         data_cfg=data_cfg,
         config_path=data_config_path,
@@ -390,18 +394,19 @@ def _find_registry_entry(
 
 
 def train_batch(
-    cfg: ExperimentsConfig,
+    cfg: CaseConfig,
     configs_dir: Path,
+    settings: NeurallsSettings | None = None,
     output_root: Path | None = None,
 ) -> BatchResult:
-    """Train all experiments defined in an experiments TOML and collect metrics.
+    """Train all experiments defined in a case config and collect metrics.
 
     Phase 1: Trains each experiment sequentially. dlkit manages all individual
     MLflow runs independently — no parent run is opened during training.
 
     Args:
-        cfg: Validated experiments configuration.
-        configs_dir: Parent directory of the experiments TOML (for resolving
+        cfg: Validated case configuration.
+        configs_dir: Parent directory of the case TOML (for resolving
             relative config paths).
         output_root: Optional override for the training output root directory.
 
@@ -412,31 +417,37 @@ def train_batch(
         ValueError: If the TOML contains no ``[[experiments]]`` or ``[[run]]`` entries.
         FileNotFoundError: If any resolved config path does not exist.
     """
+    settings = require_settings(settings)
     # Accept both direct [[run]] entries and registry-backed [[experiments]] entries.
     run_entries: list[Any] = list(cfg.run) or list(cfg.experiments)
     if not run_entries:
-        raise ValueError("No [[run]] or [[experiments]] entries found in experiments config")
+        raise ValueError("No [[run]] or [[experiments]] entries found in case config.")
 
-    # Derive output_dir from mlflow tracking_uri when not explicitly configured
     tracking_uri = cfg.mlflow.tracking_uri
     if output_root is not None:
         base_output = Path(output_root)
     elif cfg.output_dir is not None:
         base_output = cfg.output_dir
-    elif is_sqlite_tracking_uri(tracking_uri):
+    elif tracking_uri is not None and is_sqlite_tracking_uri(tracking_uri):
         derived_output = derive_output_root_from_tracking_uri(tracking_uri)
         if derived_output is None:
             raise ValueError(
-                "experiments.toml must set output_dir when mlflow.tracking_uri is remote."
+                "Case config must set output_dir when mlflow.tracking_uri is remote."
             )
         base_output = derived_output
     else:
-        raise ValueError("experiments.toml must set output_dir when mlflow.tracking_uri is remote.")
+        raise ValueError("Case config must define output_dir or a sqlite mlflow.tracking_uri.")
 
-    training_mlflow_env = build_mlflow_environment(
-        tracking_uri=cfg.mlflow.tracking_uri,
-        artifacts_destination=cfg.mlflow.artifacts_destination,
-    )
+    if tracking_uri is None:
+        training_mlflow_env = build_mlflow_environment(
+            tracking_uri=f"sqlite:///{(base_output / 'mlruns' / 'mlflow.db').as_posix()}",
+            artifacts_destination=str((base_output / "mlartifacts").resolve()),
+        )
+    else:
+        training_mlflow_env = build_mlflow_environment(
+            tracking_uri=tracking_uri,
+            artifacts_destination=cfg.mlflow.artifacts_destination,
+        )
     mlflow_experiment_name = cfg.names.training
 
     # ------------------------------------------------------------------
@@ -472,6 +483,7 @@ def train_batch(
                 dataset_registry_id = data_config.stem
 
             result = _train_single(
+                settings=settings,
                 experiment_id=experiment_id,
                 experiment_display_name=experiment_display_name,
                 model_config_path=model_config,

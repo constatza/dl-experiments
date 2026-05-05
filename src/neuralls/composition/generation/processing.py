@@ -4,20 +4,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
 from collections.abc import Mapping
-
+from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 
+from neuralls.platform.config.models.data_models import DataConfigFile, GenerationConfig
+from neuralls.domain.generation.data_types import NormalizeType
 from neuralls.shared.constants import (
     ConfigKeys,
     ConfigSections,
     DEFAULT_NORMALIZE,
-    DEFAULT_PROCESSED_DATA_DIR,
     DEFAULT_RANDOM_SEED,
-    DEFAULT_SHUFFLE,
 )
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.domain.generation.plan import GenerationPlan, StrategySpec, parse_generation_plan
@@ -52,67 +51,37 @@ class DataGenerationContext:
     solutions_path: str | None
     sample_id_regex: str | None
     dataset_dir: Path
-    normalize: str
-    source_cfg: Mapping[str, Any]
-    generation_cfg: Mapping[str, Any]
-
-
-def _coerce_mapping(value: Any) -> Mapping[str, Any]:
-    """Convert arbitrary values to an immutable mapping."""
-    if isinstance(value, Mapping):
-        return dict(value)
-    return {}
-
-
-def _coerce_optional_str(value: Any) -> str | None:
-    if value is None:
-        return None
-    return str(value)
+    normalize: NormalizeType
+    seed: int
+    shuffle: bool
 
 
 def _build_context(
     *,
-    config: Mapping[str, Any],
-    config_path: Path | str | None,
+    config: DataConfigFile,
 ) -> tuple[DataGenerationContext, GenerationPlan]:
     """Assemble generation context, plan, and dataset directory."""
-    source_cfg = _coerce_mapping(config.get(ConfigSections.SOURCE, {}))
-    generation_cfg = _coerce_mapping(config.get(ConfigSections.GENERATION, {}))
-    output_cfg = _coerce_mapping(config.get(ConfigSections.OUTPUT, {}))
+    if config.output.data_dir is None:
+        raise ValueError("output.data_dir must be resolved before process_config().")
+    dataset_dir = config.output.data_dir / config.id
 
-    # Extract dataset_id from config or filename
-    if config_path:
-        dataset_id = Path(config_path).stem
-    else:
-        flow_section = config.get("flow", {})
-        dataset_id = flow_section.get("dataset", "default")
-
-    # Resolve processed data directory
-    processed_dir_str = output_cfg.get("data_dir")
-    if processed_dir_str:
-        processed_root = Path(processed_dir_str)
-    else:
-        processed_root = DEFAULT_PROCESSED_DATA_DIR
-
-    dataset_dir = processed_root / dataset_id
-
-    matrix_path = _coerce_optional_str(source_cfg.get(ConfigKeys.MATRIX_PATH))
+    matrix_path = config.source.matrix_path
     if not matrix_path:
         raise ValueError(f"Missing '{ConfigSections.SOURCE}.{ConfigKeys.MATRIX_PATH}' in config")
 
-    rhs_path = _coerce_optional_str(source_cfg.get(ConfigKeys.RHS_PATH))
-    solutions_path = _coerce_optional_str(source_cfg.get(ConfigKeys.SOLUTIONS_PATH))
-    sample_id_regex = _coerce_optional_str(source_cfg.get("sample_id_regex"))
-    normalize_value = generation_cfg.get(ConfigKeys.NORMALIZE, DEFAULT_NORMALIZE)
+    rhs_path = config.source.rhs_path
+    solutions_path = config.source.solutions_path
+    sample_id_regex = config.source.sample_id_regex
+    normalize_value = config.generation.normalize or DEFAULT_NORMALIZE
     if isinstance(normalize_value, bool):
         raise ValueError(
             f"Invalid normalize value in config: {normalize_value} (bool). "
             f"The 'normalize' parameter expects one of "
             "'spectral', 'matrix', 'rhs', 'diagonal', or 'none'."
         )
-    normalize = str(normalize_value)
+    normalize = cast(NormalizeType, str(normalize_value))
 
-    plan = parse_generation_plan(generation_cfg)
+    plan = parse_generation_plan(config.generation.model_dump(mode="python", exclude_none=True))
 
     return DataGenerationContext(
         matrix_path=matrix_path,
@@ -121,24 +90,23 @@ def _build_context(
         sample_id_regex=sample_id_regex,
         dataset_dir=dataset_dir,
         normalize=normalize,
-        source_cfg=source_cfg,
-        generation_cfg=generation_cfg,
+        seed=config.generation.seed,
+        shuffle=config.generation.shuffle,
     ), plan
 
 
 def _merge_rhs_archive_options(
     strategy: StrategySpec | None,
-    context: DataGenerationContext,
+    generation_cfg: GenerationConfig,
 ) -> dict[str, Any]:
     """Combine generation-level options with strategy-specific overrides."""
     relevant_keys = ("cg_tolerance", "cg_max_iters")
     merged: dict[str, Any] = {}
 
-    generation_cfg = context.generation_cfg
-
     for key in relevant_keys:
-        if key in generation_cfg:
-            merged[key] = generation_cfg[key]
+        value = getattr(generation_cfg, key, None)
+        if value is not None:
+            merged[key] = value
         if strategy and key in strategy.options:
             merged[key] = strategy.options[key]
 
@@ -148,13 +116,13 @@ def _merge_rhs_archive_options(
 def _resolve_rhs_archive_glob(
     strategy: StrategySpec | None,
     context: DataGenerationContext,
+    generation_cfg: GenerationConfig,
 ) -> str | None:
     """Resolve the RHS glob path to use for RHS archive samples."""
     candidates: tuple[Any, ...] = (
         strategy.options.get(ConfigKeys.RHS_GLOB) if strategy else None,
         strategy.options.get(ConfigKeys.RHS_PATH) if strategy else None,
-        context.generation_cfg.get(ConfigKeys.RHS_ARCHIVE_GLOB),
-        context.source_cfg.get(ConfigKeys.RHS_PATH),
+        generation_cfg.rhs_archive_glob,
         context.rhs_path,
     )
 
@@ -173,7 +141,7 @@ def _resolve_solution_archive_path(
     candidates: tuple[Any, ...] = (
         strategy.options.get(ConfigKeys.SOLUTIONS_GLOB),
         strategy.options.get(ConfigKeys.SOLUTIONS_PATH),
-        context.source_cfg.get(ConfigKeys.SOLUTIONS_PATH),
+        context.solutions_path,
     )
 
     for candidate in candidates:
@@ -181,14 +149,6 @@ def _resolve_solution_archive_path(
             return candidate
 
     return None
-
-
-def _coerce_optional_int(value: Any) -> int | None:
-    """Convert optional numeric values to ``int`` while preserving ``None``."""
-    if value is None:
-        return None
-    return int(value)
-
 
 def _derive_rhs_from_solution_archive(
     *,
@@ -277,6 +237,7 @@ def _resolve_rhs_source(
 def _execute_solution_archive(
     context: DataGenerationContext,
     strategy: StrategySpec,
+    generation_cfg: GenerationConfig,
 ) -> Path:
     """Execute solution archive using new build_dataset() with solution_archive strategy."""
     resolved_solutions_path = _resolve_solution_archive_path(strategy, context)
@@ -287,18 +248,8 @@ def _execute_solution_archive(
             f"'{ConfigSections.SOURCE}.{ConfigKeys.SOLUTIONS_PATH}'."
         )
 
-    shuffle_value = strategy.options.get(
-        ConfigKeys.SHUFFLE,
-        context.generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE),
-    )
-    seed_value = strategy.options.get(
-        ConfigKeys.SEED,
-        context.generation_cfg.get(ConfigKeys.SEED, DEFAULT_RANDOM_SEED),
-    )
-
-    # Use new build_dataset with solution_archive strategy
-    from neuralls.domain.generation.data_types import NormalizeType
-    from typing import cast
+    shuffle_value = strategy.options.get(ConfigKeys.SHUFFLE, generation_cfg.shuffle)
+    seed_value = strategy.options.get(ConfigKeys.SEED, generation_cfg.seed)
 
     dataset_path = build_dataset(
         matrix_path=context.matrix_path,
@@ -306,7 +257,7 @@ def _execute_solution_archive(
         counts={"solution_archive": strategy.samples},
         solutions_path=context.solutions_path,
         sample_id_regex=context.sample_id_regex,
-        normalize=cast(NormalizeType, context.normalize),
+        normalize=context.normalize,
         shuffle=bool(shuffle_value),
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
         strategy_overrides={
@@ -325,16 +276,15 @@ def _execute_synthetic_generation(
     synthetic_strategies: Mapping[str, StrategySpec],
     rhs_archive_strategy: StrategySpec | None,
     solution_archive_strategy: StrategySpec | None,
+    generation_cfg: GenerationConfig,
     matrix: np.ndarray,
 ) -> Path:
     """Execute mixed generation using new build_dataset() with all strategies."""
-    generation_cfg = context.generation_cfg
-
-    seed_value = generation_cfg.get(ConfigKeys.SEED, DEFAULT_RANDOM_SEED)
+    seed_value = generation_cfg.seed
     if seed_value is None:
         seed_value = DEFAULT_RANDOM_SEED
     seed = int(seed_value)
-    shuffle_value = generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE)
+    shuffle_value = generation_cfg.shuffle
 
     # Build counts dict with ALL strategies (synthetic + archives)
     counts: dict[str, int] = {}
@@ -355,7 +305,7 @@ def _execute_synthetic_generation(
                 "solutions_glob": solutions_glob,
                 "shuffle": solution_archive_strategy.options.get(
                     ConfigKeys.SHUFFLE,
-                    generation_cfg.get(ConfigKeys.SHUFFLE, DEFAULT_SHUFFLE),
+                    generation_cfg.shuffle,
                 ),
                 "seed": solution_archive_strategy.options.get(ConfigKeys.SEED, seed_value),
             }
@@ -363,7 +313,7 @@ def _execute_synthetic_generation(
     # Add RHS archive strategy
     if rhs_archive_strategy is not None:
         counts["rhs_archive"] = rhs_archive_strategy.samples
-        rhs_archive_glob = _resolve_rhs_archive_glob(rhs_archive_strategy, context)
+        rhs_archive_glob = _resolve_rhs_archive_glob(rhs_archive_strategy, context, generation_cfg)
         if rhs_archive_glob is None:
             raise ValueError(
                 "RHS archive strategy requires 'rhs_glob' within the strategy, "
@@ -371,7 +321,7 @@ def _execute_synthetic_generation(
                 f"or 'generation.{ConfigKeys.RHS_ARCHIVE_GLOB}'."
             )
 
-        rhs_archive_opts = _merge_rhs_archive_options(rhs_archive_strategy, context)
+        rhs_archive_opts = _merge_rhs_archive_options(rhs_archive_strategy, generation_cfg)
         strategy_overrides["rhs_archive"] = {
             "rhs_glob": rhs_archive_glob,
             **rhs_archive_opts,
@@ -387,10 +337,6 @@ def _execute_synthetic_generation(
         matrix=matrix,
     )
 
-    # Use new unified build_dataset()
-    from neuralls.domain.generation.data_types import NormalizeType
-    from typing import cast
-
     dataset_path = build_dataset(
         matrix_path=context.matrix_path,
         dataset_dir=str(context.dataset_dir),
@@ -398,7 +344,7 @@ def _execute_synthetic_generation(
         rhs_path=rhs_source_path,
         solutions_path=context.solutions_path,
         sample_id_regex=context.sample_id_regex,
-        normalize=cast(NormalizeType, context.normalize),
+        normalize=context.normalize,
         shuffle=bool(shuffle_value),
         seed=seed,
         strategy_overrides=strategy_overrides,
@@ -415,29 +361,25 @@ def _execute_synthetic_generation(
 def _execute_rhs_archive_only(
     context: DataGenerationContext,
     strategy: StrategySpec,
+    generation_cfg: GenerationConfig,
 ) -> Path:
     """Execute RHS archive using new build_dataset() with rhs_archive strategy."""
-    rhs_glob = _resolve_rhs_archive_glob(strategy, context)
+    rhs_glob = _resolve_rhs_archive_glob(strategy, context, generation_cfg)
     if rhs_glob is None:
         raise ValueError(
             "RHS archive strategy requires either 'rhs_glob' in the strategy "
             f"or '{ConfigSections.SOURCE}.{ConfigKeys.RHS_PATH}'."
         )
 
-    collection_kwargs = _merge_rhs_archive_options(strategy, context)
-
-    seed_value = context.generation_cfg.get(ConfigKeys.SEED, DEFAULT_RANDOM_SEED)
-
-    # Use new build_dataset with rhs_archive strategy
-    from neuralls.domain.generation.data_types import NormalizeType
-    from typing import cast
+    collection_kwargs = _merge_rhs_archive_options(strategy, generation_cfg)
+    seed_value = generation_cfg.seed
 
     dataset_path = build_dataset(
         matrix_path=context.matrix_path,
         dataset_dir=str(context.dataset_dir),
         counts={"rhs_archive": strategy.samples},
         sample_id_regex=context.sample_id_regex,
-        normalize=cast(NormalizeType, context.normalize),
+        normalize=context.normalize,
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
         strategy_overrides={
             "rhs_archive": {
@@ -451,6 +393,7 @@ def _execute_rhs_archive_only(
 
 def _execute_plan(
     context: DataGenerationContext,
+    generation_cfg: GenerationConfig,
     plan: GenerationPlan,
     matrix: np.ndarray,
 ) -> Path:
@@ -463,7 +406,7 @@ def _execute_plan(
     has_synthetic_strategies = bool(synthetic_strategies)
 
     if solution_archive_strategy is not None and not (has_rhs_archive or has_synthetic_strategies):
-        return _execute_solution_archive(context, solution_archive_strategy)
+        return _execute_solution_archive(context, solution_archive_strategy, generation_cfg)
 
     if has_synthetic_strategies or has_solution_archive:
         return _execute_synthetic_generation(
@@ -471,38 +414,30 @@ def _execute_plan(
             synthetic_strategies=synthetic_strategies,
             rhs_archive_strategy=rhs_archive_strategy,
             solution_archive_strategy=solution_archive_strategy,
+            generation_cfg=generation_cfg,
             matrix=matrix,
         )
 
     if rhs_archive_strategy is None:
         raise ValueError("No generation strategies configured")
 
-    return _execute_rhs_archive_only(context, rhs_archive_strategy)
+    return _execute_rhs_archive_only(context, rhs_archive_strategy, generation_cfg)
 
 
 def process_config(
-    config: Mapping[str, Any],
+    config: DataConfigFile,
     matrix: np.ndarray,
-    config_path: Path | str | None = None,
 ) -> Path:
     """Process a data config and execute the declared generation plan.
 
     After generating the main dataset, this checks for a [test] section.
     Dedicated comparison split generation is currently skipped for now.
     """
-    context, plan = _build_context(config=config, config_path=config_path)
-    dataset_dir = _execute_plan(context, plan, matrix)
+    context, plan = _build_context(config=config)
+    dataset_dir = _execute_plan(context, config.generation, plan, matrix)
 
     # Generate comparison data if [test] section is present
-    test_config = config.get("test", {})
-    if test_config:
-        solutions_glob = test_config.get("solutions_glob")
-        if solutions_glob:
-            print("\n=== Skipping comparison split generation (not yet migrated) ===")
-            # persist_comparison_samples(
-            #     dataset_dir=dataset_dir,
-            #     test_solutions_glob=solutions_glob,
-            #     max_samples=max_samples,
-            # )
+    if config.test.solutions_path:
+        print("\n=== Skipping comparison split generation (not yet migrated) ===")
 
     return dataset_dir

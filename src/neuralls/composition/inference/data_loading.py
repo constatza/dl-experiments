@@ -17,6 +17,7 @@ from dlkit.io import load_array
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.reporting.synthetic import generate_synthetic_test_case
 from neuralls.platform.config.loaders import load_comparison_config
+from neuralls.platform.config.settings import NeurallsSettings
 from neuralls.application.inference.models import InferenceData
 from neuralls.shared.constants import RHS_ARRAY_FILENAME, SOLUTIONS_ARRAY_FILENAME
 
@@ -119,6 +120,7 @@ def load_standard_data(
 def load_synthetic_data(
     comparison_config_path: Path,
     workspace: ExperimentWorkspace,
+    settings: NeurallsSettings,
 ) -> InferenceData:
     """Generate synthetic benchmark data from comparison configuration.
 
@@ -138,7 +140,7 @@ def load_synthetic_data(
     """
     logger.info("Preparing SYNTHETIC benchmark data (x_true = ones).")
 
-    comparison_cfg = load_comparison_config(comparison_config_path)
+    comparison_cfg = load_comparison_config(comparison_config_path, settings)
     matrix_path = Path(comparison_cfg.general.data.matrix_path)
     if not matrix_path.exists():
         raise FileNotFoundError(f"Matrix file not found: {matrix_path}")
@@ -170,6 +172,7 @@ def load_synthetic_data(
 
 def load_inference_data(
     workspace: ExperimentWorkspace,
+    settings: NeurallsSettings,
     features_path: Path | None = None,
     targets_path: Path | None = None,
     synthetic_benchmark: bool = False,
@@ -210,7 +213,7 @@ def load_inference_data(
     if synthetic_benchmark:
         if comparison_config_path is None:
             raise ValueError("Comparison config path is required for synthetic benchmark.")
-        synthetic_data = load_synthetic_data(comparison_config_path, workspace)
+        synthetic_data = load_synthetic_data(comparison_config_path, workspace, settings)
 
     # Validate availability
     validate_data_availability(

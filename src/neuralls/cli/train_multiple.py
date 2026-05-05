@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train every experiment in one registry and plot aggregate metrics."""
+"""Train every experiment in one case config and plot aggregate metrics."""
 
 from __future__ import annotations
 
@@ -8,14 +8,15 @@ from pathlib import Path
 import typer
 
 from neuralls.shared.constants import EXIT_FAILURE, EXIT_KEYBOARD_INTERRUPT
-from neuralls.composition.experiments.assembler import load_validated_master_config
+from neuralls.composition.experiments.assembler import load_validated_case_config
 from neuralls.composition.experiments.multi_training import train_batch, write_metric_report
+from neuralls.platform.config.settings import load_case_settings
 
 
 def main(
     config: Path = typer.Argument(
         ...,
-        help="Path to an experiments registry TOML.",
+        help="Path to a case config TOML.",
     ),
     metric: str = typer.Option(
         "eval/rel_error",
@@ -25,8 +26,12 @@ def main(
         None,
         help=(
             "Directory for barplot and label JSON. "
-            "Defaults to output_dir/training/ from the experiments TOML."
+            "Defaults to output_dir/training/ from the case config."
         ),
+    ),
+    env_file: Path | None = typer.Option(
+        None,
+        help="Optional env file to load before config resolution.",
     ),
 ) -> None:
     """Train the registry-defined experiment batch and compare one metric.
@@ -35,8 +40,14 @@ def main(
     batch-training report rather than stepping through single runs.
     """
     try:
-        cfg, _ = load_validated_master_config(config)
-        batch = train_batch(cfg=cfg, configs_dir=config.resolve().parent, output_root=output_dir)
+        settings = load_case_settings(config, env_file)
+        cfg, _ = load_validated_case_config(config, settings)
+        batch = train_batch(
+            cfg=cfg,
+            configs_dir=config.resolve().parent,
+            settings=settings,
+            output_root=output_dir,
+        )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         typer.echo(f"Error during batch training: {exc}", err=True)
         raise typer.Exit(code=EXIT_FAILURE)

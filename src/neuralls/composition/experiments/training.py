@@ -34,13 +34,13 @@ import numpy as np
 
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.config.models.experiments import ExperimentEntry
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.config.mlflow import (
     build_mlflow_environment,
     build_sqlite_tracking_uri,
     scoped_mlflow_environment,
 )
 from neuralls.composition.experiments.assembler import load_experiment
-from neuralls.shared.constants import DEFAULT_OUTPUT_DIR
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
 from neuralls.platform.tracking.mlflow import MlflowPaths, MlflowRunConfig
 from neuralls.platform.storage.training_artifacts import (
@@ -658,7 +658,10 @@ def _extract_evaluation_arrays(
     return y_pred, y_true
 
 
-def _resolve_runtime_mlflow_env(output_root: Path | str | None) -> dict[str, str]:
+def _resolve_runtime_mlflow_env(
+    output_root: Path | str | None,
+    settings: NeurallsSettings,
+) -> dict[str, str]:
     """Return the MLflow env vars to activate for this training run.
 
     If the caller already set ``MLFLOW_TRACKING_URI`` in the environment (e.g.
@@ -675,7 +678,7 @@ def _resolve_runtime_mlflow_env(output_root: Path | str | None) -> dict[str, str
     if existing_uri:
         return build_mlflow_environment(tracking_uri=existing_uri)
 
-    permanent_root = Path(output_root).resolve() if output_root else DEFAULT_OUTPUT_DIR
+    permanent_root = Path(output_root).resolve() if output_root else settings.output_dir
     return build_mlflow_environment(
         tracking_uri=build_sqlite_tracking_uri(permanent_root / "mlruns" / "mlflow.db"),
         artifacts_destination=str((permanent_root / "mlartifacts").resolve()),
@@ -716,6 +719,8 @@ def _log_training_context(
 def train_model(
     *,
     config_path: str | Path,
+    settings: NeurallsSettings | None = None,
+    case_config_path: str | Path | None = None,
     data_config_path: str | Path | None = None,
     output_root: Path | str | None = None,
     max_epochs: int | None = None,
@@ -768,8 +773,10 @@ def train_model(
         >>> print(checkpoint)
         Path('output/checkpoints/collect-504/linear.ckpt')
     """
-    permanent_root = Path(output_root).resolve() if output_root else DEFAULT_OUTPUT_DIR
-    runtime_mlflow_env = _resolve_runtime_mlflow_env(output_root)
+    resolved_case_config_path = Path(case_config_path) if case_config_path else None
+    settings = require_settings(settings, case_config_path=resolved_case_config_path)
+    permanent_root = Path(output_root).resolve() if output_root else settings.output_dir
+    runtime_mlflow_env = _resolve_runtime_mlflow_env(output_root, settings)
     if data_config_path is None:
         raise ValueError("data_config_path is required for training.")
 
@@ -782,6 +789,8 @@ def train_model(
         experiment = load_experiment(
             config_path,
             resolved_data_config_path,
+            settings,
+            case_config_path=resolved_case_config_path,
             output_root=tmp_path,
             experiment_id=experiment_id,
             experiment_display_name=experiment_display_name,
@@ -790,14 +799,14 @@ def train_model(
             model_registry_id=model_registry_id,
             model_display_name=model_display_name,
         )
-        settings = experiment.settings
+        workflow_settings = experiment.settings
         workspace = experiment.workspace
         dataset_id = workspace.dataset_id
         resolved_experiment_display_name = experiment.spec.experiment_display_name
         resolved_dataset_display_name = experiment.spec.dataset_display_name or dataset_id
 
         # Step 2: Resolve training dataset artifacts
-        _, features, targets = _load_and_prepare_data(settings, workspace)
+        _, features, targets = _load_and_prepare_data(workflow_settings, workspace)
 
         # Step 3: Build execute()-time MLflow naming and tags
         run_config = _build_training_run_config(
@@ -812,8 +821,8 @@ def train_model(
         )
 
         # Step 4: Configure DLKit settings (dataset, paths, MLflow names)
-        settings, workspace = _configure_training_pipeline(
-            settings,
+        workflow_settings, workspace = _configure_training_pipeline(
+            workflow_settings,
             workspace,
             features,
             targets,
@@ -823,11 +832,14 @@ def train_model(
 
         # Step 5: Execute training via DLKit
         if max_epochs is not None:
-            settings = patch_model(settings, {"TRAINING": {"trainer": {"max_epochs": max_epochs}}})
+            workflow_settings = patch_model(
+                workflow_settings,
+                {"TRAINING": {"trainer": {"max_epochs": max_epochs}}},
+            )
         with scoped_mlflow_environment(runtime_mlflow_env):
             with parent_run_context(parent_run_id):
                 execution_result = execute(
-                    settings,
+                    workflow_settings,
                     overrides=ExecutionOverrides(
                         experiment_name=run_config.experiment_name,
                         run_name=run_config.run_name,

@@ -2,7 +2,7 @@
 
 This module provides the main orchestration functions for running experiments:
 - `run_experiment()`: Run single experiment (data generation + training)
-- `run_experiment_matrix()`: Run multiple experiments from experiments.toml
+- `run_experiment_matrix()`: Run multiple experiments from one case config
 
 Architecture:
     1. Data generation (with caching) - process_config() from generation module
@@ -23,6 +23,8 @@ from loguru import logger
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
 from neuralls.composition.experiments.assembler import load_batch
 from neuralls.platform.config.loaders import load_data_config
+from neuralls.platform.config.models.data_models import OutputConfig
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.storage.base import load_matrix
 from neuralls.application.models import ExperimentResult
 from neuralls.platform.caching import compute_directory_hash
@@ -41,6 +43,7 @@ from neuralls.shared.constants import (
 
 def run_experiment(
     *,
+    settings: NeurallsSettings,
     model_config_path: Path,
     data_config_path: Path,
     output_root: Path,
@@ -92,17 +95,30 @@ def run_experiment(
     model_name = extract_model_name(model_config_path)
     try:
         # Step 1: Load data configuration and generate/cache dataset
-        data_cfg = load_data_config(data_config_path)
+        data_cfg = load_data_config(data_config_path, settings)
         dataset_id = resolve_dataset_identity(
             data_cfg=data_cfg,
             config_path=data_config_path,
         ).name
-        data_dict = data_cfg.model_dump(mode="python", exclude_none=True)
-        matrix_path_str = data_dict.get("source", {}).get("matrix_path")
-        if not matrix_path_str:
+        if data_cfg.source.matrix_path is None:
             raise ValueError("Missing 'source.matrix_path' in data config")
-        matrix = load_matrix(Path(matrix_path_str))
-        data_dir = process_config(data_dict, matrix, config_path=data_config_path)
+        if data_cfg.output.data_dir is None:
+            data_cfg = data_cfg.model_copy(
+                update={
+                    "output": OutputConfig(
+                        data_dir=settings.processed_dir,
+                        dataset_format=data_cfg.output.dataset_format,
+                        matrix_codec=data_cfg.output.matrix_codec,
+                        matrix_replication=data_cfg.output.matrix_replication,
+                        dtype=data_cfg.output.dtype,
+                    )
+                }
+            )
+        matrix_path = data_cfg.source.matrix_path
+        if matrix_path is None:
+            raise ValueError("Missing 'source.matrix_path' in data config")
+        matrix = load_matrix(Path(matrix_path))
+        data_dir = process_config(data_cfg, matrix)
         validate_data_exists(
             data_dir,
             [
@@ -122,6 +138,7 @@ def run_experiment(
         if force or checkpoint is None:
             checkpoint = train_model(
                 config_path=model_config_path,
+                settings=settings,
                 data_config_path=data_config_path,
                 output_root=output_root,
                 max_epochs=max_epochs,
@@ -155,12 +172,13 @@ def run_experiment(
 
 def run_experiment_matrix(
     experiments_config_path: Path,
+    settings: NeurallsSettings | None = None,
     *,
     force: bool = False,
     project_root: Path | None = None,
     max_epochs: int | None = None,
 ) -> list[ExperimentResult]:
-    """Run training for all experiments defined in experiments.toml.
+    """Run training for all experiments defined in one case config.
 
     This is the main orchestrator for running multiple experiments in sequence.
     Each experiment consists of:
@@ -171,7 +189,7 @@ def run_experiment_matrix(
     Failed experiments don't stop the batch - each returns a result with status.
 
     Args:
-        experiments_config_path: Path to experiments.toml defining all experiments
+        experiments_config_path: Path to a case config defining all experiments
         force: If True, retrain all models even if checkpoints exist
         project_root: Root directory for resolving src/ (auto-detected if None)
 
@@ -191,12 +209,13 @@ def run_experiment_matrix(
         >>> success_count = sum(1 for r in results if r.status == "Success")
         >>> print(f"{success_count}/{len(results)} experiments succeeded")
     """
+    settings = require_settings(settings, case_config_path=experiments_config_path)
     # Auto-detect project root if not provided (for src hash calculation)
     if project_root is None:
         project_root = Path(__file__).resolve().parents[1]
 
-    # Load all experiment definitions from experiments.toml
-    batch = load_batch(experiments_config_path)
+    # Load all experiment definitions from the case config
+    batch = load_batch(experiments_config_path, settings)
     experiments = batch.experiments
 
     # Compute source code hash for cache invalidation
@@ -221,6 +240,7 @@ def run_experiment_matrix(
 
         # Run single experiment (catches exceptions internally)
         result = run_experiment(
+            settings=settings,
             model_config_path=exp.spec.model_config_path,
             data_config_path=exp.spec.data_config_path,
             output_root=batch.output_root,

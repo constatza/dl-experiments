@@ -3,45 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-from collections.abc import Mapping
+from pydantic import ValidationError
 
-import tomllib
-
-from neuralls.shared.constants import ConfigKeys, ConfigSections, FILE_MODE_READ_BINARY
 from neuralls.composition.generation.processing import process_config
+from neuralls.platform.config.loaders import load_data_config
+from neuralls.platform.config.models.data_models import OutputConfig
+from neuralls.platform.config.settings import NeurallsSettings
 from neuralls.platform.storage.base import load_matrix
-
-
-def load_data_config(config_path: Path) -> Mapping[str, Any]:
-    """Load a TOML data configuration file."""
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with config_path.open(FILE_MODE_READ_BINARY) as fh:
-        return tomllib.load(fh)
-
-
-def _apply_generation_overrides(
-    config: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Apply generation section overrides to config (immutable).
-
-    Args:
-        config: Source configuration mapping.
-
-    Returns:
-        New config dict with overrides applied.
-    """
-    config_copy = dict(config)
-    generation = dict(config_copy.get("generation", {}))
-
-    config_copy["generation"] = generation
-    return config_copy
 
 
 def process_data_from_config(
     config_path: Path,
+    settings: NeurallsSettings,
 ) -> Path:
     """Unified entry point for data collection and generation.
 
@@ -54,10 +27,28 @@ def process_data_from_config(
     Returns:
         Path to output dataset directory.
     """
-    config = load_data_config(config_path)
-    config = _apply_generation_overrides(config)
-    matrix_path = config.get(ConfigSections.SOURCE, {}).get(ConfigKeys.MATRIX_PATH)
-    if not matrix_path:
-        raise ValueError(f"Missing '{ConfigSections.SOURCE}.{ConfigKeys.MATRIX_PATH}' in config")
+    config = load_data_config(config_path, settings)
+    if config.source.matrix_path is None:
+        raise ValueError("Missing 'source.matrix_path' in config")
+
+    if config.output.data_dir is None:
+        config = config.model_copy(
+            update={
+                "output": OutputConfig(
+                    data_dir=settings.processed_dir,
+                    dataset_format=config.output.dataset_format,
+                    matrix_codec=config.output.matrix_codec,
+                    matrix_replication=config.output.matrix_replication,
+                    dtype=config.output.dtype,
+                )
+            }
+        )
+
+    matrix_path = config.source.matrix_path
+    if matrix_path is None:
+        raise ValueError("Missing 'source.matrix_path' in config")
     matrix = load_matrix(Path(matrix_path))
-    return process_config(config, matrix, config_path=config_path)
+    try:
+        return process_config(config, matrix)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc

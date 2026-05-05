@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 
 import typer
@@ -15,6 +16,7 @@ from neuralls.shared.constants import (
     SYMBOL_ERROR,
 )
 from neuralls.composition.generation.process_data import process_data_from_config
+from neuralls.platform.config.settings import CASE_CONFIG_ENV_VAR, load_case_settings
 
 
 def main(
@@ -22,15 +24,35 @@ def main(
         ...,
         help="Path to a dataset config TOML.",
     ),
+    case_config: Path | None = typer.Option(
+        None,
+        "--case-config",
+        help="Path to case config TOML.",
+    ),
+    env_file: Path | None = typer.Option(
+        None,
+        help="Optional env file to load before config resolution.",
+    ),
 ) -> None:
     """Generate or collect one dataset.
 
     Start here when you want to inspect a single dataset config before running
-    registry-wide training or comparison commands.
+    case-wide training or comparison commands.
     """
     try:
+        resolved_case_config = case_config
+        if resolved_case_config is None:
+            configured = os.getenv(CASE_CONFIG_ENV_VAR)
+            if configured is not None and configured.strip():
+                resolved_case_config = Path(configured)
+        if resolved_case_config is None:
+            raise ValueError(
+                "This command requires a case config. Pass --case-config or set "
+                "NEURALLS_CASE_CONFIG."
+            )
+        settings = load_case_settings(resolved_case_config, env_file)
         print(f"Loading data config: {config}")
-        output_path = process_data_from_config(config)
+        output_path = process_data_from_config(config, settings)
 
         print(f"\n{SYMBOL_SUCCESS} Data processing complete!")
         print(f"  Output: {output_path}")

@@ -1,7 +1,7 @@
-"""Batch dataset generation workflow: generate all datasets from an experiments config.
+"""Batch dataset generation workflow: generate all datasets from a case config.
 
 Key Functions:
-    - ``generate_batch()``: Iterates ``[[datasets]]`` in the experiments config and
+    - ``generate_batch()``: Iterates ``[[datasets]]`` in the case config and
       calls ``process_data_from_config()`` for each entry.
 """
 
@@ -12,7 +12,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from neuralls.platform.config.models.experiments import ExperimentsConfig
+from neuralls.platform.config.models.experiments import CaseConfig
+from neuralls.platform.config.settings import NeurallsSettings
 from neuralls.composition.generation.process_data import process_data_from_config
 
 
@@ -32,17 +33,18 @@ class GenerationResult:
 
 
 def generate_batch(
-    cfg: ExperimentsConfig,
+    cfg: CaseConfig,
     configs_dir: Path,
+    settings: NeurallsSettings,
 ) -> list[GenerationResult]:
-    """Generate all datasets listed in the experiments config.
+    """Generate all datasets listed in the case config.
 
     Iterates ``cfg.datasets``, resolves each entry's path relative to
     ``configs_dir``, and calls ``process_data_from_config()`` for each one.
 
     Args:
-        cfg: Validated experiments configuration.
-        configs_dir: Parent directory of the experiments TOML (for resolving
+        cfg: Validated case configuration.
+        configs_dir: Parent directory of the case TOML (for resolving
             relative dataset config paths).
 
     Returns:
@@ -51,7 +53,7 @@ def generate_batch(
     results: list[GenerationResult] = []
     for entry in cfg.datasets:
         config_path = (configs_dir / entry.path).resolve()
-        output_dir = process_data_from_config(config_path)
+        output_dir = process_data_from_config(config_path, settings)
         results.append(
             GenerationResult(dataset_id=entry.id, config_path=config_path, output_dir=output_dir)
         )

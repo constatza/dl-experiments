@@ -14,17 +14,18 @@ from loguru import logger
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
 from neuralls.platform.config.models.comparison import ComparisonConfig
 from neuralls.platform.config.models.experiments import (
+    CaseConfig,
     ComparisonRegistryEntry,
     ExperimentEntry,
-    ExperimentsConfig,
     resolve_display_name,
 )
 from neuralls.platform.config.registry import (
     get_experiment_binding,
     resolve_comparison_config_path,
 )
-from neuralls.composition.experiments.assembler import load_validated_master_config
-from neuralls.platform.config.mlflow import build_mlflow_environment
+from neuralls.composition.experiments.assembler import load_validated_case_config
+from neuralls.platform.config.mlflow import build_mlflow_environment, build_sqlite_tracking_uri
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
     PreconditionerConfig,
@@ -117,13 +118,14 @@ def _referenced_experiment_ids(
 def _build_master_experiment_contexts(
     cfg_path: Path,
     experiment_ids: tuple[str, ...],
+    settings: NeurallsSettings,
 ) -> dict[str, ExperimentModelContext]:
-    """Resolve dataset/model identity for all master-config experiments."""
-    master_cfg, config_dir = load_validated_master_config(cfg_path)
+    """Resolve dataset/model identity for all case-config experiments."""
+    master_cfg, config_dir = load_validated_case_config(cfg_path, settings)
     contexts: dict[str, ExperimentModelContext] = {}
     for experiment_id in experiment_ids:
         binding = get_experiment_binding(master_cfg, config_dir, experiment_id)
-        data_cfg = load_data_config(binding.data_config_path)
+        data_cfg = load_data_config(binding.data_config_path, settings)
         dataset_id = resolve_dataset_identity(
             data_cfg=data_cfg,
             config_path=binding.data_config_path,
@@ -139,16 +141,18 @@ def _build_experiment_contexts(
     *,
     experiments_config_path: Path,
     experiment_ids: tuple[str, ...],
+    settings: NeurallsSettings,
 ) -> dict[str, ExperimentModelContext]:
-    """Collect per-experiment model resolution context from master config."""
-    return _build_master_experiment_contexts(experiments_config_path, experiment_ids)
+    """Collect per-experiment model resolution context from case config."""
+    return _build_master_experiment_contexts(experiments_config_path, experiment_ids, settings)
 
 
 def _load_master_config(
     experiments_config_path: Path,
-) -> tuple[ExperimentsConfig, Path]:
-    """Load the master config and its resolution root."""
-    return load_validated_master_config(experiments_config_path)
+    settings: NeurallsSettings,
+) -> tuple[CaseConfig, Path]:
+    """Load the case config and its resolution root."""
+    return load_validated_case_config(experiments_config_path, settings)
 
 
 def _existing_experiment_ids(specs: tuple[PreconditionerConfig, ...]) -> set[str]:
@@ -190,6 +194,7 @@ def _resolve_specs(
     work_root: Path,
     experiments_config_path: Path,
     model_store_tracking_uri: str,
+    settings: NeurallsSettings,
 ) -> tuple[list[PreconditionerConfig], tuple[str, ...]]:
     """Resolve model_ref preconditioners into concrete checkpoint paths."""
     specs = _resolve_neural_preconditioners(list(cfg.preconditioners))
@@ -202,6 +207,7 @@ def _resolve_specs(
         experiment_contexts = _build_experiment_contexts(
             experiments_config_path=experiments_config_path,
             experiment_ids=experiment_ids,
+            settings=settings,
         )
     resolution = resolve_preconditioner_models_with_warnings(
         specs=specs,
@@ -216,14 +222,21 @@ def _resolve_specs(
 
 def _resolve_comparison_topology(
     experiments_config_path: Path,
+    settings: NeurallsSettings,
 ) -> ComparisonTopology:
-    """Resolve comparison MLflow topology from the master config."""
-    master_cfg, _ = _load_master_config(experiments_config_path)
-    env = build_mlflow_environment(
-        tracking_uri=master_cfg.mlflow.tracking_uri,
-        artifacts_destination=master_cfg.mlflow.artifacts_destination,
-        config_path=experiments_config_path,
-    )
+    """Resolve comparison MLflow topology from the case config."""
+    master_cfg, _ = _load_master_config(experiments_config_path, settings)
+    if master_cfg.mlflow.tracking_uri is None:
+        env = build_mlflow_environment(
+            tracking_uri=build_sqlite_tracking_uri(master_cfg.output_dir / "mlruns" / "mlflow.db"),
+            artifacts_destination=str((master_cfg.output_dir / "mlartifacts").resolve()),
+        )
+    else:
+        env = build_mlflow_environment(
+            tracking_uri=master_cfg.mlflow.tracking_uri,
+            artifacts_destination=master_cfg.mlflow.artifacts_destination,
+            config_path=experiments_config_path,
+        )
     return ComparisonTopology(
         tracking_uri=env["MLFLOW_TRACKING_URI"],
         artifact_location=env.get("MLFLOW_ARTIFACT_URI"),
@@ -236,6 +249,7 @@ def run_comparison(
     comparison_config: Path,
     params: ComparisonParams,
     experiments_config_path: Path,
+    settings: NeurallsSettings | None = None,
     comparison_id: str | None = None,
     comparison_display_name: str | None = None,
     experiment_entries: Sequence[ExperimentEntry] | None = None,
@@ -247,14 +261,15 @@ def run_comparison(
         resolved_comparison_id,
         comparison_display_name,
     )
+    settings = require_settings(settings, case_config_path=experiments_config_path)
     try:
-        cfg = load_comparison_config(comparison_config)
+        cfg = load_comparison_config(comparison_config, settings)
         if experiment_entries:
             claimed_ids = _existing_experiment_ids(cfg.preconditioners)
             auto_specs = neural_specs_from_experiments(experiment_entries, claimed_ids)
             if auto_specs:
                 cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))
-        topology = _resolve_comparison_topology(experiments_config_path)
+        topology = _resolve_comparison_topology(experiments_config_path, settings)
         resolution_warnings: tuple[str, ...] = ()
 
         setup_comparison_tracking(
@@ -280,6 +295,7 @@ def run_comparison(
                     work_root,
                     experiments_config_path,
                     topology.model_store_tracking_uri,
+                    settings,
                 )
                 if not resolved_specs:
                     raise ValueError("No runnable preconditioners remain after model resolution.")
@@ -348,11 +364,13 @@ def run_comparison(
 def run_comparison_batch(
     experiments_config_path: Path,
     params: ComparisonParams,
+    settings: NeurallsSettings | None = None,
 ) -> list[ComparisonOutcome]:
-    """Run all configured comparison profiles from the master config."""
-    master_cfg, config_dir = _load_master_config(experiments_config_path)
+    """Run all configured comparison profiles from the case config."""
+    settings = require_settings(settings, case_config_path=experiments_config_path)
+    master_cfg, config_dir = _load_master_config(experiments_config_path, settings)
     if not master_cfg.comparisons:
-        raise ValueError("Experiments config must define at least one [[comparisons]] entry.")
+        raise ValueError("Case config must define at least one [[comparisons]] entry.")
 
     outcomes: list[ComparisonOutcome] = []
     for entry in master_cfg.comparisons:
@@ -372,6 +390,7 @@ def run_comparison_batch(
                 comparison_config=comparison_path,
                 params=params,
                 experiments_config_path=experiments_config_path,
+                settings=settings,
                 comparison_id=entry.id,
                 comparison_display_name=entry.effective_display_name,
                 experiment_entries=experiment_entries,
