@@ -13,26 +13,19 @@ declares the datasets, models, comparisons, and experiment registrations for a
 single experiment family. Machine-specific roots live outside the repo in the
 user config directory.
 
+This checkout is pinned to CUDA 13.0. To change backends later, edit
+`pyproject.toml`, then re-run `uv lock` and `uv sync`.
+
 ## What You Need
 
 - Python managed with [`uv`](https://docs.astral.sh/uv/)
-- one PyTorch backend extra selected at install time
+- CUDA 13.0 available on the machine for the pinned PyTorch build
 - access to your own raw matrix data, processed dataset root, and output root
 
-Install the project environment with exactly one backend:
+Install the project environment:
 
 ```bash
-uv sync --extra cpu
-uv sync --extra cu128
-uv sync --extra cu130
-```
-
-Install the published CLI from a Git source with the same backend extras:
-
-```bash
-uv tool install 'neuralls[cpu] @ git+https://github.com/constatza/dl-experiments.git'
-uv tool install 'neuralls[cu128] @ git+https://github.com/constatza/dl-experiments.git'
-uvx --from 'neuralls[cpu] @ git+https://github.com/constatza/dl-experiments.git' neuralls --help
+uv sync
 ```
 
 ## Quickstart

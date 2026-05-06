@@ -3,6 +3,9 @@
 The public CLI is case-oriented. One case config drives the batch workflows for
 dataset generation, training, full execution, and comparison.
 
+This checkout is pinned to CUDA 13.0. Run `uv sync` once for the project
+environment, then use plain `uv run neuralls ...` commands.
+
 ## Start With The Right File
 
 Choose the config type that matches the case you want to run:

@@ -2,6 +2,10 @@
 
 The CLI package defines one public executable: `neuralls`.
 
+This checkout is pinned to CUDA 13.0 through the project dependencies, so the
+expected local workflow is `uv sync` followed by plain `uv run neuralls ...`
+commands.
+
 ## Public Surface
 
 - `neuralls config ...`: manage machine-specific profiles
