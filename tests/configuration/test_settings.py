@@ -108,3 +108,8 @@ def test_settings_paths_resolved_absolute(neuralls_settings: NeurallsSettings) -
     """All root path fields are absolute after validation."""
     assert neuralls_settings.processed_dir.is_absolute()
     assert neuralls_settings.output_dir.is_absolute()
+
+
+def test_mlflow_artifact_location_uses_str_not_posix(neuralls_settings: NeurallsSettings) -> None:
+    """mlflow_artifact_location uses str(), not as_posix(), so UNC paths on Windows keep backslashes."""
+    assert neuralls_settings.mlflow_artifact_location == str(neuralls_settings.mlartifacts_dir)

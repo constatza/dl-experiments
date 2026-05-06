@@ -85,3 +85,32 @@ def test_glob_wildcard_preserved(
     """Glob suffixes are preserved after prefix resolution."""
     value = expand_config_glob("${NEURALLS_OUTPUT_DIR}/*.mtx", config_context)
     assert value == str(neuralls_settings.output_dir / "*.mtx")
+
+
+def test_expand_raw_dir_forward_slash_separator_produces_valid_path(tmp_path: Path) -> None:
+    """Forward slash in template after ${NEURALLS_RAW_DIR} (Windows convention) yields an absolute path.
+
+    On Windows the raw_dir string has backslashes; pathlib normalises the mixed separators.
+    This test guards the cross-platform invariant: the result is always a non-empty absolute path
+    with no double-slash prefix that would break UNC paths.
+    """
+    from neuralls.platform.config.context import ConfigContext
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    settings = NeurallsSettings(
+        _env_file=[],
+        raw_dir=raw,
+        processed_dir=tmp_path / "processed",
+        output_dir=tmp_path / "output",
+    )
+    config_path = tmp_path / "cfg.toml"
+    config_path.touch()
+    ctx = ConfigContext(config_path=config_path, settings=settings)
+
+    result = expand_config_path("${NEURALLS_RAW_DIR}/SpectralData/matrix.txt", ctx)
+
+    assert Path(result).is_absolute()
+    assert not result.startswith("//")
+    assert "SpectralData" in result
+    assert "matrix.txt" in result
