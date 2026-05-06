@@ -132,7 +132,7 @@ conflicts = [
 ]
 
 [tool.uv.sources]
-dlkit = { git = "https://github.com/constatza/dlkit.git", rev = "c353207a0b2a508ca35012afe91d152ff3f0aacd" }
+dlkit = { git = "https://github.com/constatza/dlkit.git", branch = "main" }
 torch = [
     { index = "pytorch-cpu", extra = "cpu" },
     { index = "pytorch-cu128", extra = "cu128" },

@@ -4,14 +4,13 @@ workflow = "train"
 precision = "float64"
 
 [MODEL]
-# Scale-equivariant embedded FFNN with SPD-factorized body layers.
-name = "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
+# DLKit scale-equivariant embedded SPD residual FFNN.
+name = "ScaleEquivariantEmbeddedSPDFFNN"
 module_path = "dlkit.nn"
 in_features = 504
 out_features = 504
 hidden_size = 500
 num_layers = 3
-residual = true
 
 [TRAINING]
 # Temporary: disable DLKit LR auto-tuning because the current runtime fails in
@@ -29,7 +28,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "embedded-spd-factorized-ffnn-l2"
+filename = "embedded-spd-skip-ffnn-l2"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
