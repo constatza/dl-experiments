@@ -67,8 +67,8 @@ class NeurallsSettings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def mlflow_artifact_location(self) -> str:
-        """MLflow artifact storage path as posix string (cross-platform)."""
-        return self.mlartifacts_dir.as_posix()
+        """MLflow artifact storage path using OS-native separators. UNC paths require backslashes on Windows; as_posix() would corrupt them to double-slash form."""
+        return str(self.mlartifacts_dir)
 
 
 def _resolve_env_file_path(env_file: Path | None) -> Path | None:
