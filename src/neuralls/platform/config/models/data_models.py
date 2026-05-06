@@ -234,6 +234,17 @@ class OutputConfig(BaseModel):
         description="Numeric dtype for persisted arrays",
     )
 
+    def with_data_dir(self, data_dir: Path) -> OutputConfig:
+        """Return a copy of this config with data_dir replaced.
+
+        Args:
+            data_dir: Absolute path to use as the new output directory.
+
+        Returns:
+            A new frozen OutputConfig with only data_dir replaced.
+        """
+        return self.model_copy(update={"data_dir": data_dir})
+
     @field_validator("data_dir", mode="before")
     @classmethod
     def _expand_data_dir(cls, v: object, info: ValidationInfo) -> object:

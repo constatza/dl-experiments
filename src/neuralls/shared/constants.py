@@ -176,7 +176,6 @@ DEFAULT_KRYLOV_ITERATIONS = 15
 DEFAULT_RESIDUAL_TRACE_ITERS = 8
 
 DEFAULT_RANDOM_SEED = 42
-DEFAULT_NORMALIZE = "spectral"  # "none", "matrix", "rhs", "spectral", or "diagonal"
 DEFAULT_SHUFFLE = True
 
 # =============================================================================
@@ -206,71 +205,6 @@ MATRIX_NORM_INF = MatrixNormType.INF.value
 
 # Default matrix norm for dataset metadata
 DEFAULT_MATRIX_NORM_TYPE = MatrixNormType.SPECTRAL
-
-
-# =============================================================================
-# Config Section Names (for TOML parsing)
-# =============================================================================
-class ConfigSections:
-    """TOML config section names."""
-
-    SOURCE = "source"
-    GENERATION = "generation"
-    OUTPUT = "output"
-    TRAINING = "TRAINING"
-    MODEL = "MODEL"
-    SESSION = "SESSION"
-    DATASET = "DATASET"
-    DATAMODULE = "DATAMODULE"
-    MLFLOW = "MLFLOW"
-    OPTUNA = "OPTUNA"
-    EXTRAS = "EXTRAS"
-    PATHS = "PATHS"
-
-
-class ConfigKeys:
-    """TOML config key names."""
-
-    # Source section
-    TYPE = "type"
-    CASE_PATH = "case_path"
-    MATRIX_FILE = "matrix_file"
-    MATRIX_PATH = "matrix_path"
-    RHS_PATH = "rhs_path"
-    RHS_PATTERN = "rhs_pattern"
-    SOLUTIONS_PATH = "solutions_path"
-
-    # Generation section
-    NUM_SAMPLES = "num_samples"
-    NORMALIZE = "normalize"
-    MIX = "mix"
-    KRYLOV_ITERS = "krylov_iters"
-    RESIDUAL_ITERS = "residual_iters"
-    RHS_ARCHIVE_GLOB = "rhs_archive_glob"
-    STRATEGY = "strategy"
-    PERCENTAGE = "percentage"  # Deprecated: use SAMPLES instead
-    SAMPLES = "samples"  # Number of samples to generate (0=skip, -1=all, >0=exact count)
-    NAME = "name"
-    RHS_GLOB = "rhs_glob"
-    SOLUTIONS_GLOB = "solutions_glob"
-    SEED = "seed"
-    SHUFFLE = "shuffle"
-    PROVIDE_RHS = "provide_rhs"
-
-    # Output section
-    PROCESSED_DIR = "processed_dir"
-
-    # Expected types
-    TYPE_RHS_ARCHIVE = "rhs_archive"
-    TYPE_GENERATED = "generated"
-    TYPE_SOLUTION_ARCHIVE = "solution_archive"
-
-    # Normalization methods (for normalize parameter)
-    NORM_NONE = "none"
-    NORM_MATRIX = "matrix"
-    NORM_RHS = "rhs"
-    NORM_DIAGONAL = "diagonal"
-    NORM_SPECTRAL = "spectral"
 
 
 # =============================================================================

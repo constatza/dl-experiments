@@ -66,7 +66,7 @@ def expand_config_path(value: str, ctx: ConfigContext) -> str:
         if val is None:
             raise ValueError(
                 f"Unknown placeholder '${{NEURALLS_{m.group(1)}}}'. "
-                "Available: PROCESSED_DIR, OUTPUT_DIR."
+                "Available: RAW_DIR, PROCESSED_DIR, OUTPUT_DIR."
             )
         return str(val)
 

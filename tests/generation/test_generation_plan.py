@@ -7,7 +7,7 @@ import pytest
 from neuralls.domain.generation.plan import (
     GenerationPlan,
     StrategySpec,
-    _canonicalize_strategy_name,
+    canonicalize_strategy_name as _canonicalize_strategy_name,
     parse_generation_plan,
 )
 

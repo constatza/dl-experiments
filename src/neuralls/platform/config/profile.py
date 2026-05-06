@@ -28,7 +28,7 @@ class ProfileConfig(BaseModel):
 
     model_config = {"frozen": True}
 
-    raw_dir: Path = Field(..., description="Raw matrices and archives root.")
+    raw_dir: Path | None = Field(default=None, description="Raw matrices and archives root.")
     processed_dir: Path = Field(..., description="Processed datasets root.")
     output_dir: Path = Field(..., description="Outputs (MLflow, checkpoints) root.")
 
@@ -36,6 +36,8 @@ class ProfileConfig(BaseModel):
     @classmethod
     def _normalize_path_input(cls, value: object) -> object:
         """Reject blank path inputs and trim surrounding whitespace."""
+        if value is None:
+            return value
         if not isinstance(value, str):
             return value
         stripped = value.strip()
@@ -46,7 +48,8 @@ class ProfileConfig(BaseModel):
     @model_validator(mode="after")
     def _expand(self) -> ProfileConfig:
         """Expand ~ and resolve all paths to absolute."""
-        object.__setattr__(self, "raw_dir", self.raw_dir.expanduser().resolve())
+        if self.raw_dir is not None:
+            object.__setattr__(self, "raw_dir", self.raw_dir.expanduser().resolve())
         object.__setattr__(self, "processed_dir", self.processed_dir.expanduser().resolve())
         object.__setattr__(self, "output_dir", self.output_dir.expanduser().resolve())
         return self
@@ -55,13 +58,17 @@ class ProfileConfig(BaseModel):
         """Return a plain string mapping of the settings-relevant root fields.
 
         Returns:
-            A dict with ``processed_dir`` and ``output_dir`` as strings.
-            ``raw_dir`` is intentionally excluded — it is not a ``NeurallsSettings`` field.
+            A dict with ``processed_dir`` and ``output_dir`` as strings, plus
+            ``raw_dir`` when it is set (used to expand ``${NEURALLS_RAW_DIR}``
+            placeholders in dataset configs).
         """
-        return {
+        mapping: dict[str, str] = {
             "processed_dir": str(self.processed_dir),
             "output_dir": str(self.output_dir),
         }
+        if self.raw_dir is not None:
+            mapping["raw_dir"] = str(self.raw_dir)
+        return mapping
 
 
 def _resolve_config_file(override: Path | None) -> Path:
@@ -140,7 +147,11 @@ def save_profile(
     """
     config_file = _resolve_config_file(_config_file)
     raw: dict[str, Any] = _read_raw(config_file) if config_file.exists() else {}
-    section = {field: str(getattr(config, field)) for field in _PROFILE_FIELDS}
+    section = {
+        field: str(getattr(config, field))
+        for field in _PROFILE_FIELDS
+        if getattr(config, field) is not None
+    }
 
     if name == "default":
         if "default" in raw and not overwrite:

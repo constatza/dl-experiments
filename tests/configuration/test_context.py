@@ -10,10 +10,29 @@ from neuralls.platform.config.context import expand_config_glob, expand_config_p
 from neuralls.platform.config.settings import NeurallsSettings
 
 
-def test_expand_neuralls_raw_dir_is_unknown(config_context) -> None:
-    """`${NEURALLS_RAW_DIR}` is no longer a valid settings placeholder."""
-    with pytest.raises(ValueError, match="PROCESSED_DIR, OUTPUT_DIR"):
+def test_expand_neuralls_raw_dir_raises_when_not_configured(config_context) -> None:
+    """`${NEURALLS_RAW_DIR}` raises when raw_dir is not set in settings."""
+    with pytest.raises(ValueError, match="RAW_DIR"):
         expand_config_path("${NEURALLS_RAW_DIR}/matrix.mtx", config_context)
+
+
+def test_expand_neuralls_raw_dir_resolves_when_configured(tmp_path: Path) -> None:
+    """`${NEURALLS_RAW_DIR}` expands to the settings raw root when set."""
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    settings = NeurallsSettings(
+        _env_file=[],
+        raw_dir=raw,
+        processed_dir=tmp_path / "processed",
+        output_dir=tmp_path / "output",
+    )
+    config_path = tmp_path / "cfg.toml"
+    config_path.touch()
+    from neuralls.platform.config.context import ConfigContext
+
+    ctx = ConfigContext(config_path=config_path, settings=settings)
+    result = expand_config_path("${NEURALLS_RAW_DIR}/matrix.mtx", ctx)
+    assert result == str((raw / "matrix.mtx").resolve())
 
 
 def test_expand_neuralls_output_dir(
@@ -33,7 +52,7 @@ def test_expand_graph_cg_raises_with_migration_hint(config_context) -> None:
 
 def test_expand_unknown_neuralls_raises(config_context) -> None:
     """Unknown placeholders are rejected."""
-    with pytest.raises(ValueError, match="PROCESSED_DIR, OUTPUT_DIR"):
+    with pytest.raises(ValueError, match="RAW_DIR, PROCESSED_DIR, OUTPUT_DIR"):
         expand_config_path("${NEURALLS_UNKNOWN}/matrix.mtx", config_context)
 
 

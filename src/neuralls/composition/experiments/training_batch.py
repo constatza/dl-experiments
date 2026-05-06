@@ -23,7 +23,6 @@ from loguru import logger
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
 from neuralls.composition.experiments.assembler import load_batch
 from neuralls.platform.config.loaders import load_data_config
-from neuralls.platform.config.models.data_models import OutputConfig
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.storage.base import load_matrix
 from neuralls.application.models import ExperimentResult
@@ -104,15 +103,7 @@ def run_experiment(
             raise ValueError("Missing 'source.matrix_path' in data config")
         if data_cfg.output.data_dir is None:
             data_cfg = data_cfg.model_copy(
-                update={
-                    "output": OutputConfig(
-                        data_dir=settings.processed_dir,
-                        dataset_format=data_cfg.output.dataset_format,
-                        matrix_codec=data_cfg.output.matrix_codec,
-                        matrix_replication=data_cfg.output.matrix_replication,
-                        dtype=data_cfg.output.dtype,
-                    )
-                }
+                update={"output": data_cfg.output.with_data_dir(settings.processed_dir)}
             )
         matrix_path = data_cfg.source.matrix_path
         if matrix_path is None:

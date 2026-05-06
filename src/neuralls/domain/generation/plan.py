@@ -13,10 +13,11 @@ from dataclasses import dataclass
 from typing import Any
 from collections.abc import Mapping, Sequence
 
-from neuralls.shared.constants import ConfigKeys
+_RHS_ARCHIVE = "rhs_archive"
+_SOLUTION_ARCHIVE = "solution_archive"
 
 
-def _canonicalize_strategy_name(raw_name: str) -> str:
+def canonicalize_strategy_name(raw_name: str) -> str:
     """Normalize strategy identifiers while preserving legacy aliases.
 
     Args:
@@ -26,18 +27,17 @@ def _canonicalize_strategy_name(raw_name: str) -> str:
         Canonical name (e.g., "rhs_archive")
 
     Examples:
-        >>> _canonicalize_strategy_name("rhs-archive")
+        >>> canonicalize_strategy_name("rhs-archive")
         'rhs_archive'
-        >>> _canonicalize_strategy_name("solution_bank")
+        >>> canonicalize_strategy_name("solution_bank")
         'solution_archive'
     """
     normalized = raw_name.strip().lower().replace("-", "_")
 
-    # Legacy alias mapping
     if normalized in {"rhs_bank", "rhs_repository"}:
-        return ConfigKeys.TYPE_RHS_ARCHIVE
+        return _RHS_ARCHIVE
     if normalized in {"solution_bank", "solution_repository"}:
-        return ConfigKeys.TYPE_SOLUTION_ARCHIVE
+        return _SOLUTION_ARCHIVE
 
     return normalized
 
@@ -94,105 +94,115 @@ class GenerationPlan:
     @property
     def rhs_archive(self) -> StrategySpec | None:
         """Get RHS archive strategy if present."""
-        return self.strategies.get(ConfigKeys.TYPE_RHS_ARCHIVE)
+        return self.strategies.get(_RHS_ARCHIVE)
 
     @property
     def solution_archive(self) -> StrategySpec | None:
         """Get solution archive strategy if present."""
-        return self.strategies.get(ConfigKeys.TYPE_SOLUTION_ARCHIVE)
+        return self.strategies.get(_SOLUTION_ARCHIVE)
 
     @property
     def synthetic(self) -> Mapping[str, StrategySpec]:
         """Get all synthetic (non-archive) strategies."""
-        excluded = {ConfigKeys.TYPE_RHS_ARCHIVE, ConfigKeys.TYPE_SOLUTION_ARCHIVE}
+        excluded = {_RHS_ARCHIVE, _SOLUTION_ARCHIVE}
         return {name: spec for name, spec in self.strategies.items() if name not in excluded}
 
 
-def _ensure_sequence(value: Any) -> Sequence[Any]:
-    """Validate that value is a sequence (not str/bytes).
+def _merge_specs(existing: StrategySpec, incoming: StrategySpec) -> StrategySpec:
+    """Merge two specs with the same canonical name.
+
+    Counts add unless either is -1 (all); options merge with incoming winning.
+    """
+    if existing.samples == -1 or incoming.samples == -1:
+        merged_samples = -1
+    elif existing.samples > 0 and incoming.samples > 0:
+        merged_samples = existing.samples + incoming.samples
+    else:
+        merged_samples = max(existing.samples, incoming.samples)
+
+    return StrategySpec(
+        raw_name=incoming.raw_name,
+        canonical_name=existing.canonical_name,
+        samples=merged_samples,
+        options={**existing.options, **incoming.options},
+    )
+
+
+def plan_from_specs(specs: Sequence[StrategySpec]) -> GenerationPlan:
+    """Build a GenerationPlan from pre-validated StrategySpec objects.
+
+    Duplicate canonical names are merged: counts add, options override.
 
     Args:
-        value: Value to validate
+        specs: Sequence of strategy specs (already canonicalized).
 
     Returns:
-        The value if it's a valid sequence
+        GenerationPlan with all strategies merged.
 
     Raises:
-        ValueError: If value is not a sequence or is str/bytes
+        ValueError: If no active strategies remain after merging.
     """
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return value
-    raise ValueError("'generation.strategy' must be an array of tables ([[generation.strategy]])")
+    aggregated: dict[str, StrategySpec] = {}
+    for spec in specs:
+        existing = aggregated.get(spec.canonical_name)
+        aggregated[spec.canonical_name] = _merge_specs(existing, spec) if existing else spec
+    return GenerationPlan(strategies=aggregated)
 
 
 def _parse_strategy_entry(
     raw_spec: Mapping[str, Any],
     index: int,
-) -> tuple[str, int, str, Mapping[str, Any]]:
-    """Parse a single [[generation.strategy]] entry.
-
-    Args:
-        raw_spec: TOML table for this strategy
-        index: Index in array (for error messages)
-
-    Returns:
-        Tuple of (raw_name, samples, canonical_name, options)
-
-    Raises:
-        ValueError: If required fields missing or invalid
-    """
-    # Validate name field
-    raw_name = raw_spec.get(ConfigKeys.NAME)
+) -> StrategySpec:
+    """Parse a single [[generation.strategy]] raw dict entry into a StrategySpec."""
+    raw_name = raw_spec.get("name")
     if not isinstance(raw_name, str) or not raw_name.strip():
         raise ValueError(
             f"'generation.strategy' entry at index {index} is missing a non-empty 'name'"
         )
 
-    # Validate samples field
-    if ConfigKeys.SAMPLES not in raw_spec:
+    if "samples" not in raw_spec:
         raise ValueError(
             f"'generation.strategy' entry '{raw_name}' is missing 'samples' field. "
             f"Use samples=N (exact count), samples=-1 (all), or samples=0 (skip)."
         )
 
     try:
-        samples = int(raw_spec[ConfigKeys.SAMPLES])
+        samples = int(raw_spec["samples"])
     except (TypeError, ValueError) as exc:
         raise ValueError(
             f"'generation.strategy' entry '{raw_name}' has non-integer 'samples'"
         ) from exc
 
-    # Validate samples range
     if samples < -1:
         raise ValueError(
             f"'generation.strategy' entry '{raw_name}' has invalid samples={samples}. "
             f"Must be -1 (all), 0 (skip), or positive integer."
         )
 
-    # Canonicalize name
-    canonical = _canonicalize_strategy_name(raw_name)
+    canonical = canonicalize_strategy_name(raw_name)
+    options = {k: v for k, v in raw_spec.items() if k not in {"name", "samples"}}
+    return StrategySpec(
+        raw_name=raw_name, canonical_name=canonical, samples=samples, options=options
+    )
 
-    # Extract options (everything except 'name' and 'samples')
-    options = {
-        key: value
-        for key, value in raw_spec.items()
-        if key not in {ConfigKeys.NAME, ConfigKeys.SAMPLES}
-    }
 
-    return raw_name, samples, canonical, options
+def _ensure_sequence(value: Any) -> Sequence[Any]:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return value
+    raise ValueError("'generation.strategy' must be an array of tables ([[generation.strategy]])")
 
 
 def parse_generation_plan(generation_cfg: Mapping[str, Any]) -> GenerationPlan:
-    """Parse [[generation.strategy]] entries into count-based plan.
+    """Parse [[generation.strategy]] entries from a raw config dict into a GenerationPlan.
 
     Args:
-        generation_cfg: The [generation] section from TOML config
+        generation_cfg: The [generation] section as a plain dict.
 
     Returns:
-        GenerationPlan with all strategies
+        GenerationPlan with all strategies merged.
 
     Raises:
-        ValueError: If config invalid or strategies missing
+        ValueError: If config is invalid or strategies are missing.
 
     Examples:
         >>> config = {
@@ -208,8 +218,7 @@ def parse_generation_plan(generation_cfg: Mapping[str, Any]) -> GenerationPlan:
         >>> plan.solution_archive.samples
         -1
     """
-    # Extract strategy array
-    raw_entries = generation_cfg.get(ConfigKeys.STRATEGY)
+    raw_entries = generation_cfg.get("strategy")
     if raw_entries is None:
         raise ValueError(
             "Missing '[[generation.strategy]]' entries in config. "
@@ -220,54 +229,19 @@ def parse_generation_plan(generation_cfg: Mapping[str, Any]) -> GenerationPlan:
     if not entries:
         raise ValueError("At least one '[[generation.strategy]]' block is required")
 
-    # Parse and aggregate strategies
-    aggregated: dict[str, StrategySpec] = {}
-
+    specs: list[StrategySpec] = []
     for index, raw_spec in enumerate(entries):
         if not isinstance(raw_spec, Mapping):
             raise ValueError(f"'generation.strategy' entry at index {index} must be a table")
+        specs.append(_parse_strategy_entry(raw_spec, index))
 
-        raw_name, samples, canonical, options = _parse_strategy_entry(raw_spec, index)
-
-        # Handle duplicate strategies: merge counts and options
-        existing = aggregated.get(canonical)
-        if existing is None:
-            aggregated[canonical] = StrategySpec(
-                raw_name=raw_name,
-                canonical_name=canonical,
-                samples=samples,
-                options=dict(options),
-            )
-            continue
-
-        # Merge duplicate entries
-        # Counts add (unless one is -1, which means "all available")
-        merged_samples = samples
-        if existing.samples == -1 or samples == -1:
-            # If either is "all", use -1
-            merged_samples = -1
-        elif existing.samples > 0 and samples > 0:
-            # Both positive: add them
-            merged_samples = existing.samples + samples
-        else:
-            # One or both are 0: use max
-            merged_samples = max(existing.samples, samples)
-
-        # Options merge (later entries override)
-        merged_options = {**existing.options, **options}
-
-        aggregated[canonical] = StrategySpec(
-            raw_name=raw_name,
-            canonical_name=canonical,
-            samples=merged_samples,
-            options=merged_options,
-        )
-
-    return GenerationPlan(strategies=aggregated)
+    return plan_from_specs(specs)
 
 
 __all__ = [
     "StrategySpec",
     "GenerationPlan",
+    "canonicalize_strategy_name",
+    "plan_from_specs",
     "parse_generation_plan",
 ]

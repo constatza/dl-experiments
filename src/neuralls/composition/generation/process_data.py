@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from neuralls.composition.generation.processing import process_config
 from neuralls.platform.config.loaders import load_data_config
-from neuralls.platform.config.models.data_models import OutputConfig
 from neuralls.platform.config.settings import NeurallsSettings
 from neuralls.platform.storage.base import load_matrix
 
@@ -33,15 +32,7 @@ def process_data_from_config(
 
     if config.output.data_dir is None:
         config = config.model_copy(
-            update={
-                "output": OutputConfig(
-                    data_dir=settings.processed_dir,
-                    dataset_format=config.output.dataset_format,
-                    matrix_codec=config.output.matrix_codec,
-                    matrix_replication=config.output.matrix_replication,
-                    dtype=config.output.dtype,
-                )
-            }
+            update={"output": config.output.with_data_dir(settings.processed_dir)}
         )
 
     matrix_path = config.source.matrix_path

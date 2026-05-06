@@ -201,7 +201,6 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
     experiment: str | None = None
     config_path: Path | None = None
     data_config_path: Path | None = None
-    limit_iters: int = Field(default=-1, description="Iterations to apply; -1 means unlimited.")
     model_ref: ModelRefConfig | None = None
     resolved_checkpoint_path: Path | None = None
 

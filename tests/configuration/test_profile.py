@@ -166,11 +166,17 @@ def test_profile_config_expands_tilde_and_resolves_absolute(
     assert config.output_dir == (home / "output").resolve()
 
 
-def test_profile_config_rejects_missing_fields() -> None:
+def test_profile_config_rejects_missing_required_fields() -> None:
+    """processed_dir and output_dir are required; raw_dir is optional."""
     with pytest.raises(ValidationError):
-        ProfileConfig.model_validate(
-            {"processed_dir": "/tmp/processed", "output_dir": "/tmp/output"}
-        )
+        ProfileConfig.model_validate({"processed_dir": "/tmp/processed"})
+    with pytest.raises(ValidationError):
+        ProfileConfig.model_validate({"output_dir": "/tmp/output"})
+    # raw_dir is optional — omitting it is valid
+    config = ProfileConfig.model_validate(
+        {"processed_dir": "/tmp/processed", "output_dir": "/tmp/output"}
+    )
+    assert config.raw_dir is None
 
 
 def test_profile_config_rejects_blank_or_whitespace_paths() -> None:

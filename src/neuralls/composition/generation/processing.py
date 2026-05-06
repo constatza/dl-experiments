@@ -12,14 +12,14 @@ import numpy as np
 
 from neuralls.platform.config.models.data_models import DataConfigFile, GenerationConfig
 from neuralls.domain.generation.data_types import NormalizeType
-from neuralls.shared.constants import (
-    ConfigKeys,
-    ConfigSections,
-    DEFAULT_NORMALIZE,
-    DEFAULT_RANDOM_SEED,
-)
+from neuralls.shared.constants import DEFAULT_RANDOM_SEED
 from neuralls.composition.generation.dataset_builder import build_dataset
-from neuralls.domain.generation.plan import GenerationPlan, StrategySpec, parse_generation_plan
+from neuralls.domain.generation.plan import (
+    GenerationPlan,
+    StrategySpec,
+    canonicalize_strategy_name,
+    plan_from_specs,
+)
 from neuralls.domain.generation.runner import run_generation
 from neuralls.composition.generation.default_services import (
     make_direction_solver,
@@ -40,6 +40,33 @@ def _make_direction_solver() -> TracingSolverPort:
 
 _DEFAULT_RESIDUAL_SOLVER: TracingSolverPort = _make_residual_solver()
 _DEFAULT_DIRECTION_SOLVER: TracingSolverPort = _make_direction_solver()
+
+
+def _plan_from_generation_config(
+    generation_cfg: GenerationConfig,
+) -> GenerationPlan:
+    """Translate a validated GenerationConfig into a GenerationPlan.
+
+    Converts Pydantic StrategyConfig objects directly to StrategySpec objects,
+    bypassing raw-dict re-parsing.
+    """
+    if not generation_cfg.strategy:
+        raise ValueError(
+            "Missing '[[generation.strategy]]' entries in config. "
+            "Add at least one strategy with 'name' and 'samples' fields."
+        )
+    specs: list[StrategySpec] = []
+    for sc in generation_cfg.strategy:
+        options = sc.model_dump(mode="python", exclude={"name", "samples"}, exclude_none=True)
+        specs.append(
+            StrategySpec(
+                raw_name=sc.name,
+                canonical_name=canonicalize_strategy_name(sc.name),
+                samples=sc.samples,
+                options=options,
+            )
+        )
+    return plan_from_specs(specs)
 
 
 @dataclass(frozen=True)
@@ -67,12 +94,12 @@ def _build_context(
 
     matrix_path = config.source.matrix_path
     if not matrix_path:
-        raise ValueError(f"Missing '{ConfigSections.SOURCE}.{ConfigKeys.MATRIX_PATH}' in config")
+        raise ValueError(f"Missing '{'source'}.{'matrix_path'}' in config")
 
     rhs_path = config.source.rhs_path
     solutions_path = config.source.solutions_path
     sample_id_regex = config.source.sample_id_regex
-    normalize_value = config.generation.normalize or DEFAULT_NORMALIZE
+    normalize_value = config.generation.normalize
     if isinstance(normalize_value, bool):
         raise ValueError(
             f"Invalid normalize value in config: {normalize_value} (bool). "
@@ -81,7 +108,7 @@ def _build_context(
         )
     normalize = cast(NormalizeType, str(normalize_value))
 
-    plan = parse_generation_plan(config.generation.model_dump(mode="python", exclude_none=True))
+    plan = _plan_from_generation_config(config.generation)
 
     return DataGenerationContext(
         matrix_path=matrix_path,
@@ -120,8 +147,8 @@ def _resolve_rhs_archive_glob(
 ) -> str | None:
     """Resolve the RHS glob path to use for RHS archive samples."""
     candidates: tuple[Any, ...] = (
-        strategy.options.get(ConfigKeys.RHS_GLOB) if strategy else None,
-        strategy.options.get(ConfigKeys.RHS_PATH) if strategy else None,
+        strategy.options.get("rhs_glob") if strategy else None,
+        strategy.options.get("rhs_path") if strategy else None,
         generation_cfg.rhs_archive_glob,
         context.rhs_path,
     )
@@ -139,8 +166,8 @@ def _resolve_solution_archive_path(
 ) -> str | None:
     """Resolve the solutions glob/path for solution archive ingestion."""
     candidates: tuple[Any, ...] = (
-        strategy.options.get(ConfigKeys.SOLUTIONS_GLOB),
-        strategy.options.get(ConfigKeys.SOLUTIONS_PATH),
+        strategy.options.get("solutions_glob"),
+        strategy.options.get("solutions_path"),
         context.solutions_path,
     )
 
@@ -220,7 +247,7 @@ def _resolve_rhs_source(
             raise ValueError(
                 "provide_rhs=True requires solution archive options to resolve a solutions glob."
             )
-        solutions_glob = solution_archive_options.get(ConfigKeys.SOLUTIONS_GLOB)
+        solutions_glob = solution_archive_options.get("solutions_glob")
         if not isinstance(solutions_glob, str) or not solutions_glob:
             raise ValueError(
                 "provide_rhs=True requires 'solutions_glob' for the solution_archive strategy."
@@ -246,11 +273,11 @@ def _execute_solution_archive(
         raise ValueError(
             "Solution archive strategy requires either "
             "a 'solutions_glob' field within [[generation.strategy]] name='solution_archive' or "
-            f"'{ConfigSections.SOURCE}.{ConfigKeys.SOLUTIONS_PATH}'."
+            f"'{'source'}.{'solutions_path'}'."
         )
 
-    shuffle_value = strategy.options.get(ConfigKeys.SHUFFLE, generation_cfg.shuffle)
-    seed_value = strategy.options.get(ConfigKeys.SEED, generation_cfg.seed)
+    shuffle_value = strategy.options.get("shuffle", generation_cfg.shuffle)
+    seed_value = strategy.options.get("seed", generation_cfg.seed)
 
     dataset_path = build_dataset(
         matrix_path=context.matrix_path,
@@ -305,10 +332,10 @@ def _execute_synthetic_generation(
             strategy_overrides["solution_archive"] = {
                 "solutions_glob": solutions_glob,
                 "shuffle": solution_archive_strategy.options.get(
-                    ConfigKeys.SHUFFLE,
+                    "shuffle",
                     generation_cfg.shuffle,
                 ),
-                "seed": solution_archive_strategy.options.get(ConfigKeys.SEED, seed_value),
+                "seed": solution_archive_strategy.options.get("seed", seed_value),
             }
 
     # Add RHS archive strategy
@@ -318,8 +345,8 @@ def _execute_synthetic_generation(
         if rhs_archive_glob is None:
             raise ValueError(
                 "RHS archive strategy requires 'rhs_glob' within the strategy, "
-                f"'{ConfigSections.SOURCE}.{ConfigKeys.RHS_PATH}', "
-                f"or 'generation.{ConfigKeys.RHS_ARCHIVE_GLOB}'."
+                f"'{'source'}.{'rhs_path'}', "
+                f"or 'generation.{'rhs_archive_glob'}'."
             )
 
         rhs_archive_opts = _merge_rhs_archive_options(rhs_archive_strategy, generation_cfg)
@@ -369,7 +396,7 @@ def _execute_rhs_archive_only(
     if rhs_glob is None:
         raise ValueError(
             "RHS archive strategy requires either 'rhs_glob' in the strategy "
-            f"or '{ConfigSections.SOURCE}.{ConfigKeys.RHS_PATH}'."
+            f"or '{'source'}.{'rhs_path'}'."
         )
 
     collection_kwargs = _merge_rhs_archive_options(strategy, generation_cfg)

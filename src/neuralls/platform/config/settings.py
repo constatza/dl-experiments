@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 CASE_CONFIG_ENV_VAR = "NEURALLS_CASE_CONFIG"
 ENV_FILE_ENV_VAR = "NEURALLS_ENV_FILE"
 _ENV_TO_FIELD = {
+    "NEURALLS_RAW_DIR": "raw_dir",
     "NEURALLS_PROCESSED_DIR": "processed_dir",
     "NEURALLS_OUTPUT_DIR": "output_dir",
 }
@@ -25,12 +26,15 @@ class NeurallsSettings(BaseSettings):
         frozen=True,
     )
 
+    raw_dir: Path | None = Field(default=None, description="Raw matrices and archives root")
     processed_dir: Path = Field(..., description="Generated datasets root")
     output_dir: Path = Field(..., description="MLflow artifacts, checkpoints, figures root")
 
     @model_validator(mode="after")
     def _resolve_absolute(self) -> NeurallsSettings:
         """Expand ~ and resolve all root dirs to absolute paths."""
+        if self.raw_dir is not None:
+            object.__setattr__(self, "raw_dir", self.raw_dir.expanduser().resolve())
         object.__setattr__(self, "processed_dir", self.processed_dir.expanduser().resolve())
         object.__setattr__(self, "output_dir", self.output_dir.expanduser().resolve())
         return self
