@@ -8,8 +8,15 @@ from pathlib import Path
 from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-CASE_CONFIG_ENV_VAR = "NEURALLS_CASE_CONFIG"
-ENV_FILE_ENV_VAR = "NEURALLS_ENV_FILE"
+from neuralls.platform.config import resolution
+from neuralls.platform.config.resolution import (
+    resolve_case_config_path,
+    resolve_env_file_path,
+    resolve_user_path,
+)
+
+CASE_CONFIG_ENV_VAR = resolution.CASE_CONFIG_ENV_VAR
+ENV_FILE_ENV_VAR = resolution.ENV_FILE_ENV_VAR
 _ENV_TO_FIELD = {
     "NEURALLS_RAW_DIR": "raw_dir",
     "NEURALLS_PROCESSED_DIR": "processed_dir",
@@ -34,9 +41,9 @@ class NeurallsSettings(BaseSettings):
     def _resolve_absolute(self) -> NeurallsSettings:
         """Expand ~ and resolve all root dirs to absolute paths."""
         if self.raw_dir is not None:
-            object.__setattr__(self, "raw_dir", self.raw_dir.expanduser().resolve())
-        object.__setattr__(self, "processed_dir", self.processed_dir.expanduser().resolve())
-        object.__setattr__(self, "output_dir", self.output_dir.expanduser().resolve())
+            object.__setattr__(self, "raw_dir", resolve_user_path(self.raw_dir))
+        object.__setattr__(self, "processed_dir", resolve_user_path(self.processed_dir))
+        object.__setattr__(self, "output_dir", resolve_user_path(self.output_dir))
         return self
 
     @computed_field  # type: ignore[prop-decorator]
@@ -69,16 +76,6 @@ class NeurallsSettings(BaseSettings):
     def mlflow_artifact_location(self) -> str:
         """MLflow artifact storage path using OS-native separators. UNC paths require backslashes on Windows; as_posix() would corrupt them to double-slash form."""
         return str(self.mlartifacts_dir)
-
-
-def _resolve_env_file_path(env_file: Path | None) -> Path | None:
-    """Resolve the explicit env file path or the compatibility env-file alias."""
-    if env_file is not None:
-        return env_file.expanduser().resolve()
-    configured = os.getenv(ENV_FILE_ENV_VAR)
-    if configured is None or not configured.strip():
-        return None
-    return Path(configured).expanduser().resolve()
 
 
 def _strip_optional_quotes(value: str) -> str:
@@ -134,7 +131,7 @@ def _build_case_root_mapping(
 
 def get_settings(env_file: Path | None = None) -> NeurallsSettings:
     """Load settings from one explicit env file or from process env only."""
-    return NeurallsSettings(_env_file=_resolve_env_file_path(env_file))  # ty: ignore[unknown-argument]
+    return NeurallsSettings(_env_file=resolve_env_file_path(env_file))  # ty: ignore[unknown-argument]
 
 
 def load_case_settings(
@@ -155,7 +152,7 @@ def load_case_settings(
     """
     from neuralls.platform.config.profile import load_profile
 
-    env_file_path = _resolve_env_file_path(env_file)
+    env_file_path = resolve_env_file_path(env_file)
     profile_config = load_profile(profile)
     profile_values = profile_config.to_root_mapping() if profile_config else {}
     root_mapping = _build_case_root_mapping(
@@ -175,11 +172,7 @@ def require_settings(
     """Return explicit settings or resolve them from one explicit case config."""
     if settings is not None:
         return settings
-    resolved_case = case_config_path
-    if resolved_case is None:
-        configured_case = os.getenv(CASE_CONFIG_ENV_VAR)
-        if configured_case is not None and configured_case.strip():
-            resolved_case = Path(configured_case)
+    resolved_case = resolve_case_config_path(case_config_path)
     if resolved_case is None:
         raise ValueError(
             "This workflow requires a case config. Pass --case-config or set NEURALLS_CASE_CONFIG."

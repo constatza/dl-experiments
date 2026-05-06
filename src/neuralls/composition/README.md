@@ -43,3 +43,9 @@ Case-config assembly now assumes that platform loaders have already resolved
 machine roots from the active profile, expanded environment-backed path
 placeholders, and resolved registry-relative paths, so composition code works
 with concrete `Path` values instead of Unix-specific string conventions.
+When composition accepts explicit path overrides or env-provided case-config
+paths, it routes them through `platform.config.resolution` rather than
+re-implementing fallback logic locally. Composition still owns workflow-local
+artifact layout decisions such as comparison output directories and workspace
+selection, but shared normalization policy and MLflow URI derivation stay in
+platform so composition remains wiring-only.

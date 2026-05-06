@@ -17,9 +17,9 @@ from dlkit.infrastructure.config.workflow_configs import (
 )
 
 from neuralls.platform.config.loaders import load_raw_toml
-from neuralls.platform.config.mlflow import normalize_model_mlflow
+from neuralls.platform.config.model_mlflow import normalize_model_mlflow
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
-from neuralls.platform.config.paths import build_path_context
+from neuralls.platform.config.resolution import resolve_path_context
 from neuralls.platform.config.settings import NeurallsSettings
 
 type ModelWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
@@ -67,7 +67,12 @@ def build_settings(
     if getattr(dlkit_settings, "MLFLOW", None) is None:
         dlkit_settings = patch_model(dlkit_settings, {"MLFLOW": {}})
 
-    path_context = build_path_context(data_cfg, settings, output_override=output_override)
+    path_context = resolve_path_context(
+        processed_root=settings.processed_dir,
+        output_root=settings.output_dir,
+        data_dir_override=data_cfg.output.data_dir,
+        output_override=output_override,
+    )
     updates: dict[str, Any] = {
         "TRAINING": {
             "trainer": {
@@ -107,7 +112,12 @@ def build_inference_settings(
     dlkit_settings = InferenceWorkflowConfig.model_validate(inference_data)
     sync_session_root_to_environment(cast(Any, dlkit_settings))
 
-    path_context = build_path_context(data_cfg, settings, output_override=output_override)
+    path_context = resolve_path_context(
+        processed_root=settings.processed_dir,
+        output_root=settings.output_dir,
+        data_dir_override=data_cfg.output.data_dir,
+        output_override=output_override,
+    )
     updates: dict[str, Any] = {
         "PATHS": {
             "project_root": str(path_context.project_root),

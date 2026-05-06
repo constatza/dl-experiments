@@ -13,6 +13,9 @@ import numpy as np
 import pytest
 import tomli_w
 
+from neuralls.platform.config.resolution import resolve_case_config_path
+from tests.path_assertions import assert_local_path_eq
+
 
 @pytest.fixture
 def training_setup(tmp_path: Path) -> dict:
@@ -175,7 +178,7 @@ class TestTrainingPipelineWithMLflow:
         assert experiment.workspace.predictions_dir.exists()
 
         # VERIFICATION: Output paths are resolved from output_root, not model TOML.
-        assert experiment.settings.PATHS.output_dir == str(output_root)
+        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
         assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
         assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 
@@ -263,7 +266,7 @@ class TestTrainingPipelineWithMLflow:
         expected_workspace_root = output_root / dataset_id / run_id
         assert experiment.workspace.root_dir == expected_workspace_root
 
-        assert experiment.settings.PATHS.output_dir == str(output_root)
+        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
 
     def test_mlflow_configuration_injection(
         self,
@@ -345,6 +348,21 @@ class TestTrainingPipelineWithMLflow:
         )
 
         assert experiment.settings.MLFLOW is not None
-        assert experiment.settings.PATHS.output_dir == str(custom_output_root)
+        assert_local_path_eq(experiment.settings.PATHS.output_dir, custom_output_root)
         assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
         assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
+
+
+def test_resolve_case_config_path_expands_tilde_from_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "windows-home"))
+    monkeypatch.setenv("NEURALLS_CASE_CONFIG", r"~\configs\case.toml")
+
+    resolved = resolve_case_config_path(None)
+
+    assert resolved == (home / "configs" / "case.toml").resolve()

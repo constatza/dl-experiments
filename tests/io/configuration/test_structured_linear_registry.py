@@ -88,7 +88,7 @@ def _write_master_registry(
             [
                 "[[datasets]]",
                 f'id = "{dataset_id}"',
-                f'path = "{dataset_path}"',
+                f'path = "{Path(dataset_path).as_posix()}"',
                 "",
             ]
         )
@@ -98,7 +98,7 @@ def _write_master_registry(
             [
                 "[[models]]",
                 f'id = "{model_id}"',
-                f'path = "{model_path}"',
+                f'path = "{Path(model_path).as_posix()}"',
                 "",
             ]
         )

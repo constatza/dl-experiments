@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from neuralls.platform.config.resolution import expand_user_path, resolve_local_path
 from neuralls.platform.config.settings import NeurallsSettings
 
 _GRAPH_CG_RE = re.compile(r"\$\{GRAPH_CG_[^}]+\}")
@@ -70,10 +70,23 @@ def expand_config_path(value: str, ctx: ConfigContext) -> str:
             )
         return str(val)
 
-    expanded = _NEURALLS_RE.sub(_sub, value)
-    expanded = os.path.expanduser(expanded)
-    path = Path(expanded)
-    return str((path if path.is_absolute() else ctx.config_dir / path).resolve())
+    expanded = str(expand_user_path(_NEURALLS_RE.sub(_sub, value)))
+    return str(resolve_local_path(expanded, base_dir=ctx.config_dir))
+
+
+def _expand_user_path(value: str) -> str:
+    """Compatibility wrapper for shared HOME-first user-path expansion."""
+    return str(expand_user_path(value))
+
+
+def _join_glob_suffix(prefix: str, suffix: str) -> str:
+    """Join a resolved path prefix with a glob suffix without reparsing Windows paths."""
+    cleaned_prefix = prefix.rstrip("/\\")
+    cleaned_suffix = suffix.lstrip("/\\")
+    if not cleaned_prefix:
+        return cleaned_suffix
+    separator = "\\" if "\\" in cleaned_prefix and "/" not in cleaned_prefix else "/"
+    return f"{cleaned_prefix}{separator}{cleaned_suffix}"
 
 
 def expand_config_glob(value: str, ctx: ConfigContext) -> str:
@@ -83,11 +96,11 @@ def expand_config_glob(value: str, ctx: ConfigContext) -> str:
             prefix = value[:i]
             suffix = value[i:]
             if not prefix:
-                return str(ctx.config_dir / suffix)
+                return _join_glob_suffix(str(ctx.config_dir), suffix)
             resolved_prefix = (
                 expand_config_path(prefix, ctx) if prefix.strip() else str(ctx.config_dir)
             )
             if prefix.endswith(("/", "\\")):
-                return str(Path(resolved_prefix) / suffix)
+                return _join_glob_suffix(resolved_prefix, suffix)
             return f"{resolved_prefix}{suffix}"
     return expand_config_path(value, ctx)

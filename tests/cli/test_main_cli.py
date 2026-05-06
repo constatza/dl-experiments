@@ -16,7 +16,7 @@ from typer.testing import CliRunner
 from neuralls.application.models import ExperimentResult
 from neuralls.cli.compare import compare_case
 from neuralls.cli.generate import generate_case
-from neuralls.cli.generate_single import generate_single
+from neuralls.cli.generate_single import _resolve_case_config, generate_single
 from neuralls.cli.main import app
 from neuralls.cli.run import run_case_matrix
 from neuralls.cli.train import train_case_batch
@@ -27,7 +27,7 @@ from neuralls.composition.comparison.models import (
 )
 from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.domain.solver.models.result import ComparisonRecommendations
-from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 from neuralls.shared.constants import EXIT_FAILURE
 
 runner = CliRunner()
@@ -102,6 +102,21 @@ def test_generate_single_help_shows_dataset_mode() -> None:
     parameter = cast(Any, command.commands["generate-single"].params[0])
 
     assert parameter.help == "Path to a dataset config TOML."
+
+
+def test_generate_single_resolves_case_config_env_with_home_precedence(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "windows-home"))
+    monkeypatch.setenv("NEURALLS_CASE_CONFIG", r"~\configs\case.toml")
+
+    resolved = _resolve_case_config(None)
+
+    assert resolved == (home / "configs" / "case.toml").resolve()
 
 
 def test_generate_signature_uses_batch_case_argument() -> None:
@@ -181,13 +196,13 @@ def test_generate_fails_for_dataset_config_without_single_subcommand(
         "\n".join(
             [
                 "[source]",
-                'matrix_path = "/tmp/matrix.txt"',
+                f'matrix_path = "{(tmp_path / "matrix.txt").as_posix()}"',
                 "",
                 "[generation]",
                 "shuffle = true",
                 "",
                 "[output]",
-                'data_dir = "/tmp/processed"',
+                f'data_dir = "{(tmp_path / "processed").as_posix()}"',
             ]
         ),
         encoding="utf-8",

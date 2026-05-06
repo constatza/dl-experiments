@@ -30,9 +30,9 @@ uv sync --extra cu130
 Install the published CLI from a Git source with the same backend extras:
 
 ```bash
-uv tool install 'neuralls[cpu] @ git+https://github.com/<owner>/<repo>'
-uv tool install 'neuralls[cu128] @ git+https://github.com/<owner>/<repo>'
-uvx --from 'neuralls[cpu] @ git+https://github.com/<owner>/<repo>' neuralls --help
+uv tool install 'neuralls[cpu] @ git+https://github.com/constatza/dl-experiments.git'
+uv tool install 'neuralls[cu128] @ git+https://github.com/constatza/dl-experiments.git'
+uvx --from 'neuralls[cpu] @ git+https://github.com/constatza/dl-experiments.git' neuralls --help
 ```
 
 ## Quickstart

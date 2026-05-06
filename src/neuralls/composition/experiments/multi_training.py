@@ -22,16 +22,16 @@ from neuralls.platform.config.registry import (
     resolve_dataset_config_path,
     resolve_model_config_path,
 )
-from neuralls.platform.config.mlflow import (
+from neuralls.platform.config.resolution import (
     build_mlflow_environment,
     derive_output_root_from_tracking_uri,
     is_sqlite_tracking_uri,
-    scoped_mlflow_environment,
 )
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.plots import plot_metric_comparison
 from neuralls.platform.reporting.predictions import read_mlflow_sidecar
+from neuralls.platform.tracking.environment import scoped_mlflow_environment
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
 from neuralls.platform.tracking.model_registry import (
     register_logged_model,

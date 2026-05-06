@@ -10,7 +10,7 @@ import numpy as np
 import tomli_w
 
 from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
-from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
@@ -63,8 +63,8 @@ def _write_comparison_config(path: Path) -> None:
                 "m_max = 20",
                 "",
                 "[general.data]",
-                f'matrix_path = "{matrix_path}"',
-                f'rhs_path = "{rhs_path}"',
+                f'matrix_path = "{matrix_path.as_posix()}"',
+                f'rhs_path = "{rhs_path.as_posix()}"',
                 "",
                 "[[preconditioners]]",
                 'name = "none"',

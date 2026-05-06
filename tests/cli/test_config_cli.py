@@ -43,8 +43,14 @@ def test_create_writes_profile_when_all_root_flags_are_provided(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _configure_config_path(tmp_path / "config.toml")
+    import tomllib
+
+    config_file = tmp_path / "config.toml"
+    _configure_config_path(config_file)
     monkeypatch.delenv("NEURALLS_PROFILE", raising=False)
+    raw = tmp_path / "raw"
+    processed = tmp_path / "processed"
+    output = tmp_path / "output"
 
     result = runner.invoke(
         app,
@@ -52,20 +58,20 @@ def test_create_writes_profile_when_all_root_flags_are_provided(
             "create",
             "laptop",
             "--raw-dir",
-            "/tmp/raw",
+            str(raw),
             "--processed-dir",
-            "/tmp/processed",
+            str(processed),
             "--output-dir",
-            "/tmp/output",
+            str(output),
         ],
     )
 
     assert result.exit_code == 0
-    config_text = (tmp_path / "config.toml").read_text(encoding="utf-8")
-    assert "[profiles.laptop]" in config_text
-    assert 'raw_dir = "/tmp/raw"' in config_text
-    assert 'processed_dir = "/tmp/processed"' in config_text
-    assert 'output_dir = "/tmp/output"' in config_text
+    config = tomllib.loads(config_file.read_text(encoding="utf-8"))
+    laptop = config["profiles"]["laptop"]
+    assert Path(laptop["raw_dir"]).resolve() == raw.resolve()
+    assert Path(laptop["processed_dir"]).resolve() == processed.resolve()
+    assert Path(laptop["output_dir"]).resolve() == output.resolve()
 
 
 def test_create_fails_when_a_required_root_flag_is_missing(
@@ -80,9 +86,9 @@ def test_create_fails_when_a_required_root_flag_is_missing(
         [
             "create",
             "--raw-dir",
-            "/tmp/raw",
+            str(tmp_path / "raw"),
             "--processed-dir",
-            "/tmp/processed",
+            str(tmp_path / "processed"),
         ],
     )
 
@@ -110,85 +116,106 @@ def test_init_force_overwrites_existing_config(tmp_path: Path) -> None:
     assert 'raw_dir = "/path/to/raw"' in config_file.read_text(encoding="utf-8")
 
 
-def test_set_updates_existing_default_profile(tmp_path: Path) -> None:
+def test_set_updates_existing_default_profile(
+    tmp_path: Path,
+    profile_dirs: dict[str, Path],
+) -> None:
+    import tomllib
+
     config_file = tmp_path / "config.toml"
     _configure_config_path(config_file)
     config_file.write_text(
         "\n".join(
             [
                 "[default]",
-                'raw_dir = "/tmp/raw"',
-                'processed_dir = "/tmp/processed"',
-                'output_dir = "/tmp/output"',
+                f'raw_dir = "{profile_dirs["raw"].as_posix()}"',
+                f'processed_dir = "{profile_dirs["processed"].as_posix()}"',
+                f'output_dir = "{profile_dirs["output"].as_posix()}"',
             ]
         ),
         encoding="utf-8",
     )
+    new_output = tmp_path / "new-output"
 
-    result = runner.invoke(app, ["set", "output-dir", "/tmp/new-output"])
+    result = runner.invoke(app, ["set", "output-dir", str(new_output)])
 
     assert result.exit_code == 0
-    assert 'output_dir = "/tmp/new-output"' in config_file.read_text(encoding="utf-8")
+    config = tomllib.loads(config_file.read_text(encoding="utf-8"))
+    assert Path(config["default"]["output_dir"]).resolve() == new_output.resolve()
 
 
-def test_set_updates_existing_named_profile(tmp_path: Path) -> None:
+def test_set_updates_existing_named_profile(
+    tmp_path: Path,
+    profile_dirs: dict[str, Path],
+) -> None:
+    import tomllib
+
     config_file = tmp_path / "config.toml"
     _configure_config_path(config_file)
     config_file.write_text(
         "\n".join(
             [
                 "[profiles.laptop]",
-                'raw_dir = "/tmp/raw"',
-                'processed_dir = "/tmp/processed"',
-                'output_dir = "/tmp/output"',
+                f'raw_dir = "{profile_dirs["raw"].as_posix()}"',
+                f'processed_dir = "{profile_dirs["processed"].as_posix()}"',
+                f'output_dir = "{profile_dirs["output"].as_posix()}"',
             ]
         ),
         encoding="utf-8",
     )
+    new_output = tmp_path / "new-output"
 
-    result = runner.invoke(app, ["set", "output-dir", "/tmp/new-output", "laptop"])
+    result = runner.invoke(app, ["set", "output-dir", str(new_output), "laptop"])
 
     assert result.exit_code == 0
-    assert 'output_dir = "/tmp/new-output"' in config_file.read_text(encoding="utf-8")
+    config = tomllib.loads(config_file.read_text(encoding="utf-8"))
+    assert Path(config["profiles"]["laptop"]["output_dir"]).resolve() == new_output.resolve()
 
 
-def test_set_fails_for_missing_profile(tmp_path: Path) -> None:
+def test_set_fails_for_missing_profile(
+    tmp_path: Path,
+    profile_dirs: dict[str, Path],
+) -> None:
     config_file = tmp_path / "config.toml"
     _configure_config_path(config_file)
     config_file.write_text(
         "\n".join(
             [
                 "[default]",
-                'raw_dir = "/tmp/raw"',
-                'processed_dir = "/tmp/processed"',
-                'output_dir = "/tmp/output"',
+                f'raw_dir = "{profile_dirs["raw"].as_posix()}"',
+                f'processed_dir = "{profile_dirs["processed"].as_posix()}"',
+                f'output_dir = "{profile_dirs["output"].as_posix()}"',
             ]
         ),
         encoding="utf-8",
     )
     original_text = config_file.read_text(encoding="utf-8")
 
-    result = runner.invoke(app, ["set", "output-dir", "/tmp/new-output", "laptop"])
+    result = runner.invoke(app, ["set", "output-dir", str(tmp_path / "new-output"), "laptop"])
 
     assert result.exit_code != 0
     assert config_file.read_text(encoding="utf-8") == original_text
 
 
-def test_delete_removes_existing_named_profile(tmp_path: Path) -> None:
+def test_delete_removes_existing_named_profile(
+    tmp_path: Path,
+    profile_dirs: dict[str, Path],
+) -> None:
     config_file = tmp_path / "config.toml"
     _configure_config_path(config_file)
+    laptop_dirs = {k: tmp_path / "mnt" / k for k in ("raw", "processed", "output")}
     config_file.write_text(
         "\n".join(
             [
                 "[default]",
-                'raw_dir = "/tmp/raw"',
-                'processed_dir = "/tmp/processed"',
-                'output_dir = "/tmp/output"',
+                f'raw_dir = "{profile_dirs["raw"].as_posix()}"',
+                f'processed_dir = "{profile_dirs["processed"].as_posix()}"',
+                f'output_dir = "{profile_dirs["output"].as_posix()}"',
                 "",
                 "[profiles.laptop]",
-                'raw_dir = "/mnt/raw"',
-                'processed_dir = "/mnt/processed"',
-                'output_dir = "/mnt/output"',
+                f'raw_dir = "{laptop_dirs["raw"].as_posix()}"',
+                f'processed_dir = "{laptop_dirs["processed"].as_posix()}"',
+                f'output_dir = "{laptop_dirs["output"].as_posix()}"',
             ]
         ),
         encoding="utf-8",
@@ -202,16 +229,19 @@ def test_delete_removes_existing_named_profile(tmp_path: Path) -> None:
     assert "[profiles.laptop]" not in config_text
 
 
-def test_delete_fails_for_default_profile(tmp_path: Path) -> None:
+def test_delete_fails_for_default_profile(
+    tmp_path: Path,
+    profile_dirs: dict[str, Path],
+) -> None:
     config_file = tmp_path / "config.toml"
     _configure_config_path(config_file)
     config_file.write_text(
         "\n".join(
             [
                 "[default]",
-                'raw_dir = "/tmp/raw"',
-                'processed_dir = "/tmp/processed"',
-                'output_dir = "/tmp/output"',
+                f'raw_dir = "{profile_dirs["raw"].as_posix()}"',
+                f'processed_dir = "{profile_dirs["processed"].as_posix()}"',
+                f'output_dir = "{profile_dirs["output"].as_posix()}"',
             ]
         ),
         encoding="utf-8",
@@ -223,16 +253,19 @@ def test_delete_fails_for_default_profile(tmp_path: Path) -> None:
     assert "[default]" in config_file.read_text(encoding="utf-8")
 
 
-def test_delete_fails_for_missing_named_profile(tmp_path: Path) -> None:
+def test_delete_fails_for_missing_named_profile(
+    tmp_path: Path,
+    profile_dirs: dict[str, Path],
+) -> None:
     config_file = tmp_path / "config.toml"
     _configure_config_path(config_file)
     config_file.write_text(
         "\n".join(
             [
                 "[default]",
-                'raw_dir = "/tmp/raw"',
-                'processed_dir = "/tmp/processed"',
-                'output_dir = "/tmp/output"',
+                f'raw_dir = "{profile_dirs["raw"].as_posix()}"',
+                f'processed_dir = "{profile_dirs["processed"].as_posix()}"',
+                f'output_dir = "{profile_dirs["output"].as_posix()}"',
             ]
         ),
         encoding="utf-8",

@@ -18,7 +18,7 @@ from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
 from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
 from neuralls.composition.comparison.models import ComparisonParams
 from neuralls.composition.experiments.training import _log_training_evaluation
-from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 
 
 def _sqlite_tracking_uri(db_path: Path) -> str:
@@ -160,8 +160,8 @@ def _write_comparison_config(path: Path, dataset_dir: Path) -> None:
                 "m_max = 5",
                 "",
                 "[general.data]",
-                f'matrix_path = "{dataset_dir}"',
-                f'rhs_path = "{dataset_dir}"',
+                f'matrix_path = "{dataset_dir.as_posix()}"',
+                f'rhs_path = "{dataset_dir.as_posix()}"',
                 'normalize_system = "matrix"',
                 "",
                 "[[preconditioners]]",

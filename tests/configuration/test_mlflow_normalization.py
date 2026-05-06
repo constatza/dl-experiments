@@ -8,16 +8,17 @@ import sys
 
 import pytest
 
-from neuralls.platform.config.mlflow import (
+from neuralls.platform.config.model_mlflow import normalize_model_mlflow
+from neuralls.platform.config.resolution import (
     build_mlflow_environment,
     build_sqlite_tracking_uri,
     derive_output_root_from_tracking_uri,
     derive_sqlite_artifacts_destination,
     normalize_artifacts_destination,
-    normalize_model_mlflow,
     normalize_tracking_uri,
-    scoped_mlflow_environment,
 )
+from neuralls.platform.tracking.environment import scoped_mlflow_environment
+from tests.path_assertions import assert_local_path_eq
 
 
 def test_normalize_model_mlflow_rejects_legacy_nested_sections(tmp_path: Path) -> None:
@@ -91,7 +92,7 @@ def test_build_mlflow_environment_derives_sqlite_artifact_uri(tmp_path: Path) ->
     env = build_mlflow_environment(tracking_uri=tracking_uri)
 
     assert env["MLFLOW_TRACKING_URI"] == tracking_uri
-    assert env["MLFLOW_ARTIFACT_URI"].endswith("/mlartifacts")
+    assert_local_path_eq(env["MLFLOW_ARTIFACT_URI"], (tmp_path / "mlartifacts").resolve())
     assert env["MLFLOW_ARTIFACT_URI"] == derive_sqlite_artifacts_destination(tracking_uri)
 
 

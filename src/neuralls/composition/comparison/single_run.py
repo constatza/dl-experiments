@@ -71,6 +71,7 @@ from loguru import logger
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.models.comparison import ComparisonGeneral
 from neuralls.domain.analysis.spectra import compute_condition_numbers, plot_condition_numbers
+from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.storage.filesystem import ensure_dir
 from neuralls.platform.storage.comparison import load_system_arrays
 from neuralls.domain.linalg import compute_condition_number
@@ -306,7 +307,7 @@ def _resolve_comparison_paths(
 
     if output_root is not None:
         # Caller supplies exact directory — use as-is (no timestamp suffix)
-        output_base = Path(output_root).expanduser().resolve()
+        output_base = resolve_user_path(output_root)
     else:
         output_base = (Path.cwd() / "comparison" / matrix_file.stem).resolve()
 

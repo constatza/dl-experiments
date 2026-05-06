@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.storage.base import load_matrix
 from scipy import linalg
 
@@ -19,12 +20,12 @@ def _paths_from_env(var_name: str, default_paths: tuple[Path, ...]) -> tuple[Pat
     value = os.environ.get(var_name)
     if value is None:
         return default_paths
-    return tuple(Path(item).expanduser().resolve() for item in value.split(",") if item)
+    return tuple(resolve_user_path(item) for item in value.split(",") if item)
 
 
 MATRIX_PATHS = _paths_from_env("BENCHMARK_MATRIX_PATHS", DEFAULT_MATRIX_PATHS)
 RHS_PATHS = _paths_from_env("BENCHMARK_RHS_PATHS", DEFAULT_RHS_PATHS)
-L_PATH = Path(os.environ.get("BENCHMARK_L_PATH", str(DEFAULT_L_PATH))).expanduser().resolve()
+L_PATH = resolve_user_path(os.environ.get("BENCHMARK_L_PATH", str(DEFAULT_L_PATH)))
 
 
 # Use [None] if empty to ensure at least one test is collected and then skipped with a message

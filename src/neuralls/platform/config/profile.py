@@ -11,6 +11,8 @@ from typing import Any
 from platformdirs import user_config_dir
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from neuralls.platform.config.resolution import resolve_user_path
+
 PROFILE_ENV_VAR = "NEURALLS_PROFILE"
 USER_CONFIG_DIR = Path(user_config_dir("neuralls"))
 USER_CONFIG_FILE = USER_CONFIG_DIR / "config.toml"
@@ -49,9 +51,9 @@ class ProfileConfig(BaseModel):
     def _expand(self) -> ProfileConfig:
         """Expand ~ and resolve all paths to absolute."""
         if self.raw_dir is not None:
-            object.__setattr__(self, "raw_dir", self.raw_dir.expanduser().resolve())
-        object.__setattr__(self, "processed_dir", self.processed_dir.expanduser().resolve())
-        object.__setattr__(self, "output_dir", self.output_dir.expanduser().resolve())
+            object.__setattr__(self, "raw_dir", resolve_user_path(self.raw_dir))
+        object.__setattr__(self, "processed_dir", resolve_user_path(self.processed_dir))
+        object.__setattr__(self, "output_dir", resolve_user_path(self.output_dir))
         return self
 
     def to_root_mapping(self) -> dict[str, str]:

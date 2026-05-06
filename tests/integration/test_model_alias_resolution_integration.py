@@ -6,10 +6,10 @@ Uses local SQLite tracking + local artifacts (no MLflow server process).
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import urlparse
 
 import mlflow
 import pytest
+from dlkit.infrastructure.io import url_resolver
 from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.models.preconditioner import (
@@ -21,6 +21,7 @@ from neuralls.platform.tracking.model_registry import (
     assign_dataset_alias_to_registered_model,
     register_logged_model,
 )
+from neuralls.platform.config.resolution import resolve_local_path
 from neuralls.composition.experiments.model_resolution import resolve_model_ref
 
 
@@ -34,12 +35,14 @@ def _tracking_uri(tmp_path: Path) -> str:
     return f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
 
 
+def _artifact_location(path: Path) -> str:
+    """Convert a local artifacts root into the URI form expected by MLflow."""
+    return url_resolver.build_uri(path.resolve(), scheme="file")
+
+
 def _artifact_uri_to_path(artifact_uri: str) -> Path:
     """Convert MLflow artifact URI to local filesystem path."""
-    parsed = urlparse(artifact_uri)
-    if parsed.scheme == "file":
-        return Path(parsed.path).resolve()
-    return Path(artifact_uri).resolve()
+    return resolve_local_path(artifact_uri, base_dir=Path.cwd())
 
 
 def _assert_path_within(path: Path, root: Path) -> None:
@@ -85,7 +88,7 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
     if client.get_experiment_by_name(experiment_name) is None:
         client.create_experiment(
             experiment_name,
-            artifact_location=str(artifacts_dir),
+            artifact_location=_artifact_location(artifacts_dir),
         )
     mlflow.set_experiment(experiment_name)
 
@@ -149,7 +152,7 @@ def test_experiment_id_registration_resolves_via_latest(tmp_path: Path) -> None:
     if client.get_experiment_by_name(experiment_name) is None:
         client.create_experiment(
             experiment_name,
-            artifact_location=str(artifacts_dir),
+            artifact_location=_artifact_location(artifacts_dir),
         )
     mlflow.set_experiment(experiment_name)
 
@@ -208,7 +211,7 @@ def test_two_experiments_same_dataset_no_alias_collision(tmp_path: Path) -> None
     if client.get_experiment_by_name(experiment_name) is None:
         client.create_experiment(
             experiment_name,
-            artifact_location=str(artifacts_dir),
+            artifact_location=_artifact_location(artifacts_dir),
         )
     mlflow.set_experiment(experiment_name)
 

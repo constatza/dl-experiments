@@ -6,9 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
+from neuralls.platform.config.resolution import (
+    PathContext,
+    build_sqlite_tracking_uri,
+    resolve_path_context,
+)
 from neuralls.platform.config.models.data_models import DataConfigFile, OutputConfig
-from neuralls.platform.config.paths import PathContext, build_path_context
 from neuralls.platform.config.settings import NeurallsSettings
 from neuralls.shared.constants import DEFAULT_PROJECT_ROOT
 
@@ -50,18 +53,22 @@ def test_path_context_mlflow_properties(tmp_path: Path) -> None:
     assert ctx.mlflow_artifact_location == str((output_root / "mlartifacts").resolve())
 
 
-def test_build_path_context_uses_settings_defaults(
+def test_resolve_path_context_uses_settings_defaults(
     neuralls_settings: NeurallsSettings,
 ) -> None:
     """Default roots come from NeurallsSettings."""
     data_cfg = DataConfigFile(id="test", output=OutputConfig())
-    ctx = build_path_context(data_cfg, neuralls_settings)
+    ctx = resolve_path_context(
+        processed_root=neuralls_settings.processed_dir,
+        output_root=neuralls_settings.output_dir,
+        data_dir_override=data_cfg.output.data_dir,
+    )
     assert ctx.project_root == DEFAULT_PROJECT_ROOT
     assert ctx.output_root == neuralls_settings.output_dir
     assert ctx.processed_root == neuralls_settings.processed_dir
 
 
-def test_build_path_context_honours_output_override(
+def test_resolve_path_context_honours_output_override(
     neuralls_settings: NeurallsSettings,
     tmp_path: Path,
 ) -> None:
@@ -69,11 +76,16 @@ def test_build_path_context_honours_output_override(
     custom_output = tmp_path / "custom-output"
     custom_output.mkdir()
     data_cfg = DataConfigFile(id="test", output=OutputConfig())
-    ctx = build_path_context(data_cfg, neuralls_settings, output_override=custom_output)
+    ctx = resolve_path_context(
+        processed_root=neuralls_settings.processed_dir,
+        output_root=neuralls_settings.output_dir,
+        data_dir_override=data_cfg.output.data_dir,
+        output_override=custom_output,
+    )
     assert ctx.output_root == custom_output.resolve()
 
 
-def test_build_path_context_honours_data_dir_override(
+def test_resolve_path_context_honours_data_dir_override(
     neuralls_settings: NeurallsSettings,
     tmp_path: Path,
 ) -> None:
@@ -81,5 +93,9 @@ def test_build_path_context_honours_data_dir_override(
     processed_dir = tmp_path / "processed"
     processed_dir.mkdir()
     data_cfg = DataConfigFile(id="test", output=OutputConfig(data_dir=processed_dir))
-    ctx = build_path_context(data_cfg, neuralls_settings)
+    ctx = resolve_path_context(
+        processed_root=neuralls_settings.processed_dir,
+        output_root=neuralls_settings.output_dir,
+        data_dir_override=data_cfg.output.data_dir,
+    )
     assert ctx.processed_root == processed_dir.resolve()

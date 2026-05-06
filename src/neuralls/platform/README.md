@@ -28,14 +28,29 @@ Repo-owned config path expansion now lives at the config-model boundary.
 profile resolution from `~/.config/neuralls/config.toml` plus any explicit env
 overrides, and `ConfigContext` passes those roots into Pydantic validators so
 checked-in TOML files can use `${NEURALLS_*}` placeholders without loader-side
-normalization. DLKit-specific workflow assembly is isolated in
-`config/dlkit_bridge.py`.
+normalization. User-home expansion for checked-in config paths, profile roots,
+and runtime root overrides explicitly prefers `HOME` before platform defaults
+so `~` resolves consistently across Windows and POSIX test environments.
+DLKit-specific workflow assembly is isolated in `config/dlkit_bridge.py`.
 
-Path normalization now also delegates to DLKit where possible: local
-filesystem roots use `dlkit.infrastructure.io.PathResolver`, while
-SQLite/file URI handling uses DLKit's local URI resolver. `neuralls` keeps
-only repo-specific policy such as placing MLflow artifacts under
-`mlartifacts/`.
+Path and MLflow resolution now have a single policy home:
+`config/resolution.py`. That module is pure and owns user-home expansion,
+config-relative path resolution, sqlite/file URI normalization, MLflow
+topology derivation, and the immutable `PathContext` / `MlflowPaths` value
+objects. Path normalization delegates to DLKit where possible: local
+filesystem roots use DLKit's resolver stack, while SQLite/file URI handling
+uses DLKit's local URI resolver. `neuralls` keeps only repo-specific policy
+such as placing MLflow artifacts under `mlartifacts/`.
+On Windows, mapped-drive and UNC roots are preserved as authored rather than
+resolved through `Path.resolve()`, so profiles and `${NEURALLS_*}` placeholders
+do not collapse `M:\...` roots into UNC server paths during config loading.
+On POSIX hosts those Windows-only roots are still rejected early.
+
+Runtime side effects stay out of the resolution hub. Temporary MLflow env-var
+scoping lives in `tracking/environment.py`, while `tracking/mlflow.py` owns
+MLflow client calls and run lifecycle operations. Model-config-specific MLflow
+validation lives separately in `config/model_mlflow.py` so path policy does not
+accumulate unrelated responsibilities.
 
 Top-level case configs now accept only `[[experiments]]` for registry-backed
 entries. The singular `[[experiment]]` table is rejected instead of being

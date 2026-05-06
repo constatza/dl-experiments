@@ -35,14 +35,15 @@ import numpy as np
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.config.models.experiments import ExperimentEntry
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
-from neuralls.platform.config.mlflow import (
+from neuralls.platform.config.resolution import (
     build_mlflow_environment,
     build_sqlite_tracking_uri,
-    scoped_mlflow_environment,
+    MlflowPaths,
 )
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
-from neuralls.platform.tracking.mlflow import MlflowPaths, MlflowRunConfig
+from neuralls.platform.tracking.environment import scoped_mlflow_environment
+from neuralls.platform.tracking.mlflow import MlflowRunConfig
 from neuralls.platform.storage.training_artifacts import (
     TrainingArrays,
     coerce_jsonable,

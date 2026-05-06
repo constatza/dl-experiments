@@ -47,7 +47,9 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write('id = "exp1"\n')
         f.write('dataset = "exp1_data"\n')
         f.write('model = "exp1_model"\n')
-        f.write(f'checkpoint_path = "{project_root / "checkpoints" / "exp1.ckpt"}"\n\n')
+        f.write(
+            f'checkpoint_path = "{(project_root / "checkpoints" / "exp1.ckpt").as_posix()}"\n\n'
+        )
         f.write("# Experiment 2: Config without checkpoint (will warn)\n")
         f.write("[[experiments]]\n")
         f.write('id = "exp2"\n')
@@ -58,24 +60,24 @@ def temp_config_structure(tmp_path: Path) -> Path:
     with open(project_root / "configs" / "datasets" / "exp1_data.toml", "w") as f:
         f.write('id = "exp1_data"\n\n')
         f.write("[source]\n")
-        f.write(f'matrix_path = "{matrix_path}"\n\n')
+        f.write(f'matrix_path = "{matrix_path.as_posix()}"\n\n')
         f.write("[generation]\n")
         f.write('normalize = "matrix"\n')
         f.write("shuffle = false\n")
         f.write("seed = 42\n\n")
         f.write("[output]\n")
-        f.write(f'data_dir = "{project_root / "data" / "processed"}"\n')
+        f.write(f'data_dir = "{(project_root / "data" / "processed").as_posix()}"\n')
 
     with open(project_root / "configs" / "datasets" / "exp2_data.toml", "w") as f:
         f.write('id = "exp2_data"\n\n')
         f.write("[source]\n")
-        f.write(f'matrix_path = "{matrix2_path}"\n\n')
+        f.write(f'matrix_path = "{matrix2_path.as_posix()}"\n\n')
         f.write("[generation]\n")
         f.write('normalize = "matrix"\n')
         f.write("shuffle = false\n")
         f.write("seed = 42\n\n")
         f.write("[output]\n")
-        f.write(f'data_dir = "{project_root / "data" / "processed"}"\n')
+        f.write(f'data_dir = "{(project_root / "data" / "processed").as_posix()}"\n')
 
     # Model configs
     with open(project_root / "configs" / "models" / "exp1_model.toml", "w") as f:
@@ -188,8 +190,8 @@ def test_load_experiments_rejects_unknown_comparison_experiment_reference(
                 "m_max = 20",
                 "",
                 "[general.data]",
-                f'matrix_path = "{temp_config_structure / "data" / "matrix.txt"}"',
-                f'rhs_path = "{temp_config_structure / "data" / "matrix2.txt"}"',
+                f'matrix_path = "{(temp_config_structure / "data" / "matrix.txt").as_posix()}"',
+                f'rhs_path = "{(temp_config_structure / "data" / "matrix2.txt").as_posix()}"',
                 "",
                 "[[preconditioners]]",
                 'name = "bound-neural"',

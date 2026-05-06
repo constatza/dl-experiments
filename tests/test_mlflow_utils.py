@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import sys
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from dlkit.infrastructure.io import url_resolver
 
+import neuralls.platform.tracking.mlflow as tracking_mlflow
+from neuralls.platform.config.resolution import MlflowPaths, resolve_mlflow_paths
 from neuralls.platform.tracking.mlflow import (
     DEFAULT_ARTIFACT_SUBDIRS,
-    MlflowPaths,
     MlflowRunConfig,
     collect_artifacts,
     ensure_experiment,
@@ -16,7 +17,6 @@ from neuralls.platform.tracking.mlflow import (
     log_artifacts,
     log_metrics,
     open_run,
-    resolve_mlflow_paths,
     start_run_if_needed,
 )
 
@@ -79,7 +79,7 @@ class DummyMlflow:
 @pytest.fixture
 def dummy_mlflow(monkeypatch: pytest.MonkeyPatch) -> DummyMlflow:
     stub = DummyMlflow()
-    monkeypatch.setitem(sys.modules, "mlflow", stub)
+    monkeypatch.setattr(tracking_mlflow, "mlflow", stub)
     return stub
 
 
@@ -90,10 +90,10 @@ def test_resolve_mlflow_paths_normalizes_relative_uris(tmp_path: Path) -> None:
     workspace.mkdir()
 
     paths = resolve_mlflow_paths(
-        f"sqlite:///{(tmp_path / 'mlruns.db').as_posix()}",
-        "mlartifacts",
-        project_root,
-        workspace,
+        tracking_uri=f"sqlite:///{(tmp_path / 'mlruns.db').as_posix()}",
+        artifact_uri="mlartifacts",
+        project_root=project_root,
+        workspace_root=workspace,
     )
 
     assert paths.tracking_uri.endswith("/mlruns.db")
@@ -132,6 +132,23 @@ def test_start_run_and_logging(dummy_mlflow: DummyMlflow, tmp_path: Path) -> Non
     assert dummy_mlflow.logged_metrics == [(run.info.run_id, {"loss": 1.0}, 2)]
 
 
+def test_ensure_experiment_uses_file_uri_for_local_artifact_root(
+    dummy_mlflow: DummyMlflow,
+    tmp_path: Path,
+) -> None:
+    paths = MlflowPaths(
+        tracking_uri=f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}",
+        artifact_uri=str(tmp_path / "mlartifacts"),
+    )
+
+    exp_id = ensure_experiment("demo-file-uri", paths)
+
+    assert exp_id == "exp-0"
+    assert dummy_mlflow.experiments["demo-file-uri"].artifact_location == (
+        url_resolver.build_uri((tmp_path / "mlartifacts").resolve(), scheme="file")
+    )
+
+
 def test_finalize_run_ends_started_run(
     dummy_mlflow: DummyMlflow,
     tmp_path: Path,
@@ -140,7 +157,14 @@ def test_finalize_run_ends_started_run(
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
     (workspace_root / "figures").mkdir()
-    paths = resolve_mlflow_paths(None, None, tmp_path, workspace_root, settings=neuralls_settings)
+    paths = resolve_mlflow_paths(
+        tracking_uri=None,
+        artifact_uri=None,
+        project_root=tmp_path,
+        workspace_root=workspace_root,
+        default_tracking_uri=neuralls_settings.mlflow_tracking_uri,
+        default_artifact_location=neuralls_settings.mlflow_artifact_location,
+    )
     config = MlflowRunConfig(
         experiment_name="exp",
         run_name="run",
@@ -158,3 +182,25 @@ def test_finalize_run_ends_started_run(
     assert dummy_mlflow.logged_artifacts
     assert dummy_mlflow.logged_metrics
     assert getattr(dummy_mlflow, "ended_status", None) == "FINISHED"
+
+
+def test_resolve_mlflow_paths_requires_tracking_or_default(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    with pytest.raises(ValueError, match="tracking_uri is required"):
+        resolve_mlflow_paths(
+            tracking_uri=None,
+            artifact_uri=None,
+            workspace_root=workspace,
+        )
+
+
+def test_resolve_mlflow_paths_requires_workspace_for_local_artifacts(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="workspace_root is required"):
+        resolve_mlflow_paths(
+            tracking_uri=f"sqlite:///{(tmp_path / 'mlruns.db').as_posix()}",
+            artifact_uri="mlartifacts",
+        )

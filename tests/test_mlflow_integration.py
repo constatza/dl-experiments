@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.path_assertions import assert_local_path_eq
+
 
 @pytest.fixture
 def mlflow_tracking_dir(tmp_path: Path) -> Path:
@@ -84,7 +86,7 @@ def minimal_data_config(tmp_path: Path) -> Path:
 id = "test-dataset"
 
 [source]
-matrix_path = "{matrix_path}"
+matrix_path = "{matrix_path.as_posix()}"
 
 [generation]
 normalize = "matrix"
@@ -152,7 +154,7 @@ class TestMLflowArtifactStorage:
             dataset_registry_id=minimal_data_config.stem,
         )
 
-        assert experiment.settings.PATHS.output_dir == str(output_root)
+        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
 
     def test_mlflow_workspace_artifact_alignment(
         self,
@@ -335,7 +337,7 @@ class TestMLflowPathResolution:
         )
 
         # All MLflow paths should contain output_root
-        assert experiment.settings.PATHS.output_dir == str(output_root)
+        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
         assert experiment.workspace.root_dir.parent.parent == output_root
 
     def test_multiple_experiments_isolated_by_dataset(
@@ -355,7 +357,7 @@ class TestMLflowPathResolution:
 id = "dataset-A"
 
 [source]
-matrix_path = "{matrix_a}"
+matrix_path = "{matrix_a.as_posix()}"
 
 [generation]
 normalize = "matrix"
@@ -366,7 +368,7 @@ normalize = "matrix"
 id = "dataset-B"
 
 [source]
-matrix_path = "{matrix_b}"
+matrix_path = "{matrix_b.as_posix()}"
 
 [generation]
 normalize = "matrix"

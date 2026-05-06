@@ -3,8 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
-from neuralls.composition.comparison.single_run import compare_preconditioners
+from neuralls.composition.comparison.single_run import (
+    _resolve_comparison_paths,
+    compare_preconditioners,
+)
 from neuralls.platform.config.loaders import load_comparison_config
 from neuralls.platform.storage.datasets import save_dataset
 
@@ -38,8 +42,8 @@ def _write_comparison_config(path: Path, system_path: Path) -> None:
                 'stopping_criterion = "residual_norm"',
                 "",
                 "[general.data]",
-                f'matrix_path = "{system_path}"',
-                f'rhs_path = "{system_path}"',
+                f'matrix_path = "{system_path.as_posix()}"',
+                f'rhs_path = "{system_path.as_posix()}"',
                 'normalize_system = "matrix"',
                 "",
                 "[[preconditioners]]",
@@ -63,7 +67,7 @@ def _write_data_config(path: Path, data_root: Path) -> None:
                 'id = "test-dataset"',
                 "",
                 "[output]",
-                f'data_dir = "{data_root}"',
+                f'data_dir = "{data_root.as_posix()}"',
                 "",
             ]
         ),
@@ -144,3 +148,27 @@ def test_compare_preconditioners_workflow(tmp_path: Path, neuralls_settings) -> 
     assert set(comparison_results.keys()) == {"none", "jacobi"}
     for name, info in comparison_results.items():
         assert info.iterations > 0, f"{name} did not run"
+
+
+def test_resolve_comparison_paths_expands_tilde_output_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    neuralls_settings,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "windows-home"))
+
+    comparison_cfg = tmp_path / "comparison_config.toml"
+    _write_comparison_config(comparison_cfg, tmp_path)
+    comparison_cfg_model = load_comparison_config(comparison_cfg, neuralls_settings)
+
+    paths = _resolve_comparison_paths(
+        general_params=comparison_cfg_model.general,
+        output_root=Path(r"~\comparison-output"),
+        figures_root=None,
+    )
+
+    assert paths.output == (home / "comparison-output").resolve()
+    assert paths.figures == (home / "comparison-output" / "figures").resolve()

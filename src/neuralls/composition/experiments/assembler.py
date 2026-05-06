@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 
 from loguru import logger
@@ -18,20 +17,19 @@ from neuralls.platform.config.registry import (
     list_experiment_bindings,
     resolve_comparison_config_path,
 )
-from neuralls.platform.config.paths import build_path_context
+from neuralls.platform.config.resolution import (
+    build_mlflow_environment,
+    build_sqlite_tracking_uri,
+    derive_output_root_from_tracking_uri,
+    resolve_case_config_path,
+    resolve_path_context,
+)
 from neuralls.platform.config.settings import (
-    CASE_CONFIG_ENV_VAR,
     NeurallsSettings,
     require_settings,
 )
 from neuralls.platform.config.models.preconditioner import NeuralPreconditionerConfig
 from neuralls.platform.storage.workspaces import WorkspaceFactory
-from neuralls.platform.config.mlflow import (
-    build_mlflow_environment,
-    build_sqlite_tracking_uri,
-    derive_output_root_from_tracking_uri,
-    scoped_mlflow_environment,
-)
 from neuralls.platform.config.dlkit_bridge import (
     build_inference_settings,
     build_settings,
@@ -42,7 +40,7 @@ from neuralls.platform.config.loaders import (
     load_comparison_config,
     load_data_config,
 )
-from neuralls.platform.config.path_utils import resolve_optional_local_path
+from neuralls.platform.tracking.environment import scoped_mlflow_environment
 
 
 @dataclass(frozen=True)
@@ -52,11 +50,6 @@ class MlflowTopology:
     env: dict[str, str]
     experiment_name: str | None = None
     force_enabled: bool = False
-
-
-def _resolve_relative_path(path: Path | None, base_dir: Path) -> Path | None:
-    """Resolve an optional path relative to a config directory."""
-    return resolve_optional_local_path(path, base_dir=base_dir)
 
 
 def _validate_comparison_experiment_refs(
@@ -99,22 +92,12 @@ def load_validated_case_config(
     return cfg, config_dir
 
 
-def _resolve_case_config_path(case_config_path: Path | None) -> Path | None:
-    """Resolve the explicit case path or the NEURALLS_CASE_CONFIG override."""
-    if case_config_path is not None:
-        return case_config_path.resolve()
-    configured = os.getenv(CASE_CONFIG_ENV_VAR)
-    if configured is None or not configured.strip():
-        return None
-    return Path(configured).expanduser().resolve()
-
-
 def _load_case_config(
     case_config_path: Path | None,
     neuralls_settings: NeurallsSettings | None = None,
 ) -> CaseConfig | None:
     """Load case topology when provided explicitly or via environment."""
-    resolved_case_config = _resolve_case_config_path(case_config_path)
+    resolved_case_config = resolve_case_config_path(case_config_path)
     if resolved_case_config is None:
         return None
     cfg, _ = load_validated_case_config(resolved_case_config, neuralls_settings)
@@ -131,7 +114,9 @@ def _resolve_output_override(
     """Resolve output root from explicit override or case config."""
     if output_root is not None:
         return output_root.resolve()
-    if case_cfg is None or case_config_path is None:
+    if case_cfg is None:
+        return neuralls_settings.output_dir
+    if case_config_path is None:
         return neuralls_settings.output_dir
 
     tracking_uri = case_cfg.mlflow.tracking_uri
@@ -200,7 +185,7 @@ def load_experiment(
         ValueError: If configs are invalid or mode is invalid.
         FileNotFoundError: If config files don't exist.
     """
-    resolved_case_config_path = _resolve_case_config_path(case_config_path)
+    resolved_case_config_path = resolve_case_config_path(case_config_path)
     neuralls_settings = require_settings(
         neuralls_settings,
         case_config_path=resolved_case_config_path,
@@ -217,9 +202,10 @@ def load_experiment(
         case_config_path=resolved_case_config_path,
         neuralls_settings=neuralls_settings,
     )
-    path_ctx = build_path_context(
-        data_cfg,
-        neuralls_settings,
+    path_ctx = resolve_path_context(
+        processed_root=neuralls_settings.processed_dir,
+        output_root=neuralls_settings.output_dir,
+        data_dir_override=data_cfg.output.data_dir,
         output_override=resolved_output_root,
     )
     mlflow_topology = (
@@ -396,7 +382,11 @@ def load_batch(
             resolved_experiments[0].spec.data_config_path,
             neuralls_settings,
         )
-        path_ctx = build_path_context(first_data_cfg, neuralls_settings)
+        path_ctx = resolve_path_context(
+            processed_root=neuralls_settings.processed_dir,
+            output_root=neuralls_settings.output_dir,
+            data_dir_override=first_data_cfg.output.data_dir,
+        )
         final_output_root = path_ctx.output_root
 
     return ExperimentBatch(

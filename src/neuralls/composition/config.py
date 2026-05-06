@@ -16,4 +16,5 @@ from neuralls.platform.config.settings import (
     CASE_CONFIG_ENV_VAR as CASE_CONFIG_ENV_VAR,
     NeurallsSettings as NeurallsSettings,
     load_case_settings as load_case_settings,
+    resolve_case_config_path as resolve_case_config_path,
 )

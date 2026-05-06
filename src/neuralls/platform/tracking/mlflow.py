@@ -2,30 +2,22 @@
 
 from __future__ import annotations
 
-import importlib
 import os
-from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from neuralls.platform.config.mlflow import normalize_tracking_uri
-from neuralls.platform.config.path_utils import resolve_local_path
-from neuralls.platform.config.settings import NeurallsSettings
+import mlflow
+from mlflow import ActiveRun
+
+from neuralls.platform.config.resolution import (
+    MlflowPaths,
+    build_sqlite_tracking_uri,
+    resolve_mlflow_paths,
+    to_mlflow_artifact_location,
+)
 from neuralls.shared.constants import DEFAULT_PROJECT_ROOT
-
-if TYPE_CHECKING:
-    from mlflow import ActiveRun
-else:
-    ActiveRun = Any
-
-
-@dataclass(frozen=True)
-class MlflowPaths:
-    """Resolved MLflow URIs."""
-
-    tracking_uri: str
-    artifact_uri: str
 
 
 @dataclass(frozen=True)
@@ -56,46 +48,6 @@ DEFAULT_ARTIFACT_SUBDIRS: tuple[str, ...] = (
 )
 
 
-def _import_mlflow() -> Any:
-    """Load mlflow lazily to avoid hard dependency at import time."""
-    return importlib.import_module("mlflow")
-
-
-def _normalize_sqlite_uri(uri: str, project_root: Path) -> str:
-    """Anchor sqlite URIs to project_root when path is relative."""
-    if not uri.startswith("sqlite:///"):
-        return uri
-    return normalize_tracking_uri(uri, config_path=project_root / "config.toml")
-
-
-def resolve_mlflow_paths(
-    tracking_uri: str | None,
-    artifact_uri: str | None,
-    project_root: Path,
-    workspace: Path,
-    settings: NeurallsSettings | None = None,
-) -> MlflowPaths:
-    """Resolve tracking/artifact URIs against project and workspace roots."""
-    if tracking_uri:
-        tracking = _normalize_sqlite_uri(tracking_uri, project_root)
-    elif settings is not None:
-        tracking = settings.mlflow_tracking_uri
-    else:
-        raise ValueError("tracking_uri is required when NeurallsSettings is not provided.")
-    if artifact_uri:
-        artifact_target = resolve_local_path(artifact_uri, base_dir=workspace)
-        artifact_root = (
-            artifact_target if artifact_target.is_absolute() else workspace / artifact_target
-        )
-        return MlflowPaths(tracking_uri=tracking, artifact_uri=str(artifact_root.resolve()))
-    artifact_location = (
-        settings.mlflow_artifact_location
-        if settings is not None
-        else str(workspace / "mlartifacts")
-    )
-    return MlflowPaths(tracking_uri=tracking, artifact_uri=artifact_location)
-
-
 def build_run_config(
     *,
     settings: Any,
@@ -109,13 +61,23 @@ def build_run_config(
     mlflow_cfg = getattr(settings, "MLFLOW", None)
     if not enabled or mlflow_cfg is None or not getattr(mlflow_cfg, "enabled", False):
         return None
+    paths_cfg = getattr(settings, "PATHS", None)
+    output_dir = getattr(paths_cfg, "output_dir", None)
+    default_tracking_uri = None
+    default_artifact_location = None
+    if output_dir:
+        output_root = Path(output_dir).resolve()
+        default_tracking_uri = build_sqlite_tracking_uri(output_root / "mlruns" / "mlflow.db")
+        default_artifact_location = str((output_root / "mlartifacts").resolve())
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
     artifact_uri = os.getenv("MLFLOW_ARTIFACT_URI")
     paths = resolve_mlflow_paths(
-        tracking_uri,
-        artifact_uri,
-        Path(getattr(getattr(settings, "PATHS", None), "project_root", DEFAULT_PROJECT_ROOT)),
-        workspace_root,
+        tracking_uri=tracking_uri,
+        artifact_uri=artifact_uri,
+        project_root=Path(getattr(paths_cfg, "project_root", DEFAULT_PROJECT_ROOT)),
+        workspace_root=workspace_root,
+        default_tracking_uri=default_tracking_uri,
+        default_artifact_location=default_artifact_location,
     )
     experiment_name = getattr(mlflow_cfg, "experiment_name", None) or dataset_id
     run_name = getattr(mlflow_cfg, "run_name", None) or model_name
@@ -143,12 +105,14 @@ def make_run_tags(
 
 def ensure_experiment(name: str, paths: MlflowPaths) -> str:
     """Create or reuse an experiment and return its id."""
-    mlflow = _import_mlflow()
     mlflow.set_tracking_uri(paths.tracking_uri)
     existing = mlflow.get_experiment_by_name(name)
     if existing:
         return existing.experiment_id
-    return mlflow.create_experiment(name=name, artifact_location=paths.artifact_uri)
+    return mlflow.create_experiment(
+        name=name,
+        artifact_location=to_mlflow_artifact_location(paths.artifact_uri),
+    )
 
 
 def start_run_if_needed(
@@ -157,7 +121,6 @@ def start_run_if_needed(
     tags: Mapping[str, str] | None = None,
 ) -> tuple[ActiveRun, bool]:
     """Reuse active run or start a new one with tags."""
-    mlflow = _import_mlflow()
     active = mlflow.active_run()
     if active:
         return active, False
@@ -182,7 +145,6 @@ def log_artifacts(run: ActiveRun, artifacts: Sequence[Path]) -> None:
     """Log directories/files to MLflow for the given run."""
     if not artifacts:
         return
-    mlflow = _import_mlflow()
     for path in artifacts:
         mlflow.log_artifacts(str(path), run_id=run.info.run_id)
 
@@ -191,7 +153,6 @@ def log_metrics(run: ActiveRun, metrics: Mapping[str, float], step: int | None =
     """Log metrics to MLflow for the given run."""
     if not metrics:
         return
-    mlflow = _import_mlflow()
     mlflow.log_metrics(dict(metrics), step=step, run_id=run.info.run_id)
 
 
@@ -211,4 +172,4 @@ def finalize_run(
     if metrics:
         log_metrics(state.run, metrics)
     if state.started:
-        _import_mlflow().end_run(status="FAILED" if failed else "FINISHED")
+        mlflow.end_run(status="FAILED" if failed else "FINISHED")

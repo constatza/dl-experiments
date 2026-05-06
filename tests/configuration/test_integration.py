@@ -13,8 +13,9 @@ from neuralls.platform.config.models.workspace import (
     ExperimentWorkspace,
     RunnableExperiment,
 )
-from neuralls.platform.config.paths import PathContext
 from neuralls.platform.config.dlkit_bridge import build_settings, load_model_config
+from neuralls.platform.config.resolution import PathContext
+from tests.path_assertions import assert_local_path_eq
 
 
 @pytest.fixture
@@ -66,7 +67,7 @@ def sample_data_config(tmp_path: Path) -> Path:
 id = "test-data"
 
 [source]
-matrix_path = "{matrix_path}"
+matrix_path = "{matrix_path.as_posix()}"
 
 [generation]
 normalize = "matrix"
@@ -240,8 +241,8 @@ lr = 1e-3
         # Check PATHS injected
         assert settings.PATHS is not None
         assert getattr(settings.PATHS, "project_root") != ""
-        assert getattr(settings.PATHS, "processed_dir") == str(path_ctx.processed_root)
-        assert settings.PATHS.output_dir == str(path_ctx.output_root)
+        assert_local_path_eq(getattr(settings.PATHS, "processed_dir"), path_ctx.processed_root)
+        assert_local_path_eq(settings.PATHS.output_dir, path_ctx.output_root)
 
     def test_mlflow_runtime_fields_are_env_only(
         self,
@@ -500,7 +501,7 @@ name = "FlexibleDataset"
             dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.settings.PATHS.output_dir == str(output_root)
+        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
         assert experiment.workspace.root_dir.parent.parent == output_root
 
     def test_different_experiments_different_paths(
@@ -517,7 +518,7 @@ name = "FlexibleDataset"
 id = "dataset-1"
 
 [source]
-matrix_path = "{matrix_path}"
+matrix_path = "{matrix_path.as_posix()}"
 
 [generation]
 normalize = "matrix"
@@ -528,7 +529,7 @@ normalize = "matrix"
 id = "dataset-2"
 
 [source]
-matrix_path = "{matrix_path}"
+matrix_path = "{matrix_path.as_posix()}"
 
 [generation]
 normalize = "matrix"

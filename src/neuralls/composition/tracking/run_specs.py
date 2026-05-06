@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Literal
 
 from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, ExperimentEntry
-from neuralls.platform.tracking.mlflow import MlflowPaths, MlflowRunConfig
+from neuralls.platform.config.resolution import MlflowPaths
+from neuralls.platform.tracking.mlflow import MlflowRunConfig
 
 
 def iso_timestamp(dt: datetime | None = None) -> str:
@@ -195,7 +196,7 @@ def build_comparison_run_spec(
         comparison_id=entry.id,
         comparison_display_name=entry.effective_display_name,
         comparison_config=entry.path.stem,
-        comparison_path=str(entry.path),
+        comparison_path=entry.path.as_posix(),
         started_at=ts,
         run_name=run_name,
     )

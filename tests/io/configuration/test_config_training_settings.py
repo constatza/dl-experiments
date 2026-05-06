@@ -82,7 +82,7 @@ def test_training_sections_round_trip(tmp_path: Path, config_content_template: s
     (tmp_path / "output").mkdir()
 
     # Inject the temporary path into the config content
-    config_content = config_content_template.format(tmp_dir=str(tmp_path))
+    config_content = config_content_template.format(tmp_dir=tmp_path.as_posix())
 
     # Setup temporary config file
     config_path = tmp_path / "linear.toml"

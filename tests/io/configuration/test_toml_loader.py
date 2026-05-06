@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tomllib
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 from pydantic import ValidationError
@@ -108,7 +108,7 @@ def test_load_case_config_returns_typed_model(
         f"""
 [[datasets]]
 id = "dataset"
-path = "{dataset_cfg}"
+path = "{dataset_cfg.as_posix()}"
 """
     )
     config = load_case_config(config_file, neuralls_settings)
@@ -138,3 +138,25 @@ def test_load_raw_toml_invalid_syntax(tmp_path: Path) -> None:
     config_file.write_text("invalid [ syntax")
     with pytest.raises(tomllib.TOMLDecodeError):
         load_raw_toml(config_file)
+
+
+def test_load_raw_toml_rejects_unescaped_windows_path(tmp_path: Path) -> None:
+    """Raw Windows backslashes inside TOML basic strings trigger stdlib parsing errors."""
+    config_file = tmp_path / "test.toml"
+    config_file.write_text(
+        r"""
+[source]
+matrix_path = "C:\Users\runneradmin\AppData\Local\Temp\matrix.txt"
+"""
+    )
+    with pytest.raises(tomllib.TOMLDecodeError, match="Invalid hex value"):
+        load_raw_toml(config_file)
+
+
+def test_load_raw_toml_accepts_normalized_windows_path(tmp_path: Path) -> None:
+    """POSIX-normalized Windows paths remain valid TOML literals everywhere."""
+    config_file = tmp_path / "test.toml"
+    matrix_path = PureWindowsPath(r"C:\Users\runneradmin\AppData\Local\Temp\matrix.txt")
+    config_file.write_text(f'[source]\nmatrix_path = "{matrix_path.as_posix()}"\n')
+    data = load_raw_toml(config_file)
+    assert data["source"]["matrix_path"] == matrix_path.as_posix()

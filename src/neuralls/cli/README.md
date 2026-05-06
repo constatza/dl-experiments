@@ -64,3 +64,7 @@ non-interactive and expects explicit `--raw-dir`, `--processed-dir`, and
 `neuralls config set` overwrites an existing field value for an existing
 profile. `neuralls config delete` removes a named profile; the `default`
 profile is preserved.
+
+Case-config discovery from `--case-config` and `NEURALLS_CASE_CONFIG` uses the
+same shared path resolution policy as platform config loading, so `~`, Windows
+drive paths, and UNC shares resolve consistently before orchestration begins.

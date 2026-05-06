@@ -19,7 +19,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 import torch
 from tensordict import TensorDict
 

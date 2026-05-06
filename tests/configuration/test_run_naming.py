@@ -137,7 +137,7 @@ def sample_data_config(tmp_path: Path) -> Path:
 id = "test-data"
 
 [source]
-matrix_path = "{matrix_path}"
+matrix_path = "{matrix_path.as_posix()}"
 
 [generation]
 normalize = "matrix"

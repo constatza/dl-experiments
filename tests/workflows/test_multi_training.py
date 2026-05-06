@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 from neuralls.platform.config.models.experiments import ExperimentsConfig
 from neuralls.platform.config.registry import resolve_comparison_config_path
 from neuralls.platform.config.loaders import load_experiments_config, load_raw_toml

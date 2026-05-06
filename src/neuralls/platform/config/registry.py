@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from neuralls.platform.config.path_utils import resolve_local_path
+from neuralls.platform.config.resolution import resolve_registry_path
 from neuralls.platform.config.models.experiments import (
     CaseConfig,
     ExperimentEntry,
@@ -27,11 +27,6 @@ class ResolvedExperimentBinding:
     experiment_display_name: str = ""
     dataset_display_name: str = ""
     model_display_name: str = ""
-
-
-def _resolve_registry_path(base_dir: Path, relative_or_absolute: Path) -> Path:
-    """Resolve one registry path against the case config directory."""
-    return resolve_local_path(relative_or_absolute, base_dir=base_dir)
 
 
 def _lookup_registry_entry(
@@ -83,7 +78,7 @@ def resolve_dataset_config_path(
         owner_kind="Experiment" if experiment_id is not None else None,
         owner_id=experiment_id,
     )
-    return _resolve_registry_path(config_dir, entry.path)
+    return resolve_registry_path(config_dir, entry.path)
 
 
 def resolve_model_config_path(
@@ -101,7 +96,7 @@ def resolve_model_config_path(
         owner_kind="Experiment" if experiment_id is not None else None,
         owner_id=experiment_id,
     )
-    return _resolve_registry_path(config_dir, entry.path)
+    return resolve_registry_path(config_dir, entry.path)
 
 
 def resolve_comparison_config_path(
@@ -115,7 +110,7 @@ def resolve_comparison_config_path(
         registry_id=comparison_id,
         registry_section="comparisons",
     )
-    return _resolve_registry_path(config_dir, entry.path)
+    return resolve_registry_path(config_dir, entry.path)
 
 
 def resolve_experiment_binding(
@@ -155,7 +150,7 @@ def resolve_experiment_binding(
             experiment_id=entry.id,
         ),
         checkpoint_path=(
-            _resolve_registry_path(config_dir, entry.checkpoint_path)
+            resolve_registry_path(config_dir, entry.checkpoint_path)
             if entry.checkpoint_path is not None
             else None
         ),

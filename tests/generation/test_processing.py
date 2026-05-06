@@ -27,8 +27,8 @@ def _write_solution_archive_config(tmp_path: Path, dataset_id: str) -> Path:
 id = "{dataset_id}"
 
 [source]
-matrix_path = "{matrix_path}"
-solutions_path = "{solutions_dir / "solution_*.txt"}"
+matrix_path = "{matrix_path.as_posix()}"
+solutions_path = "{(solutions_dir / "solution_*.txt").as_posix()}"
 
 [generation]
 normalize = "matrix"
@@ -36,7 +36,7 @@ normalize = "matrix"
 [[generation.strategy]]
 name = "solution_archive"
 samples = -1
-solutions_glob = "{solutions_dir / "solution_*.txt"}"
+solutions_glob = "{(solutions_dir / "solution_*.txt").as_posix()}"
 
 [output]
 """

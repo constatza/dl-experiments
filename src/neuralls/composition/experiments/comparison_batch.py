@@ -24,7 +24,7 @@ from neuralls.platform.config.registry import (
     resolve_comparison_config_path,
 )
 from neuralls.composition.experiments.assembler import load_validated_case_config
-from neuralls.platform.config.mlflow import build_mlflow_environment, build_sqlite_tracking_uri
+from neuralls.platform.config.resolution import build_mlflow_environment, build_sqlite_tracking_uri
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
