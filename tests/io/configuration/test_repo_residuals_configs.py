@@ -70,3 +70,47 @@ def test_residual_experiments_use_residuals_100_dataset() -> None:
             entry["dataset"] in {"residuals-100", "residuals-100-gaussian"}
             for entry in residual_experiments
         )
+
+
+def test_ffnn_registry_uses_residual_model_configs() -> None:
+    """Checked-in FFNN registry entries should point at explicit residual-network configs."""
+    config = _load_toml("configs/experiments-ffnn.toml")
+    model_paths = {entry["id"]: entry["path"] for entry in config["models"]}
+
+    assert model_paths["scaleequivariant-residual-ffnn-l2"] == "models/ffnn-l2.toml"
+    assert model_paths["scaleequivariant-factorized-residual-ffnn-l2"] == "models/skip-ffnn-l2.toml"
+    assert (
+        model_paths["scaleequivariant-embedded-factorized-residual-ffnn-l2"]
+        == "models/embedded-factorized-skip-ffnn-l2.toml"
+    )
+    assert (
+        model_paths["scaleequivariant-embedded-spd-residual-ffnn-l2"]
+        == "models/embedded-spd-skip-ffnn-l2.toml"
+    )
+    assert (
+        model_paths["scaleequivariant-embedded-spd-factorized-residual-ffnn-l2"]
+        == "models/embedded-spd-factorized-skip-ffnn-l2.toml"
+    )
+
+
+def test_ffnn_residual_model_configs_use_residual_classes() -> None:
+    """Each shipped FFNN model config should use the intended residual-network API."""
+    expected_names = {
+        "configs/models/ffnn-l2.toml": "ScaleEquivariantConstantWidthFFNN",
+        "configs/models/skip-ffnn-l2.toml": "ScaleEquivariantConstantWidthFactorizedFFNN",
+        "configs/models/embedded-factorized-skip-ffnn-l2.toml": (
+            "ScaleEquivariantEmbeddedFactorizedFFNN"
+        ),
+        "configs/models/embedded-spd-skip-ffnn-l2.toml": "ScaleEquivariantEmbeddedSPDFFNN",
+        "configs/models/embedded-spd-factorized-skip-ffnn-l2.toml": (
+            "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
+        ),
+    }
+
+    for model_path, expected_name in expected_names.items():
+        config = _load_toml(model_path)
+        assert config["MODEL"]["name"] == expected_name
+
+    for model_path in expected_names:
+        config = _load_toml(model_path)
+        assert "residual" not in config["MODEL"]

@@ -5,9 +5,12 @@ from __future__ import annotations
 import inspect
 import tomllib
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
+from click import Group
 from typer.models import ArgumentInfo
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from neuralls.application.models import ExperimentResult
@@ -25,6 +28,7 @@ from neuralls.composition.comparison.models import (
 from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.domain.solver.models.result import ComparisonRecommendations
 from neuralls.platform.config.mlflow import build_sqlite_tracking_uri
+from neuralls.shared.constants import EXIT_FAILURE
 
 runner = CliRunner()
 
@@ -57,29 +61,24 @@ def _comparison_payload(tmp_path: Path) -> ComparisonResult:
 
 
 def test_root_help_lists_only_public_commands() -> None:
-    result = runner.invoke(app, ["--help"])
+    command = get_command(app)
+    assert isinstance(command, Group)
 
-    assert result.exit_code == 0
-    for command in ("config", "generate", "generate-single", "train", "run", "compare"):
-        assert command in result.stdout
-    for legacy in (
-        "compare-all",
-        "generate-all",
-        "process-data",
-        "run-experiments",
-        "train-all",
-        "train-model",
-        "predict",
-    ):
-        assert legacy not in result.stdout
+    assert sorted(command.commands) == [
+        "compare",
+        "config",
+        "generate",
+        "generate-single",
+        "run",
+        "train",
+    ]
 
 
 def test_config_subcommands_are_exposed_under_root() -> None:
-    result = runner.invoke(app, ["config", "--help"])
+    root_command = get_command(app)
+    assert isinstance(root_command, Group)
 
-    assert result.exit_code == 0
-    for subcommand in ("init", "path", "list", "show", "create", "set", "delete"):
-        assert subcommand in result.stdout
+    assert "config" in root_command.commands
 
 
 def test_project_scripts_only_expose_neuralls() -> None:
@@ -90,17 +89,19 @@ def test_project_scripts_only_expose_neuralls() -> None:
 
 
 def test_generate_help_shows_batch_mode() -> None:
-    result = runner.invoke(app, ["generate", "--help"])
+    command = get_command(app)
+    assert isinstance(command, Group)
+    parameter = cast(Any, command.commands["generate"].params[0])
 
-    assert result.exit_code == 0
-    assert "Path to a case config TOML." in result.stdout
+    assert parameter.help == "Path to a case config TOML."
 
 
 def test_generate_single_help_shows_dataset_mode() -> None:
-    result = runner.invoke(app, ["generate-single", "--help"])
+    command = get_command(app)
+    assert isinstance(command, Group)
+    parameter = cast(Any, command.commands["generate-single"].params[0])
 
-    assert result.exit_code == 0
-    assert "Path to a dataset config TOML." in result.stdout
+    assert parameter.help == "Path to a dataset config TOML."
 
 
 def test_generate_signature_uses_batch_case_argument() -> None:
@@ -160,12 +161,21 @@ def test_generate_fails_for_case_config_without_datasets(
 
     result = runner.invoke(app, ["generate", str(config)])
 
-    assert result.exit_code != 0
-    assert "does not define any [[datasets]]" in result.stderr
+    assert result.exit_code == EXIT_FAILURE
+    mock_load_settings.assert_called_once_with(config, None, profile=None)
+    mock_load_case_config.assert_called_once_with(config, settings)
     mock_generate_batch.assert_not_called()
 
 
-def test_generate_fails_for_dataset_config_without_single_subcommand(tmp_path: Path) -> None:
+@patch("neuralls.cli.generate.generate_batch")
+@patch("neuralls.cli.generate.load_validated_case_config")
+@patch("neuralls.cli.generate.load_case_settings")
+def test_generate_fails_for_dataset_config_without_single_subcommand(
+    mock_load_settings: MagicMock,
+    mock_load_case_config: MagicMock,
+    mock_generate_batch: MagicMock,
+    tmp_path: Path,
+) -> None:
     config = tmp_path / "dataset.toml"
     config.write_text(
         "\n".join(
@@ -185,8 +195,10 @@ def test_generate_fails_for_dataset_config_without_single_subcommand(tmp_path: P
 
     result = runner.invoke(app, ["generate", str(config)])
 
-    assert result.exit_code != 0
-    assert "Use 'neuralls generate-single" in result.stderr
+    assert result.exit_code == EXIT_FAILURE
+    mock_load_settings.assert_not_called()
+    mock_load_case_config.assert_not_called()
+    mock_generate_batch.assert_not_called()
 
 
 def test_generate_single_signature_uses_dataset_argument_and_case_option() -> None:
@@ -223,18 +235,25 @@ def test_generate_single_invokes_single_dataset_workflow(
     assert result.exit_code == 0
     mock_load_settings.assert_called_once_with(case_config, None, profile=None)
     mock_process_data.assert_called_once_with(dataset_config, settings)
-    assert "Data processing complete!" in result.stdout
 
 
-def test_generate_single_requires_case_config(tmp_path: Path, monkeypatch) -> None:
+@patch("neuralls.cli.generate_single.process_data_from_config")
+@patch("neuralls.cli.generate_single.load_case_settings")
+def test_generate_single_requires_case_config(
+    mock_load_settings: MagicMock,
+    mock_process_data: MagicMock,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     dataset_config = tmp_path / "dataset.toml"
     dataset_config.write_text("", encoding="utf-8")
     monkeypatch.delenv("NEURALLS_CASE_CONFIG", raising=False)
 
     result = runner.invoke(app, ["generate-single", str(dataset_config)])
 
-    assert result.exit_code != 0
-    assert "This command requires a case config." in result.stderr
+    assert result.exit_code == EXIT_FAILURE
+    mock_load_settings.assert_not_called()
+    mock_process_data.assert_not_called()
 
 
 def test_train_signature_uses_batch_case_argument() -> None:

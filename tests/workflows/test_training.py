@@ -304,7 +304,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
         ),
         MODEL=ModelComponentSettings(
             name="ConstantWidthFFNN",
-            module_path="dlkit.domain.nn.ffnn.simple",
+            module_path="dlkit.nn",
             hidden_size=4,
             num_layers=1,
         ),

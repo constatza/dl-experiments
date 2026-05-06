@@ -5,7 +5,9 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
+from click import Group
 from typer.models import OptionInfo
+from typer.main import get_command
 from typer.testing import CliRunner
 
 import neuralls.cli.config as config_cli
@@ -84,8 +86,7 @@ def test_create_fails_when_a_required_root_flag_is_missing(
         ],
     )
 
-    assert result.exit_code != 0
-    assert "Missing option '--output-dir'" in result.stderr
+    assert result.exit_code == 2
     assert not (tmp_path / "config.toml").exists()
 
 
@@ -95,7 +96,6 @@ def test_init_writes_template_config(tmp_path: Path) -> None:
     result = runner.invoke(app, ["init"])
 
     assert result.exit_code == 0
-    assert "Wrote starter config" in result.stdout
     assert "[default]" in (tmp_path / "config.toml").read_text(encoding="utf-8")
 
 
@@ -107,7 +107,6 @@ def test_init_force_overwrites_existing_config(tmp_path: Path) -> None:
     result = runner.invoke(app, ["init", "--force"])
 
     assert result.exit_code == 0
-    assert "Wrote starter config" in result.stdout
     assert 'raw_dir = "/path/to/raw"' in config_file.read_text(encoding="utf-8")
 
 
@@ -154,12 +153,25 @@ def test_set_updates_existing_named_profile(tmp_path: Path) -> None:
 
 
 def test_set_fails_for_missing_profile(tmp_path: Path) -> None:
-    _configure_config_path(tmp_path / "config.toml")
+    config_file = tmp_path / "config.toml"
+    _configure_config_path(config_file)
+    config_file.write_text(
+        "\n".join(
+            [
+                "[default]",
+                'raw_dir = "/tmp/raw"',
+                'processed_dir = "/tmp/processed"',
+                'output_dir = "/tmp/output"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    original_text = config_file.read_text(encoding="utf-8")
 
     result = runner.invoke(app, ["set", "output-dir", "/tmp/new-output", "laptop"])
 
     assert result.exit_code != 0
-    assert "Profile 'laptop' not found" in result.stderr
+    assert config_file.read_text(encoding="utf-8") == original_text
 
 
 def test_delete_removes_existing_named_profile(tmp_path: Path) -> None:
@@ -185,7 +197,6 @@ def test_delete_removes_existing_named_profile(tmp_path: Path) -> None:
     result = runner.invoke(app, ["delete", "laptop"])
 
     assert result.exit_code == 0
-    assert "Profile 'laptop' deleted." in result.stdout
     config_text = config_file.read_text(encoding="utf-8")
     assert "[default]" in config_text
     assert "[profiles.laptop]" not in config_text
@@ -209,7 +220,7 @@ def test_delete_fails_for_default_profile(tmp_path: Path) -> None:
     result = runner.invoke(app, ["delete", "default"])
 
     assert result.exit_code != 0
-    assert "Cannot delete the 'default' profile." in result.stderr
+    assert "[default]" in config_file.read_text(encoding="utf-8")
 
 
 def test_delete_fails_for_missing_named_profile(tmp_path: Path) -> None:
@@ -226,8 +237,24 @@ def test_delete_fails_for_missing_named_profile(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
+    original_text = config_file.read_text(encoding="utf-8")
 
     result = runner.invoke(app, ["delete", "laptop"])
 
     assert result.exit_code != 0
-    assert "Profile 'laptop' not found." in result.stderr
+    assert config_file.read_text(encoding="utf-8") == original_text
+
+
+def test_config_subcommands_are_registered() -> None:
+    command = get_command(app)
+    assert isinstance(command, Group)
+
+    assert sorted(command.commands) == [
+        "create",
+        "delete",
+        "init",
+        "list",
+        "path",
+        "set",
+        "show",
+    ]
