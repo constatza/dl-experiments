@@ -91,7 +91,10 @@ Model configs define:
 - checkpoint callback naming
 
 Checked-in model configs keep `module_path = "dlkit.nn"` as the user-facing
-entrypoint and now define a repo-wide two-stage optimizer program:
+entrypoint. The checked-in FFNN configs explicitly point at DLKit's residual
+network classes in `MODEL.name`. The constant-width family ships in both
+standard (`models/ffnn-l2.toml`) and factorized (`models/skip-ffnn-l2.toml`)
+forms, and the repo-wide FFNN configs define a two-stage optimizer program:
 
 - stage 1: AdamW
 - switch: epoch `200`

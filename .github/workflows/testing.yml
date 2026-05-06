@@ -69,14 +69,5 @@ jobs:
       - name: Run ty
         run: uv run ty check
 
-      - name: Run Windows portability smoke
-        run: >
-          uv run pytest
-          tests/configuration/test_mlflow_normalization.py
-          tests/configuration/test_paths.py
-          tests/io/configuration/test_toml_loader.py
-          tests/cli/test_run_experiments_cli.py
-          tests/cli/test_compare_preconditioners_integration.py
-          tests/workflows/test_multi_training.py
-          tests/workflows/test_comparison_workflow.py
-          -q
+      - name: Run pytest
+        run: uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q
