@@ -77,32 +77,30 @@ def test_ffnn_registry_uses_residual_model_configs() -> None:
     config = _load_toml("configs/experiments-ffnn.toml")
     model_paths = {entry["id"]: entry["path"] for entry in config["models"]}
 
-    assert model_paths["scaleequivariant-residual-ffnn-l2"] == "models/ffnn-l2.toml"
-    assert model_paths["scaleequivariant-factorized-residual-ffnn-l2"] == "models/skip-ffnn-l2.toml"
+    assert model_paths["scaleequivariant-residual-ffnn"] == "models/skip-ffnn.toml"
     assert (
-        model_paths["scaleequivariant-embedded-factorized-residual-ffnn-l2"]
-        == "models/embedded-factorized-skip-ffnn-l2.toml"
+        model_paths["scaleequivariant-embedded-factorized-residual-ffnn"]
+        == "models/embedded-factorized-skip-ffnn.toml"
     )
     assert (
-        model_paths["scaleequivariant-embedded-spd-residual-ffnn-l2"]
-        == "models/embedded-spd-skip-ffnn-l2.toml"
+        model_paths["scaleequivariant-embedded-spd-residual-ffnn"]
+        == "models/embedded-spd-skip-ffnn.toml"
     )
     assert (
-        model_paths["scaleequivariant-embedded-spd-factorized-residual-ffnn-l2"]
-        == "models/embedded-spd-factorized-skip-ffnn-l2.toml"
+        model_paths["scaleequivariant-embedded-spd-factorized-residual-ffnn"]
+        == "models/embedded-spd-factorized-skip-ffnn.toml"
     )
 
 
 def test_ffnn_residual_model_configs_use_residual_classes() -> None:
     """Each shipped FFNN model config should use the intended residual-network API."""
     expected_names = {
-        "configs/models/ffnn-l2.toml": "ScaleEquivariantConstantWidthFFNN",
-        "configs/models/skip-ffnn-l2.toml": "ScaleEquivariantConstantWidthFactorizedFFNN",
-        "configs/models/embedded-factorized-skip-ffnn-l2.toml": (
+        "configs/models/skip-ffnn.toml": "ScaleEquivariantConstantWidthFactorizedFFNN",
+        "configs/models/embedded-factorized-skip-ffnn.toml": (
             "ScaleEquivariantEmbeddedFactorizedFFNN"
         ),
-        "configs/models/embedded-spd-skip-ffnn-l2.toml": "ScaleEquivariantEmbeddedSPDFFNN",
-        "configs/models/embedded-spd-factorized-skip-ffnn-l2.toml": (
+        "configs/models/embedded-spd-skip-ffnn.toml": "ScaleEquivariantEmbeddedSPDFFNN",
+        "configs/models/embedded-spd-factorized-skip-ffnn.toml": (
             "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
         ),
     }

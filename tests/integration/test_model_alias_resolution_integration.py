@@ -220,7 +220,7 @@ def test_two_experiments_same_dataset_no_alias_collision(tmp_path: Path) -> None
     checkpoint_file.write_text("dummy-checkpoint")
 
     run_ids: list[str] = []
-    for run_name in ("run-linear", "run-linear-l2"):
+    for run_name in ("run-linear", "run-linear-normalized"):
         with mlflow.start_run(run_name=run_name) as run:
             run_ids.append(run.info.run_id)
             mlflow.pyfunc.log_model(artifact_path="model", python_model=model_code)
@@ -235,7 +235,7 @@ def test_two_experiments_same_dataset_no_alias_collision(tmp_path: Path) -> None
     )
     record_b = register_logged_model(
         run_id=run_ids[1],
-        registered_model_name="spectral-energy-l2-col-test",
+        registered_model_name="spectral-energy-normalized-col-test",
         tracking_uri=tracking_uri,
         aliases=("candidate",),
         tags={"model_class": "NormScaledLinearFFNN"},

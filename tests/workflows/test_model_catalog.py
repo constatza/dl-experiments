@@ -320,7 +320,7 @@ def test_register_logged_model_two_experiments_no_alias_collision(
         )
         record_b = register_logged_model(
             run_id="run-b",
-            registered_model_name="spectral-energy-l2",
+            registered_model_name="spectral-energy-normalized",
             tracking_uri=tracking_uri,
             aliases=("candidate",),
             tags={"model_class": "NormScaledLinearFFNN"},
@@ -328,4 +328,4 @@ def test_register_logged_model_two_experiments_no_alias_collision(
 
     assert record_a.name != record_b.name
     assert record_a.name == "spectral-energy"
-    assert record_b.name == "spectral-energy-l2"
+    assert record_b.name == "spectral-energy-normalized"

@@ -227,8 +227,8 @@ def test_default_structured_linear_registry_has_expected_models_and_experiments(
     ]
 
 
-def test_legacy_linear_registry_is_preserved(tmp_path: Path) -> None:
-    """A legacy linear-focused registry can coexist under a different filename."""
+def test_linear_registry_uses_single_normalized_model(tmp_path: Path) -> None:
+    """A linear-focused registry can use one normalized-loss model across cases."""
     config_path = _write_master_registry(
         tmp_path / "experiments-linear.toml",
         datasets=[
@@ -241,11 +241,9 @@ def test_legacy_linear_registry_is_preserved(tmp_path: Path) -> None:
         ],
         models=[
             ("linear", "models/linear.toml"),
-            ("linear-l2", "models/linear-l2.toml"),
         ],
         experiments=[
-            ("spectral-l2", "spectral", "linear-l2"),
-            ("spectral-energy", "spectral", "linear"),
+            ("spectral", "spectral", "linear"),
             ("eig-rhs-largest", "eig-rhs-largest", "linear"),
             ("eig-rhs-smallest", "eig-rhs-smallest", "linear"),
             ("eig-solutions-largest", "eig-solutions-largest", "linear"),
@@ -257,10 +255,9 @@ def test_legacy_linear_registry_is_preserved(tmp_path: Path) -> None:
     cfg, config_dir = load_validated_master_config(config_path)
     bindings = list_experiment_bindings(cfg, config_dir)
 
-    assert [entry.id for entry in cfg.models] == ["linear", "linear-l2"]
+    assert [entry.id for entry in cfg.models] == ["linear"]
     assert [binding.experiment_id for binding in bindings] == [
-        "spectral-l2",
-        "spectral-energy",
+        "spectral",
         "eig-rhs-largest",
         "eig-rhs-smallest",
         "eig-solutions-largest",

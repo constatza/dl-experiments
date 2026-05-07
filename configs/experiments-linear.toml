@@ -27,11 +27,6 @@ id = "linear"
 path = "models/linear.toml"
 display_name = "LinearNetwork"
 
-[[models]]
-id = "linear-l2"
-path = "models/linear-l2.toml"
-display_name = "LinearNetwork L2"
-
 # -----------
 # Experiments
 # -----------

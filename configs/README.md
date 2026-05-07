@@ -60,17 +60,17 @@ id = "residuals-100"
 path = "datasets/residuals-100.toml"
 
 [[models]]
-id = "scaleequivariant-residual-ffnn-l2"
-path = "models/ffnn-l2.toml"
+id = "scaleequivariant-residual-ffnn"
+path = "models/skip-ffnn.toml"
 
 [[comparisons]]
 id = "gaussian"
 path = "comparison/gaussian.toml"
 
 [[experiments]]
-id = "residuals-100-scaleequivariant-residual-ffnn-l2"
+id = "residuals-100-scaleequivariant-residual-ffnn"
 dataset = "residuals-100"
-model = "scaleequivariant-residual-ffnn-l2"
+model = "scaleequivariant-residual-ffnn"
 ```
 
 ## What Lives In Each Config
@@ -90,18 +90,26 @@ Model configs define:
 
 - DLKit model module and hyperparameters
 - trainer, loss, and optimizer-policy settings
-- staged optimization under `TRAINING.optimizer.stages`
+- either `TRAINING.optimizer.default_optimizer` / `default_scheduler` or
+  staged optimization under `TRAINING.optimizer.stages`
 - checkpoint callback naming
 
 Checked-in model configs keep `module_path = "dlkit.nn"` as the user-facing
-entrypoint. The checked-in FFNN configs explicitly point at DLKit's residual
-network classes in `MODEL.name`. The constant-width family ships in both
-standard (`models/ffnn-l2.toml`) and factorized (`models/skip-ffnn-l2.toml`)
-forms, and the repo-wide FFNN configs define a two-stage optimizer program:
+entrypoint when the model lives there. The checked-in FFNN configs explicitly
+point at DLKit's residual network classes in `MODEL.name`, and the active
+constant-width FFNN entry now resolves to the skip-model config
+`models/skip-ffnn.toml`.
 
-- stage 1: AdamW
-- switch: epoch `200`
-- stage 2: LBFGS
+Model kwargs stay flat under `[MODEL]` and are forwarded through DLKit's
+`ModelComponentSettings` filtering, so they must match the target constructor
+signature exactly.
+
+The checked-in FFNN family uses DLKit's explicit concurrent optimizer form:
+
+- BatchedMuon for Muon-eligible matrix parameters
+- AdamW for the remaining parameters
+- `ReduceLROnPlateau` on `val_loss`
+- `EarlyStopping` on `val_loss`
 
 Checked-in configs use canonical DLKit syntax: the default scheduler lives
 under `TRAINING.optimizer.default_scheduler`, and any staged program lives
