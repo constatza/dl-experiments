@@ -104,9 +104,13 @@ def _configure_mock_mlflow(mock_mlflow: MagicMock, run_id: str = "comp-run-id") 
 
 def _mock_cfg(
     *,
+    matrix_path: Path | None = None,
+    rhs_path: Path | None = None,
     preconditioners: list[PreconditionerConfig] | None = None,
 ) -> MagicMock:
     cfg = MagicMock()
+    cfg.general.data.matrix_path = matrix_path
+    cfg.general.data.rhs_path = rhs_path
     cfg.general.data.dataset_alias = None
     cfg.preconditioners = tuple(preconditioners or [])
     return cfg
@@ -127,6 +131,15 @@ def _solver_params(tmp_path: Path) -> ComparisonGeneral:
             rhs_path=tmp_path / "rhs.npy",
         ),
     )
+
+
+def _write_system_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    """Create minimal matrix/RHS arrays used by comparison preflight."""
+    matrix_path = tmp_path / "matrix.npy"
+    rhs_path = tmp_path / "rhs.npy"
+    np.save(matrix_path, np.eye(2, dtype=np.float64))
+    np.save(rhs_path, np.array([[1.0, 0.0]], dtype=np.float64))
+    return matrix_path, rhs_path
 
 
 def _logged_ref(run_id: str) -> LoggedModelRefConfig:
@@ -250,10 +263,13 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
     experiments_config = tmp_path / "experiments.toml"
     comparison_config.touch()
     _write_experiments_config(experiments_config)
+    matrix_path, rhs_path = _write_system_inputs(tmp_path)
     cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
         preconditioners=[
             StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
-        ]
+        ],
     )
     payload = MagicMock()
 
@@ -287,10 +303,13 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
     condition_numbers.write_text("condition", encoding="utf-8")
     comparison_config = tmp_path / "comparison.toml"
     comparison_config.touch()
+    matrix_path, rhs_path = _write_system_inputs(tmp_path)
     cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
         preconditioners=[
             StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
-        ]
+        ],
     )
     payload = ComparisonResult(
         results={},
@@ -344,7 +363,10 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
     experiments_config = tmp_path / "experiments.toml"
     comparison_config.touch()
     _write_experiments_config(experiments_config)
+    matrix_path, rhs_path = _write_system_inputs(tmp_path)
     cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
         preconditioners=[
             StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY),
             NeuralPreconditionerConfig(
@@ -352,7 +374,7 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
                 type=PreconditionerType.NEURAL,
                 model_ref=_registered_ref("MissingFFNN", "solutions"),
             ),
-        ]
+        ],
     )
     payload = MagicMock()
 
@@ -390,14 +412,17 @@ def test_run_comparison_fails_if_all_preconditioners_are_skipped(
     experiments_config = tmp_path / "experiments.toml"
     comparison_config.touch()
     _write_experiments_config(experiments_config)
+    matrix_path, rhs_path = _write_system_inputs(tmp_path)
     cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
         preconditioners=[
             NeuralPreconditionerConfig(
                 name="missing-neural",
                 type=PreconditionerType.NEURAL,
                 model_ref=_registered_ref("MissingFFNN", "solutions"),
             ),
-        ]
+        ],
     )
 
     with (
@@ -461,7 +486,10 @@ model = "valid-model"
         """.strip(),
         encoding="utf-8",
     )
+    matrix_path, rhs_path = _write_system_inputs(tmp_path)
     cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
         preconditioners=[
             NeuralPreconditionerConfig(
                 name="registered-neural",
@@ -471,7 +499,7 @@ model = "valid-model"
                     "residuals-100",
                 ),
             ),
-        ]
+        ],
     )
     payload = MagicMock()
 
@@ -494,6 +522,72 @@ model = "valid-model"
 
     assert outcomes[0].success is True
     assert mock_resolve_specs.call_args.kwargs["experiment_contexts"] is None
+
+
+def test_run_comparison_fails_before_tracking_when_matrix_input_is_missing(
+    tmp_path: Path,
+) -> None:
+    comparison_config = tmp_path / "comparison.toml"
+    experiments_config = tmp_path / "experiments.toml"
+    comparison_config.touch()
+    _write_experiments_config(experiments_config)
+    missing_matrix = tmp_path / "missing-matrix.npy"
+    _, rhs_path = _write_system_inputs(tmp_path)
+    cfg = _mock_cfg(
+        matrix_path=missing_matrix,
+        rhs_path=rhs_path,
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ],
+    )
+
+    with (
+        patch(_LOAD_COMPARISON_CONFIG, return_value=cfg),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_SETUP_TRACKING) as mock_setup_tracking,
+    ):
+        outcomes = run_comparison(
+            comparison_config,
+            ComparisonParams(),
+            experiments_config_path=experiments_config,
+        )
+
+    assert outcomes[0].success is False
+    assert f"Comparison input not found: {missing_matrix}" in (outcomes[0].error or "")
+    mock_setup_tracking.assert_not_called()
+    mock_mlflow.start_run.assert_not_called()
+
+
+def test_run_comparison_missing_known_dataset_includes_generate_single_hint(
+    tmp_path: Path,
+) -> None:
+    comparison_config = tmp_path / "comparison.toml"
+    experiments_config = tmp_path / "experiments.toml"
+    comparison_config.touch()
+    _write_experiments_config(experiments_config)
+    missing_dataset = tmp_path / "solutions"
+    rhs_path = tmp_path / "rhs.npy"
+    np.save(rhs_path, np.array([[1.0, 0.0]], dtype=np.float64))
+    cfg = _mock_cfg(
+        matrix_path=missing_dataset,
+        rhs_path=rhs_path,
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ],
+    )
+
+    with patch(_LOAD_COMPARISON_CONFIG, return_value=cfg):
+        outcomes = run_comparison(
+            comparison_config,
+            ComparisonParams(),
+            experiments_config_path=experiments_config,
+        )
+
+    assert outcomes[0].success is False
+    assert "pre-generated benchmark dataset" in (outcomes[0].error or "")
+    assert "uv run neuralls generate-single configs/datasets/solutions.toml" in (
+        outcomes[0].error or ""
+    )
 
 
 def test_run_comparison_batch_preserves_declared_order(tmp_path: Path) -> None:

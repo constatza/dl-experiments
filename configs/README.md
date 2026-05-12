@@ -33,6 +33,10 @@ uv run neuralls generate-single /path/to/dataset.toml \
   --case-config /path/to/case.toml
 ```
 
+`neuralls generate <case.toml>` only builds the case `[[datasets]]` entries.
+It does not infer or materialize standalone benchmark datasets referenced by
+`comparison/*.toml`.
+
 ### 3. Train the case batch
 
 ```bash
@@ -45,6 +49,18 @@ uv run neuralls train /path/to/case.toml
 uv run neuralls run /path/to/case.toml
 uv run neuralls compare /path/to/case.toml
 ```
+
+If one comparison profile depends on an extra benchmark dataset such as
+`configs/datasets/solutions.toml`, build it explicitly first:
+
+```bash
+uv run neuralls generate-single configs/datasets/solutions.toml \
+  --case-config configs/case-ffnn.toml
+```
+
+When a benchmark dataset is missing, `neuralls compare <case.toml>` now fails
+that comparison before opening an MLflow run, reports the missing processed
+path, and continues the rest of the batch.
 
 ## Case Anatomy
 
@@ -114,6 +130,10 @@ Comparison configs define:
 - solver tolerances and iteration limits
 - matrix and RHS inputs for benchmarking
 - explicit `[[preconditioners]]` blocks
+
+Comparison configs may point at processed benchmark datasets that are separate
+from the case `[[datasets]]` registry. Those benchmark datasets must be
+materialized with `neuralls generate-single` before comparison runs.
 
 ## MLflow And Paths
 

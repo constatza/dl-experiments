@@ -39,6 +39,13 @@ Model-reference resolution also keeps MLflow URI/model lookup helpers on the
 composition side because the installed DLKit package no longer exposes the
 older convenience functions that previous code imported from `dlkit`.
 
+Comparison orchestration also owns preflight validation of comparison input
+paths before MLflow tracking starts. Missing benchmark datasets now fail the
+individual comparison outcome early with a remediation hint instead of opening
+partial runs. Neural comparison model downloads use stable internal ids for
+their temporary artifact directories so case display names remain human-readable
+without leaking Windows-invalid characters into filesystem paths.
+
 Case-config assembly now assumes that platform loaders have already resolved
 machine roots from the active profile, expanded environment-backed path
 placeholders, and resolved registry-relative paths, so composition code works

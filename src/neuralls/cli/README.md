@@ -13,7 +13,7 @@ commands.
 - `neuralls generate-single <dataset.toml> --case-config <case.toml>`: build one dataset config
 - `neuralls train <case.toml>`: train every experiment declared in one case
 - `neuralls run <case.toml>`: generate datasets and train the full case matrix
-- `neuralls compare <case.toml>`: run every comparison profile declared in one case
+- `neuralls compare <case.toml>`: run every comparison profile declared in one case after their benchmark datasets exist
 
 ## Package Map
 
@@ -37,6 +37,14 @@ plus optional `--env-file` and `--profile` overrides. `neuralls
 generate-single` accepts a dataset config plus `--case-config` to resolve settings.
 This keeps settings discovery at the CLI boundary rather than inside workflow
 orchestration code.
+
+`neuralls generate <case.toml>` only materializes the case `[[datasets]]`
+entries. Comparison profiles may reference additional benchmark datasets under
+`configs/datasets/` that are not part of that training registry. When one of
+those benchmark datasets is missing, `neuralls compare <case.toml>` fails that
+comparison before opening an MLflow run and reports the matching
+`neuralls generate-single ... --case-config ...` command for shipped benchmark
+configs.
 
 ## Machine Configuration
 

@@ -34,6 +34,7 @@ from neuralls.platform.config.models.preconditioner import (
 )
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.loaders import load_comparison_config
+from neuralls.platform.storage.datasets import load_dataset_manifest, resolve_dataset_paths
 from neuralls.platform.reporting.artifacts import (
     coerce_comparison_result_payload,
     write_comparison_artifacts,
@@ -50,6 +51,23 @@ from neuralls.composition.tracking.run_specs import (
     build_child_comparison_tags,
 )
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
+from neuralls.shared.constants import (
+    DATASET_MANIFEST_FILENAME,
+    MATRIX_COO_DIRNAME,
+    RHS_ARRAY_FILENAME,
+)
+
+_SUPPORTED_COMPARISON_FILE_SUFFIXES = {"", ".npy", ".txt"}
+_KNOWN_COMPARISON_DATASET_CONFIGS = {
+    "solutions": Path("configs/datasets/solutions.toml"),
+    "gaussian-rhs": Path("configs/datasets/gaussian-rhs.toml"),
+    "scaled-solutions": Path("configs/datasets/scaled-solutions.toml"),
+    "sparse-rhs": Path("configs/datasets/sparse-rhs.toml"),
+    "eig-few-solutions-smallest": Path("configs/datasets/eig-few-solutions-smallest.toml"),
+    "eig-few-solutions-largest": Path("configs/datasets/eig-few-solutions-largest.toml"),
+    "eig-few-rhs-smallest": Path("configs/datasets/eig-few-rhs-smallest.toml"),
+    "eig-few-rhs-largest": Path("configs/datasets/eig-few-rhs-largest.toml"),
+}
 
 
 @dataclass(frozen=True)
@@ -60,6 +78,100 @@ class ComparisonTopology:
     artifact_location: str | None
     experiment_name: str
     model_store_tracking_uri: str
+
+
+def _format_cli_path(path: Path) -> str:
+    """Prefer cwd-relative paths in user-facing remediation messages."""
+    try:
+        return path.resolve().relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
+
+
+def _matching_dataset_config_for_processed_path(path: Path) -> Path | None:
+    """Map a known processed dataset directory to its source dataset config."""
+    return _KNOWN_COMPARISON_DATASET_CONFIGS.get(path.name)
+
+
+def _build_missing_input_error(path: Path, *, experiments_config_path: Path) -> FileNotFoundError:
+    """Build a user-facing missing-input error with optional dataset remediation."""
+    message = f"Comparison input not found: {path}."
+    dataset_config = _matching_dataset_config_for_processed_path(path)
+    if dataset_config is None:
+        return FileNotFoundError(message)
+
+    case_hint = _format_cli_path(experiments_config_path)
+    dataset_hint = _format_cli_path(dataset_config)
+    return FileNotFoundError(
+        f"{message} This comparison expects a pre-generated benchmark dataset referenced by "
+        "its comparison profile, not by case [[datasets]]. Generate it with: "
+        f"uv run neuralls generate-single {dataset_hint} --case-config {case_hint}"
+    )
+
+
+def _validate_matrix_input(path: Path, *, experiments_config_path: Path) -> None:
+    """Validate one comparison matrix input without fully executing the comparison."""
+    if not path.exists():
+        raise _build_missing_input_error(path, experiments_config_path=experiments_config_path)
+    if path.is_dir():
+        try:
+            load_dataset_manifest(path)
+        except FileNotFoundError, ValueError:
+            manifest_path = path / DATASET_MANIFEST_FILENAME
+            values_path = path / "values.npy"
+            if manifest_path.exists() and values_path.exists():
+                return
+            raise ValueError(
+                f"Comparison matrix dataset directory is not loadable: {path}. "
+                f"Expected a dataset root with {DATASET_MANIFEST_FILENAME} or a sparse-pack "
+                "matrix directory containing manifest.json and values.npy."
+            ) from None
+        matrix_pack_dir = resolve_dataset_paths(path).matrix_pack_dir
+        if not matrix_pack_dir.exists():
+            raise ValueError(
+                f"Comparison matrix dataset directory is missing {MATRIX_COO_DIRNAME}: {path}"
+            )
+        return
+    if path.suffix not in _SUPPORTED_COMPARISON_FILE_SUFFIXES:
+        raise ValueError(
+            f"Unsupported comparison matrix input format: {path}. "
+            "Use a dataset directory, .npy file, or text matrix file."
+        )
+
+
+def _validate_rhs_input(path: Path, *, experiments_config_path: Path) -> None:
+    """Validate one comparison RHS input without fully executing the comparison."""
+    if not path.exists():
+        raise _build_missing_input_error(path, experiments_config_path=experiments_config_path)
+    if path.is_dir():
+        load_dataset_manifest(path)
+        rhs_path = resolve_dataset_paths(path).rhs_path
+        if not rhs_path.exists():
+            raise ValueError(
+                f"Comparison RHS dataset directory is missing {RHS_ARRAY_FILENAME}: {path}"
+            )
+        return
+    if path.suffix not in _SUPPORTED_COMPARISON_FILE_SUFFIXES:
+        raise ValueError(
+            f"Unsupported comparison RHS input format: {path}. "
+            "Use a dataset directory, .npy file, or text vector file."
+        )
+
+
+def _preflight_comparison_inputs(
+    cfg: ComparisonConfig,
+    *,
+    experiments_config_path: Path,
+) -> None:
+    """Validate comparison matrix/RHS inputs before opening tracking runs."""
+    _validate_matrix_input(
+        Path(cfg.general.data.matrix_path),
+        experiments_config_path=experiments_config_path,
+    )
+    _validate_rhs_input(
+        Path(cfg.general.data.rhs_path),
+        experiments_config_path=experiments_config_path,
+    )
 
 
 def _validate_neural_preconditioner(spec: Any) -> None:
@@ -269,6 +381,7 @@ def run_comparison(
             auto_specs = neural_specs_from_experiments(experiment_entries, claimed_ids)
             if auto_specs:
                 cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))
+        _preflight_comparison_inputs(cfg, experiments_config_path=experiments_config_path)
         topology = _resolve_comparison_topology(experiments_config_path, settings)
         resolution_warnings: tuple[str, ...] = ()
 

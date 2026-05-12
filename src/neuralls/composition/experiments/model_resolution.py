@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -20,6 +21,8 @@ from neuralls.platform.config.models.preconditioner import (
 )
 
 _DATASET_ALIAS_PLACEHOLDER = "@dataset"
+_SAFE_DIRNAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
+_MULTIPLE_UNDERSCORES_PATTERN = re.compile(r"_+")
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,23 @@ class LoggedModelSearchResult:
 
     run_id: str
     model_uri: str
+
+
+def _sanitize_download_dirname(value: str) -> str:
+    """Convert one arbitrary label into a filesystem-safe directory name."""
+    sanitized = _SAFE_DIRNAME_PATTERN.sub("_", value.strip())
+    collapsed = _MULTIPLE_UNDERSCORES_PATTERN.sub("_", sanitized)
+    stripped = collapsed.strip("._-")
+    if stripped:
+        return stripped
+    return "neural-model"
+
+
+def build_neural_download_dirname(spec: NeuralPreconditionerConfig) -> str:
+    """Build a stable local artifact directory name for one neural spec."""
+    if spec.experiment is not None:
+        return _sanitize_download_dirname(spec.experiment)
+    return _sanitize_download_dirname(spec.name)
 
 
 def build_logged_model_uri(*, run_id: str, artifact_path: str) -> str:
@@ -448,7 +468,7 @@ def resolve_preconditioner_models_with_warnings(
             resolution = resolve_model_ref(
                 spec=neural_spec,
                 tracking_uri=tracking_uri,
-                destination=download_root / neural_spec.name.replace(" ", "_"),
+                destination=download_root / build_neural_download_dirname(neural_spec),
                 dataset_alias=context.dataset_alias if context is not None else dataset_alias,
                 model_name=context.model_name if context is not None else None,
             )

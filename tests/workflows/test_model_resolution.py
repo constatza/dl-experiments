@@ -17,6 +17,7 @@ from neuralls.platform.config.models.preconditioner import (
 from neuralls.composition.experiments.model_resolution import (
     ModelResolution,
     PreconditionerResolutionResult,
+    build_neural_download_dirname,
     resolve_model_ref,
     resolve_preconditioner_models,
     resolve_preconditioner_models_with_warnings,
@@ -37,6 +38,31 @@ def test_resolve_preconditioner_models_keeps_non_neural_specs(tmp_path: Path) ->
         download_root=tmp_path,
     )
     assert resolved == [jacobi]
+
+
+def test_build_neural_download_dirname_prefers_experiment_id() -> None:
+    """Stable experiment ids should drive local artifact directory naming."""
+    neural = NeuralPreconditionerConfig(
+        name="Residual-Error 100 | Embedded SPD",
+        type=PreconditionerType.NEURAL,
+        experiment="residuals-100-embedded-spd",
+        model_ref=LoggedModelRefConfig(run_id="run-1"),
+    )
+    assert build_neural_download_dirname(neural) == "residuals-100-embedded-spd"
+
+
+def test_build_neural_download_dirname_sanitizes_display_name_when_needed() -> None:
+    """Fallback naming should strip Windows-invalid punctuation from labels."""
+    neural = NeuralPreconditionerConfig(
+        name='Residual-Error 100 Gaussian | Embedded SPD:?"<>',
+        type=PreconditionerType.NEURAL,
+        model_ref=LoggedModelRefConfig(run_id="run-1"),
+    )
+    dirname = build_neural_download_dirname(neural)
+    assert dirname == "Residual-Error_100_Gaussian_Embedded_SPD"
+    assert "|" not in dirname
+    assert ":" not in dirname
+    assert '"' not in dirname
 
 
 @patch("neuralls.composition.experiments.model_resolution.resolve_model_ref")
