@@ -4,6 +4,8 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from neuralls.composition.experiments.assembler import load_validated_master_config
+from neuralls.platform.config.registry import list_experiment_bindings
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -12,6 +14,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 def _load_toml(relative_path: str) -> dict:
     with (REPO_ROOT / relative_path).open("rb") as handle:
         return tomllib.load(handle)
+
+
+def _load_model_toml(relative_path: str) -> dict:
+    """Load one model TOML relative to configs/models."""
+    return _load_toml(f"configs/models/{relative_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +417,7 @@ def test_residuals_100_gaussian_dataset_uses_gaussian_residuals_strategy() -> No
 def test_current_experiment_registries_reference_residuals_dataset() -> None:
     """Residual registries must expose both archive and Gaussian residual datasets."""
     registry_paths = [
+        "configs/case-advanced.toml",
         "configs/case-ffnn.toml",
         "configs/case-linear.toml",
         "configs/case-parametrized.toml",
@@ -425,6 +433,7 @@ def test_current_experiment_registries_reference_residuals_dataset() -> None:
 def test_residual_experiments_use_residuals_100_dataset() -> None:
     """Every active residual-labelled experiment should use one of the residual datasets."""
     registry_paths = [
+        "configs/case-advanced.toml",
         "configs/case-ffnn.toml",
         "configs/case-linear.toml",
     ]
@@ -477,3 +486,84 @@ def test_embedded_spd_factorized_config_uses_residual_class(
         == "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
     )
     assert "residual" not in embedded_spd_factorized_config["MODEL"]
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "expected_name"),
+    [
+        ("advanced/fourier-feature.toml", "FourierFeatureNetwork"),
+        ("advanced/fourier-feature-lbfgs.toml", "FourierFeatureNetwork"),
+        ("advanced/siren.toml", "SirenFFNN"),
+        ("advanced/siren-lbfgs.toml", "SirenFFNN"),
+        ("advanced/modified-mlp.toml", "ModifiedMLP"),
+        ("advanced/modified-mlp-lbfgs.toml", "ModifiedMLP"),
+    ],
+)
+def test_advanced_model_configs_use_expected_classes(
+    relative_path: str,
+    expected_name: str,
+) -> None:
+    """Advanced configs should target the intended DLKit model classes."""
+    config = _load_model_toml(relative_path)
+
+    assert config["MODEL"]["name"] == expected_name
+    assert config["MODEL"]["module_path"] == "dlkit.domain.nn.spectral"
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "advanced/fourier-feature-lbfgs.toml",
+        "advanced/siren-lbfgs.toml",
+        "advanced/modified-mlp-lbfgs.toml",
+    ],
+)
+def test_advanced_lbfgs_model_configs_use_two_stage_optimizer(relative_path: str) -> None:
+    """Advanced LBFGS configs should use the shared AdamW -> LBFGS stage layout."""
+    config = _load_model_toml(relative_path)
+    stages = config["TRAINING"]["optimizer"]["stages"]
+
+    assert len(stages) == 2
+    assert stages[0]["optimizer"]["name"] == "AdamW"
+    assert stages[0]["trigger"] == {"at_epoch": 200}
+    assert stages[1]["optimizer"]["name"] == "LBFGS"
+
+
+def test_case_advanced_registers_expected_models_and_experiments() -> None:
+    """The advanced case config should expose the full residual-dataset experiment matrix."""
+    config = _load_toml("configs/case-advanced.toml")
+
+    assert [entry["id"] for entry in config["models"]] == [
+        "fourier-feature",
+        "siren",
+        "modified-mlp",
+    ]
+    assert {entry["path"] for entry in config["models"]} == {
+        "models/advanced/fourier-feature.toml",
+        "models/advanced/siren.toml",
+        "models/advanced/modified-mlp.toml",
+    }
+    assert [entry["id"] for entry in config["experiments"]] == [
+        "residuals-100-fourier-feature",
+        "residuals-100-gaussian-fourier-feature",
+        "residuals-100-siren",
+        "residuals-100-gaussian-siren",
+        "residuals-100-modified-mlp",
+        "residuals-100-gaussian-modified-mlp",
+    ]
+
+
+def test_case_advanced_registry_resolves_model_paths() -> None:
+    """The advanced case registry should resolve into concrete model config paths."""
+    cfg, config_dir = load_validated_master_config(REPO_ROOT / "configs" / "case-advanced.toml")
+    bindings = list_experiment_bindings(cfg, config_dir)
+
+    assert [binding.model_registry_id for binding in bindings] == [
+        "fourier-feature",
+        "fourier-feature",
+        "siren",
+        "siren",
+        "modified-mlp",
+        "modified-mlp",
+    ]
+    assert all(binding.model_config_path.is_file() for binding in bindings)

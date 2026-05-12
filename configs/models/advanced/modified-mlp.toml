@@ -1,0 +1,79 @@
+[SESSION]
+seed = 42
+workflow = "train"
+precision = "float64"
+
+[MODEL]
+# U/V-gated MLP with learned encoder branches.
+name = "ModifiedMLP"
+module_path = "dlkit.domain.nn.spectral"
+hidden_size = 504
+num_layers = 3
+
+[TRAINING.lr_tuner]
+min_lr = 1e-5
+max_lr = 1e-1
+num_training = 100
+mode = "linear"
+
+[TRAINING.trainer]
+max_epochs = 300
+accelerator = "auto"
+enable_checkpointing = true
+
+[[TRAINING.trainer.callbacks]]
+name = "ModelCheckpoint"
+filename = "modified-mlp"
+monitor = "val_loss"
+save_top_k = 1
+save_weights_only = false
+enable_version_counter = false
+
+[[TRAINING.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "val_loss"
+min_delta = 1e-4
+patience = 30
+mode = "min"
+check_finite = true
+
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+weight_decay = 1e-2
+
+[TRAINING.optimizer.default_scheduler]
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = 10
+cooldown = 5
+threshold = 1e-4
+min_lr = 1e-6
+
+[TRAINING.loss_function]
+name = "normalized_vector_norm_loss"
+module_path = "dlkit.domain.losses"
+target_key = "targets.solutions"
+
+[[TRAINING.metrics]]
+name = "NormalizedVectorNormError"
+module_path = "dlkit.domain.metrics"
+norm_ord = 2
+vector_dim = -1
+
+[DATASET]
+name = "FlexibleDataset"
+memmap_cache = true
+
+[DATAMODULE]
+name = "InMemoryModule"
+
+[DATAMODULE.dataloader]
+num_workers = 0
+batch_size = 32
+pin_memory = true
+shuffle = true
+
+[OPTUNA]
+enabled = false

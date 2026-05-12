@@ -59,6 +59,9 @@ silently normalized.
 Current DLKit compatibility note:
 
 - model configs still use `dlkit.nn` as the public-facing namespace
+- advanced model configs may target concrete DLKit submodules such as
+  `dlkit.domain.nn.spectral` when the installed top-level namespace does not
+  re-export those classes
 - local loaders normalize model TOML into workflow-specific DLKit config models
 - MLflow logged-model URI construction is handled locally in `tracking/`
   because the installed DLKit package no longer exports those registry

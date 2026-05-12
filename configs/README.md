@@ -16,6 +16,10 @@ Choose the config type that matches the case you want to run:
 - `case-*.toml`: case configs that tie datasets, models, comparisons,
   MLflow, and experiment ids together
 
+Current model families include `linear/`, `skip-ffnn/`, `gnn/`, and
+`advanced/`. The `advanced/` family covers the high-capacity single-input
+DLKit models `FourierFeatureNetwork`, `SirenFFNN`, and `ModifiedMLP`.
+
 ## Recommended Progression
 
 ### 1. Configure one machine profile
@@ -118,6 +122,10 @@ when the model lives there. `MODEL.name` must match the target class name
 exactly; kwargs stay flat under `[MODEL]` and are forwarded through DLKit's
 `ModelComponentSettings` filtering, so they must match the target constructor
 signature exactly.
+
+Some advanced models are exported from a DLKit submodule instead of the
+top-level namespace. In those cases, configs may use a concrete module path
+such as `dlkit.domain.nn.spectral`.
 
 Model configs use canonical DLKit syntax: the default scheduler lives
 under `TRAINING.optimizer.default_scheduler`, and any staged program lives

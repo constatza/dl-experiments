@@ -1,0 +1,110 @@
+# Advanced single-input model registry for residual dataset sweeps.
+
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training = "Train"
+comparison = "Comparisons"
+
+# -------
+# Dataset
+# -------
+
+[[datasets]]
+id = "residuals-100"
+path = "datasets/residuals-100.toml"
+display_name = "Residual-Error 100"
+
+[[datasets]]
+id = "residuals-100-gaussian"
+path = "datasets/residuals-100-gaussian.toml"
+display_name = "Residual-Error 100 Gaussian"
+
+# ------
+# Models
+# ------
+
+[[models]]
+id = "fourier-feature"
+path = "models/advanced/fourier-feature.toml"
+display_name = "Fourier Feature"
+
+[[models]]
+id = "siren"
+path = "models/advanced/siren.toml"
+display_name = "SIREN"
+
+[[models]]
+id = "modified-mlp"
+path = "models/advanced/modified-mlp.toml"
+display_name = "Modified MLP"
+
+# -----------
+# Comparisons
+# -----------
+
+[[comparisons]]
+id = "gaussian"
+path = "comparison/gaussian.toml"
+display_name = "Gaussian RHS"
+
+[[comparisons]]
+id = "scaled-solutions"
+path = "comparison/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[comparisons]]
+id = "sparse-rhs"
+path = "comparison/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[comparisons]]
+id = "eig-few-solutions-smallest"
+path = "comparison/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[comparisons]]
+id = "eig-few-rhs-smallest"
+path = "comparison/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"
+
+# -----------
+# Experiments
+# -----------
+
+[[experiments]]
+id = "residuals-100-fourier-feature"
+dataset = "residuals-100"
+model = "fourier-feature"
+display_name = "Residual-Error 100 | Fourier Feature"
+
+[[experiments]]
+id = "residuals-100-gaussian-fourier-feature"
+dataset = "residuals-100-gaussian"
+model = "fourier-feature"
+display_name = "Residual-Error 100 Gaussian | Fourier Feature"
+
+[[experiments]]
+id = "residuals-100-siren"
+dataset = "residuals-100"
+model = "siren"
+display_name = "Residual-Error 100 | SIREN"
+
+[[experiments]]
+id = "residuals-100-gaussian-siren"
+dataset = "residuals-100-gaussian"
+model = "siren"
+display_name = "Residual-Error 100 Gaussian | SIREN"
+
+[[experiments]]
+id = "residuals-100-modified-mlp"
+dataset = "residuals-100"
+model = "modified-mlp"
+display_name = "Residual-Error 100 | Modified MLP"
+
+[[experiments]]
+id = "residuals-100-gaussian-modified-mlp"
+dataset = "residuals-100-gaussian"
+model = "modified-mlp"
+display_name = "Residual-Error 100 Gaussian | Modified MLP"

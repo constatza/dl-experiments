@@ -15,6 +15,11 @@ import pytest
 
 _CONFIGS_ROOT = Path(__file__).parents[2] / "configs" / "models"
 _SHAPE_AWARE_PREFIX = "ScaleEquivariant"
+_SHAPE_AWARE_MODEL_NAMES = {
+    "FourierFeatureNetwork",
+    "SirenFFNN",
+    "ModifiedMLP",
+}
 _FORBIDDEN_KEYS = ("in_features", "out_features")
 
 
@@ -22,11 +27,12 @@ def _shape_aware_model_configs() -> list[Path]:
     """Return all model TOML configs whose MODEL.name starts with the shape-aware prefix."""
     return [
         p
-        for p in _CONFIGS_ROOT.glob("*.toml")
+        for p in _CONFIGS_ROOT.rglob("*.toml")
         if tomllib.loads(p.read_text())
         .get("MODEL", {})
         .get("name", "")
         .startswith(_SHAPE_AWARE_PREFIX)
+        or tomllib.loads(p.read_text()).get("MODEL", {}).get("name", "") in _SHAPE_AWARE_MODEL_NAMES
     ]
 
 
