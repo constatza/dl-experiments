@@ -10,6 +10,7 @@ The domain package contains the pure computational core of `neuralls`.
 - `linalg.py`: pure linear algebra utilities (matrix norms, normalization scale)
 - `normalization.py`: data scaling helpers and normalization ABC
 - `inference.py`: cross-boundary inference DTOs (`InferencePredictions`, `InferenceOutputs`)
+- `inference_ports.py`: framework-agnostic batch inference predictor port used by application and platform
 
 ## Semantic Difference
 

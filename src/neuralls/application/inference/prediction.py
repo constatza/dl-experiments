@@ -7,13 +7,12 @@ including batch processing and result collection.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
 
 import numpy as np
-import torch
 from loguru import logger
 
 from neuralls.application.inference.models import InferenceData, InferencePredictions
+from neuralls.domain.inference_ports import InferencePredictorPort
 
 
 def iterate_feature_batches(
@@ -36,14 +35,14 @@ def iterate_feature_batches(
 
 
 def collect_predictions(
-    predictor: Any,
+    predictor: InferencePredictorPort,
     feature_arrays: dict[str, np.ndarray],
     batch_size: int,
-) -> tuple[list[torch.Tensor], float]:
+) -> tuple[list[np.ndarray], float]:
     """Run inference for every feature batch.
 
     Args:
-        predictor: DLKit CheckpointPredictor instance.
+        predictor: Batch predictor port implementation.
         feature_arrays: Feature arrays keyed by name.
         batch_size: Number of samples per batch.
 
@@ -53,40 +52,54 @@ def collect_predictions(
     Raises:
         ValueError: If predictor returns no predictions.
     """
-    predictions: list[torch.Tensor] = []
+    predictions: list[np.ndarray] = []
     for batch in iterate_feature_batches(feature_arrays, batch_size):
-        tensor_batch = {
-            k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()
-        }
-        result = predictor.predict(**tensor_batch)
-        primary = result[0] if isinstance(result, tuple) else result
-        predictions.append(primary)
+        predictions.append(np.asarray(predictor.predict_batch(batch), dtype=np.float64))
     if not predictions:
         raise ValueError("Predictor returned no predictions.")
     return predictions, 0.0
 
 
 def process_predictions(
-    raw_predictions: list[torch.Tensor],
+    raw_predictions: list[np.ndarray],
 ) -> np.ndarray:
     """Process raw prediction batches into single array.
 
     Args:
-        raw_predictions: List of prediction tensors from predictor.
+        raw_predictions: List of batch prediction arrays from predictor.
 
     Returns:
         Flattened prediction array.
     """
-    normalized = [
-        prediction if prediction.ndim > 0 else prediction.unsqueeze(0)
-        for prediction in raw_predictions
-    ]
-    stacked = torch.cat(normalized, dim=0).detach().cpu().numpy()
+    if not raw_predictions:
+        raise ValueError("No predictions available to process.")
+
+    normalized: list[np.ndarray] = []
+    expected_tail_shape: tuple[int, ...] | None = None
+    for prediction in raw_predictions:
+        array = np.asarray(prediction, dtype=np.float64)
+        if array.ndim == 0:
+            array = array.reshape(1)
+        if array.shape[0] == 0:
+            raise ValueError("Predictor returned an empty prediction batch.")
+
+        tail_shape = array.shape[1:]
+        if expected_tail_shape is None:
+            expected_tail_shape = tail_shape
+        elif tail_shape != expected_tail_shape:
+            raise ValueError(
+                "Inconsistent prediction batch shapes: "
+                f"expected trailing shape {expected_tail_shape}, got {tail_shape}"
+            )
+
+        normalized.append(array)
+
+    stacked = np.concatenate(normalized, axis=0)
     return stacked.ravel()
 
 
 def run_prediction(
-    predictor: Any,
+    predictor: InferencePredictorPort,
     data: InferenceData,
     batch_size: int = 256,
 ) -> InferencePredictions:
@@ -96,15 +109,14 @@ def run_prediction(
     (enabled with apply_transforms=True in predictor creation).
 
     Args:
-        predictor: DLKit predictor instance with transforms enabled.
+        predictor: Batch predictor port implementation.
         data: Inference data with features and targets.
         batch_size: Batch size for inference (defaults to 256).
 
     Returns:
         InferencePredictions with results and metadata.
     """
-    feature_name, feature_array = next(iter(data.features.items()))
-    feature_arrays = {feature_name: feature_array}
+    feature_arrays = data.features
 
     logger.info(f"Running inference on {data.metadata.get('source', 'unknown')} data...")
     raw_preds, duration = collect_predictions(predictor, feature_arrays, batch_size)

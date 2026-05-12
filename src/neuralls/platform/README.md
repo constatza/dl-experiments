@@ -8,7 +8,7 @@ The platform package isolates external integrations and side-effecting helpers.
 - `storage/`: filesystem, workspaces, dataset I/O, and storage validation helpers
 - `tracking/`: MLflow run and client helpers
 - `reporting/`: plotting, artifact staging, and inference output adapters
-- `dlkit/`: DLKit-backed predictor adapter
+- `dlkit/`: DLKit-backed adapters for solver preconditioners and batch inference
 - `caching.py`: directory hashing for workflow cache invalidation
 
 ## Semantic Difference
@@ -66,6 +66,10 @@ Current DLKit compatibility note:
 - MLflow logged-model URI construction is handled locally in `tracking/`
   because the installed DLKit package no longer exports those registry
   convenience helpers
+- DLKit output-shape normalization is private to `platform/dlkit`, where both
+  solver and inference adapters depend only on a structural contract:
+  prediction results must expose a `predictions` tensor. No legacy tensor or
+  tuple return shapes are supported in `neuralls`.
 
 ## Boundary
 

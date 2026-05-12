@@ -5,13 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 
 import numpy as np
-import torch
 from loguru import logger
-
-from dlkit.io import load_array
 
 from neuralls.application.inference.models import InferenceConfig
 from neuralls.composition.experiments.assembler import load_experiment
@@ -48,74 +45,6 @@ class InferenceResult:
 # NOTE: Minimal dataset functions removed - no longer needed with InferenceWorkflowConfig
 # Transforms are loaded from checkpoint metadata (apply_transforms=True)
 # DATASET section is optional for inference mode
-
-
-def _load_feature_arrays(entries: Iterable[Any]) -> dict[str, np.ndarray]:
-    """Load feature tensors into numpy arrays keyed by entry name."""
-    feature_arrays: dict[str, np.ndarray] = {}
-    for entry in entries:
-        value = getattr(entry, "value", None)
-        if value is None and hasattr(entry, "get_value"):
-            value = entry.get_value()
-
-        if value is not None:
-            array = np.asarray(value)
-        else:
-            tensor = load_array(entry.path)
-            array = (
-                tensor.cpu().numpy()
-                if hasattr(tensor, "cpu") and hasattr(tensor, "numpy")
-                else np.asarray(tensor)
-            )
-
-        feature_arrays[entry.name] = array
-    if not feature_arrays:
-        raise ValueError("No feature entries defined in DATASET configuration.")
-    lengths = {array.shape[0] for array in feature_arrays.values()}
-    if len(lengths) != 1:
-        raise ValueError("Feature entries must share the same leading dimension.")
-    return feature_arrays
-
-
-def _iterate_feature_batches(
-    feature_arrays: dict[str, np.ndarray],
-    batch_size: int,
-) -> Iterator[dict[str, np.ndarray]]:
-    """Yield contiguous feature batches to stream through the predictor."""
-    total = next(iter(feature_arrays.values())).shape[0]
-    for start in range(0, total, batch_size):
-        end = min(start + batch_size, total)
-        yield {name: array[start:end] for name, array in feature_arrays.items()}
-
-
-def _resolve_batch_size(settings: Any) -> int:
-    """Reuse dataloader batch size when available, else default to 256."""
-    datamodule = getattr(settings, "DATAMODULE", None)
-    dataloader = getattr(datamodule, "dataloader", None) if datamodule else None
-    configured = getattr(dataloader, "batch_size", None)
-    try:
-        return int(configured) if configured is not None else 256
-    except TypeError, ValueError:
-        return 256
-
-
-def _collect_predictions(
-    predictor: Any,
-    feature_arrays: dict[str, np.ndarray],
-    batch_size: int,
-) -> tuple[list[torch.Tensor], float]:
-    """Run inference for every feature batch."""
-    predictions: list[torch.Tensor] = []
-    for batch in _iterate_feature_batches(feature_arrays, batch_size):
-        tensor_batch = {
-            k: torch.from_numpy(np.asarray(v, dtype=np.float64)) for k, v in batch.items()
-        }
-        result = predictor.predict(**tensor_batch)
-        primary = result[0] if isinstance(result, tuple) else result
-        predictions.append(primary)
-    if not predictions:
-        raise ValueError("Predictor returned no predictions.")
-    return predictions, 0.0
 
 
 def _flatten_predictions(preds: Any) -> dict[str, Any]:
@@ -491,7 +420,10 @@ def _execute_inference_pipeline(
     """
     from neuralls.composition.inference.data_loading import load_inference_data
     from neuralls.application.inference.prediction import run_prediction
-    from neuralls.platform.dlkit.predictor_adapter import create_predictor, resolve_batch_size
+    from neuralls.platform.dlkit.inference_adapter import (
+        create_inference_predictor,
+        resolve_batch_size,
+    )
     from neuralls.platform.reporting.predictions import (
         save_inference_outputs,
         save_synthetic_predictions,
@@ -511,7 +443,7 @@ def _execute_inference_pipeline(
     )
 
     # Run prediction (transforms applied automatically from checkpoint)
-    with create_predictor(config.checkpoint_path, settings) as predictor:
+    with create_inference_predictor(config.checkpoint_path, settings) as predictor:
         predictions = run_prediction(predictor, data, batch_size=resolve_batch_size(settings))
 
     # Save synthetic results separately (if applicable)

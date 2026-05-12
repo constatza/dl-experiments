@@ -13,7 +13,7 @@ Design Principles:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import torch
 from dlkit import load_model
@@ -25,6 +25,8 @@ from neuralls.domain.solver.preconditioners.tensor_utils import (
     extract_model_output,
     prepare_model_input,
 )
+
+from ._prediction_outputs import extract_prediction_tensor
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -72,9 +74,7 @@ class DLKitPredictor(PredictorPort):
         try:
             input_tensor = prepare_model_input(residual, self._device)
             output = self._predictor.predict(input_tensor)
-            primary = output[0] if isinstance(output, tuple) else output
-            if not isinstance(primary, torch.Tensor):
-                raise TypeError(f"Unsupported predictor output type: {type(primary).__name__}")
+            primary = extract_prediction_tensor(output)
             return extract_model_output(primary)
 
         except torch.cuda.OutOfMemoryError as e:
@@ -176,44 +176,3 @@ class DLKitAdapter(PredictorAdapter):
             raise RuntimeError(
                 f"Failed to load model from {checkpoint_path}: {type(e).__name__}: {e}"
             ) from e
-
-
-def create_predictor(checkpoint_path: Path, settings: Any) -> Any:
-    """Create DLKit predictor from checkpoint with fitted transforms.
-
-    Uses the public DLKit inference API, FULL_64 precision, and
-    checkpoint-based transforms (normalization, scaling, etc.) loaded
-    automatically from checkpoint metadata.
-
-    Args:
-        checkpoint_path: Path to model checkpoint.
-        settings: DLKit workflow settings (unused; kept for call-site compatibility).
-
-    Returns:
-        DLKit predictor context manager with fitted transforms enabled.
-    """
-    logger.debug(f"Loading checkpoint from: {checkpoint_path}")
-    return load_model(
-        checkpoint_path,
-        device="auto",
-        apply_transforms=True,
-        precision=PrecisionStrategy.FULL_64,
-    )
-
-
-def resolve_batch_size(settings: Any) -> int:
-    """Resolve batch size from DLKit workflow settings.
-
-    Args:
-        settings: DLKit workflow settings object.
-
-    Returns:
-        Batch size (defaults to 256 if not configured).
-    """
-    datamodule = getattr(settings, "DATAMODULE", None)
-    dataloader = getattr(datamodule, "dataloader", None) if datamodule else None
-    configured = getattr(dataloader, "batch_size", None)
-    try:
-        return int(configured) if configured is not None else 256
-    except TypeError, ValueError:
-        return 256

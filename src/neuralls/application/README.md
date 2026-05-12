@@ -5,7 +5,7 @@ The application package holds use-case logic only.
 ## Package Map
 
 - `comparison/execution.py`: thin redirect to `domain/solver/comparison.py`
-- `inference/prediction.py`: predictor execution over prepared inference data
+- `inference/prediction.py`: batch prediction execution over prepared inference data through a domain-owned inference predictor port
 - `inference/models.py`: `InferenceConfig` and `InferenceData` DTOs
 - `models.py`: `ExperimentResult` and `TaskResult` reporting DTOs
 - `training/`: reserved package boundary for training use-case services
