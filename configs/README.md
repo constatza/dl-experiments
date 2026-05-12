@@ -13,7 +13,7 @@ Choose the config type that matches the case you want to run:
 - `datasets/*.toml`: define one dataset source or generation strategy
 - `models/*.toml`: define one model architecture and trainer setup
 - `comparison/*.toml`: define one solver benchmark profile
-- `experiments-*.toml`: case configs that tie datasets, models, comparisons,
+- `case-*.toml`: case configs that tie datasets, models, comparisons,
   MLflow, and experiment ids together
 
 ## Recommended Progression
@@ -28,49 +28,52 @@ uv run neuralls config create default --raw-dir /data/raw --processed-dir /data/
 ### 2. Generate datasets
 
 ```bash
-uv run neuralls generate configs/experiments-ffnn.toml
-uv run neuralls generate-single configs/datasets/residuals-100.toml \
-  --case-config configs/experiments-ffnn.toml
+uv run neuralls generate /path/to/case.toml
+uv run neuralls generate-single /path/to/dataset.toml \
+  --case-config /path/to/case.toml
 ```
 
 ### 3. Train the case batch
 
 ```bash
-uv run neuralls train configs/experiments-ffnn.toml
+uv run neuralls train /path/to/case.toml
 ```
 
 ### 4. Run or compare the same case
 
 ```bash
-uv run neuralls run configs/experiments-ffnn.toml
-uv run neuralls compare configs/experiments-ffnn.toml
+uv run neuralls run /path/to/case.toml
+uv run neuralls compare /path/to/case.toml
 ```
 
 ## Case Anatomy
 
-Each `experiments-*.toml` file is a case config for one experiment family.
+Each `case-*.toml` file is a case config for one experiment family.
 
 ```toml
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
 [names]
 training = "Train"
 comparison = "Comparisons"
 
 [[datasets]]
-id = "residuals-100"
-path = "datasets/residuals-100.toml"
+id = "my-dataset"
+path = "datasets/my-dataset.toml"
 
 [[models]]
-id = "scaleequivariant-residual-ffnn"
-path = "models/skip-ffnn.toml"
+id = "my-model"
+path = "models/<family>/my-model.toml"
 
 [[comparisons]]
-id = "gaussian"
-path = "comparison/gaussian.toml"
+id = "my-solver"
+path = "comparison/my-solver.toml"
 
 [[experiments]]
-id = "residuals-100-scaleequivariant-residual-ffnn"
-dataset = "residuals-100"
-model = "scaleequivariant-residual-ffnn"
+id = "my-dataset-my-model"
+dataset = "my-dataset"
+model = "my-model"
 ```
 
 ## What Lives In Each Config
@@ -94,24 +97,13 @@ Model configs define:
   staged optimization under `TRAINING.optimizer.stages`
 - checkpoint callback naming
 
-Checked-in model configs keep `module_path = "dlkit.nn"` as the user-facing
-entrypoint when the model lives there. The checked-in FFNN configs explicitly
-point at DLKit's residual network classes in `MODEL.name`, and the active
-constant-width FFNN entry now resolves to the skip-model config
-`models/skip-ffnn.toml`.
-
-Model kwargs stay flat under `[MODEL]` and are forwarded through DLKit's
+Model configs keep `module_path = "dlkit.nn"` as the user-facing entrypoint
+when the model lives there. `MODEL.name` must match the target class name
+exactly; kwargs stay flat under `[MODEL]` and are forwarded through DLKit's
 `ModelComponentSettings` filtering, so they must match the target constructor
 signature exactly.
 
-The checked-in FFNN family uses DLKit's explicit concurrent optimizer form:
-
-- BatchedMuon for Muon-eligible matrix parameters
-- AdamW for the remaining parameters
-- `ReduceLROnPlateau` on `val_loss`
-- `EarlyStopping` on `val_loss`
-
-Checked-in configs use canonical DLKit syntax: the default scheduler lives
+Model configs use canonical DLKit syntax: the default scheduler lives
 under `TRAINING.optimizer.default_scheduler`, and any staged program lives
 under `TRAINING.optimizer.stages`.
 
@@ -161,5 +153,5 @@ config file directory instead of assuming a Unix-only working directory layout.
 
 ## What To Read Next
 
-- [`configs/datasets/README.md`](datasets/README.md) for strategy details
+- [`datasets/README.md`](datasets/README.md) for strategy details and schema examples
 - [`../README.md`](../README.md) for the end-to-end workflow

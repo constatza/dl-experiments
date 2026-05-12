@@ -11,8 +11,8 @@ first and only then drop into the package internals.
 Build one dataset from one config:
 
 ```bash
-uv run process-data configs/datasets/residuals-100.toml \
-  --case-config configs/experiments-ffnn.toml
+uv run process-data /path/to/dataset.toml \
+  --case-config /path/to/case.toml
 ```
 
 ### Intermediate
@@ -20,7 +20,7 @@ uv run process-data configs/datasets/residuals-100.toml \
 Build every dataset declared in one case config:
 
 ```bash
-uv run generate-all configs/experiments-ffnn.toml
+uv run generate-all /path/to/case.toml
 ```
 
 ### Advanced
@@ -79,7 +79,7 @@ When adding a strategy:
 1. add a config model in `strategy_configs.py`
 2. implement the strategy under `strategies/`
 3. register it through `@register_strategy`
-4. document the public name in `configs/datasets/README.md`
+4. document the public strategy name and its required fields in user-facing docs
 5. add generation and config tests
 
 ## Where It Connects

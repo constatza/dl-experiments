@@ -4,22 +4,21 @@ workflow = "train"
 precision = "float64"
 
 [MODEL]
-# DLKit scale-equivariant constant-width skip/factorized residual FFNN.
-name = "ScaleEquivariantConstantWidthFactorizedFFNN"
+# DLKit scale-equivariant embedded SPD-factorized residual FFNN.
+name = "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
 module_path = "dlkit.nn"
-size = 504
+hidden_size = 500
 num_layers = 3
+bias = false
+min_diag = 1e-4
 norm = "l2"
 dropout = 0.0
 
-[TRAINING]
-# Temporary: disable DLKit LR auto-tuning because the current runtime fails in
-# Lightning's LR finder before training can start.
-#[TRAINING.lr_tuner]
-#min_lr = 1e-5
-#max_lr = 1e-1
-#num_training = 100
-#mode = "linear"
+[TRAINING.lr_tuner]
+min_lr = 1e-5
+max_lr = 1e-1
+num_training = 100
+mode = "linear"
 
 [TRAINING.trainer]
 max_epochs = 300
@@ -28,7 +27,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "skip-ffnn"
+filename = "embedded-spd-factorized-lbfgs"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
@@ -42,21 +41,13 @@ patience = 30
 mode = "min"
 check_finite = true
 
-[TRAINING.optimizer.default_optimizer]
-name = "Concurrent"
-optimizers = [
-  { name = "BatchedMuon", lr = 1e-2, momentum = 0.95, nesterov = true, ns_steps = 5 },
-  { name = "AdamW", lr = 1e-3, weight_decay = 1e-2 },
-]
+[[TRAINING.optimizer.stages]]
+optimizer = {name = "AdamW", lr = 1e-3, weight_decay = 1e-2}
+scheduler = {name = "ReduceLROnPlateau", mode = "min", factor = 0.5, patience = 10, cooldown = 5, threshold = 1e-4, min_lr = 1e-6}
+trigger = {at_epoch = 200}
 
-[TRAINING.optimizer.default_scheduler]
-name = "ReduceLROnPlateau"
-mode = "min"
-factor = 0.5
-patience = 10
-cooldown = 5
-threshold = 1e-4
-min_lr = 1e-6
+[[TRAINING.optimizer.stages]]
+optimizer = {name = "LBFGS", lr = 1.0, max_iter = 20, line_search_fn = "strong_wolfe"}
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"

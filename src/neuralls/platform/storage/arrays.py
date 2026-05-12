@@ -44,9 +44,9 @@ def derive_checkpoint_path(
 
     Example:
         >>> derive_checkpoint_path(
-        ...     "configs/linear.toml",
-        ...     "data-configs/test-solutions.toml",
-        ...     "/data/projects/graph-cg/data/output",
+        ...     "/tmp/model.toml",
+        ...     "/tmp/dataset.toml",
+        ...     "/data/output",
         ... )
         PosixPath('/data/projects/graph-cg/data/output/test-solutions/ffnn/checkpoints/ffnn.ckpt')
     """

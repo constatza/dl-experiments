@@ -230,7 +230,7 @@ def test_default_structured_linear_registry_has_expected_models_and_experiments(
 def test_linear_registry_uses_single_normalized_model(tmp_path: Path) -> None:
     """A linear-focused registry can use one normalized-loss model across cases."""
     config_path = _write_master_registry(
-        tmp_path / "experiments-linear.toml",
+        tmp_path / "case-linear.toml",
         datasets=[
             ("spectral", "datasets/solutions.toml"),
             ("residuals-100", "datasets/residuals-100.toml"),

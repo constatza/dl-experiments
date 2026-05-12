@@ -27,7 +27,7 @@ EXIT_KEYBOARD_INTERRUPT = 130
 DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 # Default Experiment Config Filenames
-EXP_MODEL_CONFIG_NAME = "linear.toml"
+EXP_MODEL_CONFIG_NAME = "model.toml"
 EXP_DATA_CONFIG_NAME = "data.toml"
 EXP_SOLVER_CONFIG_NAME = "solver.toml"
 

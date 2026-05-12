@@ -66,8 +66,8 @@ def run_experiment(
     5. Return success/failure result
 
     Args:
-        model_config_path: Path to model configuration TOML (e.g., configs/linear.toml)
-        data_config_path: Path to data configuration TOML (e.g., data-configs/collect-504.toml)
+        model_config_path: Path to a model configuration TOML (e.g., /path/to/model.toml)
+        data_config_path: Path to a dataset configuration TOML (e.g., /path/to/dataset.toml)
         output_root: Root directory for all experiment outputs
         force: If True, retrain even if checkpoint exists. If False, reuse existing checkpoint.
         src_hash: Hash of source code directory for cache invalidation
@@ -81,8 +81,8 @@ def run_experiment(
 
     Example:
         >>> result = run_experiment(
-        ...     model_config_path=Path("configs/linear.toml"),
-        ...     data_config_path=Path("data-configs/collect-504.toml"),
+        ...     model_config_path=Path("/tmp/model.toml"),
+        ...     data_config_path=Path("/tmp/dataset.toml"),
         ...     output_root=Path("output"),
         ...     force=False,
         ...     src_hash="abc123",
@@ -90,7 +90,7 @@ def run_experiment(
         >>> print(result.status)
         'Success'
     """
-    # Extract model identifier from config file (e.g., "linear" from "linear.toml")
+    # Extract model identifier from the config filename stem.
     model_name = extract_model_name(model_config_path)
     try:
         # Step 1: Load data configuration and generate/cache dataset
@@ -194,7 +194,7 @@ def run_experiment_matrix(
 
     Example:
         >>> results = run_experiment_matrix(
-        ...     Path("configs/experiments.toml"),
+        ...     Path("/tmp/case.toml"),
         ...     force=False,
         ... )
         >>> success_count = sum(1 for r in results if r.status == "Success")

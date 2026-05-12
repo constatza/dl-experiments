@@ -752,8 +752,8 @@ def train_model(
     DLKit handles all MLflow operations including server startup and tracking.
 
     Args:
-        config_path: Path to model configuration TOML (e.g., configs/linear.toml)
-        data_config_path: Path to data configuration TOML (e.g., data-configs/collect-504.toml)
+        config_path: Path to a model configuration TOML (e.g., /path/to/model.toml)
+        data_config_path: Path to a dataset configuration TOML (e.g., /path/to/dataset.toml)
         output_root: Root directory for the permanent checkpoint. Defaults to
             ``DEFAULT_OUTPUT_DIR`` from constants.
         parent_run_id: Optional MLflow parent run UUID. When set, the training run is
@@ -768,11 +768,11 @@ def train_model(
 
     Example:
         >>> checkpoint = train_model(
-        ...     config_path="configs/linear.toml",
-        ...     data_config_path="data-configs/collect-504.toml",
+        ...     config_path="/tmp/model.toml",
+        ...     data_config_path="/tmp/dataset.toml",
         ... )
         >>> print(checkpoint)
-        Path('output/checkpoints/collect-504/linear.ckpt')
+        Path('output/checkpoints/my-dataset/my-model.ckpt')
     """
     resolved_case_config_path = Path(case_config_path) if case_config_path else None
     settings = require_settings(settings, case_config_path=resolved_case_config_path)

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tomllib
+from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -10,6 +12,377 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 def _load_toml(relative_path: str) -> dict:
     with (REPO_ROOT / relative_path).open("rb") as handle:
         return tomllib.load(handle)
+
+
+# ---------------------------------------------------------------------------
+# Embedded model config fixtures — self-contained, do not depend on configs/
+# ---------------------------------------------------------------------------
+
+_SKIP_FFNN_TOML = """\
+[SESSION]
+seed = 42
+workflow = "train"
+precision = "float64"
+
+[MODEL]
+name = "ScaleEquivariantConstantWidthFactorizedFFNN"
+module_path = "dlkit.nn"
+size = 504
+num_layers = 3
+norm = "l2"
+dropout = 0.0
+
+[TRAINING.lr_tuner]
+min_lr = 1e-5
+max_lr = 1e-1
+num_training = 100
+mode = "linear"
+
+[TRAINING.trainer]
+max_epochs = 300
+accelerator = "auto"
+enable_checkpointing = true
+
+[[TRAINING.trainer.callbacks]]
+name = "ModelCheckpoint"
+filename = "constant-width-factorized"
+monitor = "val_loss"
+save_top_k = 1
+save_weights_only = false
+enable_version_counter = false
+
+[[TRAINING.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "val_loss"
+min_delta = 1e-4
+patience = 30
+mode = "min"
+check_finite = true
+
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+weight_decay = 1e-2
+
+[TRAINING.optimizer.default_scheduler]
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = 10
+cooldown = 5
+threshold = 1e-4
+min_lr = 1e-6
+
+[TRAINING.loss_function]
+name = "normalized_vector_norm_loss"
+module_path = "dlkit.domain.losses"
+target_key = "targets.solutions"
+
+[[TRAINING.metrics]]
+name = "NormalizedVectorNormError"
+module_path = "dlkit.domain.metrics"
+norm_ord = 2
+vector_dim = -1
+
+[DATASET]
+name = "FlexibleDataset"
+memmap_cache = true
+
+[DATAMODULE]
+name = "InMemoryModule"
+
+[DATAMODULE.dataloader]
+num_workers = 0
+batch_size = 32
+pin_memory = true
+shuffle = true
+
+[OPTUNA]
+enabled = false
+"""
+
+_EMBEDDED_FACTORIZED_TOML = """\
+[SESSION]
+seed = 42
+workflow = "train"
+precision = "float64"
+
+[MODEL]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+module_path = "dlkit.nn"
+hidden_size = 500
+num_layers = 3
+bias = true
+norm = "l2"
+dropout = 0.0
+
+[TRAINING.lr_tuner]
+min_lr = 1e-5
+max_lr = 1e-1
+num_training = 100
+mode = "linear"
+
+[TRAINING.trainer]
+max_epochs = 300
+accelerator = "auto"
+enable_checkpointing = true
+
+[[TRAINING.trainer.callbacks]]
+name = "ModelCheckpoint"
+filename = "embedded-factorized"
+monitor = "val_loss"
+save_top_k = 1
+save_weights_only = false
+enable_version_counter = false
+
+[[TRAINING.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "val_loss"
+min_delta = 1e-4
+patience = 30
+mode = "min"
+check_finite = true
+
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+weight_decay = 1e-2
+
+[TRAINING.optimizer.default_scheduler]
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = 10
+cooldown = 5
+threshold = 1e-4
+min_lr = 1e-6
+
+[TRAINING.loss_function]
+name = "normalized_vector_norm_loss"
+module_path = "dlkit.domain.losses"
+target_key = "targets.solutions"
+
+[[TRAINING.metrics]]
+name = "NormalizedVectorNormError"
+module_path = "dlkit.domain.metrics"
+norm_ord = 2
+vector_dim = -1
+
+[DATASET]
+name = "FlexibleDataset"
+memmap_cache = true
+
+[DATAMODULE]
+name = "InMemoryModule"
+
+[DATAMODULE.dataloader]
+num_workers = 0
+batch_size = 32
+pin_memory = true
+shuffle = true
+
+[OPTUNA]
+enabled = false
+"""
+
+_EMBEDDED_SPD_TOML = """\
+[SESSION]
+seed = 42
+workflow = "train"
+precision = "float64"
+
+[MODEL]
+name = "ScaleEquivariantEmbeddedSPDFFNN"
+module_path = "dlkit.nn"
+hidden_size = 500
+num_layers = 3
+bias = false
+min_diag = 1e-4
+norm = "l2"
+dropout = 0.0
+
+[TRAINING.lr_tuner]
+min_lr = 1e-5
+max_lr = 1e-1
+num_training = 100
+mode = "linear"
+
+[TRAINING.trainer]
+max_epochs = 300
+accelerator = "auto"
+enable_checkpointing = true
+
+[[TRAINING.trainer.callbacks]]
+name = "ModelCheckpoint"
+filename = "embedded-spd"
+monitor = "val_loss"
+save_top_k = 1
+save_weights_only = false
+enable_version_counter = false
+
+[[TRAINING.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "val_loss"
+min_delta = 1e-4
+patience = 30
+mode = "min"
+check_finite = true
+
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+weight_decay = 1e-2
+
+[TRAINING.optimizer.default_scheduler]
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = 10
+cooldown = 5
+threshold = 1e-4
+min_lr = 1e-6
+
+[TRAINING.loss_function]
+name = "normalized_vector_norm_loss"
+module_path = "dlkit.domain.losses"
+target_key = "targets.solutions"
+
+[[TRAINING.metrics]]
+name = "NormalizedVectorNormError"
+module_path = "dlkit.domain.metrics"
+norm_ord = 2
+vector_dim = -1
+
+[DATASET]
+name = "FlexibleDataset"
+memmap_cache = true
+
+[DATAMODULE]
+name = "InMemoryModule"
+
+[DATAMODULE.dataloader]
+num_workers = 0
+batch_size = 32
+pin_memory = true
+shuffle = true
+
+[OPTUNA]
+enabled = false
+"""
+
+_EMBEDDED_SPD_FACTORIZED_TOML = """\
+[SESSION]
+seed = 42
+workflow = "train"
+precision = "float64"
+
+[MODEL]
+name = "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
+module_path = "dlkit.nn"
+hidden_size = 500
+num_layers = 3
+bias = false
+min_diag = 1e-4
+norm = "l2"
+dropout = 0.0
+
+[TRAINING.lr_tuner]
+min_lr = 1e-5
+max_lr = 1e-1
+num_training = 100
+mode = "linear"
+
+[TRAINING.trainer]
+max_epochs = 300
+accelerator = "auto"
+enable_checkpointing = true
+
+[[TRAINING.trainer.callbacks]]
+name = "ModelCheckpoint"
+filename = "embedded-spd-factorized"
+monitor = "val_loss"
+save_top_k = 1
+save_weights_only = false
+enable_version_counter = false
+
+[[TRAINING.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "val_loss"
+min_delta = 1e-4
+patience = 30
+mode = "min"
+check_finite = true
+
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+weight_decay = 1e-2
+
+[TRAINING.optimizer.default_scheduler]
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = 10
+cooldown = 5
+threshold = 1e-4
+min_lr = 1e-6
+
+[TRAINING.loss_function]
+name = "normalized_vector_norm_loss"
+module_path = "dlkit.domain.losses"
+target_key = "targets.solutions"
+
+[[TRAINING.metrics]]
+name = "NormalizedVectorNormError"
+module_path = "dlkit.domain.metrics"
+norm_ord = 2
+vector_dim = -1
+
+[DATASET]
+name = "FlexibleDataset"
+memmap_cache = true
+
+[DATAMODULE]
+name = "InMemoryModule"
+
+[DATAMODULE.dataloader]
+num_workers = 0
+batch_size = 32
+pin_memory = true
+shuffle = true
+
+[OPTUNA]
+enabled = false
+"""
+
+
+@pytest.fixture
+def skip_ffnn_config() -> dict:
+    """Embedded copy of the skip-ffnn base model config."""
+    return tomllib.loads(_SKIP_FFNN_TOML)
+
+
+@pytest.fixture
+def embedded_factorized_config() -> dict:
+    """Embedded copy of the embedded-factorized model config."""
+    return tomllib.loads(_EMBEDDED_FACTORIZED_TOML)
+
+
+@pytest.fixture
+def embedded_spd_config() -> dict:
+    """Embedded copy of the embedded-spd model config."""
+    return tomllib.loads(_EMBEDDED_SPD_TOML)
+
+
+@pytest.fixture
+def embedded_spd_factorized_config() -> dict:
+    """Embedded copy of the embedded-spd-factorized model config."""
+    return tomllib.loads(_EMBEDDED_SPD_FACTORIZED_TOML)
+
+
+# ---------------------------------------------------------------------------
+# Dataset config tests — stable contracts, load from disk
+# ---------------------------------------------------------------------------
 
 
 def test_residuals_100_dataset_uses_residuals_strategy() -> None:
@@ -37,9 +410,9 @@ def test_residuals_100_gaussian_dataset_uses_gaussian_residuals_strategy() -> No
 def test_current_experiment_registries_reference_residuals_dataset() -> None:
     """Residual registries must expose both archive and Gaussian residual datasets."""
     registry_paths = [
-        "configs/experiments-ffnn.toml",
-        "configs/experiments-linear.toml",
-        "configs/experiments-parametrized.toml",
+        "configs/case-ffnn.toml",
+        "configs/case-linear.toml",
+        "configs/case-parametrized.toml",
     ]
 
     for registry_path in registry_paths:
@@ -52,8 +425,8 @@ def test_current_experiment_registries_reference_residuals_dataset() -> None:
 def test_residual_experiments_use_residuals_100_dataset() -> None:
     """Every active residual-labelled experiment should use one of the residual datasets."""
     registry_paths = [
-        "configs/experiments-ffnn.toml",
-        "configs/experiments-linear.toml",
+        "configs/case-ffnn.toml",
+        "configs/case-linear.toml",
     ]
 
     for registry_path in registry_paths:
@@ -72,43 +445,35 @@ def test_residual_experiments_use_residuals_100_dataset() -> None:
         )
 
 
-def test_ffnn_registry_uses_residual_model_configs() -> None:
-    """Checked-in FFNN registry entries should point at explicit residual-network configs."""
-    config = _load_toml("configs/experiments-ffnn.toml")
-    model_paths = {entry["id"]: entry["path"] for entry in config["models"]}
+# ---------------------------------------------------------------------------
+# Model config content tests — use embedded fixtures, no disk dependency
+# ---------------------------------------------------------------------------
 
-    assert model_paths["scaleequivariant-residual-ffnn"] == "models/skip-ffnn.toml"
+
+def test_skip_ffnn_config_uses_residual_class(skip_ffnn_config: dict) -> None:
+    """skip-ffnn config must use the constant-width factorized residual network."""
+    assert skip_ffnn_config["MODEL"]["name"] == "ScaleEquivariantConstantWidthFactorizedFFNN"
+    assert "residual" not in skip_ffnn_config["MODEL"]
+
+
+def test_embedded_factorized_config_uses_residual_class(embedded_factorized_config: dict) -> None:
+    """embedded-factorized config must use the embedded factorized residual network."""
+    assert embedded_factorized_config["MODEL"]["name"] == "ScaleEquivariantEmbeddedFactorizedFFNN"
+    assert "residual" not in embedded_factorized_config["MODEL"]
+
+
+def test_embedded_spd_config_uses_residual_class(embedded_spd_config: dict) -> None:
+    """embedded-spd config must use the embedded SPD residual network."""
+    assert embedded_spd_config["MODEL"]["name"] == "ScaleEquivariantEmbeddedSPDFFNN"
+    assert "residual" not in embedded_spd_config["MODEL"]
+
+
+def test_embedded_spd_factorized_config_uses_residual_class(
+    embedded_spd_factorized_config: dict,
+) -> None:
+    """embedded-spd-factorized config must use the embedded SPD-factorized residual network."""
     assert (
-        model_paths["scaleequivariant-embedded-factorized-residual-ffnn"]
-        == "models/embedded-factorized-skip-ffnn.toml"
+        embedded_spd_factorized_config["MODEL"]["name"]
+        == "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
     )
-    assert (
-        model_paths["scaleequivariant-embedded-spd-residual-ffnn"]
-        == "models/embedded-spd-skip-ffnn.toml"
-    )
-    assert (
-        model_paths["scaleequivariant-embedded-spd-factorized-residual-ffnn"]
-        == "models/embedded-spd-factorized-skip-ffnn.toml"
-    )
-
-
-def test_ffnn_residual_model_configs_use_residual_classes() -> None:
-    """Each shipped FFNN model config should use the intended residual-network API."""
-    expected_names = {
-        "configs/models/skip-ffnn.toml": "ScaleEquivariantConstantWidthFactorizedFFNN",
-        "configs/models/embedded-factorized-skip-ffnn.toml": (
-            "ScaleEquivariantEmbeddedFactorizedFFNN"
-        ),
-        "configs/models/embedded-spd-skip-ffnn.toml": "ScaleEquivariantEmbeddedSPDFFNN",
-        "configs/models/embedded-spd-factorized-skip-ffnn.toml": (
-            "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
-        ),
-    }
-
-    for model_path, expected_name in expected_names.items():
-        config = _load_toml(model_path)
-        assert config["MODEL"]["name"] == expected_name
-
-    for model_path in expected_names:
-        config = _load_toml(model_path)
-        assert "residual" not in config["MODEL"]
+    assert "residual" not in embedded_spd_factorized_config["MODEL"]

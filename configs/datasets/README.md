@@ -7,8 +7,8 @@ data?
 ## First Successful Run
 
 ```bash
-uv run process-data configs/datasets/residuals-100.toml \
-  --case-config configs/experiments-ffnn.toml
+uv run process-data /path/to/dataset.toml \
+  --case-config /path/to/case.toml
 ```
 
 Start with one dataset config before moving on to training or case-wide
@@ -17,8 +17,8 @@ workflows.
 The paired Gaussian variant is:
 
 ```bash
-uv run process-data configs/datasets/residuals-100-gaussian.toml \
-  --case-config configs/experiments-ffnn.toml
+uv run process-data /path/to/gaussian-dataset.toml \
+  --case-config /path/to/case.toml
 ```
 
 ## Minimal Shape
@@ -81,11 +81,9 @@ For trace strategies, `samples` is a row budget, not a base-system count.
 - `gaussian_residuals` removes archive dependence when Gaussian true solutions
   are acceptable
 
-The checked-in residual dataset pair uses the same matrix, normalization, row
-budget, and CG iteration count for both strategies:
-
-- `residuals-100.toml`: archive-backed `residuals`
-- `residuals-100-gaussian.toml`: random-solution `gaussian_residuals`
+One common pattern is to keep the same matrix, normalization, row
+budget, and CG iteration count across archive-backed and Gaussian variants.
+Only the strategy block changes between the two TOMLs.
 
 ## Important Fields
 
@@ -124,7 +122,7 @@ built by combining multiple strategy blocks in order.
 
 `[output].data_dir` controls where processed datasets land.
 
-Checked-in dataset configs are expected to use:
+Dataset configs typically use:
 
 - `NEURALLS_RAW_DIR` for raw matrix and archive roots
 - `NEURALLS_PROCESSED_DIR` for processed dataset roots

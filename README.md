@@ -42,12 +42,9 @@ The shortest useful path for a new user is:
 
 Checked-in examples currently live under names such as:
 
-- `configs/experiments-ffnn.toml`
-- `configs/experiments-linear.toml`
-- `configs/experiments-parametrized.toml`
-
-Those files are **case configs** even though the filenames still say
-`experiments-*`. The generic conceptual name is `case.toml`.
+- `configs/case-ffnn.toml`
+- `configs/case-linear.toml`
+- `configs/case-parametrized.toml`
 
 ### 2. Set machine-specific roots
 
@@ -155,9 +152,9 @@ Use the batch form for a full case, or `generate-single` when you want to
 inspect one dataset config directly.
 
 ```bash
-uv run neuralls generate configs/experiments-ffnn.toml --env-file .env.windows
-uv run neuralls generate-single configs/datasets/residuals-100.toml \
-  --case-config configs/experiments-ffnn.toml \
+uv run neuralls generate configs/case-<name>.toml --env-file .env.windows
+uv run neuralls generate-single configs/datasets/<dataset>.toml \
+  --case-config configs/case-<name>.toml \
   --env-file .env.windows
 ```
 
@@ -168,7 +165,7 @@ when you want to validate one dataset config in isolation.
 ### 4. Train one case batch
 
 ```bash
-uv run neuralls train configs/experiments-ffnn.toml --env-file .env.windows
+uv run neuralls train configs/case-<name>.toml --env-file .env.windows
 ```
 
 This trains every experiment declared in the case config and writes aggregate
@@ -177,8 +174,8 @@ training outputs under the resolved output root.
 ### 5. Run or compare a full case
 
 ```bash
-uv run neuralls run configs/experiments-ffnn.toml --env-file .env.windows
-uv run neuralls compare configs/experiments-ffnn.toml --env-file .env.windows
+uv run neuralls run configs/case-<name>.toml --env-file .env.windows
+uv run neuralls compare configs/case-<name>.toml --env-file .env.windows
 ```
 
 `neuralls run` generates datasets as needed and trains the full experiment
@@ -201,21 +198,21 @@ Minimal example:
 
 ```toml
 [[datasets]]
-id = "residuals-100"
-path = "datasets/residuals-100.toml"
+id = "my-dataset"
+path = "datasets/my-dataset.toml"
 
 [[models]]
-id = "scaleequivariant-residual-ffnn-l2"
-path = "models/ffnn-l2.toml"
+id = "my-model"
+path = "models/<family>/my-model.toml"
 
 [[comparisons]]
-id = "gaussian"
-path = "comparison/gaussian.toml"
+id = "my-solver"
+path = "comparison/my-solver.toml"
 
 [[experiments]]
-id = "residuals-100-scaleequivariant-residual-ffnn-l2"
-dataset = "residuals-100"
-model = "scaleequivariant-residual-ffnn-l2"
+id = "my-dataset-my-model"
+dataset = "my-dataset"
+model = "my-model"
 ```
 
 Important behavior:
@@ -254,7 +251,7 @@ The repo uses one case layer and three lower-level config families:
 - `configs/datasets/*.toml`: dataset generation and input-source definitions
 - `configs/models/*.toml`: DLKit model, trainer, loss, and optimizer settings
 - `configs/comparison/*.toml`: solver comparison inputs and preconditioners
-- `configs/experiments-*.toml`: case configs tying all of the above together
+- `configs/case-*.toml`: case configs tying all of the above together
 
 Use the narrowest config that matches the task:
 

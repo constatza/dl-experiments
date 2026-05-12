@@ -1,0 +1,127 @@
+# Residual FFNN registry for archive-backed and Gaussian residual sweeps.
+
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training = "Train"
+comparison = "Comparisons"
+
+# -------
+# Dataset
+# -------
+
+[[datasets]]
+id = "residuals-100"
+path = "datasets/residuals-100.toml"
+display_name = "Residual-Error 100"
+
+[[datasets]]
+id = "residuals-100-gaussian"
+path = "datasets/residuals-100-gaussian.toml"
+display_name = "Residual-Error 100 Gaussian"
+
+# ------
+# Models
+# ------
+
+[[models]]
+id = "constant-width-factorized"
+path = "models/skip-ffnn/constant-width-factorized.toml"
+display_name = "Constant-Width Factorized"
+
+[[models]]
+id = "embedded-factorized"
+path = "models/skip-ffnn/embedded-factorized.toml"
+display_name = "Embedded Factorized"
+
+[[models]]
+id = "embedded-spd"
+path = "models/skip-ffnn/embedded-spd.toml"
+display_name = "Embedded SPD"
+
+[[models]]
+id = "embedded-spd-factorized"
+path = "models/skip-ffnn/embedded-spd-factorized.toml"
+display_name = "Embedded SPD-Factorized"
+
+# -----------
+# Comparisons
+# -----------
+
+[[comparisons]]
+id = "gaussian"
+path = "comparison/gaussian.toml"
+display_name = "Gaussian RHS"
+
+[[comparisons]]
+id = "scaled-solutions"
+path = "comparison/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[comparisons]]
+id = "sparse-rhs"
+path = "comparison/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[comparisons]]
+id = "eig-few-solutions-smallest"
+path = "comparison/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[comparisons]]
+id = "eig-few-rhs-smallest"
+path = "comparison/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"
+
+# -----------
+# Experiments
+# -----------
+
+[[experiments]]
+id = "residuals-100-constant-width-factorized"
+dataset = "residuals-100"
+model = "constant-width-factorized"
+display_name = "Residual-Error 100 | Constant-Width Factorized"
+
+[[experiments]]
+id = "residuals-100-gaussian-constant-width-factorized"
+dataset = "residuals-100-gaussian"
+model = "constant-width-factorized"
+display_name = "Residual-Error 100 Gaussian | Constant-Width Factorized"
+
+[[experiments]]
+id = "residuals-100-embedded-factorized"
+dataset = "residuals-100"
+model = "embedded-factorized"
+display_name = "Residual-Error 100 | Embedded Factorized"
+
+[[experiments]]
+id = "residuals-100-gaussian-embedded-factorized"
+dataset = "residuals-100-gaussian"
+model = "embedded-factorized"
+display_name = "Residual-Error 100 Gaussian | Embedded Factorized"
+
+[[experiments]]
+id = "residuals-100-embedded-spd"
+dataset = "residuals-100"
+model = "embedded-spd"
+display_name = "Residual-Error 100 | Embedded SPD"
+
+[[experiments]]
+id = "residuals-100-gaussian-embedded-spd"
+dataset = "residuals-100-gaussian"
+model = "embedded-spd"
+display_name = "Residual-Error 100 Gaussian | Embedded SPD"
+
+[[experiments]]
+id = "residuals-100-embedded-spd-factorized"
+dataset = "residuals-100"
+model = "embedded-spd-factorized"
+display_name = "Residual-Error 100 | Embedded SPD-Factorized"
+
+[[experiments]]
+id = "residuals-100-gaussian-embedded-spd-factorized"
+dataset = "residuals-100-gaussian"
+model = "embedded-spd-factorized"
+display_name = "Residual-Error 100 Gaussian | Embedded SPD-Factorized"

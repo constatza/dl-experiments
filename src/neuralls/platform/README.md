@@ -4,7 +4,7 @@ The platform package isolates external integrations and side-effecting helpers.
 
 ## Package Map
 
-- `config/`: settings, config-validation context, repo-owned config models, registry resolution, TOML loaders, and DLKit workflow bridging
+- `config/`: settings, config-validation context, workflow config models, registry resolution, TOML loaders, and DLKit workflow bridging
 - `storage/`: filesystem, workspaces, dataset I/O, and storage validation helpers
 - `tracking/`: MLflow run and client helpers
 - `reporting/`: plotting, artifact staging, and inference output adapters
@@ -21,14 +21,14 @@ or contain domain algorithms.
 The DLKit integration now maps cleanly onto DLKit's current layer split:
 `dlkit.infrastructure.*` for config and IO, `dlkit.engine.*` for runtime
 training and inference entrypoints, and `dlkit.domain.*` for model, metric,
-and loss namespaces referenced by checked-in configs.
+and loss namespaces referenced by workflow TOMLs.
 
-Repo-owned config path expansion now lives at the config-model boundary.
+Workflow config path expansion now lives at the config-model boundary.
 `NeurallsSettings` provides required raw, processed, and output roots after
 profile resolution from `~/.config/neuralls/config.toml` plus any explicit env
 overrides, and `ConfigContext` passes those roots into Pydantic validators so
-checked-in TOML files can use `${NEURALLS_*}` placeholders without loader-side
-normalization. User-home expansion for checked-in config paths, profile roots,
+workflow TOMLs can use `${NEURALLS_*}` placeholders without loader-side
+normalization. User-home expansion for workflow config paths, profile roots,
 and runtime root overrides explicitly prefers `HOME` before platform defaults
 so `~` resolves consistently across Windows and POSIX test environments.
 DLKit-specific workflow assembly is isolated in `config/dlkit_bridge.py`.

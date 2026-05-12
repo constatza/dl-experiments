@@ -1,5 +1,8 @@
 # Residual linear registry for archive-backed and Gaussian residual sweeps.
 
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
 [names]
 training = "Train"
 comparison = "Comparisons"
@@ -24,8 +27,8 @@ display_name = "Residual-Error 100 Gaussian"
 
 [[models]]
 id = "linear"
-path = "models/linear.toml"
-display_name = "LinearNetwork"
+path = "models/linear/linear.toml"
+display_name = "Linear"
 
 # -----------
 # Experiments
