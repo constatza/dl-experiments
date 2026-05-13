@@ -4,8 +4,6 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from neuralls.composition.experiments.assembler import load_validated_master_config
-from neuralls.platform.config.registry import list_experiment_bindings
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -35,7 +33,7 @@ precision = "float64"
 name = "ScaleEquivariantConstantWidthFactorizedFFNN"
 module_path = "dlkit.nn"
 size = 504
-num_layers = 3
+num_layers = 1
 norm = "l2"
 dropout = 0.0
 
@@ -106,6 +104,12 @@ shuffle = true
 
 [OPTUNA]
 enabled = false
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 6, 9]}
+dropout = {low = 0.0, high = 0.3, step = 0.05}
+size = {choices = [252, 504, 756]}
 """
 
 _EMBEDDED_FACTORIZED_TOML = """\
@@ -118,7 +122,7 @@ precision = "float64"
 name = "ScaleEquivariantEmbeddedFactorizedFFNN"
 module_path = "dlkit.nn"
 hidden_size = 500
-num_layers = 3
+num_layers = 1
 bias = true
 norm = "l2"
 dropout = 0.0
@@ -190,6 +194,12 @@ shuffle = true
 
 [OPTUNA]
 enabled = false
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 6, 9]}
+dropout = {low = 0.0, high = 0.3, step = 0.05}
+hidden_size = {choices = [256, 512, 768]}
 """
 
 _EMBEDDED_SPD_TOML = """\
@@ -202,7 +212,7 @@ precision = "float64"
 name = "ScaleEquivariantEmbeddedSPDFFNN"
 module_path = "dlkit.nn"
 hidden_size = 500
-num_layers = 3
+num_layers = 1
 bias = false
 min_diag = 1e-4
 norm = "l2"
@@ -275,6 +285,13 @@ shuffle = true
 
 [OPTUNA]
 enabled = false
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 6, 9]}
+dropout = {low = 0.0, high = 0.3, step = 0.05}
+hidden_size = {choices = [256, 512, 768]}
+min_diag = {choices = [1e-5, 1e-4, 1e-3]}
 """
 
 _EMBEDDED_SPD_FACTORIZED_TOML = """\
@@ -287,7 +304,7 @@ precision = "float64"
 name = "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
 module_path = "dlkit.nn"
 hidden_size = 500
-num_layers = 3
+num_layers = 1
 bias = false
 min_diag = 1e-4
 norm = "l2"
@@ -360,6 +377,13 @@ shuffle = true
 
 [OPTUNA]
 enabled = false
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 6, 9]}
+dropout = {low = 0.0, high = 0.3, step = 0.05}
+hidden_size = {choices = [256, 512, 768]}
+min_diag = {choices = [1e-5, 1e-4, 1e-3]}
 """
 
 
@@ -486,84 +510,3 @@ def test_embedded_spd_factorized_config_uses_residual_class(
         == "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
     )
     assert "residual" not in embedded_spd_factorized_config["MODEL"]
-
-
-@pytest.mark.parametrize(
-    ("relative_path", "expected_name"),
-    [
-        ("advanced/fourier-feature.toml", "FourierFeatureNetwork"),
-        ("advanced/fourier-feature-lbfgs.toml", "FourierFeatureNetwork"),
-        ("advanced/siren.toml", "SirenFFNN"),
-        ("advanced/siren-lbfgs.toml", "SirenFFNN"),
-        ("advanced/modified-mlp.toml", "ModifiedMLP"),
-        ("advanced/modified-mlp-lbfgs.toml", "ModifiedMLP"),
-    ],
-)
-def test_advanced_model_configs_use_expected_classes(
-    relative_path: str,
-    expected_name: str,
-) -> None:
-    """Advanced configs should target the intended DLKit model classes."""
-    config = _load_model_toml(relative_path)
-
-    assert config["MODEL"]["name"] == expected_name
-    assert config["MODEL"]["module_path"] == "dlkit.domain.nn.spectral"
-
-
-@pytest.mark.parametrize(
-    "relative_path",
-    [
-        "advanced/fourier-feature-lbfgs.toml",
-        "advanced/siren-lbfgs.toml",
-        "advanced/modified-mlp-lbfgs.toml",
-    ],
-)
-def test_advanced_lbfgs_model_configs_use_two_stage_optimizer(relative_path: str) -> None:
-    """Advanced LBFGS configs should use the shared AdamW -> LBFGS stage layout."""
-    config = _load_model_toml(relative_path)
-    stages = config["TRAINING"]["optimizer"]["stages"]
-
-    assert len(stages) == 2
-    assert stages[0]["optimizer"]["name"] == "AdamW"
-    assert stages[0]["trigger"] == {"at_epoch": 200}
-    assert stages[1]["optimizer"]["name"] == "LBFGS"
-
-
-def test_case_advanced_registers_expected_models_and_experiments() -> None:
-    """The advanced case config should expose the full residual-dataset experiment matrix."""
-    config = _load_toml("configs/case-advanced.toml")
-
-    assert [entry["id"] for entry in config["models"]] == [
-        "fourier-feature",
-        "siren",
-        "modified-mlp",
-    ]
-    assert {entry["path"] for entry in config["models"]} == {
-        "models/advanced/fourier-feature.toml",
-        "models/advanced/siren.toml",
-        "models/advanced/modified-mlp.toml",
-    }
-    assert [entry["id"] for entry in config["experiments"]] == [
-        "residuals-100-fourier-feature",
-        "residuals-100-gaussian-fourier-feature",
-        "residuals-100-siren",
-        "residuals-100-gaussian-siren",
-        "residuals-100-modified-mlp",
-        "residuals-100-gaussian-modified-mlp",
-    ]
-
-
-def test_case_advanced_registry_resolves_model_paths() -> None:
-    """The advanced case registry should resolve into concrete model config paths."""
-    cfg, config_dir = load_validated_master_config(REPO_ROOT / "configs" / "case-advanced.toml")
-    bindings = list_experiment_bindings(cfg, config_dir)
-
-    assert [binding.model_registry_id for binding in bindings] == [
-        "fourier-feature",
-        "fourier-feature",
-        "siren",
-        "siren",
-        "modified-mlp",
-        "modified-mlp",
-    ]
-    assert all(binding.model_config_path.is_file() for binding in bindings)

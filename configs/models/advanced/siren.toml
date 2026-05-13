@@ -4,12 +4,13 @@ workflow = "train"
 precision = "float64"
 
 [MODEL]
-# Sinusoidal implicit representation network.
-name = "SirenFFNN"
-module_path = "dlkit.domain.nn.spectral"
+# DLKit scale-equivariant sinusoidal implicit representation network.
+name = "ScaleEquivariantSiren"
+module_path = "dlkit.nn"
 hidden_size = 504
 num_layers = 3
 omega0 = 30.0
+norm = "l2"
 
 [TRAINING.lr_tuner]
 min_lr = 1e-5
@@ -40,8 +41,6 @@ check_finite = true
 
 [TRAINING.optimizer.default_optimizer]
 name = "AdamW"
-lr = 1e-3
-weight_decay = 1e-2
 
 [TRAINING.optimizer.default_scheduler]
 name = "ReduceLROnPlateau"

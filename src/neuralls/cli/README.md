@@ -2,10 +2,6 @@
 
 The CLI package defines one public executable: `neuralls`.
 
-This checkout is pinned to CUDA 13.0 through the project dependencies, so the
-expected local workflow is `uv sync` followed by plain `uv run neuralls ...`
-commands.
-
 ## Public Surface
 
 - `neuralls config ...`: manage machine-specific profiles
@@ -32,51 +28,6 @@ CLI modules parse user input, print progress, resolve runtime settings at the
 boundary, and delegate immediately to `neuralls.composition`. They must not
 instantiate platform adapters directly or contain workflow business logic.
 
-The batch workflow commands accept one explicit case config positional argument
-plus optional `--env-file` and `--profile` overrides. `neuralls
-generate-single` accepts a dataset config plus `--case-config` to resolve settings.
-This keeps settings discovery at the CLI boundary rather than inside workflow
-orchestration code.
-
-`neuralls generate <case.toml>` only materializes the case `[[datasets]]`
-entries. Comparison profiles may reference additional benchmark datasets under
-`configs/datasets/` that are not part of that training registry. When one of
-those benchmark datasets is missing, `neuralls compare <case.toml>` fails that
-comparison before opening an MLflow run and reports the matching
-`neuralls generate-single ... --case-config ...` command for shipped benchmark
-configs.
-
-## Machine Configuration
-
-Machine-specific roots are managed outside the repo with `neuralls config`.
-Profiles live under the user config directory and provide:
-
-- `raw_dir`: raw matrix and archive inputs
-- `processed_dir`: processed datasets
-- `output_dir`: MLflow state, checkpoints, figures, and reports
-
-Typical flow:
-
-```bash
-uv run neuralls config init
-uv run neuralls config create default --raw-dir /data/raw --processed-dir /data/processed --output-dir /data/output
-uv run neuralls config list
-uv run neuralls config show
-uv run neuralls config set output-dir /new/output
-uv run neuralls config delete laptop
-```
-
-Every public workflow command also accepts `--profile` / `-p` to override the active
-`NEURALLS_PROFILE` selection for one invocation.
-
-`neuralls config init` writes a commented starter file. `neuralls config create` is
-non-interactive and expects explicit `--raw-dir`, `--processed-dir`, and
-`--output-dir` flags.
-
-`neuralls config set` overwrites an existing field value for an existing
-profile. `neuralls config delete` removes a named profile; the `default`
-profile is preserved.
-
-Case-config discovery from `--case-config` and `NEURALLS_CASE_CONFIG` uses the
-same shared path resolution policy as platform config loading, so `~`, Windows
-drive paths, and UNC shares resolve consistently before orchestration begins.
+CLI owns argument parsing, top-level option semantics, and user-facing error
+messages. It may resolve the active settings/profile context, but it should not
+contain workflow assembly, filesystem policy, or service-integration logic.

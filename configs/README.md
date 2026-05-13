@@ -17,8 +17,9 @@ Choose the config type that matches the case you want to run:
   MLflow, and experiment ids together
 
 Current model families include `linear/`, `skip-ffnn/`, `gnn/`, and
-`advanced/`. The `advanced/` family covers the high-capacity single-input
-DLKit models `FourierFeatureNetwork`, `SirenFFNN`, and `ModifiedMLP`.
+`advanced/`. The `advanced/` family now targets the scale-equivariant DLKit
+models `ScaleEquivariantFourierFeatureNetwork`,
+`ScaleEquivariantSiren`, and `ScaleEquivariantModifiedMLP`.
 
 ## Recommended Progression
 
@@ -117,15 +118,14 @@ Model configs define:
   staged optimization under `TRAINING.optimizer.stages`
 - checkpoint callback naming
 
-Model configs keep `module_path = "dlkit.nn"` as the user-facing entrypoint
-when the model lives there. `MODEL.name` must match the target class name
-exactly; kwargs stay flat under `[MODEL]` and are forwarded through DLKit's
-`ModelComponentSettings` filtering, so they must match the target constructor
-signature exactly.
+Model configs keep `module_path = "dlkit.nn"` as the user-facing entrypoint.
+`MODEL.name` must match the target class name exactly; kwargs stay flat under
+`[MODEL]` and are forwarded through DLKit's `ModelComponentSettings`
+filtering, so they must match the target constructor signature exactly.
 
-Some advanced models are exported from a DLKit submodule instead of the
-top-level namespace. In those cases, configs may use a concrete module path
-such as `dlkit.domain.nn.spectral`.
+Optimizer sections may omit per-optimizer kwargs when DLKit defaults are
+acceptable. Scheduler settings should still be written explicitly unless the
+case intentionally wants DLKit's scheduler defaults.
 
 Model configs use canonical DLKit syntax: the default scheduler lives
 under `TRAINING.optimizer.default_scheduler`, and any staged program lives
@@ -150,7 +150,14 @@ settings come from the selected case config or the execution environment.
 
 Model configs must use DLKit's canonical workflow syntax directly. `neuralls`
 does not translate top-level `[OPTIMIZATION]` or infer optimization mode from
-`OPTUNA.enabled`.
+`OPTUNA.enabled`. To run Optuna, set `SESSION.workflow = "optimize"` explicitly.
+Keeping `workflow = "train"` with `OPTUNA.enabled = true` still executes a
+normal training run.
+
+Optuna search spaces live under `[OPTUNA.model]`. Numeric ranges use
+`{low=..., high=..., step=...}` and categorical sweeps use
+`{choices=[...]}`. For example, layer-count candidates `1`, `6`, and `9`
+must be written as `num_layers = {choices = [1, 6, 9]}`.
 
 ## Machine Roots
 

@@ -4,12 +4,13 @@ workflow = "train"
 precision = "float64"
 
 [MODEL]
-# Sinusoidal implicit representation network.
-name = "SirenFFNN"
-module_path = "dlkit.domain.nn.spectral"
+# DLKit scale-equivariant sinusoidal implicit representation network.
+name = "ScaleEquivariantSiren"
+module_path = "dlkit.nn"
 hidden_size = 504
 num_layers = 3
 omega0 = 30.0
+norm = "l2"
 
 [TRAINING.lr_tuner]
 min_lr = 1e-5
@@ -39,12 +40,12 @@ mode = "min"
 check_finite = true
 
 [[TRAINING.optimizer.stages]]
-optimizer = {name = "AdamW", lr = 1e-3, weight_decay = 1e-2}
+optimizer = {name = "AdamW"}
 scheduler = {name = "ReduceLROnPlateau", mode = "min", factor = 0.5, patience = 10, cooldown = 5, threshold = 1e-4, min_lr = 1e-6}
 trigger = {at_epoch = 200}
 
 [[TRAINING.optimizer.stages]]
-optimizer = {name = "LBFGS", lr = 1.0, max_iter = 20, line_search_fn = "strong_wolfe"}
+optimizer = {name = "LBFGS"}
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"

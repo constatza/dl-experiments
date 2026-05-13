@@ -26,19 +26,24 @@ display_name = "Residual-Error 100 Gaussian"
 # ------
 
 [[models]]
-id = "fourier-feature"
-path = "models/advanced/fourier-feature.toml"
-display_name = "Fourier Feature"
-
-[[models]]
 id = "siren"
 path = "models/advanced/siren.toml"
 display_name = "SIREN"
 
 [[models]]
+id = "siren-lbfgs"
+path = "models/advanced/siren-lbfgs.toml"
+display_name = "SIREN-LBFGS"
+
+[[models]]
 id = "modified-mlp"
 path = "models/advanced/modified-mlp.toml"
 display_name = "Modified MLP"
+
+[[models]]
+id = "modified-mlp-lbfgs"
+path = "models/advanced/modified-mlp-lbfgs.toml"
+display_name = "Modified-MLP-LBFGS"
 
 # -----------
 # Comparisons
@@ -73,17 +78,6 @@ display_name = "Eig Few RHS Smallest"
 # Experiments
 # -----------
 
-[[experiments]]
-id = "residuals-100-fourier-feature"
-dataset = "residuals-100"
-model = "fourier-feature"
-display_name = "Residual-Error 100 | Fourier Feature"
-
-[[experiments]]
-id = "residuals-100-gaussian-fourier-feature"
-dataset = "residuals-100-gaussian"
-model = "fourier-feature"
-display_name = "Residual-Error 100 Gaussian | Fourier Feature"
 
 [[experiments]]
 id = "residuals-100-siren"
@@ -98,6 +92,12 @@ model = "siren"
 display_name = "Residual-Error 100 Gaussian | SIREN"
 
 [[experiments]]
+id = "residuals-100-gaussian-siren-lbfgs"
+dataset = "residuals-100-gaussian"
+model = "siren-lbfgs"
+display_name = "Residual-Error 100 Gaussian | SIREN-LBFGS"
+
+[[experiments]]
 id = "residuals-100-modified-mlp"
 dataset = "residuals-100"
 model = "modified-mlp"
@@ -108,3 +108,9 @@ id = "residuals-100-gaussian-modified-mlp"
 dataset = "residuals-100-gaussian"
 model = "modified-mlp"
 display_name = "Residual-Error 100 Gaussian | Modified MLP"
+
+[[experiments]]
+id = "residuals-100-gaussian-modified-mlp-lbfgs"
+dataset = "residuals-100-gaussian"
+model = "modified-mlp-lbfgs"
+display_name = "Residual-Error 100 Gaussian | Modified MLP LBFGS"

@@ -4,11 +4,12 @@ workflow = "train"
 precision = "float64"
 
 [MODEL]
-# U/V-gated MLP with learned encoder branches.
-name = "ModifiedMLP"
-module_path = "dlkit.domain.nn.spectral"
+# DLKit scale-equivariant U/V-gated MLP with learned encoder branches.
+name = "ScaleEquivariantModifiedMLP"
+module_path = "dlkit.nn"
 hidden_size = 504
 num_layers = 3
+norm = "l2"
 
 [TRAINING.lr_tuner]
 min_lr = 1e-5
@@ -39,8 +40,6 @@ check_finite = true
 
 [TRAINING.optimizer.default_optimizer]
 name = "AdamW"
-lr = 1e-3
-weight_decay = 1e-2
 
 [TRAINING.optimizer.default_scheduler]
 name = "ReduceLROnPlateau"

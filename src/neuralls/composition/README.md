@@ -25,38 +25,13 @@ Composition is where config models, platform adapters, workflow DTOs, and
 domain services are connected. Entry modules that still assemble concrete
 collaborators belong here rather than under `application`.
 
-CLI entry points now create `NeurallsSettings` from the active machine profile
-plus explicit env overrides and pass them top-down into composition. Dataset
-generation, training, comparison, and inference assembly all expect resolved
-settings instead of reading environment variables or normalizing config paths
-locally.
+Composition assumes that platform has already resolved configuration and
+runtime concerns into concrete values and adapters. Its job is to select the
+right collaborators, construct workflow-local DTOs, and hand execution to
+application or platform entrypoints without re-implementing path, environment,
+or client policy.
 
-Training orchestration now keeps DLKit's unified `execute()` entrypoint at the
-composition boundary. The loader is responsible for producing the correct
-workflow-specific DLKit config type before invoking DLKit runtime execution.
-
-Model-reference resolution also keeps MLflow URI/model lookup helpers on the
-composition side because the installed DLKit package no longer exposes the
-older convenience functions that previous code imported from `dlkit`.
-
-Comparison orchestration also owns preflight validation of comparison input
-paths before MLflow tracking starts. Missing benchmark datasets now fail the
-individual comparison outcome early with a remediation hint instead of opening
-partial runs. Neural comparison model downloads use stable internal ids for
-their temporary artifact directories so case display names remain human-readable
-without leaking Windows-invalid characters into filesystem paths.
-Inference wiring now delegates all prediction execution to the application
-layer and uses `platform.dlkit.inference_adapter` only as a runtime-facing
-adapter factory. Composition does not decode raw DLKit prediction outputs or
-perform tensor-level batch orchestration locally.
-
-Case-config assembly now assumes that platform loaders have already resolved
-machine roots from the active profile, expanded environment-backed path
-placeholders, and resolved registry-relative paths, so composition code works
-with concrete `Path` values instead of Unix-specific string conventions.
-When composition accepts explicit path overrides or env-provided case-config
-paths, it routes them through `platform.config.resolution` rather than
-re-implementing fallback logic locally. Composition still owns workflow-local
-artifact layout decisions such as comparison output directories and workspace
-selection, but shared normalization policy and MLflow URI derivation stay in
-platform so composition remains wiring-only.
+Training, inference, comparison, and generation assembly all follow the same
+rule: composition may decide which collaborators participate in a workflow, but
+it must not absorb low-level IO mechanics, config normalization policy, or
+tensor-level runtime behavior.

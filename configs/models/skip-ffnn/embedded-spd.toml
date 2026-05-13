@@ -8,7 +8,7 @@ precision = "float64"
 name = "ScaleEquivariantEmbeddedSPDFFNN"
 module_path = "dlkit.nn"
 hidden_size = 500
-num_layers = 3
+num_layers = 1
 bias = false
 min_diag = 1e-4
 norm = "l2"
@@ -81,3 +81,10 @@ shuffle = true
 
 [OPTUNA]
 enabled = false
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 6, 9]}
+dropout = {low = 0.0, high = 0.3, step = 0.05}
+hidden_size = {choices = [256, 512, 768]}
+min_diag = {choices = [1e-5, 1e-4, 1e-3]}
