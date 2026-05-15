@@ -46,10 +46,7 @@ class SolverResult:
         rhs_norm: Right-hand side norm ||b||.
         breakdown: Whether numerical breakdown occurred.
         info: Status code (0=success, >0=warning, <0=error).
-        niter: Alias for iterations (SciPy compatibility).
-        status: Alias for info (SciPy compatibility).
-        residual_rel: Alias for residual (explicit naming).
-        residual_history: Relative residual norms across iterations.
+        residual_history_rel: Relative residual norms across iterations.
         residual_history_abs: Absolute residual norms across iterations.
         tol: Tolerance used (for diagnostics).
         atol: Absolute tolerance used.
@@ -94,16 +91,7 @@ class SolverResult:
     info: int = 0
     """Status code: 0=success, >0=warning (max iter), <0=error (breakdown)."""
 
-    niter: int | None = None
-    """Alias for iterations (SciPy compatibility)."""
-
-    status: int | None = None
-    """Alias for info (SciPy compatibility)."""
-
-    residual_rel: float | None = None
-    """Alias for residual (explicit naming)."""
-
-    residual_history: list[float] | None = None
+    residual_history_rel: list[float] | None = None
     """Relative residual norms ||r_k||/||b|| across iterations."""
 
     residual_history_abs: list[float] | None = None
@@ -133,21 +121,8 @@ class SolverResult:
     solution_vectors: np.ndarray | None = None
     """Optional full solution vectors (shape: iterations x n). Heavy, use sparingly."""
 
-    def __post_init__(self) -> None:
-        """Synchronize aliased fields for backward compatibility.
 
-        Ensures that niter, status, and residual_rel are set if not provided.
-        This maintains compatibility with code expecting SciPy-style fields.
-        """
-        if self.residual_rel is None:
-            self.residual_rel = self.residual
-        if self.niter is None:
-            self.niter = self.iterations
-        if self.status is None:
-            self.status = self.info
-
-
-@dataclass
+@dataclass(slots=True)
 class CGComparisonResult:
     """Result container for CG comparison experiments.
 
@@ -160,7 +135,7 @@ class CGComparisonResult:
         iterations: Number of iterations executed.
         residual: Relative residual norm at termination.
         residual_abs: Absolute residual norm at termination.
-        residual_history: Relative residual norms across iterations.
+        residual_history_rel: Relative residual norms across iterations.
         residual_history_abs: Absolute residual norms across iterations.
         warm_start: Warm start strategy name.
         preconditioner: Preconditioner strategy name.
@@ -180,7 +155,7 @@ class CGComparisonResult:
         ...     iterations=5,
         ...     residual=1e-8,
         ...     residual_abs=1e-8,
-        ...     residual_history=[1.0, 0.1, 0.01, 0.001, 1e-8],
+        ...     residual_history_rel=[1.0, 0.1, 0.01, 0.001, 1e-8],
         ...     residual_history_abs=[1.0, 0.1, 0.01, 0.001, 1e-8],
         ...     preconditioner="jacobi",
         ...     initial_guess=np.zeros(10),
@@ -207,11 +182,11 @@ class CGComparisonResult:
     residual_abs: float
     """Absolute residual norm at termination."""
 
-    residual_history: list[float]
-    """Relative residual norms across iterations."""
+    residual_history_rel: list[float]
+    """Relative residual norms ||r_k||/||b|| across iterations."""
 
     residual_history_abs: list[float]
-    """Absolute residual norms across iterations."""
+    """Absolute residual norms ||r_k|| across iterations."""
 
     preconditioner: str
     """Preconditioner strategy name (e.g., 'none', 'jacobi', 'neural')."""
@@ -232,7 +207,7 @@ class CGComparisonResult:
     """Error message if solver failed."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class IterationContext:
     """Context passed to flexible preconditioners and step helpers.
 
@@ -286,7 +261,7 @@ class IterationContext:
     """Right-hand side vector b."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PlotPaths:
     """Paths to generated diagnostic plots from a comparison workflow.
 
@@ -340,7 +315,7 @@ class PlotPaths:
         return {key: path for key, path in values.items() if path is not None}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RankedRecommendation:
     """A single ranked entry from a solver comparison.
 
@@ -359,7 +334,7 @@ class RankedRecommendation:
     breakdown: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ComparisonRecommendations:
     """Ranked recommendations from a comparison run.
 
@@ -372,7 +347,7 @@ class ComparisonRecommendations:
     overall_best: RankedRecommendation | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ComparisonResult:
     """Typed result from compare_preconditioners workflow.
 

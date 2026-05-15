@@ -377,7 +377,7 @@ class ConjugateGradientSolver(IterativeSolverBase[CGState]):
             residual_abs=state.residual_norm,
             rhs_norm=state.rhs_norm,
             breakdown=state.breakdown,
-            residual_history=residual_history_rel,
+            residual_history_rel=residual_history_rel,
             residual_history_abs=residual_history_abs,
             tol=rtol,
             atol=atol,

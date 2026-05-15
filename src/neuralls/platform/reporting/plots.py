@@ -1,9 +1,10 @@
 """Plotting utilities for graph-cg project."""
 
 from __future__ import annotations
+
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping
 
 import matplotlib
 
@@ -121,10 +122,10 @@ def plot_residual_history(
     for method_name, result in results.items():
         # Handle both dict and dataclass results
         residuals = None
-        if hasattr(result, "residual_history"):
-            residuals = getattr(result, "residual_history")
+        if hasattr(result, "residual_history_rel"):
+            residuals = getattr(result, "residual_history_rel")
         elif isinstance(result, dict):
-            residuals = result.get("residual_history") or result.get("residuals")
+            residuals = result.get("residual_history_rel") or result.get("residuals")
         else:
             residuals = None
 
@@ -231,9 +232,9 @@ def plot_convergence_comparison(
     for method_name, result in results.items():
         # Handle both dict and dataclass results
         if isinstance(result, CGComparisonResult):
-            residuals = result.residual_history
+            residuals = result.residual_history_rel
         elif isinstance(result, Mapping):
-            residuals = result.get("residual_history") or result.get("residuals")
+            residuals = result.get("residual_history_rel") or result.get("residuals")
         else:
             residuals = None
 

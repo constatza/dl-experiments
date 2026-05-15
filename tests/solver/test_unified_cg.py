@@ -147,9 +147,9 @@ class TestUnifiedCGSolver:
         x, result = solver.solve(A, b, rtol=1e-10)
 
         # Verify residual history
-        assert result.residual_history is not None
-        assert len(result.residual_history) == result.iterations + 1
-        assert result.residual_history[0] > result.residual_history[-1]
+        assert result.residual_history_rel is not None
+        assert len(result.residual_history_rel) == result.iterations + 1
+        assert result.residual_history_rel[0] > result.residual_history_rel[-1]
 
     def test_unified_solver_handles_convergence_flags(
         self, simple_spd_system: tuple[np.ndarray, np.ndarray, np.ndarray]

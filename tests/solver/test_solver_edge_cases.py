@@ -418,14 +418,16 @@ class TestResultConsistency:
         # Check required fields exist and have reasonable values
         assert hasattr(result, "converged"), "Result missing 'converged' field"
         assert hasattr(result, "iterations"), "Result missing 'iterations' field"
-        assert hasattr(result, "residual_history"), "Result missing 'residual_history' field"
+        assert hasattr(result, "residual_history_rel"), (
+            "Result missing 'residual_history_rel' field"
+        )
 
         assert isinstance(result.converged, bool), "converged should be bool"
         assert isinstance(result.iterations, int), "iterations should be int"
         assert result.iterations >= 0, "iterations should be non-negative"
 
         # Residual history should have at least initial residual
-        assert len(result.residual_history) > 0, "residual_history should not be empty"
+        assert len(result.residual_history_rel) > 0, "residual_history_rel should not be empty"
 
     @pytest.mark.parametrize("solver_name", ["fcg", "pcg", "scipy_cg"])
     def test_residual_history_length_matches_iterations(
@@ -436,7 +438,7 @@ class TestResultConsistency:
         rhs_ones_small: NDArray,
         integration_tolerances: tuple[float, float],
     ) -> None:
-        """Length of residual_history should match iterations + 1 (includes initial)."""
+        """Length of residual_history_rel should match iterations + 1 (includes initial)."""
         solver = solver_factories[solver_name]
         A = diagonal_spd_small
         b = rhs_ones_small
@@ -446,7 +448,7 @@ class TestResultConsistency:
 
         # Residual history includes iteration 0 (initial residual)
         expected_length = result.iterations + 1
-        actual_length = len(result.residual_history)
+        actual_length = len(result.residual_history_rel)
 
         assert actual_length == expected_length, (
             f"Residual history length ({actual_length}) should equal "
@@ -471,7 +473,7 @@ class TestResultConsistency:
         x, result = solver(A, b, rtol=rtol, atol=atol, trace_mode=TraceMode.MINIMAL)
 
         # Check residuals are non-increasing with small tolerance for numerical noise
-        residuals = result.residual_history
+        residuals = result.residual_history_rel
         for i in range(1, len(residuals)):
             # Allow 10% increase for numerical reasons (e.g., flexible CG, finite precision)
             assert residuals[i] <= residuals[i - 1] * 1.1, (

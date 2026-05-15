@@ -9,35 +9,35 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import tomli_w
 
-from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
-from neuralls.platform.config.resolution import build_sqlite_tracking_uri
-from neuralls.platform.config.models.preconditioner import (
-    LoggedModelRefConfig,
-    NeuralPreconditionerConfig,
-    PreconditionerType,
-    PreconditionerConfig,
-    RegisteredModelRefConfig,
-    StandardPreconditionerConfig,
-)
-from neuralls.domain.solver.models.result import CGComparisonResult
+from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.composition.experiments.comparison_batch import (
     _resolve_neural_preconditioners,
     _validate_neural_preconditioner,
     run_comparison,
     run_comparison_batch,
 )
-from neuralls.platform.reporting.artifacts import (
-    coerce_comparison_result_payload,
-    extract_array_artifacts,
-    serialize_comparison_payload,
-)
+from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.domain.solver.models.result import (
+    CGComparisonResult,
     ComparisonRecommendations,
     ComparisonResult,
     PlotPaths,
     RankedRecommendation,
 )
-from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
+from neuralls.platform.config.models.preconditioner import (
+    LoggedModelRefConfig,
+    NeuralPreconditionerConfig,
+    PreconditionerConfig,
+    PreconditionerType,
+    RegisteredModelRefConfig,
+    StandardPreconditionerConfig,
+)
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
+from neuralls.platform.reporting.artifacts import (
+    coerce_comparison_result_payload,
+    extract_array_artifacts,
+    serialize_comparison_payload,
+)
 
 _LOAD_COMPARISON_CONFIG = "neuralls.composition.experiments.comparison_batch.load_comparison_config"
 _COMPARE_PRECONDITIONERS = (
@@ -164,7 +164,7 @@ def _typed_comparison_result(plot_path: Path) -> ComparisonResult:
                 iterations=2,
                 residual=1.0e-8,
                 residual_abs=1.0e-9,
-                residual_history=[1.0, 1.0e-8],
+                residual_history_rel=[1.0, 1.0e-8],
                 residual_history_abs=[1.0, 1.0e-9],
                 preconditioner="none",
                 initial_guess=np.zeros(2),

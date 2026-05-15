@@ -1,8 +1,7 @@
 """CG solver comparison runner.
 
 This module provides pure domain logic for running CG comparisons with multiple
-preconditioners. It handles solver routing (PCG vs Flexible CG), result
-formatting, and analysis.
+preconditioners using Flexible CG (FCG) uniformly, result formatting, and analysis.
 """
 
 from __future__ import annotations
@@ -12,14 +11,14 @@ from collections.abc import Mapping
 import numpy as np
 from scipy.linalg import norm
 
-from neuralls.shared.constants import DEFAULT_ATOL, DEFAULT_M_MAX, DEFAULT_RTOL
-from neuralls.domain.solver.factories import flexible_cg, pcg
+from neuralls.domain.solver.factories import flexible_cg
 from neuralls.domain.solver.models.result import (
     CGComparisonResult,
     ComparisonRecommendations,
     RankedRecommendation,
 )
 from neuralls.domain.solver.preconditioners.base import Preconditioner
+from neuralls.shared.constants import DEFAULT_ATOL, DEFAULT_M_MAX, DEFAULT_RTOL
 
 
 def run_cg_comparison(
@@ -36,10 +35,10 @@ def run_cg_comparison(
 ) -> dict[str, CGComparisonResult]:
     """Run CG with multiple preconditioners for comparison.
 
-    Uses type-based routing:
-    - Contextual/iteration-dependent preconditioners → flexible_cg
-    - Non-linear preconditioners (for example neural models) → flexible_cg
-    - Static linear preconditioners → pcg
+    All preconditioners use flexible_cg (FCG with Gram-Schmidt orthogonalization)
+    to ensure identical mathematical treatment regardless of preconditioner type.
+    This is the only fair basis for comparison: every preconditioner sees the same
+    algorithm, the same initial guess, and the same system.
 
     Args:
         A: System matrix.
@@ -79,29 +78,17 @@ def run_cg_comparison(
 
     for precond_name, precond in preconditioners.items():
         try:
-            if _requires_flexible_cg(precond):
-                x_sol, info = flexible_cg(
-                    A,
-                    b,
-                    x0,
-                    rtol=rtol,
-                    atol=atol,
-                    maxiter=maxiter,
-                    preconditioner=precond,
-                    m_max=m_max,
-                    breakdown_tol=breakdown_tol,
-                )
-            else:
-                x_sol, info = pcg(
-                    A,
-                    b,
-                    x0,
-                    rtol=rtol,
-                    atol=atol,
-                    maxiter=maxiter,
-                    preconditioner=precond,
-                    breakdown_tol=breakdown_tol,
-                )
+            x_sol, info = flexible_cg(
+                A,
+                b,
+                x0,
+                rtol=rtol,
+                atol=atol,
+                maxiter=maxiter,
+                preconditioner=precond,
+                m_max=m_max,
+                breakdown_tol=breakdown_tol,
+            )
         except (ValueError, RuntimeError, np.linalg.LinAlgError) as solver_exc:
             result = CGComparisonResult(
                 x=x0_base.copy(),
@@ -109,7 +96,7 @@ def run_cg_comparison(
                 iterations=0,
                 residual=float("inf"),
                 residual_abs=float("inf"),
-                residual_history=[],
+                residual_history_rel=[],
                 residual_history_abs=[],
                 preconditioner=precond_name,
                 initial_guess=x0_base.copy(),
@@ -124,10 +111,15 @@ def run_cg_comparison(
                 norm(x_sol - x_exact) / exact_norm if exact_norm != 0 else norm(x_sol - x_exact)
             )
 
-            if info.iteration_history is not None:
-                residual_history: list[float] = info.iteration_history.residual_norms.to_list()
-            else:
-                residual_history = [info.residual]
+            rhs_norm = info.rhs_norm
+            residual: list[float] = (
+                info.iteration_history.residual_norms.to_list()
+                if info.iteration_history is not None
+                else [info.residual_abs]
+            )
+            residual_rel: list[float] = (
+                [r / rhs_norm for r in residual] if rhs_norm > 0 else list(residual)
+            )
 
             result = CGComparisonResult(
                 x=x_sol,
@@ -135,8 +127,8 @@ def run_cg_comparison(
                 iterations=info.iterations,
                 residual=info.residual,
                 residual_abs=info.residual_abs,
-                residual_history=residual_history,
-                residual_history_abs=residual_history,
+                residual_history_rel=residual_rel,
+                residual_history_abs=residual,
                 preconditioner=precond_name,
                 initial_guess=x0_base.copy(),
                 exact_error=exact_error,

@@ -20,6 +20,11 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from neuralls.domain.solver.comparison import (
+    format_results_summary,
+    run_cg_comparison,
+    summarize_best_combinations,
+)
 from neuralls.domain.solver.models.result import CGComparisonResult
 from neuralls.domain.solver.preconditioners import (
     Identity,
@@ -28,11 +33,6 @@ from neuralls.domain.solver.preconditioners import (
     ScheduledPreconditioner,
 )
 from neuralls.domain.solver.preconditioners.base import NonLinearPreconditioner
-from neuralls.domain.solver.comparison import (
-    format_results_summary,
-    run_cg_comparison,
-    summarize_best_combinations,
-)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -85,7 +85,7 @@ def mock_comparison_results() -> dict[str, CGComparisonResult]:
             iterations=10,
             residual=1e-8,
             residual_abs=1e-9,
-            residual_history=[1.0, 0.1, 1e-8],
+            residual_history_rel=[1.0, 0.1, 1e-8],
             residual_history_abs=[1.0, 0.1, 1e-9],
             preconditioner="jacobi",
             initial_guess=x0,
@@ -99,7 +99,7 @@ def mock_comparison_results() -> dict[str, CGComparisonResult]:
             iterations=20,
             residual=1e-7,
             residual_abs=1e-8,
-            residual_history=[1.0, 0.5, 1e-7],
+            residual_history_rel=[1.0, 0.5, 1e-7],
             residual_history_abs=[1.0, 0.5, 1e-8],
             preconditioner="identity",
             initial_guess=x0,
@@ -113,7 +113,7 @@ def mock_comparison_results() -> dict[str, CGComparisonResult]:
             iterations=100,
             residual=0.5,
             residual_abs=0.5,
-            residual_history=[1.0, 0.9, 0.5],
+            residual_history_rel=[1.0, 0.9, 0.5],
             residual_history_abs=[1.0, 0.9, 0.5],
             preconditioner="failed",
             initial_guess=x0,
@@ -182,7 +182,7 @@ def test_run_cg_comparison_routes_to_flexible_cg(spd_matrix: NDArray, rhs_vector
     result = results["scheduled"]
     assert isinstance(result, CGComparisonResult)
     # Flexible CG provides iteration history
-    assert len(result.residual_history) > 1
+    assert len(result.residual_history_rel) > 1
 
 
 def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
@@ -190,7 +190,7 @@ def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
     spd_matrix: NDArray,
     rhs_vector: NDArray,
 ) -> None:
-    """Test that nonlinear preconditioners use flexible_cg by default."""
+    """Test that all preconditioners use flexible_cg uniformly."""
 
     class DummyNonLinearPreconditioner(NonLinearPreconditioner):
         def apply(
@@ -201,7 +201,6 @@ def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
             return residual
 
     flexible_calls: list[str] = []
-    pcg_calls: list[str] = []
 
     from neuralls.domain.solver.models.result import SolverResult
 
@@ -214,29 +213,13 @@ def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
             residual_abs=1e-8,
             rhs_norm=float(np.linalg.norm(rhs_vector)),
             breakdown=False,
-            residual_history=[1.0, 1e-8],
+            residual_history_rel=[1.0, 1e-8],
             residual_history_abs=[1.0, 1e-8],
             tol=1e-8,
             atol=1e-10,
         )
 
-    def fake_pcg(*args: object, **kwargs: object) -> tuple[NDArray, SolverResult]:
-        pcg_calls.append("pcg")
-        return np.zeros_like(rhs_vector), SolverResult(
-            converged=True,
-            iterations=2,
-            residual=1e-7,
-            residual_abs=1e-7,
-            rhs_norm=float(np.linalg.norm(rhs_vector)),
-            breakdown=False,
-            residual_history=[1.0, 1e-7],
-            residual_history_abs=[1.0, 1e-7],
-            tol=1e-8,
-            atol=1e-10,
-        )
-
     monkeypatch.setattr("neuralls.domain.solver.comparison.flexible_cg", fake_flexible_cg)
-    monkeypatch.setattr("neuralls.domain.solver.comparison.pcg", fake_pcg)
 
     results = run_cg_comparison(
         spd_matrix,
@@ -250,8 +233,7 @@ def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
         maxiter=100,
     )
 
-    assert flexible_calls == ["flexible"]
-    assert pcg_calls == ["pcg"]
+    assert flexible_calls == ["flexible", "flexible"]
     assert results["nonlinear"].converged
 
 
@@ -413,7 +395,7 @@ def test_summarize_best_combinations_empty_results() -> None:
             iterations=100,
             residual=0.5,
             residual_abs=0.5,
-            residual_history=[],
+            residual_history_rel=[],
             residual_history_abs=[],
             preconditioner="failed1",
             initial_guess=np.zeros(3),
@@ -439,7 +421,7 @@ def test_summarize_best_combinations_single_converged() -> None:
             iterations=10,
             residual=1e-8,
             residual_abs=1e-9,
-            residual_history=[],
+            residual_history_rel=[],
             residual_history_abs=[],
             preconditioner="jacobi",
             initial_guess=np.zeros(2),

@@ -86,7 +86,7 @@ def test_scipy_cg_vs_fcg_consistency():
     """Test that scipy CG and FCG both capture iteration 0 with consistent formats.
 
     Both solvers should store:
-    - residual_history: RELATIVE residuals (||r|| / ||b||)
+    - residual_history_rel: RELATIVE residuals (||r|| / ||b||)
     - residual_history_abs: ABSOLUTE residuals (||r||)
     """
     from neuralls.domain.solver.factories import flexible_cg, pcg
@@ -103,14 +103,14 @@ def test_scipy_cg_vs_fcg_consistency():
     x_fcg, result_fcg = flexible_cg(A, b, x0=x0, rtol=1e-6, maxiter=20)
 
     # Both should have iteration 0 in history
-    assert result_scipy.residual_history is not None
-    assert result_fcg.residual_history is not None
-    assert len(result_scipy.residual_history) > 0
-    assert len(result_fcg.residual_history) > 0
+    assert result_scipy.residual_history_rel is not None
+    assert result_fcg.residual_history_rel is not None
+    assert len(result_scipy.residual_history_rel) > 0
+    assert len(result_fcg.residual_history_rel) > 0
 
     # For x0=0, both should have initial relative residual = 1.0
-    assert np.isclose(result_scipy.residual_history[0], 1.0, rtol=1e-10)
-    assert np.isclose(result_fcg.residual_history[0], 1.0, rtol=1e-10)
+    assert np.isclose(result_scipy.residual_history_rel[0], 1.0, rtol=1e-10)
+    assert np.isclose(result_fcg.residual_history_rel[0], 1.0, rtol=1e-10)
 
     # Both should have absolute residual = ||b||
     assert result_scipy.residual_history_abs is not None

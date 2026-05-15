@@ -108,12 +108,12 @@ def test_pcg_jacobi_double_precision_accuracy(
     assert info.converged
     assert info.residual_abs <= _tol_bound(b, DOUBLE_PRECISION_ATOL, DOUBLE_PRECISION_RTOL)
     assert np.allclose(x_sol, x_true, atol=DOUBLE_PRECISION_ATOL, rtol=DOUBLE_PRECISION_RTOL)
-    if info.residual_history is not None and info.residual_history_abs is not None:
-        count = min(len(info.residual_history), len(info.residual_history_abs), MAX_SAMPLES)
+    if info.residual_history_rel is not None and info.residual_history_abs is not None:
+        count = min(len(info.residual_history_rel), len(info.residual_history_abs), MAX_SAMPLES)
         data = np.column_stack(
             [
                 np.asarray(info.residual_history_abs[:count], dtype=np.float64),
-                np.asarray(info.residual_history[:count], dtype=np.float64),
+                np.asarray(info.residual_history_rel[:count], dtype=np.float64),
             ]
         )
         np.savetxt(
@@ -124,8 +124,8 @@ def test_pcg_jacobi_double_precision_accuracy(
             header="residual_abs,residual_rel",
             comments="",
         )
-    if info.residual_history is not None:
-        _plot_history("pcg_double_precision_history", info.residual_history, diagnostics_dir)
+    if info.residual_history_rel is not None:
+        _plot_history("pcg_double_precision_history", info.residual_history_rel, diagnostics_dir)
     # Uncomment to persist residual vectors for inspection (requires trace_mode="full" above).
     # if info.residual_vectors is not None:
     #     np.savetxt(
@@ -162,12 +162,12 @@ def test_flexible_pcg_jacobi_double_precision_accuracy(
     assert info.converged
     assert info.residual_abs <= _tol_bound(b, DOUBLE_PRECISION_ATOL, DOUBLE_PRECISION_RTOL)
     assert np.allclose(x_sol, x_true, atol=DOUBLE_PRECISION_ATOL, rtol=DOUBLE_PRECISION_RTOL)
-    if info.residual_history is not None and info.residual_history_abs is not None:
-        count = min(len(info.residual_history), len(info.residual_history_abs), MAX_SAMPLES)
+    if info.residual_history_rel is not None and info.residual_history_abs is not None:
+        count = min(len(info.residual_history_rel), len(info.residual_history_abs), MAX_SAMPLES)
         data = np.column_stack(
             [
                 np.asarray(info.residual_history_abs[:count], dtype=np.float64),
-                np.asarray(info.residual_history[:count], dtype=np.float64),
+                np.asarray(info.residual_history_rel[:count], dtype=np.float64),
             ]
         )
         np.savetxt(
@@ -178,10 +178,10 @@ def test_flexible_pcg_jacobi_double_precision_accuracy(
             header="residual_abs,residual_rel",
             comments="",
         )
-    if info.residual_history is not None:
+    if info.residual_history_rel is not None:
         _plot_history(
             "flexible_pcg_jacobi_double_precision",
-            info.residual_history,
+            info.residual_history_rel,
             diagnostics_dir,
         )
     # Uncomment to persist residual vectors for inspection (requires trace_mode="full" above).

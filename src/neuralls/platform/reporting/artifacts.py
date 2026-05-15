@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, is_dataclass, replace
 import json
 import re
 import shutil
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
-from numpy.typing import NDArray
 import tomli_w
+from numpy.typing import NDArray
 
 from neuralls.domain.solver.models.result import (
     CGComparisonResult,
@@ -116,7 +116,7 @@ class SerializedSolverResult:
     residual: float
     residual_abs: float | None = None
     converged: bool | None = None
-    residual_history: tuple[float, ...] = ()
+    residual_history_rel: tuple[float, ...] = ()
     residual_history_abs: tuple[float, ...] = ()
     preconditioner: str | None = None
     exact_error: float | None = None
@@ -175,7 +175,7 @@ def _serialize_solver_result(
         residual=result.residual,
         residual_abs=result.residual_abs,
         converged=result.converged,
-        residual_history=tuple(result.residual_history),
+        residual_history_rel=tuple(result.residual_history_rel),
         residual_history_abs=tuple(result.residual_history_abs),
         preconditioner=result.preconditioner,
         exact_error=result.exact_error,

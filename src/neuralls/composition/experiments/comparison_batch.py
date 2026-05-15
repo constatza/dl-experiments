@@ -442,7 +442,7 @@ def run_comparison(
                         with mlflow.start_run(
                             run_name=name, nested=True, tags=child_tags.as_mlflow_tags()
                         ):
-                            for step, residual in enumerate(entry.residual_history):
+                            for step, residual in enumerate(entry.residual_history_rel):
                                 mlflow.log_metric("residual", residual, step=step)
 
             mlflow.log_param("comparison_config", comparison_config.stem)

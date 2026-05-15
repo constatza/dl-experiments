@@ -333,7 +333,7 @@ class SciPyCGSolver:
             residual_abs=final_residual_abs,
             rhs_norm=rhs_norm,
             breakdown=(info_code < 0),
-            residual_history=residual_history_rel,
+            residual_history_rel=residual_history_rel,
             residual_history_abs=residual_history_abs,
             tol=rtol,
             atol=atol,
@@ -342,6 +342,4 @@ class SciPyCGSolver:
             residual_vectors=residual_vectors,
             solution_vectors=solution_vectors,
             info=info_code,
-            niter=iterations,  # scipy alias
-            status=info_code,  # scipy alias
         )

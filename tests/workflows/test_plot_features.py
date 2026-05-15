@@ -11,11 +11,10 @@ import pytest
 
 matplotlib.use("Agg")
 
-from neuralls.domain.analysis.spectra import plot_condition_numbers
-from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
-from neuralls.domain.solver.models.result import CGComparisonResult
 from neuralls.composition.comparison.single_run import ComparisonPaths, _generate_comparison_plots
-from neuralls.domain.solver.models.result import PlotPaths
+from neuralls.domain.analysis.spectra import plot_condition_numbers
+from neuralls.domain.solver.models.result import CGComparisonResult, PlotPaths
+from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -50,7 +49,7 @@ def two_result_entries() -> dict[str, CGComparisonResult]:
             iterations=iters,
             residual=history[-1],
             residual_abs=history[-1],
-            residual_history=history,
+            residual_history_rel=history,
             residual_history_abs=history,
             preconditioner=name,
             initial_guess=np.zeros(2),

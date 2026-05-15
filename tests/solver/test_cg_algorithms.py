@@ -65,10 +65,10 @@ def test_pcg_captures_residual_history(
         maxiter=10,
     )
 
-    assert info.residual_history is not None
-    assert len(info.residual_history) > 0
-    assert len(info.residual_history) >= info.iterations
-    assert not np.isnan(info.residual_history).any()
+    assert info.residual_history_rel is not None
+    assert len(info.residual_history_rel) > 0
+    assert len(info.residual_history_rel) >= info.iterations
+    assert not np.isnan(info.residual_history_rel).any()
     assert info.iteration_history is not None
     # Check scalar residual norms (logged in MINIMAL mode)
     residual_norms = np.asarray(info.iteration_history.residual_norms.to_list(), dtype=np.float64)
