@@ -33,7 +33,7 @@ from mlflow.tracking import MlflowClient
 import numpy as np
 
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
-from neuralls.platform.config.models.experiments import ExperimentEntry
+from neuralls.platform.config.models.experiments import ExperimentEntry, ExperimentNamesConfig
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.config.resolution import (
     build_mlflow_environment,
@@ -65,7 +65,6 @@ from neuralls.composition.tracking.run_specs import build_training_run_spec, for
 
 GRAPH_DATASET_NAME: str = "GraphDataset"
 FLEXIBLE_DATASET_NAME: str = "FlexibleDataset"
-TRAINING_EXPERIMENT_NAME: str = "Train"
 type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
@@ -82,6 +81,13 @@ class TrainingResult:
     checkpoint_path: Path
     experiment_dir: Path
     data_dir: Path
+
+
+def _resolve_training_experiment_name(mlflow_experiment_name: str | None) -> str:
+    """Resolve the training MLflow experiment name from caller input or config defaults."""
+    if mlflow_experiment_name is not None:
+        return mlflow_experiment_name
+    return ExperimentNamesConfig().training
 
 
 def _load_and_prepare_data(
@@ -374,8 +380,8 @@ def _build_training_run_config(
     workspace_root: Path,
 ) -> MlflowRunConfig:
     """Build the execute()-time MLflow run config for training."""
-    _ = (mlflow_experiment_name, dataset_display_name)
-    experiment_name = TRAINING_EXPERIMENT_NAME
+    _ = dataset_display_name
+    experiment_name = _resolve_training_experiment_name(mlflow_experiment_name)
     paths = _build_runtime_mlflow_paths(runtime_mlflow_env)
     if experiment_id and dataset_registry_id and model_registry_id:
         entry = ExperimentEntry(

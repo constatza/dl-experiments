@@ -75,12 +75,17 @@ def _write_comparison_config(path: Path) -> None:
     )
 
 
-def _write_experiments_config(path: Path, *, with_comparisons: bool = False) -> None:
+def _write_experiments_config(
+    path: Path,
+    *,
+    with_comparisons: bool = False,
+    comparison_name: str = "Comparisons",
+) -> None:
     payload: dict[str, object] = {
         "mlflow": {"tracking_uri": build_sqlite_tracking_uri(path.parent / "mlruns" / "mlflow.db")},
         "names": {
             "training": "neuralls-training",
-            "comparison": "Comparisons",
+            "comparison": comparison_name,
         },
     }
     if with_comparisons:
@@ -262,7 +267,7 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
     comparison_config = tmp_path / "comparison.toml"
     experiments_config = tmp_path / "experiments.toml"
     comparison_config.touch()
-    _write_experiments_config(experiments_config)
+    _write_experiments_config(experiments_config, comparison_name="CustomComparison")
     matrix_path, rhs_path = _write_system_inputs(tmp_path)
     cfg = _mock_cfg(
         matrix_path=matrix_path,
@@ -288,7 +293,7 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
 
     assert outcomes[0].success is True
     mock_setup_tracking.assert_called_once()
-    assert mock_setup_tracking.call_args.kwargs["experiment_name"] == "Comparisons"
+    assert mock_setup_tracking.call_args.kwargs["experiment_name"] == "CustomComparison"
 
 
 def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None:

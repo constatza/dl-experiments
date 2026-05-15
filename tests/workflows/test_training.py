@@ -19,6 +19,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+from neuralls.platform.config.models.experiments import ExperimentNamesConfig
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 import torch
 from tensordict import TensorDict
@@ -419,7 +420,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             dataset_display_name="Dataset One",
             model_registry_id="model-1",
             model_display_name="Model One",
-            mlflow_experiment_name="Train",
+            mlflow_experiment_name="CustomTrain",
         )
 
     load_args = mock_load.call_args.args
@@ -428,7 +429,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
 
     execute_kwargs = mock_execute.call_args.kwargs
     overrides = execute_kwargs["overrides"]
-    assert overrides.experiment_name == "Train"
+    assert overrides.experiment_name == "CustomTrain"
     assert re.match(
         r"^Experiment One-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
         overrides.run_name,
@@ -445,7 +446,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
 def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
     tmp_path: Path,
 ) -> None:
-    """Legacy callers without explicit experiment names use dataset display name and no tags."""
+    """Legacy callers use the config-model default experiment name and no tags."""
     from neuralls.platform.config.models.workspace import ExperimentWorkspace
     from neuralls.composition.experiments.training import train_model
 
@@ -528,7 +529,7 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
 
     execute_kwargs = mock_execute.call_args.kwargs
     overrides = execute_kwargs["overrides"]
-    assert overrides.experiment_name == "Train"
+    assert overrides.experiment_name == ExperimentNamesConfig().training
     assert re.match(
         r"^Legacy Experiment-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
         overrides.run_name,

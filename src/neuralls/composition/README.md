@@ -35,3 +35,8 @@ Training, inference, comparison, and generation assembly all follow the same
 rule: composition may decide which collaborators participate in a workflow, but
 it must not absorb low-level IO mechanics, config normalization policy, or
 tensor-level runtime behavior.
+
+For MLflow naming, composition only propagates the resolved case-config names.
+Training uses `names.training` and comparison uses `names.comparison`, with the
+defaults owned by the case-config Pydantic models rather than composition-layer
+constants.

@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 import pytest
 
-from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 from neuralls.platform.config.models.experiments import ExperimentsConfig
+from neuralls.platform.config.models.experiments import ExperimentNamesConfig
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 from neuralls.platform.config.registry import resolve_comparison_config_path
 from neuralls.platform.config.loaders import load_experiments_config, load_raw_toml
 from neuralls.composition.experiments.multi_training import (
@@ -269,9 +270,59 @@ def test_train_batch_returns_local_output_dir(
         )
 
     assert mock_train.call_count == 1
-    assert mock_train.call_args.kwargs["mlflow_experiment_name"] == "Train"
+    assert mock_train.call_args.kwargs["mlflow_experiment_name"] == ExperimentNamesConfig().training
     assert result.output_dir == (tmp_path / "training")
     assert result.label_map["1"]["experiment_id"] == "ffnn_test"
+
+
+def test_train_batch_forwards_custom_training_experiment_name(
+    valid_experiments_toml: Path,
+    tmp_path: Path,
+    neuralls_settings,
+) -> None:
+    """Batch training forwards the case-configured training experiment name."""
+    fake_ckpt = tmp_path / "ckpt" / "model.ckpt"
+    fake_ckpt.parent.mkdir()
+    fake_ckpt.touch()
+    valid_experiments_toml.write_text(
+        "\n".join(
+            [
+                "[mlflow]",
+                f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")}"',
+                "",
+                "[names]",
+                'training = "CustomTrain"',
+                'comparison = "CustomComparison"',
+                "",
+                "[[models]]",
+                'id = "ffnn"',
+                'path = "models/ffnn.toml"',
+                "",
+                "[[datasets]]",
+                'id = "test-solutions"',
+                'path = "datasets/test-solutions.toml"',
+                "",
+                "[[experiments]]",
+                'id = "ffnn_test"',
+                'model = "ffnn"',
+                'dataset = "test-solutions"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
+
+    with patch(
+        "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
+    ) as mock_train:
+        train_batch(
+            cfg=cfg,
+            configs_dir=valid_experiments_toml.parent,
+            settings=neuralls_settings,
+        )
+
+    assert mock_train.call_args.kwargs["mlflow_experiment_name"] == "CustomTrain"
 
 
 def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -> None:

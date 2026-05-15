@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from dlkit.infrastructure.io import url_resolver
 
+from neuralls.platform.config.models.experiments import ExperimentNamesConfig
 from neuralls.platform.tracking.comparison_tracking import setup_comparison_tracking
 
 
@@ -21,18 +22,22 @@ def test_setup_comparison_tracking_creates_missing_experiment(tmp_path: Path) ->
     ):
         mock_client = mock_client_cls.return_value
         mock_client.get_experiment_by_name.return_value = None
-        setup_comparison_tracking(tracking_uri, artifact_dir)
+        setup_comparison_tracking(
+            tracking_uri,
+            artifact_dir,
+            experiment_name="CustomComparison",
+        )
 
     mock_mlflow.set_tracking_uri.assert_called_once_with(tracking_uri)
     mock_client.create_experiment.assert_called_once_with(
-        "Comparisons",
+        "CustomComparison",
         artifact_location=artifact_location,
     )
-    mock_mlflow.set_experiment.assert_called_once_with("Comparisons")
+    mock_mlflow.set_experiment.assert_called_once_with("CustomComparison")
 
 
-def test_setup_comparison_tracking_reuses_existing_experiment(tmp_path: Path) -> None:
-    """Existing comparison experiments should not be recreated."""
+def test_setup_comparison_tracking_uses_model_default_when_name_missing(tmp_path: Path) -> None:
+    """Missing comparison names fall back to the config-model default."""
     tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
     artifact_dir = str(tmp_path / "artifacts")
     with (
@@ -44,4 +49,4 @@ def test_setup_comparison_tracking_reuses_existing_experiment(tmp_path: Path) ->
         setup_comparison_tracking(tracking_uri, artifact_dir)
 
     mock_client.create_experiment.assert_not_called()
-    mock_mlflow.set_experiment.assert_called_once_with("Comparisons")
+    mock_mlflow.set_experiment.assert_called_once_with(ExperimentNamesConfig().comparison)

@@ -101,6 +101,11 @@ dataset = "my-dataset"
 model = "my-model"
 ```
 
+`[names].training` controls the MLflow experiment bucket used for training
+runs, and `[names].comparison` controls the MLflow experiment bucket used for
+comparison runs. If you omit `[names]`, the defaults come from the case-config
+model: `"Train"` for training and `"Comparisons"` for comparison.
+
 ## What Lives In Each Config
 
 ### Dataset configs
