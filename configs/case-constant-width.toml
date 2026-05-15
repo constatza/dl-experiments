@@ -1,0 +1,120 @@
+# Constant-width factorized FFNN registry for Gaussian residual sweeps.
+
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training = "Train-Datasets"
+comparison = "Comparisons"
+
+# -------
+# Dataset
+# -------
+
+[[datasets]]
+id = "res-gaussian-0"
+path = "datasets/res-gaussian-0.toml"
+display_name = "Residual-Error 0 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-10"
+path = "datasets/res-gaussian-10.toml"
+display_name = "Residual-Error 10 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-20"
+path = "datasets/res-gaussian-20.toml"
+display_name = "Residual-Error 20 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-50"
+path = "datasets/res-gaussian-50.toml"
+display_name = "Residual-Error 50 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-100"
+path = "datasets/res-gaussian-100.toml"
+display_name = "Residual-Error 100 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-100-93x31"
+path = "datasets/res-gaussian-100-93x31.toml"
+display_name = "Residual-Error 100 Gaussian 93x31"
+
+# ------
+# Models
+# ------
+
+[[models]]
+id = "constant-width-factorized"
+path = "models/skip-ffnn/constant-width-factorized.toml"
+display_name = "Constant-Width Factorized"
+
+# -----------
+# Comparisons
+# -----------
+
+[[comparisons]]
+id = "gaussian"
+path = "comparison/gaussian.toml"
+display_name = "Gaussian RHS"
+
+[[comparisons]]
+id = "scaled-solutions"
+path = "comparison/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[comparisons]]
+id = "sparse-rhs"
+path = "comparison/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[comparisons]]
+id = "eig-few-solutions-smallest"
+path = "comparison/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[comparisons]]
+id = "eig-few-rhs-smallest"
+path = "comparison/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"
+
+# -----------
+# Experiments
+# -----------
+
+[[experiments]]
+id = "res-gaussian-0-constant-width-factorized"
+dataset = "res-gaussian-0"
+model = "constant-width-factorized"
+display_name = "Residual-Error 0 Gaussian | Constant-Width Factorized"
+
+[[experiments]]
+id = "res-gaussian-10-constant-width-factorized"
+dataset = "res-gaussian-10"
+model = "constant-width-factorized"
+display_name = "Residual-Error 10 Gaussian | Constant-Width Factorized"
+
+[[experiments]]
+id = "res-gaussian-20-constant-width-factorized"
+dataset = "res-gaussian-20"
+model = "constant-width-factorized"
+display_name = "Residual-Error 20 Gaussian | Constant-Width Factorized"
+
+[[experiments]]
+id = "res-gaussian-50-constant-width-factorized"
+dataset = "res-gaussian-50"
+model = "constant-width-factorized"
+display_name = "Residual-Error 50 Gaussian | Constant-Width Factorized"
+
+[[experiments]]
+id = "res-gaussian-100-constant-width-factorized"
+dataset = "res-gaussian-100"
+model = "constant-width-factorized"
+display_name = "Residual-Error 100 Gaussian | Constant-Width Factorized"
+
+[[experiments]]
+id = "res-gaussian-100-93x31-constant-width-factorized"
+dataset = "res-gaussian-100-93x31"
+model = "constant-width-factorized"
+display_name = "Residual-Error 100 Gaussian 93x31 | Constant-Width Factorized"

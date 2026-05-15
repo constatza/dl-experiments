@@ -7,7 +7,7 @@ precision = "float64"
 # DLKit scale-equivariant constant-width skip/factorized residual FFNN.
 name = "ScaleEquivariantConstantWidthFactorizedFFNN"
 module_path = "dlkit.nn"
-size = 504
+size = 1000
 num_layers = 1
 norm = "l2"
 dropout = 0.0

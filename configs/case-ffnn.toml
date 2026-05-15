@@ -17,9 +17,34 @@ path = "datasets/residuals-100.toml"
 display_name = "Residual-Error 100"
 
 [[datasets]]
-id = "residuals-100-gaussian"
-path = "datasets/residuals-100-gaussian.toml"
+id = "res-gaussian-100"
+path = "datasets/res-gaussian-100.toml"
 display_name = "Residual-Error 100 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-0"
+path = "datasets/res-gaussian-0.toml"
+display_name = "Residual-Error 0 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-10"
+path = "datasets/res-gaussian-10.toml"
+display_name = "Residual-Error 10 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-20"
+path = "datasets/res-gaussian-20.toml"
+display_name = "Residual-Error 20 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-50"
+path = "datasets/res-gaussian-50.toml"
+display_name = "Residual-Error 50 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-100-93x31"
+path = "datasets/res-gaussian-100-93x31.toml"
+display_name = "Residual-Error 100 Gaussian 93x31"
 
 # ------
 # Models
@@ -85,8 +110,8 @@ model = "constant-width-factorized"
 display_name = "Residual-Error 100 | Constant-Width Factorized"
 
 [[experiments]]
-id = "residuals-100-gaussian-constant-width-factorized"
-dataset = "residuals-100-gaussian"
+id = "res-gaussian-100-constant-width-factorized"
+dataset = "res-gaussian-100"
 model = "constant-width-factorized"
 display_name = "Residual-Error 100 Gaussian | Constant-Width Factorized"
 
@@ -97,8 +122,8 @@ model = "embedded-factorized"
 display_name = "Residual-Error 100 | Embedded Factorized"
 
 [[experiments]]
-id = "residuals-100-gaussian-embedded-factorized"
-dataset = "residuals-100-gaussian"
+id = "res-gaussian-100-embedded-factorized"
+dataset = "res-gaussian-100"
 model = "embedded-factorized"
 display_name = "Residual-Error 100 Gaussian | Embedded Factorized"
 
@@ -109,8 +134,8 @@ model = "embedded-spd"
 display_name = "Residual-Error 100 | Embedded SPD"
 
 [[experiments]]
-id = "residuals-100-gaussian-embedded-spd"
-dataset = "residuals-100-gaussian"
+id = "res-gaussian-100-embedded-spd"
+dataset = "res-gaussian-100"
 model = "embedded-spd"
 display_name = "Residual-Error 100 Gaussian | Embedded SPD"
 
@@ -121,7 +146,7 @@ model = "embedded-spd-factorized"
 display_name = "Residual-Error 100 | Embedded SPD-Factorized"
 
 [[experiments]]
-id = "residuals-100-gaussian-embedded-spd-factorized"
-dataset = "residuals-100-gaussian"
+id = "res-gaussian-100-embedded-spd-factorized"
+dataset = "res-gaussian-100"
 model = "embedded-spd-factorized"
 display_name = "Residual-Error 100 Gaussian | Embedded SPD-Factorized"

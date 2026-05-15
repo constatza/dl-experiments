@@ -21,6 +21,15 @@ uv run process-data /path/to/gaussian-dataset.toml \
   --case-config /path/to/case.toml
 ```
 
+The shipped residual Gaussian variants include:
+
+- `res-gaussian-0.toml`
+- `res-gaussian-10.toml`
+- `res-gaussian-20.toml`
+- `res-gaussian-50.toml`
+- `res-gaussian-100.toml`
+- `res-gaussian-100-93x31.toml`
+
 ## Minimal Shape
 
 ```toml
@@ -84,6 +93,11 @@ For trace strategies, `samples` is a row budget, not a base-system count.
 One common pattern is to keep the same matrix, normalization, row
 budget, and CG iteration count across archive-backed and Gaussian variants.
 Only the strategy block changes between the two TOMLs.
+
+The repository also ships Gaussian residual sweeps that vary only:
+
+- `cg_iters`: `0`, `10`, `20`, `50`, or `100` on `45x15-displacements`
+- `matrix_path`: `93x31-displacements` for the larger-matrix Gaussian variant
 
 ## Important Fields
 

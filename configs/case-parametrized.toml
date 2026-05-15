@@ -17,9 +17,34 @@ path = "datasets/residuals-100.toml"
 display_name = "Residual-Error 100"
 
 [[datasets]]
-id = "residuals-100-gaussian"
-path = "datasets/residuals-100-gaussian.toml"
+id = "res-gaussian-100"
+path = "datasets/res-gaussian-100.toml"
 display_name = "Residual-Error 100 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-0"
+path = "datasets/res-gaussian-0.toml"
+display_name = "Residual-Error 0 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-10"
+path = "datasets/res-gaussian-10.toml"
+display_name = "Residual-Error 10 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-20"
+path = "datasets/res-gaussian-20.toml"
+display_name = "Residual-Error 20 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-50"
+path = "datasets/res-gaussian-50.toml"
+display_name = "Residual-Error 50 Gaussian"
+
+[[datasets]]
+id = "res-gaussian-100-93x31"
+path = "datasets/res-gaussian-100-93x31.toml"
+display_name = "Residual-Error 100 Gaussian 93x31"
 
 # -----------
 # Comparisons
