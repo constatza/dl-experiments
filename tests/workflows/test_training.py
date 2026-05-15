@@ -313,27 +313,66 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
 
     result = cast(TrainingResult, execute(settings))
 
-    # Verify predictions were captured
     assert result.predictions is not None, "trainer.predict() should have captured predictions"
     assert isinstance(result.predictions, list)
     assert len(result.predictions) > 0
 
-    # Verify stacked TensorDict is accessible
     stacked = result.stacked
     assert stacked is not None, "result.stacked should be a TensorDict after prediction"
 
-    # Verify to_numpy() returns the expected dict structure
     all_numpy = result.to_numpy()
     assert all_numpy is not None, "to_numpy() should return a dict after prediction"
     assert "predictions" in all_numpy, f"Expected 'predictions' key, got {list(all_numpy.keys())}"
     preds = all_numpy["predictions"]
-    # predictions may be a numpy array directly or a dict with sub-keys
     if isinstance(preds, dict):
         output = next(iter(preds.values()))
     else:
         output = preds
     assert isinstance(output, np.ndarray)
     assert output.ndim >= 1
+
+
+def test_resolve_training_checkpoint_downloads_into_scratch_dir(
+    tmp_path: Path,
+) -> None:
+    """MLflow fallback checkpoint download must not create checkpoints/checkpoints."""
+    from neuralls.composition.experiments.training import _resolve_training_checkpoint
+    from neuralls.platform.config.models.workspace import ExperimentWorkspace
+
+    workspace = ExperimentWorkspace(
+        dataset_id="dataset",
+        run_id="run",
+        root_dir=tmp_path / "workspace",
+        data_dir=tmp_path / "workspace" / "data",
+    )
+    workspace.checkpoint_dir.mkdir(parents=True)
+    training_result = SimpleNamespace(checkpoint_path=None, artifacts={})
+    downloaded = tmp_path / "scratch" / "checkpoints" / "model.ckpt"
+    downloaded.parent.mkdir(parents=True)
+    downloaded.write_text("checkpoint")
+
+    with (
+        patch(
+            "neuralls.composition.experiments.training.get_latest_checkpoint",
+            return_value=None,
+        ),
+        patch(
+            "neuralls.composition.experiments.training._download_training_checkpoint",
+            return_value=downloaded,
+        ) as mock_download,
+    ):
+        resolved = _resolve_training_checkpoint(
+            training_result=training_result,
+            workspace=workspace,
+            tracking_uri="sqlite:///tmp/mlflow.db",
+            run_id="run-1",
+        )
+
+    assert resolved == downloaded
+    download_destination = Path(mock_download.call_args.kwargs["destination"])
+    assert download_destination != workspace.checkpoint_dir
+    assert download_destination.parent == workspace.root_dir
+    assert download_destination.name != "checkpoints"
 
 
 def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path) -> None:

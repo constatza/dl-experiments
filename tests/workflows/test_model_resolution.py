@@ -17,6 +17,8 @@ from neuralls.platform.config.models.preconditioner import (
 from neuralls.composition.experiments.model_resolution import (
     ModelResolution,
     PreconditionerResolutionResult,
+    _download_checkpoint_for_run,
+    _find_single_checkpoint,
     build_neural_download_dirname,
     resolve_model_ref,
     resolve_preconditioner_models,
@@ -227,3 +229,93 @@ def test_resolve_model_ref_normalizes_explicit_at_alias(
         "NormScaledLinearFFNN",
         "solutions",
     )
+
+
+def test_find_single_checkpoint_collapses_nested_duplicate_copy(tmp_path: Path) -> None:
+    """Nested duplicate artifact copies should resolve to one canonical checkpoint."""
+    root = tmp_path / "run-download"
+    duplicate_root = root / "checkpoints"
+    root.mkdir(parents=True)
+    duplicate_root.mkdir(parents=True)
+    primary = root / "model.ckpt"
+    duplicate = duplicate_root / "model.ckpt"
+    primary.write_bytes(b"same-checkpoint")
+    duplicate.write_bytes(b"same-checkpoint")
+
+    resolved = _find_single_checkpoint(root)
+
+    assert resolved == primary
+
+
+def test_find_single_checkpoint_rejects_distinct_candidates(tmp_path: Path) -> None:
+    """Multiple distinct checkpoint files in one run root should fail loudly."""
+    root = tmp_path / "run-download"
+    root.mkdir(parents=True)
+    (root / "first.ckpt").write_bytes(b"first")
+    (root / "second.ckpt").write_bytes(b"second")
+
+    with pytest.raises(ValueError, match="Multiple distinct checkpoints found"):
+        _find_single_checkpoint(root)
+
+
+def test_find_single_checkpoint_stays_within_provided_root(tmp_path: Path) -> None:
+    """Checkpoint discovery must not inspect sibling download roots."""
+    target_root = tmp_path / "run-a"
+    sibling_root = tmp_path / "run-b"
+    target_root.mkdir(parents=True)
+    sibling_root.mkdir(parents=True)
+    expected = target_root / "model.ckpt"
+    expected.write_bytes(b"target")
+    (sibling_root / "other.ckpt").write_bytes(b"sibling")
+
+    resolved = _find_single_checkpoint(target_root)
+
+    assert resolved == expected
+
+
+@patch("neuralls.composition.experiments.model_resolution.MlflowClient")
+def test_download_checkpoint_for_run_collapses_nested_duplicate_artifacts(
+    mock_client_cls,
+    tmp_path: Path,
+) -> None:
+    """Downloaded duplicate trees from one run should resolve to one checkpoint."""
+    download_root = tmp_path / "download"
+    nested = download_root / "checkpoints"
+    nested.mkdir(parents=True)
+    primary = download_root / "model.ckpt"
+    duplicate = nested / "model.ckpt"
+    primary.write_bytes(b"same-checkpoint")
+    duplicate.write_bytes(b"same-checkpoint")
+    client = mock_client_cls.return_value
+    client.download_artifacts.return_value = str(download_root)
+
+    resolved = _download_checkpoint_for_run(
+        client=client,
+        run_id="run-1",
+        destination=tmp_path / "out",
+        fallback_artifact_path="model",
+    )
+
+    assert resolved == primary
+
+
+@patch("neuralls.composition.experiments.model_resolution.MlflowClient")
+def test_download_checkpoint_for_run_raises_on_ambiguous_distinct_artifacts(
+    mock_client_cls,
+    tmp_path: Path,
+) -> None:
+    """Downloaded distinct checkpoint candidates from one run should raise."""
+    download_root = tmp_path / "download"
+    download_root.mkdir(parents=True)
+    (download_root / "first.ckpt").write_bytes(b"first")
+    (download_root / "second.ckpt").write_bytes(b"second")
+    client = mock_client_cls.return_value
+    client.download_artifacts.return_value = str(download_root)
+
+    with pytest.raises(ValueError, match="Multiple distinct checkpoints found"):
+        _download_checkpoint_for_run(
+            client=client,
+            run_id="run-1",
+            destination=tmp_path / "out",
+            fallback_artifact_path="model",
+        )

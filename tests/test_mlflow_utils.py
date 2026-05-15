@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from dlkit.infrastructure.io import url_resolver
@@ -19,6 +20,7 @@ from neuralls.platform.tracking.mlflow import (
     open_run,
     start_run_if_needed,
 )
+from neuralls.platform.tracking.mlflow_client import log_artifacts_to_mlflow
 
 
 class DummyRun:
@@ -204,3 +206,24 @@ def test_resolve_mlflow_paths_requires_workspace_for_local_artifacts(
             tracking_uri=f"sqlite:///{(tmp_path / 'mlruns.db').as_posix()}",
             artifact_uri="mlartifacts",
         )
+
+
+def test_log_artifacts_to_mlflow_excludes_checkpoints(tmp_path: Path) -> None:
+    """Workspace upload should not re-log checkpoints already handled by DLKit."""
+    workspace_root = tmp_path / "workspace"
+    for name in ("checkpoints", "figures", "metrics", "predictions", "config"):
+        directory = workspace_root / name
+        directory.mkdir(parents=True)
+        (directory / f"{name}.txt").write_text(name)
+
+    with patch("mlflow.tracking.MlflowClient") as mock_client_cls:
+        client = mock_client_cls.return_value
+        log_artifacts_to_mlflow(
+            tracking_uri=f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}",
+            run_id="run-1",
+            workspace_root=workspace_root,
+        )
+
+    logged_paths = [Path(call.args[1]).name for call in client.log_artifacts.call_args_list]
+    assert "checkpoints" not in logged_paths
+    assert set(logged_paths) == {"figures", "metrics", "predictions", "config"}

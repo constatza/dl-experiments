@@ -61,6 +61,7 @@ from neuralls.platform.tracking.mlflow_client import (
     log_diagnostics_to_mlflow,
     parent_run_context,
 )
+from neuralls.composition.experiments.model_resolution import _find_single_checkpoint
 from neuralls.composition.tracking.run_specs import build_training_run_spec, format_run_timestamp
 
 GRAPH_DATASET_NAME: str = "GraphDataset"
@@ -517,14 +518,6 @@ def _resolve_mlflow_run_ids(
     return tracking_uri, fallback_experiment_id, fallback_run_id
 
 
-def _find_single_checkpoint(root: Path) -> Path:
-    """Return one checkpoint under a downloaded MLflow artifact tree."""
-    checkpoints = sorted(root.glob("**/*.ckpt"))
-    if not checkpoints:
-        raise FileNotFoundError(f"No checkpoint found under {root}")
-    return checkpoints[0]
-
-
 def _download_training_checkpoint(
     *,
     tracking_uri: str,
@@ -576,14 +569,16 @@ def _resolve_training_checkpoint(
         return local_checkpoint
 
     if tracking_uri and run_id:
+        download_root = workspace.root_dir / "mlflow-downloads"
         logger.info(
-            "Checkpoint missing locally for run {}. Downloading from MLflow artifacts.",
+            "Checkpoint missing locally for run {}. Downloading from MLflow artifacts into {}.",
             run_id,
+            download_root,
         )
         return _download_training_checkpoint(
             tracking_uri=tracking_uri,
             run_id=run_id,
-            destination=workspace.checkpoint_dir,
+            destination=download_root,
         )
 
     raise RuntimeError(f"No checkpoint found in {workspace.checkpoint_dir}")

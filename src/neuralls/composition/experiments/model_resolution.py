@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -201,17 +202,39 @@ def search_logged_models(
 
 
 def _find_single_checkpoint(root: Path) -> Path:
-    """Find a checkpoint under a local artifact directory."""
+    """Find one unambiguous checkpoint under a local artifact directory."""
     checkpoints = sorted(root.glob("**/*.ckpt"))
     if not checkpoints:
         raise FileNotFoundError(f"No checkpoint found under {root}")
-    if len(checkpoints) > 1:
-        logger.warning(
-            "Multiple checkpoints found under {}. Using {}.",
-            root,
-            checkpoints[0],
+    logger.debug(
+        "Checkpoint discovery under {} found candidates: {}",
+        root,
+        [path.as_posix() for path in checkpoints],
+    )
+    if len(checkpoints) == 1:
+        return checkpoints[0]
+
+    groups: dict[tuple[str, str], list[Path]] = {}
+    for checkpoint in checkpoints:
+        digest = sha256(checkpoint.read_bytes()).hexdigest()
+        key = (checkpoint.name, digest)
+        groups.setdefault(key, []).append(checkpoint)
+
+    if len(groups) == 1:
+        duplicates = next(iter(groups.values()))
+        canonical = min(
+            duplicates,
+            key=lambda path: (len(path.relative_to(root).parts), path.relative_to(root).as_posix()),
         )
-    return checkpoints[0]
+        logger.warning(
+            "Duplicate checkpoint artifacts found under {}. Using canonical path {}.",
+            root,
+            canonical,
+        )
+        return canonical
+
+    candidate_list = ", ".join(path.as_posix() for path in checkpoints)
+    raise ValueError(f"Multiple distinct checkpoints found under {root}: {candidate_list}")
 
 
 def _download_checkpoint_for_run(

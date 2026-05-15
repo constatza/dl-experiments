@@ -13,6 +13,14 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+_WORKSPACE_ARTIFACT_DIRS: tuple[str, ...] = (
+    "config",
+    "figures",
+    "metrics",
+    "predictions",
+)
+
+
 def fetch_mlflow_metrics(run_id: str, tracking_uri: str) -> dict[str, float]:
     """Query MLflow for all metrics belonging to a run.
 
@@ -45,7 +53,11 @@ def log_artifacts_to_mlflow(
     from mlflow.tracking import MlflowClient
 
     client = MlflowClient(tracking_uri=tracking_uri)
-    client.log_artifacts(run_id, str(workspace_root))
+    for artifact_dir in _WORKSPACE_ARTIFACT_DIRS:
+        path = workspace_root / artifact_dir
+        if not path.exists():
+            continue
+        client.log_artifacts(run_id, str(path))
 
 
 def find_mlflow_run(

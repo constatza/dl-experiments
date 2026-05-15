@@ -33,3 +33,8 @@ quirks or registry helpers.
 
 Platform code may depend on domain protocols and domain data structures, but it
 should not own business rules or experiment orchestration.
+
+Tracking helpers treat DLKit as the authoritative checkpoint artifact logger.
+Workspace uploads therefore exclude the local `checkpoints/` tree and only
+forward staged diagnostics/config artifacts, avoiding duplicate MLflow artifact
+layouts such as `checkpoints/checkpoints/...`.
