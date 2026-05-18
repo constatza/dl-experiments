@@ -21,7 +21,7 @@ seed = 42
 # size the number of base systems from the desired trace-row budget using integer division.
 [[generation.strategy]]
 name = "gaussian_residuals"
-samples = 20000
+samples = 6000
 cg_iters = 100
 
 [output]
