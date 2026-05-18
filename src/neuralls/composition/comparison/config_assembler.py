@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from neuralls.domain.solver.models.config import (
     ComparisonData,
@@ -90,7 +91,7 @@ def resolve_comparison_config(
         else settings.processed_dir / rhs_data_cfg.id
     )
 
-    base_params: dict[str, object] = {
+    base_params: dict[str, Any] = {
         "rtol": defaults.rtol,
         "atol": defaults.atol,
         "max_iterations": defaults.max_iterations,

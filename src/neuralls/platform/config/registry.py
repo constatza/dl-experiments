@@ -9,7 +9,6 @@ from pathlib import Path
 from neuralls.platform.config.resolution import resolve_registry_path
 from neuralls.platform.config.models.experiments import (
     CaseConfig,
-    ComparisonRegistryEntry,
     ExperimentEntry,
     RegistryEntry,
 )
@@ -62,17 +61,6 @@ def _require_registry_entry(
         f"{registry_section[:-1].capitalize()} id '{registry_id}' is not defined "
         f"in [[{registry_section}]]."
     )
-
-
-def _require_comparison_entry(
-    entries: Sequence[ComparisonRegistryEntry],
-    comparison_id: str,
-) -> ComparisonRegistryEntry:
-    """Return a comparison registry entry or raise a focused error."""
-    for entry in entries:
-        if entry.id == comparison_id:
-            return entry
-    raise ValueError(f"Comparison id '{comparison_id}' is not defined in [[comparisons]].")
 
 
 def resolve_dataset_config_path(
