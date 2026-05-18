@@ -8,8 +8,6 @@ import shutil
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
-
 import numpy as np
 import tomli_w
 from numpy.typing import NDArray
@@ -55,7 +53,7 @@ class ComparisonArtifactManifest:
     comparison_json: Path
     recommendations_json: Path
     summary_txt: Path
-    config_copy: Path
+    config_copy: Path | None
     arrays: tuple[ArrayArtifact, ...] = ()
 
 
@@ -311,17 +309,20 @@ def write_comparison_artifacts(
     *,
     result: ComparisonArtifactSource,
     work_root: Path,
-    comparison_config: Path,
+    comparison_config: Path | None = None,
 ) -> ComparisonArtifactManifest:
     """Write all structured comparison artifacts to disk."""
     staged_result = _stage_result_plots(result, work_root)
     payload, pending_arrays = extract_array_artifacts(staged_result)
+    config_copy = (
+        work_root / "config" / comparison_config.name if comparison_config is not None else None
+    )
     manifest = ComparisonArtifactManifest(
         comparison_toml=work_root / "comparison.toml",
         comparison_json=work_root / "comparison.json",
         recommendations_json=work_root / "recommendations.json",
         summary_txt=work_root / "summary.txt",
-        config_copy=work_root / "config" / comparison_config.name,
+        config_copy=config_copy,
         arrays=save_numpy_artifacts(work_root, pending_arrays),
     )
     _save_comparison_toml(staged_result, manifest.comparison_toml)
@@ -334,8 +335,9 @@ def write_comparison_artifacts(
         json.dumps(_serialize_value(payload.recommendations), indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    manifest.config_copy.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(comparison_config, manifest.config_copy)
+    if comparison_config is not None and config_copy is not None:
+        config_copy.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(comparison_config, config_copy)
     return manifest
 
 
@@ -419,8 +421,6 @@ def _coerce_fallback_result_entry(value: object) -> FallbackComparisonResultEntr
             residual = mapping.get("residual")
             residual_abs = mapping.get("residual_abs")
             error = mapping.get("error")
-        case _ if isinstance(value, Mock):
-            return None
         case _:
             iterations = getattr(value, "iterations", None)
             residual = getattr(value, "residual", None)
@@ -461,9 +461,6 @@ def coerce_comparison_result_payload(value: object) -> ComparisonArtifactSource:
     """Normalize loose comparison payloads at the workflow boundary."""
     if isinstance(value, ComparisonResult):
         return value
-    if isinstance(value, Mock):
-        return ComparisonArtifactFallback()
-
     summary = getattr(value, "summary", "")
     preconditioners = getattr(value, "preconditioners", ())
     condition_numbers = getattr(value, "condition_numbers", {})
