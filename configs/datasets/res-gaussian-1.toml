@@ -1,0 +1,28 @@
+id = "res-gaussian-1"
+
+# Residual-error trace dataset built from Gaussian N(0, 1) true solutions.
+# Samples x_true ~ N(0, I), computes b = A @ x_true, then records:
+#   residual = r_k
+#   dx = x_true - x_k
+# at each CG iteration. The persisted training pairs therefore satisfy r_k = A @ dx_k.
+#
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/res-gaussian-1.toml
+# Output: res-gaussian-1-{normalization}/
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+# Gaussian residual-error trace strategy: use random N(0, 1) true solutions and
+# size the number of base systems from the desired trace-row budget using integer division.
+[[generation.strategy]]
+name = "gaussian_residuals"
+samples = 6000
+cg_iters = 1
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"
