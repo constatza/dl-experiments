@@ -58,7 +58,7 @@ def resolve_comparison_config(
 
     preconditioners: list[PreconditionerConfig] = list(defaults.preconditioners)
     normalize_system = defaults.normalize_system
-    params_override: dict[str, object] | None = None
+    params_override: dict[str, Any] | None = None
 
     if entry.method is not None:
         method_path = resolve_registry_path(config_dir, entry.method)
