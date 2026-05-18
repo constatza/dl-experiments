@@ -12,7 +12,6 @@ Choose the config type that matches the case you want to run:
 
 - `datasets/*.toml`: define one dataset source or generation strategy
 - `models/*.toml`: define one model architecture and trainer setup
-- `comparison/*.toml`: define one solver benchmark profile
 - `case-*.toml`: case configs that tie datasets, models, comparisons,
   MLflow, and experiment ids together
 
@@ -43,8 +42,8 @@ uv run neuralls generate-single /path/to/dataset.toml \
 ```
 
 `neuralls generate <case.toml>` only builds the case `[[datasets]]` entries.
-It does not infer or materialize standalone benchmark datasets referenced by
-`comparison/*.toml`.
+It does not infer or materialize standalone benchmark datasets referenced in
+`[[comparisons]]` entries.
 
 ### 3. Train the case batch
 
@@ -87,18 +86,23 @@ comparison = "Comparisons"
 id = "my-dataset"
 path = "datasets/my-dataset.toml"
 
+[[datasets]]
+id = "my-bench-dataset"
+path = "datasets/my-bench-dataset.toml"
+
 [[models]]
 id = "my-model"
 path = "models/<family>/my-model.toml"
 
 [[comparisons]]
-id = "my-solver"
-path = "comparison/my-solver.toml"
+id             = "my-comparison"
+matrix_dataset = "my-bench-dataset"
+rhs_dataset    = "my-bench-dataset"
 
 [[experiments]]
-id = "my-dataset-my-model"
+id      = "my-dataset-my-model"
 dataset = "my-dataset"
-model = "my-model"
+model   = "my-model"
 ```
 
 `[names].training` controls the MLflow experiment bucket used for training
@@ -143,17 +147,20 @@ Model configs use canonical DLKit syntax: the default scheduler lives
 under `TRAINING.optimizer.default_scheduler`, and any staged program lives
 under `TRAINING.optimizer.stages`.
 
-### Comparison configs
+### Comparison entries
 
-Comparison configs define:
+`[[comparisons]]` entries in a case config define:
 
-- solver tolerances and iteration limits
-- matrix and RHS inputs for benchmarking
-- explicit `[[preconditioners]]` blocks
+- `matrix_dataset` and `rhs_dataset`: ids from the case `[[datasets]]` registry
+- optional `method` path to a methodology override TOML with solver params and preconditioners
+- optional `display_name`, `rhs_index`, `matrix_index`
 
-Comparison configs may point at processed benchmark datasets that are separate
-from the case `[[datasets]]` registry. Those benchmark datasets must be
-materialized with `neuralls generate-single` before comparison runs.
+Shared solver parameters live in `[comparison_defaults]`. A `method` override
+can selectively replace preconditioners or solver tolerances for a single entry.
+
+Datasets referenced by `[[comparisons]]` must be materialised with
+`neuralls generate-single` before comparison runs if they are not part of the
+training dataset batch.
 
 ## MLflow And Paths
 

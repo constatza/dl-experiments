@@ -21,13 +21,23 @@ uv run process-data /path/to/gaussian-dataset.toml \
   --case-config /path/to/case.toml
 ```
 
-The shipped residual Gaussian variants include:
+The shipped residual Gaussian variants include (45x15 displacement matrix):
 
 - `res-gaussian-0.toml`
+- `res-gaussian-1.toml`
+- `res-gaussian-2.toml`
+- `res-gaussian-5.toml`
 - `res-gaussian-10.toml`
 - `res-gaussian-20.toml`
 - `res-gaussian-50.toml`
 - `res-gaussian-100.toml`
+
+And for the larger 93x31 displacement matrix:
+
+- `res-gaussian-1-93x31.toml`
+- `res-gaussian-2-93x31.toml`
+- `res-gaussian-5-93x31.toml`
+- `res-gaussian-10-93x31.toml`
 - `res-gaussian-100-93x31.toml`
 
 ## Minimal Shape
