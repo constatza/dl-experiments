@@ -314,9 +314,11 @@ def write_comparison_artifacts(
     """Write all structured comparison artifacts to disk."""
     staged_result = _stage_result_plots(result, work_root)
     payload, pending_arrays = extract_array_artifacts(staged_result)
-    config_copy = (
-        work_root / "config" / comparison_config.name if comparison_config is not None else None
-    )
+    config_copy: Path | None = None
+    if comparison_config is not None:
+        config_copy = work_root / "config" / comparison_config.name
+        config_copy.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(comparison_config, config_copy)
     manifest = ComparisonArtifactManifest(
         comparison_toml=work_root / "comparison.toml",
         comparison_json=work_root / "comparison.json",
@@ -335,9 +337,6 @@ def write_comparison_artifacts(
         json.dumps(_serialize_value(payload.recommendations), indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    if comparison_config is not None and config_copy is not None:
-        config_copy.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(comparison_config, config_copy)
     return manifest
 
 

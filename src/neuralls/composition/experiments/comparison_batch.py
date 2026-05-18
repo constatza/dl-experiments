@@ -203,16 +203,6 @@ def _build_master_experiment_contexts(
     return contexts
 
 
-def _build_experiment_contexts(
-    *,
-    experiments_config_path: Path,
-    experiment_ids: tuple[str, ...],
-    settings: NeurallsSettings,
-) -> dict[str, ExperimentModelContext]:
-    """Collect per-experiment model resolution context from case config."""
-    return _build_master_experiment_contexts(experiments_config_path, experiment_ids, settings)
-
-
 def _load_master_config(
     experiments_config_path: Path,
     settings: NeurallsSettings,
@@ -270,10 +260,8 @@ def _resolve_specs(
     experiment_ids = _referenced_experiment_ids(cfg.preconditioners)
     experiment_contexts = None
     if experiment_ids:
-        experiment_contexts = _build_experiment_contexts(
-            experiments_config_path=experiments_config_path,
-            experiment_ids=experiment_ids,
-            settings=settings,
+        experiment_contexts = _build_master_experiment_contexts(
+            experiments_config_path, experiment_ids, settings
         )
     resolution = resolve_preconditioner_models_with_warnings(
         specs=specs,
