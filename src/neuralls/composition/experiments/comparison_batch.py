@@ -17,11 +17,10 @@ from neuralls.platform.config.models.experiments import (
     CaseConfig,
     ComparisonRegistryEntry,
     ExperimentEntry,
-    resolve_display_name,
 )
 from neuralls.platform.config.registry import (
     get_experiment_binding,
-    resolve_comparison_config_path,
+    resolve_comparison_config,
 )
 from neuralls.composition.experiments.assembler import load_validated_case_config
 from neuralls.platform.config.resolution import build_mlflow_environment, build_sqlite_tracking_uri
@@ -33,7 +32,6 @@ from neuralls.platform.config.models.preconditioner import (
     RegisteredModelRefConfig,
 )
 from neuralls.platform.config.loaders import load_data_config
-from neuralls.platform.config.loaders import load_comparison_config
 from neuralls.platform.storage.datasets import load_dataset_manifest, resolve_dataset_paths
 from neuralls.platform.reporting.artifacts import (
     coerce_comparison_result_payload,
@@ -58,16 +56,6 @@ from neuralls.shared.constants import (
 )
 
 _SUPPORTED_COMPARISON_FILE_SUFFIXES = {"", ".npy", ".txt"}
-_KNOWN_COMPARISON_DATASET_CONFIGS = {
-    "solutions": Path("configs/datasets/solutions.toml"),
-    "gaussian-rhs": Path("configs/datasets/gaussian-rhs.toml"),
-    "scaled-solutions": Path("configs/datasets/scaled-solutions.toml"),
-    "sparse-rhs": Path("configs/datasets/sparse-rhs.toml"),
-    "eig-few-solutions-smallest": Path("configs/datasets/eig-few-solutions-smallest.toml"),
-    "eig-few-solutions-largest": Path("configs/datasets/eig-few-solutions-largest.toml"),
-    "eig-few-rhs-smallest": Path("configs/datasets/eig-few-rhs-smallest.toml"),
-    "eig-few-rhs-largest": Path("configs/datasets/eig-few-rhs-largest.toml"),
-}
 
 
 @dataclass(frozen=True)
@@ -80,98 +68,64 @@ class ComparisonTopology:
     model_store_tracking_uri: str
 
 
-def _format_cli_path(path: Path) -> str:
-    """Prefer cwd-relative paths in user-facing remediation messages."""
-    try:
-        return path.resolve().relative_to(Path.cwd()).as_posix()
-    except ValueError:
-        return path.resolve().as_posix()
+def _build_missing_input_error(path: Path) -> FileNotFoundError:
+    """Build a user-facing missing-input error for a comparison dataset path."""
+    return FileNotFoundError(f"Comparison input not found: {path}.")
 
 
-def _matching_dataset_config_for_processed_path(path: Path) -> Path | None:
-    """Map a known processed dataset directory to its source dataset config."""
-    return _KNOWN_COMPARISON_DATASET_CONFIGS.get(path.name)
-
-
-def _build_missing_input_error(path: Path, *, experiments_config_path: Path) -> FileNotFoundError:
-    """Build a user-facing missing-input error with optional dataset remediation."""
-    message = f"Comparison input not found: {path}."
-    dataset_config = _matching_dataset_config_for_processed_path(path)
-    if dataset_config is None:
-        return FileNotFoundError(message)
-
-    case_hint = _format_cli_path(experiments_config_path)
-    dataset_hint = _format_cli_path(dataset_config)
-    return FileNotFoundError(
-        f"{message} This comparison expects a pre-generated benchmark dataset referenced by "
-        "its comparison profile, not by case [[datasets]]. Generate it with: "
-        f"uv run neuralls generate-single {dataset_hint} --case-config {case_hint}"
-    )
-
-
-def _validate_matrix_input(path: Path, *, experiments_config_path: Path) -> None:
+def _validate_matrix_input(path: Path) -> None:
     """Validate one comparison matrix input without fully executing the comparison."""
     if not path.exists():
-        raise _build_missing_input_error(path, experiments_config_path=experiments_config_path)
-    if path.is_dir():
-        try:
-            load_dataset_manifest(path)
-        except FileNotFoundError, ValueError:
-            manifest_path = path / DATASET_MANIFEST_FILENAME
-            values_path = path / "values.npy"
-            if manifest_path.exists() and values_path.exists():
-                return
+        raise _build_missing_input_error(path)
+    if not path.is_dir():
+        if path.suffix not in _SUPPORTED_COMPARISON_FILE_SUFFIXES:
+            raise ValueError(
+                f"Unsupported comparison matrix input format: {path}. "
+                "Use a dataset directory, .npy file, or text matrix file."
+            )
+        return
+    try:
+        load_dataset_manifest(path)
+    except FileNotFoundError, ValueError:
+        manifest_path = path / DATASET_MANIFEST_FILENAME
+        values_path = path / "values.npy"
+        if not (manifest_path.exists() and values_path.exists()):
             raise ValueError(
                 f"Comparison matrix dataset directory is not loadable: {path}. "
                 f"Expected a dataset root with {DATASET_MANIFEST_FILENAME} or a sparse-pack "
                 "matrix directory containing manifest.json and values.npy."
             ) from None
-        matrix_pack_dir = resolve_dataset_paths(path).matrix_pack_dir
-        if not matrix_pack_dir.exists():
-            raise ValueError(
-                f"Comparison matrix dataset directory is missing {MATRIX_COO_DIRNAME}: {path}"
-            )
         return
-    if path.suffix not in _SUPPORTED_COMPARISON_FILE_SUFFIXES:
+    matrix_pack_dir = resolve_dataset_paths(path).matrix_pack_dir
+    if not matrix_pack_dir.exists():
         raise ValueError(
-            f"Unsupported comparison matrix input format: {path}. "
-            "Use a dataset directory, .npy file, or text matrix file."
+            f"Comparison matrix dataset directory is missing {MATRIX_COO_DIRNAME}: {path}"
         )
 
 
-def _validate_rhs_input(path: Path, *, experiments_config_path: Path) -> None:
+def _validate_rhs_input(path: Path) -> None:
     """Validate one comparison RHS input without fully executing the comparison."""
     if not path.exists():
-        raise _build_missing_input_error(path, experiments_config_path=experiments_config_path)
-    if path.is_dir():
-        load_dataset_manifest(path)
-        rhs_path = resolve_dataset_paths(path).rhs_path
-        if not rhs_path.exists():
+        raise _build_missing_input_error(path)
+    if not path.is_dir():
+        if path.suffix not in _SUPPORTED_COMPARISON_FILE_SUFFIXES:
             raise ValueError(
-                f"Comparison RHS dataset directory is missing {RHS_ARRAY_FILENAME}: {path}"
+                f"Unsupported comparison RHS input format: {path}. "
+                "Use a dataset directory, .npy file, or text vector file."
             )
         return
-    if path.suffix not in _SUPPORTED_COMPARISON_FILE_SUFFIXES:
+    load_dataset_manifest(path)
+    rhs_path = resolve_dataset_paths(path).rhs_path
+    if not rhs_path.exists():
         raise ValueError(
-            f"Unsupported comparison RHS input format: {path}. "
-            "Use a dataset directory, .npy file, or text vector file."
+            f"Comparison RHS dataset directory is missing {RHS_ARRAY_FILENAME}: {path}"
         )
 
 
-def _preflight_comparison_inputs(
-    cfg: ComparisonConfig,
-    *,
-    experiments_config_path: Path,
-) -> None:
+def _preflight_comparison_inputs(cfg: ComparisonConfig) -> None:
     """Validate comparison matrix/RHS inputs before opening tracking runs."""
-    _validate_matrix_input(
-        Path(cfg.general.data.matrix_path),
-        experiments_config_path=experiments_config_path,
-    )
-    _validate_rhs_input(
-        Path(cfg.general.data.rhs_path),
-        experiments_config_path=experiments_config_path,
-    )
+    _validate_matrix_input(Path(cfg.general.data.matrix_path))
+    _validate_rhs_input(Path(cfg.general.data.rhs_path))
 
 
 def _validate_neural_preconditioner(spec: Any) -> None:
@@ -357,45 +311,38 @@ def _resolve_comparison_topology(
     )
 
 
-def run_comparison(
-    comparison_config: Path,
-    params: ComparisonParams,
+def _run_comparison_from_config(
+    cfg: ComparisonConfig,
+    entry: ComparisonRegistryEntry,
     experiments_config_path: Path,
-    settings: NeurallsSettings | None = None,
-    comparison_id: str | None = None,
-    comparison_display_name: str | None = None,
-    experiment_entries: Sequence[ExperimentEntry] | None = None,
+    settings: NeurallsSettings,
 ) -> list[ComparisonOutcome]:
-    """Run a preconditioner comparison from the current config schema."""
-    _ = params
-    resolved_comparison_id = comparison_id or comparison_config.stem
-    resolved_comparison_display_name = resolve_display_name(
-        resolved_comparison_id,
-        comparison_display_name,
-    )
-    settings = require_settings(settings, case_config_path=experiments_config_path)
+    """Execute one resolved comparison and log results to MLflow.
+
+    Args:
+        cfg: Fully resolved ComparisonConfig with injected data paths and preconditioners.
+        entry: Registry entry providing display name and method path for artifact logging.
+        experiments_config_path: Path to the case config (used for topology resolution).
+        settings: Resolved runtime settings.
+
+    Returns:
+        Single-element list with the outcome of the comparison run.
+    """
+    comparison_display_name = entry.effective_display_name
+    comparison_id = entry.id
+    method_config_path = entry.method  # Path | None; None when using defaults only
+    resolution_warnings: tuple[str, ...] = ()
+
     try:
-        cfg = load_comparison_config(comparison_config, settings)
-        if experiment_entries:
-            claimed_ids = _existing_experiment_ids(cfg.preconditioners)
-            auto_specs = neural_specs_from_experiments(experiment_entries, claimed_ids)
-            if auto_specs:
-                cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))
-        _preflight_comparison_inputs(cfg, experiments_config_path=experiments_config_path)
+        _preflight_comparison_inputs(cfg)
         topology = _resolve_comparison_topology(experiments_config_path, settings)
-        resolution_warnings: tuple[str, ...] = ()
 
         setup_comparison_tracking(
             tracking_uri=topology.tracking_uri,
             artifact_location=topology.artifact_location,
             experiment_name=topology.experiment_name,
         )
-        comparison_entry = ComparisonRegistryEntry(
-            id=resolved_comparison_id,
-            path=comparison_config,
-            display_name=comparison_display_name,
-        )
-        run_name, comp_tags = build_comparison_run_spec(entry=comparison_entry)
+        run_name, comp_tags = build_comparison_run_spec(entry=entry)
 
         with mlflow.start_run(run_name=run_name, tags=comp_tags.as_mlflow_tags()) as comp_run:
             comp_run_id = comp_run.info.run_id
@@ -413,49 +360,48 @@ def run_comparison(
                 if not resolved_specs:
                     raise ValueError("No runnable preconditioners remain after model resolution.")
                 if resolution_warnings:
-                    mlflow.log_param(
-                        "skipped_preconditioners",
-                        str(len(resolution_warnings)),
-                    )
+                    mlflow.log_param("skipped_preconditioners", str(len(resolution_warnings)))
                 raw_result = compare_preconditioners(
                     general_params=cfg.general,
                     preconditioner_configs=resolved_specs,
                     output_root=work_root,
-                    display_name=resolved_comparison_display_name,
+                    display_name=comparison_display_name,
                 )
                 artifact_source = coerce_comparison_result_payload(raw_result)
                 write_comparison_artifacts(
                     result=artifact_source,
                     work_root=work_root,
-                    comparison_config=comparison_config,
+                    comparison_config=method_config_path,
                 )
                 mlflow.log_artifacts(str(work_root))
 
-                # Create nested child runs for each preconditioner result
                 if isinstance(raw_result, ComparisonResult):
-                    for name, entry in raw_result.results.items():
+                    for name, result_entry in raw_result.results.items():
                         child_tags = build_child_comparison_tags(
                             preconditioner_name=name,
-                            comparison_id=resolved_comparison_id,
+                            comparison_id=comparison_id,
                             parent_run_name=run_name,
                         )
                         with mlflow.start_run(
                             run_name=name, nested=True, tags=child_tags.as_mlflow_tags()
                         ):
-                            for step, residual in enumerate(entry.residual_history_rel):
+                            for step, residual in enumerate(result_entry.residual_history_rel):
                                 mlflow.log_metric("residual", residual, step=step)
 
-            mlflow.log_param("comparison_config", comparison_config.stem)
-            mlflow.log_param("comparison_id", resolved_comparison_id)
-            mlflow.log_param("comparison_display_name", resolved_comparison_display_name)
+            config_label = (
+                method_config_path.stem if method_config_path is not None else comparison_id
+            )
+            mlflow.log_param("comparison_config", config_label)
+            mlflow.log_param("comparison_id", comparison_id)
+            mlflow.log_param("comparison_display_name", comparison_display_name)
             mlflow.log_param("comp_run_id", comp_run_id)
 
     except (ValueError, RuntimeError, OSError, FileNotFoundError, KeyError) as exc:
         logger.error(f"Comparison failed: {exc}")
         return [
             ComparisonOutcome(
-                comparison_id=resolved_comparison_id,
-                comparison_display_name=resolved_comparison_display_name,
+                comparison_id=comparison_id,
+                comparison_display_name=comparison_display_name,
                 success=False,
                 error=str(exc),
                 warnings=(),
@@ -465,8 +411,8 @@ def run_comparison(
     payload = raw_result if isinstance(raw_result, ComparisonResult) else None
     return [
         ComparisonOutcome(
-            comparison_id=resolved_comparison_id,
-            comparison_display_name=resolved_comparison_display_name,
+            comparison_id=comparison_id,
+            comparison_display_name=comparison_display_name,
             success=True,
             payload=payload,
             warnings=resolution_warnings,
@@ -479,7 +425,17 @@ def run_comparison_batch(
     params: ComparisonParams,
     settings: NeurallsSettings | None = None,
 ) -> list[ComparisonOutcome]:
-    """Run all configured comparison profiles from the case config."""
+    """Run all configured comparison entries from the case config.
+
+    Args:
+        experiments_config_path: Path to the case config TOML.
+        params: Comparison execution parameters (currently unused, reserved for future use).
+        settings: Optional pre-loaded runtime settings.
+
+    Returns:
+        List of comparison outcomes, one per [[comparisons]] entry.
+    """
+    _ = params
     settings = require_settings(settings, case_config_path=experiments_config_path)
     master_cfg, config_dir = _load_master_config(experiments_config_path, settings)
     if not master_cfg.comparisons:
@@ -487,26 +443,15 @@ def run_comparison_batch(
 
     outcomes: list[ComparisonOutcome] = []
     for entry in master_cfg.comparisons:
-        if entry.experiments:
-            experiment_entries: list[ExperimentEntry] = [
-                e for e in master_cfg.experiments if e.id in entry.experiments
-            ]
-        else:
-            experiment_entries = list(master_cfg.experiments)
-        comparison_path = resolve_comparison_config_path(
-            master_cfg,
-            config_dir,
-            entry.id,
+        experiment_entries: list[ExperimentEntry] = (
+            [e for e in master_cfg.experiments if e.id in entry.experiments]
+            if entry.experiments
+            else list(master_cfg.experiments)
         )
-        outcomes.extend(
-            run_comparison(
-                comparison_config=comparison_path,
-                params=params,
-                experiments_config_path=experiments_config_path,
-                settings=settings,
-                comparison_id=entry.id,
-                comparison_display_name=entry.effective_display_name,
-                experiment_entries=experiment_entries,
-            )
-        )
+        cfg = resolve_comparison_config(master_cfg, config_dir, entry, settings)
+        claimed_ids = _existing_experiment_ids(cfg.preconditioners)
+        auto_specs = neural_specs_from_experiments(experiment_entries, claimed_ids)
+        if auto_specs:
+            cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))
+        outcomes.extend(_run_comparison_from_config(cfg, entry, experiments_config_path, settings))
     return outcomes

@@ -12,7 +12,7 @@ import torch
 
 from neuralls.platform.config.models.experiments import ExperimentsConfig
 from neuralls.platform.config.loaders import load_raw_toml
-from neuralls.composition.experiments.comparison_batch import run_comparison
+from neuralls.composition.experiments.comparison_batch import run_comparison_batch
 from neuralls.composition.generation.process_data import process_data_from_config
 from neuralls.platform.storage.datasets import resolve_dataset_paths
 from neuralls.composition.experiments.multi_training import BatchResult, train_batch
@@ -184,7 +184,7 @@ def runs_config_path(
     output_root: Path,
     processed_root: Path,
 ) -> Path:
-    """Run matrix with a single model+dataset pair."""
+    """Run matrix with a single model+dataset pair plus comparison registry entries."""
     tracking_uri = f"sqlite:///{(output_root / 'mlruns' / 'mlflow.db').as_posix()}"
     path = config_root / "experiments.toml"
     path.write_text(
@@ -196,6 +196,23 @@ def runs_config_path(
                 "[names]",
                 'training = "neuralls-training"',
                 'comparison = "Comparisons"',
+                "",
+                "[comparison_defaults]",
+                "rtol = 1e-6",
+                "atol = 1e-14",
+                f"max_iterations = {TEST_COMPARISON_MAX_ITERATIONS}",
+                'stopping_criterion = "residual_norm"',
+                "m_max = 20",
+                "",
+                "[[datasets]]",
+                'id = "tiny-data"',
+                f'path = "datasets/{data_config_path.name}"',
+                "",
+                "[[comparisons]]",
+                'id = "tiny-comparison"',
+                'matrix_dataset = "tiny-data"',
+                'rhs_dataset = "tiny-data"',
+                'method = "comparison.toml"',
                 "",
                 "[[run]]",
                 'id = "tiny-linear-run"',
@@ -238,7 +255,11 @@ def comparison_config_path(
     trained_batch_result: BatchResult,
     config_root: Path,
 ) -> Path:
-    """Comparison config that references the just-trained logged model."""
+    """Method override TOML that injects the just-trained neural preconditioner.
+
+    Data paths are resolved by the case config via dataset registry — only the
+    preconditioner list is specified here.
+    """
     trained = trained_batch_result.results[0]
     run_id = trained.mlflow_run_id
     if run_id is None:
@@ -250,25 +271,10 @@ def comparison_config_path(
         with mlflow.start_run(run_name="tiny-linear-fallback-artifact") as run:
             mlflow.log_artifact(str(trained.checkpoint_path), artifact_path="model")
             run_id = run.info.run_id
-    dataset_dir = config_root.parent / "processed" / "tiny-data"
     path = config_root / "comparison.toml"
     path.write_text(
         "\n".join(
             [
-                "[general]",
-                "",
-                "[general.params]",
-                "rtol = 1e-6",
-                "atol = 1e-14",
-                f"max_iterations = {TEST_COMPARISON_MAX_ITERATIONS}",
-                'stopping_criterion = "residual_norm"',
-                "m_max = 20",
-                "",
-                "[general.data]",
-                f'matrix_path = "{dataset_dir.as_posix()}"',
-                f'rhs_path = "{dataset_dir.as_posix()}"',
-                'normalize_system = "matrix"',
-                "",
                 "[[preconditioners]]",
                 'name = "neural_norm_scaled_linear_ffnn"',
                 'type = "neural"',
@@ -286,8 +292,8 @@ def comparison_config_path(
 @pytest.mark.slow
 def test_train_multiple_checkpoint_then_compare_model_loading(
     trained_batch_result: BatchResult,
-    comparison_config_path: Path,
-    runs_config_path: Path,  # noqa: ARG001
+    comparison_config_path: Path,  # noqa: ARG001 — ensures method file is written first
+    runs_config_path: Path,
 ) -> None:
     """Train one tiny run then load its checkpoint through comparison."""
     assert len(trained_batch_result.results) == 1
@@ -306,10 +312,9 @@ def test_train_multiple_checkpoint_then_compare_model_loading(
     assert dataset_paths.solutions_path.exists()
     assert dataset_paths.matrix_pack_dir.exists()
 
-    outcomes = run_comparison(
-        comparison_config=comparison_config_path,
-        params=ComparisonParams(),
+    outcomes = run_comparison_batch(
         experiments_config_path=runs_config_path,
+        params=ComparisonParams(),
     )
 
     assert len(outcomes) == 1

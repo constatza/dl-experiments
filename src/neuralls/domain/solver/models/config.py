@@ -72,6 +72,7 @@ class ComparisonData:
         matrix_path: Path to system matrix file.
         rhs_path: Path to right-hand side vector file.
         rhs_index: Index into rhs array (for multi-column rhs).
+        matrix_index: Index of matrix sample when dataset has multiple matrices.
         dataset_alias: Optional dataset label.
         normalize_system: Normalization strategy to apply.
     """
@@ -79,6 +80,7 @@ class ComparisonData:
     matrix_path: Path
     rhs_path: Path
     rhs_index: int = 0
+    matrix_index: int = 0
     dataset_alias: str | None = None
     normalize_system: NormalizeSystem = "matrix"
 

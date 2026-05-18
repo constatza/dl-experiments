@@ -48,9 +48,16 @@ class _SolverParamsModel(BaseModel):
 
 
 class ComparisonDataModel(BaseModel):
-    matrix_path: Path
-    rhs_path: Path
+    """Parser model for ``[general.data]`` inside a comparison method file.
+
+    ``matrix_path`` and ``rhs_path`` are absent here — they are injected by
+    ``resolve_comparison_config`` from the case ``[[comparisons]]`` entry.
+    """
+
+    matrix_path: Path | None = None
+    rhs_path: Path | None = None
     rhs_index: int = 0
+    matrix_index: int = 0
     dataset_alias: str | None = None
     normalize_system: NormalizeSystem = "matrix"
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -67,22 +74,27 @@ class ComparisonDataModel(BaseModel):
 
 
 class _ComparisonGeneralModel(BaseModel):
-    params: _SolverParamsModel
-    data: ComparisonDataModel
+    params: _SolverParamsModel | None = None
+    data: ComparisonDataModel = Field(default_factory=ComparisonDataModel)
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class _ComparisonConfigModel(BaseModel):
-    general: _ComparisonGeneralModel
-    preconditioners: list[PreconditionerConfig]
+    """Parser for comparison method override files.
+
+    All sections are optional — absent sections inherit from case
+    ``[comparison_defaults]`` when resolved via ``resolve_comparison_config``.
+    """
+
+    general: _ComparisonGeneralModel = Field(default_factory=_ComparisonGeneralModel)
+    preconditioners: list[PreconditionerConfig] = Field(default_factory=list)
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     @model_validator(mode="after")
     def validate_preconditioners(self) -> _ComparisonConfigModel:
+        """Validate any preconditioners that are present."""
         if not self.preconditioners:
-            raise ValueError(
-                "Comparison config must define at least one [[preconditioners]] entry."
-            )
+            return self
         names = [spec.name for spec in self.preconditioners]
         if len(names) != len(set(names)):
             raise ValueError("Comparison config cannot define duplicate preconditioner names.")
@@ -128,7 +140,11 @@ def parse_comparison_config(
     raw: dict[str, object],
     context: ConfigContext,
 ) -> ComparisonConfig:
-    """Parse comparison TOML payload into a ComparisonConfig domain model.
+    """Parse a standalone comparison TOML into a ComparisonConfig domain model.
+
+    This function is for comparison files that include explicit ``matrix_path``,
+    ``rhs_path``, solver params, and preconditioners (legacy / inference use).
+    For case-driven comparisons use ``resolve_comparison_config`` in the registry.
 
     Args:
         raw: Deserialized TOML dict for the comparison config file.
@@ -136,10 +152,24 @@ def parse_comparison_config(
 
     Returns:
         Fully validated ComparisonConfig domain model.
+
+    Raises:
+        ValueError: If required fields (matrix_path, rhs_path, preconditioners,
+            or solver params) are absent.
     """
     parsed = _ComparisonConfigModel.model_validate(raw, context=context.as_pydantic_context())
     data = parsed.general.data
     params = parsed.general.params
+    if data.matrix_path is None:
+        raise ValueError("Standalone comparison config must specify [general.data].matrix_path.")
+    if data.rhs_path is None:
+        raise ValueError("Standalone comparison config must specify [general.data].rhs_path.")
+    if params is None:
+        raise ValueError("Standalone comparison config must specify [general.params].")
+    if not parsed.preconditioners:
+        raise ValueError(
+            "Standalone comparison config must define at least one [[preconditioners]] entry."
+        )
     return ComparisonConfig(
         general=ComparisonGeneral(
             params=SolverParams(**params.model_dump()),
@@ -147,3 +177,21 @@ def parse_comparison_config(
         ),
         preconditioners=tuple(parsed.preconditioners),
     )
+
+
+def parse_comparison_method_override(
+    raw: dict[str, object],
+    context: ConfigContext,
+) -> _ComparisonConfigModel:
+    """Parse a comparison method override file (partial config, no paths required).
+
+    Returns the raw parsed model so callers can merge it with case defaults.
+
+    Args:
+        raw: Deserialized TOML dict for the method override file.
+        context: ConfigContext for expanding ${NEURALLS_*} path placeholders.
+
+    Returns:
+        Parsed partial config model for merging with case comparison_defaults.
+    """
+    return _ComparisonConfigModel.model_validate(raw, context=context.as_pydantic_context())

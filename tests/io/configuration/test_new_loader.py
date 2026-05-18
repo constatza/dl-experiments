@@ -169,46 +169,28 @@ def test_load_experiments_missing_registry_id(
         )
 
 
-def test_load_experiments_rejects_unknown_comparison_experiment_reference(
+def test_load_experiments_rejects_unknown_comparison_experiment_filter(
     temp_config_structure: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Comparison configs cannot reference experiment ids missing from [[experiments]]."""
+    """Comparison experiments filter cannot reference ids missing from [[experiments]]."""
     monkeypatch.chdir(temp_config_structure)
-    comparison_dir = temp_config_structure / "configs" / "comparison"
-    comparison_dir.mkdir()
-    (comparison_dir / "linear.toml").write_text(
-        "\n".join(
-            [
-                "[general]",
-                "",
-                "[general.params]",
-                "rtol = 1.0e-6",
-                "atol = 1.0e-14",
-                "max_iterations = 10",
-                'stopping_criterion = "residual_norm"',
-                "m_max = 20",
-                "",
-                "[general.data]",
-                f'matrix_path = "{(temp_config_structure / "data" / "matrix.txt").as_posix()}"',
-                f'rhs_path = "{(temp_config_structure / "data" / "matrix2.txt").as_posix()}"',
-                "",
-                "[[preconditioners]]",
-                'name = "bound-neural"',
-                'type = "neural"',
-                'experiment = "missing-exp"',
-                'model_ref = { source = "registered", name = "NormScaledLinearFFNN", alias = "solutions" }',
-            ]
-        )
-    )
     with open(temp_config_structure / "configs" / "experiments.toml", "a") as f:
-        f.write("\n[[comparisons]]\n")
-        f.write('id = "linear"\n')
-        f.write('path = "comparison/linear.toml"\n')
+        f.write("\n[[datasets]]\n")
+        f.write('id = "solutions"\n')
+        f.write('path = "datasets/exp1_data.toml"\n\n')
+        f.write("[[datasets]]\n")
+        f.write('id = "gaussian-rhs"\n')
+        f.write('path = "datasets/exp2_data.toml"\n\n')
+        f.write("[[comparisons]]\n")
+        f.write('id = "gaussian"\n')
+        f.write('matrix_dataset = "solutions"\n')
+        f.write('rhs_dataset = "gaussian-rhs"\n')
+        f.write('experiments = ["missing-exp"]\n')
 
     with pytest.raises(
         ValueError,
-        match="Comparison 'linear' neural preconditioner 'bound-neural' references experiment id 'missing-exp'",
+        match="Comparison 'gaussian' experiments filter references unknown experiment ids: missing-exp",
     ):
         load_batch(
             case_config_path=temp_config_structure / "configs" / "experiments.toml",

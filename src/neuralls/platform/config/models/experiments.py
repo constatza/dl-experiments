@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+
+from neuralls.shared.constants import DEFAULT_RTOL, DEFAULT_ATOL, DEFAULT_M_MAX
+from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 
 
 def resolve_display_name(entity_id: str, display_name: str | None) -> str:
@@ -191,18 +195,87 @@ class RunEntry(BaseModel):
         return self.id
 
 
-class ComparisonRegistryEntry(RegistryEntry):
-    """Comparison registry entry with optional experiment filter.
+class ComparisonDefaults(BaseModel):
+    """Shared methodology defaults applied to all ``[[comparisons]]`` entries.
 
     Attributes:
-        experiments: Optional list of experiment ids to include in this
-            comparison. If absent or empty, all active experiments are used.
+        rtol: Relative convergence tolerance.
+        atol: Absolute convergence tolerance.
+        max_iterations: Maximum solver iterations.
+        stopping_criterion: Convergence check strategy.
+        m_max: FCG orthogonalization window.
+        breakdown_tol: Breakdown detection threshold.
+        normalize_system: Normalization applied to the test system.
+        preconditioners: Classical preconditioner list (neural preconditioners are
+            auto-generated from case experiments at runtime).
     """
 
+    rtol: float = Field(default=DEFAULT_RTOL, gt=0.0)
+    atol: float = Field(default=DEFAULT_ATOL, ge=0.0)
+    max_iterations: int = Field(default=100, ge=1)
+    stopping_criterion: Literal["residual_norm", "fixed_iterations"] = "residual_norm"
+    m_max: int = Field(default=DEFAULT_M_MAX, ge=-1)
+    breakdown_tol: float | None = Field(default=None, ge=0.0)
+    normalize_system: Literal["none", "matrix", "rhs", "both", "diagonal", "spectral"] = "matrix"
+    preconditioners: list[PreconditionerConfig] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class ComparisonRegistryEntry(BaseModel):
+    """Comparison registry entry: data binding + optional methodology override.
+
+    The test matrix and RHS are identified by dataset IDs from the case
+    ``[[datasets]]`` registry.  Solver parameters and the base preconditioner
+    list are inherited from ``[comparison_defaults]`` unless a ``method`` file
+    is given to override them.
+
+    Attributes:
+        id: Stable comparison identifier.
+        matrix_dataset: Dataset id (from ``[[datasets]]``) used as the test matrix.
+        rhs_dataset: Dataset id (from ``[[datasets]]``) used as the test RHS.
+        matrix_index: Matrix sample index when the dataset stores multiple matrices.
+        rhs_index: RHS sample index when the dataset stores multiple RHS vectors.
+        method: Optional path to a comparison TOML that overrides defaults.
+        experiments: Optional experiment id filter; empty means all experiments.
+        display_name: Optional human-facing label.
+    """
+
+    id: str = Field(..., min_length=1)
+    matrix_dataset: str
+    rhs_dataset: str
+    matrix_index: int = 0
+    rhs_index: int = 0
+    method: Path | None = None
     experiments: list[str] = Field(default_factory=list)
+    display_name: str | None = None
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator("method", mode="before")
+    @classmethod
+    def _expand_method_path(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ${NEURALLS_*} placeholders in the method file path.
+
+        Args:
+            v: Raw value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or original value if not a string.
+        """
+        if v is None or not isinstance(v, str) or info.context is None:
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
+    @property
+    def effective_display_name(self) -> str:
+        """Return the configured label or fall back to the id."""
+        return resolve_display_name(self.id, self.display_name)
 
 
-def _dedupe_ids(kind: str, entries: Sequence[RegistryEntry]) -> None:
+def _dedupe_ids(kind: str, entries: Sequence[RegistryEntry | ComparisonRegistryEntry]) -> None:
     """Reject duplicate registry ids with a focused error."""
     seen: set[str] = set()
     duplicates = sorted({entry.id for entry in entries if entry.id in seen or seen.add(entry.id)})
@@ -240,6 +313,25 @@ def _validate_comparison_experiment_filter_refs(
             )
 
 
+def _validate_comparison_dataset_refs(
+    comparisons: list[ComparisonRegistryEntry],
+    *,
+    dataset_ids: set[str],
+) -> None:
+    """Reject comparison entries that reference undefined dataset ids."""
+    for entry in comparisons:
+        if entry.matrix_dataset not in dataset_ids:
+            raise ValueError(
+                f"Comparison '{entry.id}' references matrix_dataset "
+                f"'{entry.matrix_dataset}', but [[datasets]] does not define it."
+            )
+        if entry.rhs_dataset not in dataset_ids:
+            raise ValueError(
+                f"Comparison '{entry.id}' references rhs_dataset "
+                f"'{entry.rhs_dataset}', but [[datasets]] does not define it."
+            )
+
+
 def _validate_experiment_registry_refs(
     experiments: list[ExperimentEntry],
     *,
@@ -264,13 +356,15 @@ class CaseConfig(BaseModel):
     """Top-level case configuration.
 
     Attributes:
-        datasets: Dataset registry entries.
+        datasets: Dataset registry entries (training data + comparison reference data).
         models: Model registry entries.
-        comparisons: Comparison registry entries.
+        comparisons: Comparison registry entries with data binding.
         experiments: Experiment entries referencing registry ids.
         run: Optional legacy direct-path entries.
         mlflow: MLflow topology config (tracking URI, etc.).
         names: MLflow experiment names for training and comparison.
+        comparison_defaults: Shared solver params and preconditioner list applied to
+            all comparisons unless overridden by a per-entry ``method`` file.
     """
 
     datasets: list[RegistryEntry] = Field(default_factory=list)
@@ -280,6 +374,7 @@ class CaseConfig(BaseModel):
     run: list[RunEntry] = Field(default_factory=list)
     mlflow: MlflowTopologyConfig = Field(default_factory=MlflowTopologyConfig)
     names: ExperimentNamesConfig = Field(default_factory=ExperimentNamesConfig)
+    comparison_defaults: ComparisonDefaults | None = None
 
     model_config = ConfigDict(extra="allow", frozen=True)
 
@@ -303,20 +398,22 @@ class CaseConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> CaseConfig:
-        """Reject duplicate ids across registry collections."""
+        """Reject duplicate ids and validate all cross-registry references."""
         _dedupe_ids("dataset registry", self.datasets)
         _dedupe_ids("model registry", self.models)
         _dedupe_ids("comparison registry", self.comparisons)
         _dedupe_experiment_ids(self.experiments)
+        dataset_ids = _registry_ids(self.datasets)
         _validate_experiment_registry_refs(
             self.experiments,
-            dataset_ids=_registry_ids(self.datasets),
+            dataset_ids=dataset_ids,
             model_ids=_registry_ids(self.models),
         )
         _validate_comparison_experiment_filter_refs(
             self.comparisons,
             experiment_ids={e.id for e in self.experiments},
         )
+        _validate_comparison_dataset_refs(self.comparisons, dataset_ids=dataset_ids)
         return self
 
 

@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from neuralls.platform.config.context import ConfigContext
-from neuralls.platform.config.models.comparison import ComparisonConfig, parse_comparison_config
+from neuralls.platform.config.models.comparison import (
+    ComparisonConfig,
+    parse_comparison_config,
+)
 from neuralls.platform.config.models.data_models import DataConfigFile
 from neuralls.platform.config.models.experiments import CaseConfig
 from neuralls.platform.config.settings import NeurallsSettings, load_case_settings

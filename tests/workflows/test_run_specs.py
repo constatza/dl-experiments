@@ -70,7 +70,9 @@ def test_comparison_run_spec_name_and_tags() -> None:
     """Comparison runs capture the timestamp, path, and derived config stem."""
     entry = ComparisonRegistryEntry(
         id="cmp-1",
-        path=Path("configs/compare.toml"),
+        matrix_dataset="solutions",
+        rhs_dataset="gaussian-rhs",
+        method=Path("configs/compare.toml"),
         display_name="Comparison One",
     )
 

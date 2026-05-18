@@ -13,7 +13,7 @@ from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
 from neuralls.platform.storage.datasets import save_dataset
-from neuralls.composition.experiments.comparison_batch import run_comparison
+from neuralls.composition.experiments.comparison_batch import run_comparison_batch
 from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
 from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
 from neuralls.composition.comparison.models import ComparisonParams
@@ -128,10 +128,42 @@ def test_log_diagnostics_to_mlflow_reopens_sqlite_run_without_active_context(
     assert any(item.path.endswith("diagnostics_training.png") for item in figures)
 
 
-def _write_experiments_config(path: Path, output_root: Path) -> str:
-    """Write sqlite-only experiments topology and return tracking URI."""
+def _write_dataset_config(path: Path, dataset_id: str, data_dir: Path) -> None:
+    """Write a minimal dataset config for the registry."""
+    path.write_text(
+        "\n".join(
+            [
+                f'id = "{dataset_id}"',
+                "",
+                "[output]",
+                f'data_dir = "{data_dir.as_posix()}"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_experiments_config(
+    path: Path,
+    output_root: Path,
+    *,
+    dataset_dir: Path | None = None,
+    method_config_path: Path | None = None,
+) -> str:
+    """Write sqlite-only experiments topology and return tracking URI.
+
+    Args:
+        path: Output path for the experiments TOML.
+        output_root: Output root directory for MLflow tracking.
+        dataset_dir: Optional dataset directory for registry dataset configs.
+        method_config_path: Optional method override TOML path for [[comparisons]].
+
+    Returns:
+        SQLite tracking URI string.
+    """
     tracking_uri = _sqlite_tracking_uri(output_root / "mlruns" / "mlflow.db")
-    payload = {
+    payload: dict[str, object] = {
         "mlflow": {
             "tracking_uri": tracking_uri,
         },
@@ -139,14 +171,36 @@ def _write_experiments_config(path: Path, output_root: Path) -> str:
             "training": "neuralls-training",
             "comparison": "Comparisons",
         },
+        "comparison_defaults": {
+            "rtol": 1e-6,
+            "atol": 1e-14,
+            "max_iterations": 20,
+            "stopping_criterion": "residual_norm",
+            "m_max": 5,
+            "normalize_system": "matrix",
+            "preconditioners": [{"name": "none", "type": "identity"}],
+        },
     }
+    if dataset_dir is not None:
+        datasets_dir = path.parent / "datasets"
+        datasets_dir.mkdir(exist_ok=True)
+        _write_dataset_config(datasets_dir / "benchmark.toml", "benchmark", dataset_dir.parent)
+        payload["datasets"] = [{"id": "benchmark", "path": "datasets/benchmark.toml"}]
+        comparison_entry: dict[str, object] = {
+            "id": "benchmark-comparison",
+            "matrix_dataset": "benchmark",
+            "rhs_dataset": "benchmark",
+        }
+        if method_config_path is not None:
+            comparison_entry["method"] = method_config_path.relative_to(path.parent).as_posix()
+        payload["comparisons"] = [comparison_entry]
     with path.open("wb") as fh:
         tomli_w.dump(payload, fh)
     return tracking_uri
 
 
-def _write_comparison_config(path: Path, dataset_dir: Path) -> None:
-    """Write minimal comparison config for run_comparison orchestration."""
+def _write_method_config(path: Path) -> None:
+    """Write a minimal comparison method override config."""
     path.write_text(
         "\n".join(
             [
@@ -158,11 +212,6 @@ def _write_comparison_config(path: Path, dataset_dir: Path) -> None:
                 "max_iterations = 20",
                 'stopping_criterion = "residual_norm"',
                 "m_max = 5",
-                "",
-                "[general.data]",
-                f'matrix_path = "{dataset_dir.as_posix()}"',
-                f'rhs_path = "{dataset_dir.as_posix()}"',
-                'normalize_system = "matrix"',
                 "",
                 "[[preconditioners]]",
                 'name = "none"',
@@ -177,18 +226,8 @@ def _write_comparison_config(path: Path, dataset_dir: Path) -> None:
 def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None:
     """Comparison workflow logs figures and diagnostics files under run artifacts."""
     output_root = tmp_path / "output"
-    experiments_config = tmp_path / "experiments.toml"
-    tracking_uri = _write_experiments_config(experiments_config, output_root)
     artifact_root = output_root / "mlartifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
-
-    # Ensure comparison experiment uses a deterministic local artifact root.
-    client = MlflowClient(tracking_uri=tracking_uri)
-    experiment_id = _ensure_experiment(
-        client=client,
-        name="Comparisons",
-        artifact_root=artifact_root,
-    )
 
     dataset_dir = tmp_path / "dataset"
     save_dataset(
@@ -202,8 +241,25 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
         scale_metadata={},
     )
 
-    comparison_config = tmp_path / "comparison.toml"
-    _write_comparison_config(comparison_config, dataset_dir)
+    # Write a method config to test that config artifacts are logged under config/.
+    method_config = tmp_path / "method.toml"
+    _write_method_config(method_config)
+
+    experiments_config = tmp_path / "experiments.toml"
+    tracking_uri = _write_experiments_config(
+        experiments_config,
+        output_root,
+        dataset_dir=dataset_dir,
+        method_config_path=method_config,
+    )
+
+    # Ensure comparison experiment uses a deterministic local artifact root.
+    client = MlflowClient(tracking_uri=tracking_uri)
+    experiment_id = _ensure_experiment(
+        client=client,
+        name="Comparisons",
+        artifact_root=artifact_root,
+    )
 
     def _fake_compare_preconditioners(*, output_root: Path, **_: object) -> SimpleNamespace:
         figures_dir = output_root / "figures"
@@ -219,10 +275,9 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
         "neuralls.composition.experiments.comparison_batch.compare_preconditioners",
         side_effect=_fake_compare_preconditioners,
     ):
-        outcomes = run_comparison(
-            comparison_config=comparison_config,
-            params=ComparisonParams(),
+        outcomes = run_comparison_batch(
             experiments_config_path=experiments_config,
+            params=ComparisonParams(),
         )
 
     assert outcomes and outcomes[0].success is True
@@ -243,7 +298,7 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
     assert "config" in root_paths
     config_artifacts = client.list_artifacts(run_id, path="config")
     config_names = {Path(item.path).name for item in config_artifacts}
-    assert comparison_config.name in config_names
+    assert method_config.name in config_names
 
     figure_artifacts = client.list_artifacts(run_id, path="figures")
     assert any(item.path.endswith("comparison_plot.png") for item in figure_artifacts)

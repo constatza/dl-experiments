@@ -191,12 +191,13 @@ def build_comparison_run_spec(
     """
     ts = timestamp or iso_timestamp()
     run_name = f"{entry.effective_display_name}-{ts}"
+    method_label = entry.method.stem if entry.method is not None else entry.id
     tags = ComparisonRunTags(
         phase="comparison",
         comparison_id=entry.id,
         comparison_display_name=entry.effective_display_name,
-        comparison_config=entry.path.stem,
-        comparison_path=entry.path.as_posix(),
+        comparison_config=method_label,
+        comparison_path=entry.method.as_posix() if entry.method is not None else entry.id,
         started_at=ts,
         run_name=run_name,
     )

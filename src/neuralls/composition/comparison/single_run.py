@@ -377,6 +377,7 @@ def _load_linear_system(
     paths: ComparisonPaths,
     *,
     rhs_index: int,
+    matrix_index: int,
     normalize_system: str,
 ) -> LinearSystem:
     """Load and validate linear system.
@@ -397,7 +398,9 @@ def _load_linear_system(
         ValueError: If validation fails (wrong shape, NaN values, incompatible dimensions)
         FileNotFoundError: If matrix or rhs files don't exist
     """
-    A, b = load_system_arrays(paths.matrix, paths.rhs, rhs_index=rhs_index)
+    A, b = load_system_arrays(
+        paths.matrix, paths.rhs, rhs_index=rhs_index, matrix_index=matrix_index
+    )
     A, b = _normalize_linear_system(A, b, normalize_system)
     validate_matrix(A)
     validate_rhs_vector(b, A)
@@ -619,6 +622,7 @@ def compare_preconditioners(
     system = _load_linear_system(
         paths,
         rhs_index=general_params.data.rhs_index,
+        matrix_index=general_params.data.matrix_index,
         normalize_system=general_params.data.normalize_system,
     )
     _log_matrix_condition_number(

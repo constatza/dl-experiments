@@ -4,117 +4,166 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training = "Train-Datasets"
+training   = "Train-Datasets"
 comparison = "Comparisons"
 
-# -------
-# Dataset
-# -------
+# ────────────────────────
+# Comparison defaults
+# ────────────────────────
+
+[comparison_defaults]
+rtol               = 1.0e-6
+atol               = 1.0e-14
+max_iterations     = 200
+stopping_criterion = "residual_norm"
+m_max              = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+# ───────────────────────────────────────────────────────────────────────────
+# Datasets
+#   Training datasets: res-gaussian-{1,2,5,10,100}
+#   Comparison datasets: solutions (test matrix) + comparison RHS variants
+# ───────────────────────────────────────────────────────────────────────────
 
 [[datasets]]
-id = "res-gaussian-0"
-path = "datasets/res-gaussian-0.toml"
-display_name = "Residual-Error 0 Gaussian"
+id   = "res-gaussian-1"
+path = "datasets/res-gaussian-1.toml"
+display_name = "Residual-Error 1 Gaussian"
 
 [[datasets]]
-id = "res-gaussian-10"
+id   = "res-gaussian-2"
+path = "datasets/res-gaussian-2.toml"
+display_name = "Residual-Error 2 Gaussian"
+
+[[datasets]]
+id   = "res-gaussian-5"
+path = "datasets/res-gaussian-5.toml"
+display_name = "Residual-Error 5 Gaussian"
+
+[[datasets]]
+id   = "res-gaussian-10"
 path = "datasets/res-gaussian-10.toml"
 display_name = "Residual-Error 10 Gaussian"
 
 [[datasets]]
-id = "res-gaussian-20"
-path = "datasets/res-gaussian-20.toml"
-display_name = "Residual-Error 20 Gaussian"
-
-[[datasets]]
-id = "res-gaussian-50"
-path = "datasets/res-gaussian-50.toml"
-display_name = "Residual-Error 50 Gaussian"
-
-[[datasets]]
-id = "res-gaussian-100"
+id   = "res-gaussian-100"
 path = "datasets/res-gaussian-100.toml"
 display_name = "Residual-Error 100 Gaussian"
 
 [[datasets]]
-id = "res-gaussian-100-93x31"
-path = "datasets/res-gaussian-100-93x31.toml"
-display_name = "Residual-Error 100 Gaussian 93x31"
+id   = "solutions"
+path = "datasets/solutions.toml"
+display_name = "Solutions"
 
-# ------
+[[datasets]]
+id   = "gaussian-rhs"
+path = "datasets/gaussian-rhs.toml"
+display_name = "Gaussian RHS"
+
+[[datasets]]
+id   = "scaled-solutions"
+path = "datasets/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[datasets]]
+id   = "sparse-rhs"
+path = "datasets/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[datasets]]
+id   = "eig-few-solutions-smallest"
+path = "datasets/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[datasets]]
+id   = "eig-few-rhs-smallest"
+path = "datasets/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"
+
+# ───────────────────────
 # Models
-# ------
+# ───────────────────────
 
 [[models]]
-id = "constant-width-factorized"
+id   = "constant-width-factorized"
 path = "models/skip-ffnn/constant-width-factorized.toml"
 display_name = "Constant-Width Factorized"
 
-# -----------
-# Comparisons
-# -----------
+# ───────────────────────────────────────────────────────────────────────────
+# Comparisons  (data binding — methodology from [comparison_defaults] above)
+# ───────────────────────────────────────────────────────────────────────────
 
 [[comparisons]]
-id = "gaussian"
-path = "comparison/gaussian.toml"
-display_name = "Gaussian RHS"
+id             = "gaussian"
+matrix_dataset = "solutions"
+rhs_dataset    = "gaussian-rhs"
+display_name   = "Gaussian RHS"
 
 [[comparisons]]
-id = "scaled-solutions"
-path = "comparison/scaled-solutions.toml"
-display_name = "Scaled Solutions"
+id             = "scaled-solutions"
+matrix_dataset = "solutions"
+rhs_dataset    = "scaled-solutions"
+display_name   = "Scaled Solutions"
 
 [[comparisons]]
-id = "sparse-rhs"
-path = "comparison/sparse-rhs.toml"
-display_name = "Sparse RHS"
+id             = "sparse-rhs"
+matrix_dataset = "solutions"
+rhs_dataset    = "sparse-rhs"
+display_name   = "Sparse RHS"
 
 [[comparisons]]
-id = "eig-few-solutions-smallest"
-path = "comparison/eig-few-solutions-smallest.toml"
-display_name = "Eig Few Solutions Smallest"
+id             = "eig-few-solutions-smallest"
+matrix_dataset = "solutions"
+rhs_dataset    = "eig-few-solutions-smallest"
+display_name   = "Eig Few Solutions Smallest"
 
 [[comparisons]]
-id = "eig-few-rhs-smallest"
-path = "comparison/eig-few-rhs-smallest.toml"
-display_name = "Eig Few RHS Smallest"
+id             = "eig-few-rhs-smallest"
+matrix_dataset = "solutions"
+rhs_dataset    = "eig-few-rhs-smallest"
+display_name   = "Eig Few RHS Smallest"
 
-# -----------
+# ───────────────────────
 # Experiments
-# -----------
+# ───────────────────────
 
 [[experiments]]
-id = "res-gaussian-0-constant-width-factorized"
-dataset = "res-gaussian-0"
-model = "constant-width-factorized"
-display_name = "Residual-Error 0 Gaussian | Constant-Width Factorized"
+id      = "res-gaussian-1-constant-width-factorized"
+dataset = "res-gaussian-1"
+model   = "constant-width-factorized"
+display_name = "Residual-Error 1 Gaussian | Constant-Width Factorized"
 
 [[experiments]]
-id = "res-gaussian-10-constant-width-factorized"
+id      = "res-gaussian-2-constant-width-factorized"
+dataset = "res-gaussian-2"
+model   = "constant-width-factorized"
+display_name = "Residual-Error 2 Gaussian | Constant-Width Factorized"
+
+[[experiments]]
+id      = "res-gaussian-5-constant-width-factorized"
+dataset = "res-gaussian-5"
+model   = "constant-width-factorized"
+display_name = "Residual-Error 5 Gaussian | Constant-Width Factorized"
+
+[[experiments]]
+id      = "res-gaussian-10-constant-width-factorized"
 dataset = "res-gaussian-10"
-model = "constant-width-factorized"
+model   = "constant-width-factorized"
 display_name = "Residual-Error 10 Gaussian | Constant-Width Factorized"
 
 [[experiments]]
-id = "res-gaussian-20-constant-width-factorized"
-dataset = "res-gaussian-20"
-model = "constant-width-factorized"
-display_name = "Residual-Error 20 Gaussian | Constant-Width Factorized"
-
-[[experiments]]
-id = "res-gaussian-50-constant-width-factorized"
-dataset = "res-gaussian-50"
-model = "constant-width-factorized"
-display_name = "Residual-Error 50 Gaussian | Constant-Width Factorized"
-
-[[experiments]]
-id = "res-gaussian-100-constant-width-factorized"
+id      = "res-gaussian-100-constant-width-factorized"
 dataset = "res-gaussian-100"
-model = "constant-width-factorized"
+model   = "constant-width-factorized"
 display_name = "Residual-Error 100 Gaussian | Constant-Width Factorized"
-
-[[experiments]]
-id = "res-gaussian-100-93x31-constant-width-factorized"
-dataset = "res-gaussian-100-93x31"
-model = "constant-width-factorized"
-display_name = "Residual-Error 100 Gaussian 93x31 | Constant-Width Factorized"

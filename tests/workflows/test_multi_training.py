@@ -11,7 +11,6 @@ import pytest
 from neuralls.platform.config.models.experiments import ExperimentsConfig
 from neuralls.platform.config.models.experiments import ExperimentNamesConfig
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
-from neuralls.platform.config.registry import resolve_comparison_config_path
 from neuralls.platform.config.loaders import load_experiments_config, load_raw_toml
 from neuralls.composition.experiments.multi_training import (
     TrainingRunResult,
@@ -419,15 +418,3 @@ def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
         ValueError, match="Experiment 'ffnn_test' references model id 'missing-model'"
     ):
         ExperimentsConfig.model_validate(load_raw_toml(config))
-
-
-def test_resolve_comparison_config_path_rejects_missing_registry_id(tmp_path: Path) -> None:
-    """Comparison ids are resolved strictly through [[comparisons]]."""
-    config = tmp_path / "experiments.toml"
-    config.write_text("\n".join([]))
-    cfg = ExperimentsConfig.model_validate(load_raw_toml(config))
-
-    with pytest.raises(
-        ValueError, match="Comparison id 'linear' is not defined in \\[\\[comparisons\\]\\]"
-    ):
-        resolve_comparison_config_path(cfg, tmp_path, "linear")

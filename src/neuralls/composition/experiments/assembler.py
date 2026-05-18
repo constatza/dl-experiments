@@ -13,10 +13,7 @@ from neuralls.platform.config.models.workspace import (
     RunnableExperiment,
 )
 from neuralls.platform.config.models.experiments import CaseConfig, resolve_display_name
-from neuralls.platform.config.registry import (
-    list_experiment_bindings,
-    resolve_comparison_config_path,
-)
+from neuralls.platform.config.registry import list_experiment_bindings
 from neuralls.platform.config.resolution import (
     build_mlflow_environment,
     build_sqlite_tracking_uri,
@@ -28,7 +25,6 @@ from neuralls.platform.config.settings import (
     NeurallsSettings,
     require_settings,
 )
-from neuralls.platform.config.models.preconditioner import NeuralPreconditionerConfig
 from neuralls.platform.storage.workspaces import WorkspaceFactory
 from neuralls.platform.config.dlkit_bridge import (
     build_inference_settings,
@@ -37,7 +33,6 @@ from neuralls.platform.config.dlkit_bridge import (
 )
 from neuralls.platform.config.loaders import (
     load_case_config,
-    load_comparison_config,
     load_data_config,
 )
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
@@ -52,31 +47,6 @@ class MlflowTopology:
     force_enabled: bool = False
 
 
-def _validate_comparison_experiment_refs(
-    cfg: CaseConfig,
-    config_dir: Path,
-    neuralls_settings: NeurallsSettings,
-) -> None:
-    """Reject comparison configs that reference undefined experiment ids."""
-    experiment_ids = {entry.id for entry in cfg.experiments}
-    for entry in cfg.comparisons:
-        comparison_cfg = load_comparison_config(
-            resolve_comparison_config_path(cfg, config_dir, entry.id),
-            neuralls_settings,
-        )
-        for spec in comparison_cfg.preconditioners:
-            if not isinstance(spec, NeuralPreconditionerConfig):
-                continue
-            experiment_id = spec.experiment
-            if experiment_id is None or experiment_id in experiment_ids:
-                continue
-            raise ValueError(
-                f"Comparison '{entry.id}' neural preconditioner '{spec.name}' "
-                f"references experiment id '{experiment_id}', but [[experiments]] "
-                "does not define it."
-            )
-
-
 def load_validated_case_config(
     config_path: Path,
     neuralls_settings: NeurallsSettings | None = None,
@@ -88,7 +58,6 @@ def load_validated_case_config(
     )
     cfg = load_case_config(config_path, neuralls_settings)
     config_dir = config_path.resolve().parent
-    _validate_comparison_experiment_refs(cfg, config_dir, neuralls_settings)
     return cfg, config_dir
 
 

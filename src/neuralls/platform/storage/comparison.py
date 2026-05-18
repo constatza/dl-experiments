@@ -64,7 +64,10 @@ def _select_rhs_sample(arr: np.ndarray, rhs_index: int, source_path: Path) -> np
 
 
 def load_system_arrays(
-    matrix_path: Path, rhs_path: Path | None = None, rhs_index: int = 0
+    matrix_path: Path,
+    rhs_path: Path | None = None,
+    rhs_index: int = 0,
+    matrix_index: int = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Load matrix and RHS from explicit file paths (dataset dir, npy, txt)."""
     matrix_path = Path(matrix_path)
@@ -77,12 +80,12 @@ def load_system_arrays(
             try:
                 load_dataset_manifest(path)
                 if key == "matrix":
-                    return load_matrix_dense_sample(path, sample_index=0)
+                    return load_matrix_dense_sample(path, sample_index=matrix_index)
                 rhs, _ = load_dense_training_arrays(path)
                 return np.asarray(rhs, dtype=np.float64)
             except FileNotFoundError, ValueError:
                 if key == "matrix" and (path / "values.npy").exists():
-                    return load_matrix_dense_sample(path.parent, sample_index=0)
+                    return load_matrix_dense_sample(path.parent, sample_index=matrix_index)
                 raise
         match path.suffix:
             case ".npy":
