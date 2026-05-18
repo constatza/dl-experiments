@@ -389,14 +389,18 @@ def _load_linear_system(
     4. Returns validated LinearSystem
 
     Args:
-        paths: Comparison paths with matrix and rhs file locations
+        paths: Comparison paths with matrix and rhs file locations.
+        rhs_index: Row index to select from a multi-RHS file; -1 selects row 0.
+        matrix_index: Sample index to select from a multi-matrix dataset directory.
+        normalize_system: Scaling mode — one of ``"none"``, ``"matrix"``,
+            ``"rhs"``, ``"both"``, ``"diagonal"``, ``"spectral"``.
 
     Returns:
-        LinearSystem with loaded and validated arrays
+        LinearSystem: Validated (A, b) pair, scaled and shaped.
 
     Raises:
-        ValueError: If validation fails (wrong shape, NaN values, incompatible dimensions)
-        FileNotFoundError: If matrix or rhs files don't exist
+        ValueError: If validation fails (wrong shape, NaN values, incompatible dimensions).
+        FileNotFoundError: If matrix or rhs files don't exist.
     """
     A, b = load_system_arrays(
         paths.matrix, paths.rhs, rhs_index=rhs_index, matrix_index=matrix_index
