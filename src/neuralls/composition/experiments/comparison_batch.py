@@ -18,10 +18,8 @@ from neuralls.platform.config.models.experiments import (
     ComparisonRegistryEntry,
     ExperimentEntry,
 )
-from neuralls.platform.config.registry import (
-    get_experiment_binding,
-    resolve_comparison_config,
-)
+from neuralls.platform.config.registry import get_experiment_binding
+from neuralls.composition.comparison.config_assembler import resolve_comparison_config
 from neuralls.composition.experiments.assembler import load_validated_case_config
 from neuralls.platform.config.resolution import build_mlflow_environment, build_sqlite_tracking_uri
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
