@@ -229,7 +229,7 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
     artifact_root = output_root / "mlartifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
 
-    dataset_dir = tmp_path / "dataset"
+    dataset_dir = tmp_path / "benchmark"
     save_dataset(
         dataset_dir=dataset_dir,
         rhs=np.ones((1, 2), dtype=np.float64),
