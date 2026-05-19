@@ -1,0 +1,26 @@
+id = "solutions-93x31"
+
+# Solution dataset for the 93x31 system: Gaussian RHS, x solved from A x = b
+# Uses gaussian_inverse strategy since no spectral solution archives exist for 93x31.
+# Replace with solution_archive strategy if UaVectors become available at:
+#   ${NEURALLS_RAW_DIR}/SpectralData/93x31-displacements/UaVectorsFromSpectral/
+#
+# Usage: uv run process-data configs/datasets/93x31/solutions.toml
+
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/93x31-displacements/stiffness/subdomain_1_Kaa.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "gaussian_inverse"
+samples = 6000
+mu = 0.0
+sigma = 1.0
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"

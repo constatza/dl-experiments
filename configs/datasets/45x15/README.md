@@ -7,8 +7,8 @@ data?
 ## First Successful Run
 
 ```bash
-uv run process-data /path/to/dataset.toml \
-  --case-config /path/to/case.toml
+uv run process-data configs/datasets/<system>/<dataset>.toml \
+  --case-config configs/cases/<system>/<case>.toml
 ```
 
 Start with one dataset config before moving on to training or case-wide
@@ -17,11 +17,15 @@ workflows.
 The paired Gaussian variant is:
 
 ```bash
-uv run process-data /path/to/gaussian-dataset.toml \
-  --case-config /path/to/case.toml
+uv run process-data configs/datasets/<system>/gaussian-rhs.toml \
+  --case-config configs/cases/<system>/<case>.toml
 ```
 
-The shipped residual Gaussian variants include (45x15 displacement matrix):
+## Shipped Datasets
+
+### 45x15 displacement matrix (`configs/datasets/45x15/`)
+
+Residual Gaussian sweeps:
 
 - `res-gaussian-0.toml`
 - `res-gaussian-1.toml`
@@ -32,13 +36,20 @@ The shipped residual Gaussian variants include (45x15 displacement matrix):
 - `res-gaussian-50.toml`
 - `res-gaussian-100.toml`
 
-And for the larger 93x31 displacement matrix:
+Comparison and benchmark datasets: `solutions.toml`, `gaussian-rhs.toml`,
+`scaled-solutions.toml`, `sparse-rhs.toml`, `eig-*.toml`, `residuals-100.toml`.
 
-- `res-gaussian-1-93x31.toml`
-- `res-gaussian-2-93x31.toml`
-- `res-gaussian-5-93x31.toml`
-- `res-gaussian-10-93x31.toml`
-- `res-gaussian-100-93x31.toml`
+### 93x31 displacement matrix (`configs/datasets/93x31/`)
+
+Residual Gaussian sweeps:
+
+- `res-gaussian-1.toml`
+- `res-gaussian-2.toml`
+- `res-gaussian-5.toml`
+- `res-gaussian-10.toml`
+- `res-gaussian-100.toml`
+
+Comparison datasets: `solutions.toml`, `gaussian-rhs.toml`.
 
 ## Minimal Shape
 
@@ -103,11 +114,6 @@ For trace strategies, `samples` is a row budget, not a base-system count.
 One common pattern is to keep the same matrix, normalization, row
 budget, and CG iteration count across archive-backed and Gaussian variants.
 Only the strategy block changes between the two TOMLs.
-
-The repository also ships Gaussian residual sweeps that vary only:
-
-- `cg_iters`: `0`, `10`, `20`, `50`, or `100` on `45x15-displacements`
-- `matrix_path`: `93x31-displacements` for the larger-matrix Gaussian variant
 
 ## Important Fields
 

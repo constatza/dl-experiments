@@ -1,11 +1,11 @@
-# Residual FFNN registry for archive-backed and Gaussian residual sweeps.
+# Residual registry for archive-backed and Gaussian residual datasets.
 
 [mlflow]
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train"
-comparison = "Comparisons"
+training   = "Train-45x15"
+comparison = "Compare-45x15"
 
 # ────────────────────────
 # Comparison defaults
@@ -36,92 +36,68 @@ type = "ic0"
 
 [[datasets]]
 id   = "residuals-100"
-path = "datasets/residuals-100.toml"
+path = "../../datasets/45x15/residuals-100.toml"
 display_name = "Residual-Error 100"
 
 [[datasets]]
 id   = "res-gaussian-100"
-path = "datasets/res-gaussian-100.toml"
+path = "../../datasets/45x15/res-gaussian-100.toml"
 display_name = "Residual-Error 100 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-0"
-path = "datasets/res-gaussian-0.toml"
+path = "../../datasets/45x15/res-gaussian-0.toml"
 display_name = "Residual-Error 0 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-10"
-path = "datasets/res-gaussian-10.toml"
+path = "../../datasets/45x15/res-gaussian-10.toml"
 display_name = "Residual-Error 10 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-20"
-path = "datasets/res-gaussian-20.toml"
+path = "../../datasets/45x15/res-gaussian-20.toml"
 display_name = "Residual-Error 20 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-50"
-path = "datasets/res-gaussian-50.toml"
+path = "../../datasets/45x15/res-gaussian-50.toml"
 display_name = "Residual-Error 50 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-100-93x31"
-path = "datasets/res-gaussian-100-93x31.toml"
+path = "../../datasets/93x31/res-gaussian-100.toml"
 display_name = "Residual-Error 100 Gaussian 93x31"
 
 [[datasets]]
 id   = "solutions"
-path = "datasets/solutions.toml"
+path = "../../datasets/45x15/solutions.toml"
 display_name = "Solutions"
 
 [[datasets]]
 id   = "gaussian-rhs"
-path = "datasets/gaussian-rhs.toml"
+path = "../../datasets/45x15/gaussian-rhs.toml"
 display_name = "Gaussian RHS"
 
 [[datasets]]
 id   = "scaled-solutions"
-path = "datasets/scaled-solutions.toml"
+path = "../../datasets/45x15/scaled-solutions.toml"
 display_name = "Scaled Solutions"
 
 [[datasets]]
 id   = "sparse-rhs"
-path = "datasets/sparse-rhs.toml"
+path = "../../datasets/45x15/sparse-rhs.toml"
 display_name = "Sparse RHS"
 
 [[datasets]]
 id   = "eig-few-solutions-smallest"
-path = "datasets/eig-few-solutions-smallest.toml"
+path = "../../datasets/45x15/eig-few-solutions-smallest.toml"
 display_name = "Eig Few Solutions Smallest"
 
 [[datasets]]
 id   = "eig-few-rhs-smallest"
-path = "datasets/eig-few-rhs-smallest.toml"
+path = "../../datasets/45x15/eig-few-rhs-smallest.toml"
 display_name = "Eig Few RHS Smallest"
-
-# ───────────────────────
-# Models
-# ───────────────────────
-
-[[models]]
-id   = "constant-width-factorized"
-path = "models/skip-ffnn/constant-width-factorized.toml"
-display_name = "Constant-Width Factorized"
-
-[[models]]
-id   = "embedded-factorized"
-path = "models/skip-ffnn/embedded-factorized.toml"
-display_name = "Embedded Factorized"
-
-[[models]]
-id   = "embedded-spd"
-path = "models/skip-ffnn/embedded-spd.toml"
-display_name = "Embedded SPD"
-
-[[models]]
-id   = "embedded-spd-factorized"
-path = "models/skip-ffnn/embedded-spd-factorized.toml"
-display_name = "Embedded SPD-Factorized"
 
 # ───────────────────────────────────────────────────────────────────────────
 # Comparisons  (data binding — methodology from [comparison_defaults] above)
@@ -156,55 +132,3 @@ id             = "eig-few-rhs-smallest"
 matrix_dataset = "solutions"
 rhs_dataset    = "eig-few-rhs-smallest"
 display_name   = "Eig Few RHS Smallest"
-
-# ───────────────────────
-# Experiments
-# ───────────────────────
-
-[[experiments]]
-id      = "residuals-100-constant-width-factorized"
-dataset = "residuals-100"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 100 | Constant-Width Factorized"
-
-[[experiments]]
-id      = "res-gaussian-100-constant-width-factorized"
-dataset = "res-gaussian-100"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 100 Gaussian | Constant-Width Factorized"
-
-[[experiments]]
-id      = "residuals-100-embedded-factorized"
-dataset = "residuals-100"
-model   = "embedded-factorized"
-display_name = "Residual-Error 100 | Embedded Factorized"
-
-[[experiments]]
-id      = "res-gaussian-100-embedded-factorized"
-dataset = "res-gaussian-100"
-model   = "embedded-factorized"
-display_name = "Residual-Error 100 Gaussian | Embedded Factorized"
-
-[[experiments]]
-id      = "residuals-100-embedded-spd"
-dataset = "residuals-100"
-model   = "embedded-spd"
-display_name = "Residual-Error 100 | Embedded SPD"
-
-[[experiments]]
-id      = "res-gaussian-100-embedded-spd"
-dataset = "res-gaussian-100"
-model   = "embedded-spd"
-display_name = "Residual-Error 100 Gaussian | Embedded SPD"
-
-[[experiments]]
-id      = "residuals-100-embedded-spd-factorized"
-dataset = "residuals-100"
-model   = "embedded-spd-factorized"
-display_name = "Residual-Error 100 | Embedded SPD-Factorized"
-
-[[experiments]]
-id      = "res-gaussian-100-embedded-spd-factorized"
-dataset = "res-gaussian-100"
-model   = "embedded-spd-factorized"
-display_name = "Residual-Error 100 Gaussian | Embedded SPD-Factorized"

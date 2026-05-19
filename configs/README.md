@@ -10,14 +10,14 @@ environment, then use plain `uv run neuralls ...` commands.
 
 Choose the config type that matches the case you want to run:
 
-- `datasets/*.toml`: define one dataset source or generation strategy
-- `models/*.toml`: define one model architecture and trainer setup
-- `case-*.toml`: case configs that tie datasets, models, comparisons,
+- `datasets/<system>/*.toml`: define one dataset source or generation strategy
+- `models/*.toml`: define one model architecture and trainer setup (shared across systems)
+- `cases/<system>/*.toml`: case configs that tie datasets, models, comparisons,
   MLflow, and experiment ids together
 
-The repository also includes focused sweep cases such as
-`case-constant-width.toml` and `case-factorized-linear.toml`, which bind one
-model to a family of related datasets.
+Current systems: `cases/45x15/` and `cases/93x31/`. Each system directory
+contains focused sweep cases such as `constant-width.toml` and
+`factorized-linear.toml`.
 
 Current model families include `linear/`, `skip-ffnn/`, `gnn/`, and
 `advanced/`. The `advanced/` family now targets the scale-equivariant DLKit
@@ -62,8 +62,8 @@ If one comparison profile depends on an extra benchmark dataset such as
 `configs/datasets/solutions.toml`, build it explicitly first:
 
 ```bash
-uv run neuralls generate-single configs/datasets/solutions.toml \
-  --case-config configs/case-ffnn.toml
+uv run neuralls generate-single configs/datasets/45x15/solutions.toml \
+  --case-config configs/cases/45x15/ffnn.toml
 ```
 
 When a benchmark dataset is missing, `neuralls compare <case.toml>` now fails
@@ -208,5 +208,5 @@ config file directory instead of assuming a Unix-only working directory layout.
 
 ## What To Read Next
 
-- [`datasets/README.md`](datasets/README.md) for strategy details and schema examples
+- [`datasets/45x15/README.md`](datasets/45x15/README.md) for strategy details and schema examples
 - [`../README.md`](../README.md) for the end-to-end workflow

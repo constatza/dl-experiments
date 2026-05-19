@@ -4,8 +4,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train-Datasets"
-comparison = "Comparisons"
+training   = "Train-93x31"
+comparison = "Compare-93x31"
 
 # ────────────────────────
 # Comparison defaults
@@ -33,63 +33,43 @@ type = "ic0"
 # ───────────────────────────────────────────────────────────────────────────
 # Datasets
 #   Training datasets: res-gaussian-{1,2,5,10,100}-93x31
-#   Comparison datasets: solutions (test matrix) + comparison RHS variants
+#   Comparison datasets: solutions + gaussian-rhs (93x31 matrix)
 # ───────────────────────────────────────────────────────────────────────────
 
 [[datasets]]
 id   = "res-gaussian-1-93x31"
-path = "datasets/res-gaussian-1-93x31.toml"
+path = "../../datasets/93x31/res-gaussian-1.toml"
 display_name = "Residual-Error 1 Gaussian 93x31"
 
 [[datasets]]
 id   = "res-gaussian-2-93x31"
-path = "datasets/res-gaussian-2-93x31.toml"
+path = "../../datasets/93x31/res-gaussian-2.toml"
 display_name = "Residual-Error 2 Gaussian 93x31"
 
 [[datasets]]
 id   = "res-gaussian-5-93x31"
-path = "datasets/res-gaussian-5-93x31.toml"
+path = "../../datasets/93x31/res-gaussian-5.toml"
 display_name = "Residual-Error 5 Gaussian 93x31"
 
 [[datasets]]
 id   = "res-gaussian-10-93x31"
-path = "datasets/res-gaussian-10-93x31.toml"
+path = "../../datasets/93x31/res-gaussian-10.toml"
 display_name = "Residual-Error 10 Gaussian 93x31"
 
 [[datasets]]
 id   = "res-gaussian-100-93x31"
-path = "datasets/res-gaussian-100-93x31.toml"
+path = "../../datasets/93x31/res-gaussian-100.toml"
 display_name = "Residual-Error 100 Gaussian 93x31"
 
 [[datasets]]
 id   = "solutions"
-path = "datasets/solutions.toml"
+path = "../../datasets/93x31/solutions.toml"
 display_name = "Solutions"
 
 [[datasets]]
 id   = "gaussian-rhs"
-path = "datasets/gaussian-rhs.toml"
+path = "../../datasets/93x31/gaussian-rhs.toml"
 display_name = "Gaussian RHS"
-
-[[datasets]]
-id   = "scaled-solutions"
-path = "datasets/scaled-solutions.toml"
-display_name = "Scaled Solutions"
-
-[[datasets]]
-id   = "sparse-rhs"
-path = "datasets/sparse-rhs.toml"
-display_name = "Sparse RHS"
-
-[[datasets]]
-id   = "eig-few-solutions-smallest"
-path = "datasets/eig-few-solutions-smallest.toml"
-display_name = "Eig Few Solutions Smallest"
-
-[[datasets]]
-id   = "eig-few-rhs-smallest"
-path = "datasets/eig-few-rhs-smallest.toml"
-display_name = "Eig Few RHS Smallest"
 
 # ───────────────────────
 # Models
@@ -97,7 +77,7 @@ display_name = "Eig Few RHS Smallest"
 
 [[models]]
 id   = "constant-width-factorized"
-path = "models/skip-ffnn/constant-width-factorized.toml"
+path = "../../models/skip-ffnn/constant-width-factorized.toml"
 display_name = "Constant-Width Factorized"
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -109,30 +89,6 @@ id             = "gaussian"
 matrix_dataset = "solutions"
 rhs_dataset    = "gaussian-rhs"
 display_name   = "Gaussian RHS"
-
-[[comparisons]]
-id             = "scaled-solutions"
-matrix_dataset = "solutions"
-rhs_dataset    = "scaled-solutions"
-display_name   = "Scaled Solutions"
-
-[[comparisons]]
-id             = "sparse-rhs"
-matrix_dataset = "solutions"
-rhs_dataset    = "sparse-rhs"
-display_name   = "Sparse RHS"
-
-[[comparisons]]
-id             = "eig-few-solutions-smallest"
-matrix_dataset = "solutions"
-rhs_dataset    = "eig-few-solutions-smallest"
-display_name   = "Eig Few Solutions Smallest"
-
-[[comparisons]]
-id             = "eig-few-rhs-smallest"
-matrix_dataset = "solutions"
-rhs_dataset    = "eig-few-rhs-smallest"
-display_name   = "Eig Few RHS Smallest"
 
 # ───────────────────────
 # Experiments

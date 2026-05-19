@@ -4,8 +4,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train-Datasets"
-comparison = "Comparisons"
+training   = "Train-45x15"
+comparison = "Compare-45x15"
 
 # ────────────────────────
 # Comparison defaults
@@ -38,57 +38,57 @@ type = "ic0"
 
 [[datasets]]
 id   = "res-gaussian-1"
-path = "datasets/res-gaussian-1.toml"
+path = "../../datasets/45x15/res-gaussian-1.toml"
 display_name = "Residual-Error 1 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-2"
-path = "datasets/res-gaussian-2.toml"
+path = "../../datasets/45x15/res-gaussian-2.toml"
 display_name = "Residual-Error 2 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-5"
-path = "datasets/res-gaussian-5.toml"
+path = "../../datasets/45x15/res-gaussian-5.toml"
 display_name = "Residual-Error 5 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-10"
-path = "datasets/res-gaussian-10.toml"
+path = "../../datasets/45x15/res-gaussian-10.toml"
 display_name = "Residual-Error 10 Gaussian"
 
 [[datasets]]
 id   = "res-gaussian-100"
-path = "datasets/res-gaussian-100.toml"
+path = "../../datasets/45x15/res-gaussian-100.toml"
 display_name = "Residual-Error 100 Gaussian"
 
 [[datasets]]
 id   = "solutions"
-path = "datasets/solutions.toml"
+path = "../../datasets/45x15/solutions.toml"
 display_name = "Solutions"
 
 [[datasets]]
 id   = "gaussian-rhs"
-path = "datasets/gaussian-rhs.toml"
+path = "../../datasets/45x15/gaussian-rhs.toml"
 display_name = "Gaussian RHS"
 
 [[datasets]]
 id   = "scaled-solutions"
-path = "datasets/scaled-solutions.toml"
+path = "../../datasets/45x15/scaled-solutions.toml"
 display_name = "Scaled Solutions"
 
 [[datasets]]
 id   = "sparse-rhs"
-path = "datasets/sparse-rhs.toml"
+path = "../../datasets/45x15/sparse-rhs.toml"
 display_name = "Sparse RHS"
 
 [[datasets]]
 id   = "eig-few-solutions-smallest"
-path = "datasets/eig-few-solutions-smallest.toml"
+path = "../../datasets/45x15/eig-few-solutions-smallest.toml"
 display_name = "Eig Few Solutions Smallest"
 
 [[datasets]]
 id   = "eig-few-rhs-smallest"
-path = "datasets/eig-few-rhs-smallest.toml"
+path = "../../datasets/45x15/eig-few-rhs-smallest.toml"
 display_name = "Eig Few RHS Smallest"
 
 # ───────────────────────
@@ -97,7 +97,7 @@ display_name = "Eig Few RHS Smallest"
 
 [[models]]
 id   = "constant-width-factorized"
-path = "models/skip-ffnn/constant-width-factorized.toml"
+path = "../../models/skip-ffnn/constant-width-factorized.toml"
 display_name = "Constant-Width Factorized"
 
 # ───────────────────────────────────────────────────────────────────────────
