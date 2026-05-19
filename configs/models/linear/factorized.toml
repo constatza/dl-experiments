@@ -5,7 +5,7 @@ precision = "float64"
 
 [MODEL]
 # Single factorized linear layer (no hidden layers)
-name = "NormScaledFactorizedLinear"
+name = "FactorizedLinearNetwork"
 module_path = "dlkit.nn"
 bias = true
 
