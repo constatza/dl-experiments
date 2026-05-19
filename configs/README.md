@@ -16,8 +16,8 @@ Choose the config type that matches the case you want to run:
   MLflow, and experiment ids together
 
 The repository also includes focused sweep cases such as
-`case-constant-width.toml`, which binds one model to a family of related
-datasets.
+`case-constant-width.toml` and `case-factorized-linear.toml`, which bind one
+model to a family of related datasets.
 
 Current model families include `linear/`, `skip-ffnn/`, `gnn/`, and
 `advanced/`. The `advanced/` family now targets the scale-equivariant DLKit
@@ -136,8 +136,9 @@ Model configs keep `module_path = "dlkit.nn"` as the user-facing entrypoint.
 `[MODEL]` and are forwarded through DLKit's `ModelComponentSettings`
 filtering, so they must match the target constructor signature exactly.
 For constant-width FFNN variants, "constant width" means the hidden body uses
-the same width across layers; the width itself is still configured explicitly
-with the constructor's `size` or `hidden_size` kwarg.
+the model's built-in width policy. Do not add an explicit `size` or
+`hidden_size` override unless the DLKit constructor for that exact class
+accepts it.
 
 Optimizer sections may omit per-optimizer kwargs when DLKit defaults are
 acceptable. Scheduler settings should still be written explicitly unless the

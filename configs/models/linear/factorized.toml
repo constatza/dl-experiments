@@ -4,12 +4,10 @@ workflow = "train"
 precision = "float64"
 
 [MODEL]
-# DLKit scale-equivariant constant-width skip/factorized residual FFNN.
-name = "ScaleEquivariantConstantWidthFactorizedFFNN"
+# Single factorized linear layer (no hidden layers)
+name = "NormScaledFactorizedLinear"
 module_path = "dlkit.nn"
-num_layers = 1
-norm = "l2"
-dropout = 0.0
+bias = true
 
 [TRAINING.lr_tuner]
 min_lr = 1e-5
@@ -24,7 +22,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "constant-width-factorized"
+filename = "factorized"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
@@ -40,7 +38,7 @@ check_finite = true
 
 [TRAINING.optimizer.default_optimizer]
 name = "AdamW"
-lr = 1e-3
+lr = 5e-3
 weight_decay = 1e-2
 
 [TRAINING.optimizer.default_scheduler]
@@ -50,7 +48,7 @@ factor = 0.5
 patience = 10
 cooldown = 5
 threshold = 1e-4
-min_lr = 1e-6
+min_lr = 1e-7
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"
@@ -64,6 +62,8 @@ norm_ord = 2
 vector_dim = -1
 
 [DATASET]
+# Dataset uses PRE-NORMALIZED data from the data generation pipeline.
+# Features/targets are injected programmatically at runtime as path-based entries.
 name = "FlexibleDataset"
 memmap_cache = true
 
@@ -78,8 +78,3 @@ shuffle = true
 
 [OPTUNA]
 enabled = false
-n_trials = 40
-
-[OPTUNA.model]
-num_layers = {choices = [1, 6, 9]}
-dropout = {low = 0.0, high = 0.3, step = 0.05}

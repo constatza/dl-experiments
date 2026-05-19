@@ -1,0 +1,169 @@
+# Factorized linear registry for Gaussian residual sweeps — 93x31 matrix.
+
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training   = "Train-Datasets"
+comparison = "Comparisons"
+
+# ────────────────────────
+# Comparison defaults
+# ────────────────────────
+
+[comparison_defaults]
+rtol               = 1.0e-6
+atol               = 1.0e-14
+max_iterations     = 200
+stopping_criterion = "residual_norm"
+m_max              = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+# ───────────────────────────────────────────────────────────────────────────
+# Datasets
+#   Training datasets: res-gaussian-{1,2,5,10,100}-93x31
+#   Comparison datasets: solutions (test matrix) + comparison RHS variants
+# ───────────────────────────────────────────────────────────────────────────
+
+[[datasets]]
+id   = "res-gaussian-1-93x31"
+path = "datasets/res-gaussian-1-93x31.toml"
+display_name = "Residual-Error 1 Gaussian 93x31"
+
+[[datasets]]
+id   = "res-gaussian-2-93x31"
+path = "datasets/res-gaussian-2-93x31.toml"
+display_name = "Residual-Error 2 Gaussian 93x31"
+
+[[datasets]]
+id   = "res-gaussian-5-93x31"
+path = "datasets/res-gaussian-5-93x31.toml"
+display_name = "Residual-Error 5 Gaussian 93x31"
+
+[[datasets]]
+id   = "res-gaussian-10-93x31"
+path = "datasets/res-gaussian-10-93x31.toml"
+display_name = "Residual-Error 10 Gaussian 93x31"
+
+[[datasets]]
+id   = "res-gaussian-100-93x31"
+path = "datasets/res-gaussian-100-93x31.toml"
+display_name = "Residual-Error 100 Gaussian 93x31"
+
+[[datasets]]
+id   = "solutions"
+path = "datasets/solutions.toml"
+display_name = "Solutions"
+
+[[datasets]]
+id   = "gaussian-rhs"
+path = "datasets/gaussian-rhs.toml"
+display_name = "Gaussian RHS"
+
+[[datasets]]
+id   = "scaled-solutions"
+path = "datasets/scaled-solutions.toml"
+display_name = "Scaled Solutions"
+
+[[datasets]]
+id   = "sparse-rhs"
+path = "datasets/sparse-rhs.toml"
+display_name = "Sparse RHS"
+
+[[datasets]]
+id   = "eig-few-solutions-smallest"
+path = "datasets/eig-few-solutions-smallest.toml"
+display_name = "Eig Few Solutions Smallest"
+
+[[datasets]]
+id   = "eig-few-rhs-smallest"
+path = "datasets/eig-few-rhs-smallest.toml"
+display_name = "Eig Few RHS Smallest"
+
+# ───────────────────────
+# Models
+# ───────────────────────
+
+[[models]]
+id   = "factorized-linear"
+path = "models/linear/factorized.toml"
+display_name = "Factorized Linear"
+
+# ───────────────────────────────────────────────────────────────────────────
+# Comparisons  (data binding — methodology from [comparison_defaults] above)
+# ───────────────────────────────────────────────────────────────────────────
+
+[[comparisons]]
+id             = "gaussian"
+matrix_dataset = "solutions"
+rhs_dataset    = "gaussian-rhs"
+display_name   = "Gaussian RHS"
+
+[[comparisons]]
+id             = "scaled-solutions"
+matrix_dataset = "solutions"
+rhs_dataset    = "scaled-solutions"
+display_name   = "Scaled Solutions"
+
+[[comparisons]]
+id             = "sparse-rhs"
+matrix_dataset = "solutions"
+rhs_dataset    = "sparse-rhs"
+display_name   = "Sparse RHS"
+
+[[comparisons]]
+id             = "eig-few-solutions-smallest"
+matrix_dataset = "solutions"
+rhs_dataset    = "eig-few-solutions-smallest"
+display_name   = "Eig Few Solutions Smallest"
+
+[[comparisons]]
+id             = "eig-few-rhs-smallest"
+matrix_dataset = "solutions"
+rhs_dataset    = "eig-few-rhs-smallest"
+display_name   = "Eig Few RHS Smallest"
+
+# ───────────────────────
+# Experiments
+# ───────────────────────
+
+[[experiments]]
+id      = "res-gaussian-1-93x31-factorized-linear"
+dataset = "res-gaussian-1-93x31"
+model   = "factorized-linear"
+display_name = "Residual-Error 1 Gaussian 93x31 | Factorized Linear"
+
+[[experiments]]
+id      = "res-gaussian-2-93x31-factorized-linear"
+dataset = "res-gaussian-2-93x31"
+model   = "factorized-linear"
+display_name = "Residual-Error 2 Gaussian 93x31 | Factorized Linear"
+
+[[experiments]]
+id      = "res-gaussian-5-93x31-factorized-linear"
+dataset = "res-gaussian-5-93x31"
+model   = "factorized-linear"
+display_name = "Residual-Error 5 Gaussian 93x31 | Factorized Linear"
+
+[[experiments]]
+id      = "res-gaussian-10-93x31-factorized-linear"
+dataset = "res-gaussian-10-93x31"
+model   = "factorized-linear"
+display_name = "Residual-Error 10 Gaussian 93x31 | Factorized Linear"
+
+[[experiments]]
+id      = "res-gaussian-100-93x31-factorized-linear"
+dataset = "res-gaussian-100-93x31"
+model   = "factorized-linear"
+display_name = "Residual-Error 100 Gaussian 93x31 | Factorized Linear"
