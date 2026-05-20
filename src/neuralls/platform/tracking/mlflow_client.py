@@ -60,6 +60,45 @@ def log_artifacts_to_mlflow(
         client.log_artifacts(run_id, str(path))
 
 
+_COMPARISON_ARTIFACT_DIRS: tuple[str, ...] = ("arrays", "figures", "config")
+_COMPARISON_FLAT_FILES: tuple[str, ...] = (
+    "comparison.toml",
+    "comparison.json",
+    "recommendations.json",
+    "summary.txt",
+)
+
+
+def log_comparison_artifacts_to_mlflow(
+    tracking_uri: str,
+    run_id: str,
+    work_root: Path,
+) -> None:
+    """Upload comparison artifacts to an existing MLflow run.
+
+    Uploads only the structured comparison outputs, excluding downloaded model
+    checkpoints that may reside in the same working directory.
+
+    Args:
+        tracking_uri: MLflow tracking URI.
+        run_id: Existing MLflow run to upload into.
+        work_root: Working directory produced by the comparison run.
+    """
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient(tracking_uri=tracking_uri)
+    for artifact_dir in _COMPARISON_ARTIFACT_DIRS:
+        path = work_root / artifact_dir
+        if not path.exists():
+            continue
+        client.log_artifacts(run_id, str(path), artifact_path=artifact_dir)
+    for filename in _COMPARISON_FLAT_FILES:
+        path = work_root / filename
+        if not path.exists():
+            continue
+        client.log_artifact(run_id, str(path))
+
+
 def find_mlflow_run(
     *,
     tracking_uri: str,

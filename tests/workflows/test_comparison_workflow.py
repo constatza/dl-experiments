@@ -55,6 +55,9 @@ _COMPARE_PRECONDITIONERS = (
 )
 _MLFLOW_MODULE = "neuralls.composition.experiments.comparison_batch.mlflow"
 _SETUP_TRACKING = "neuralls.composition.experiments.comparison_batch.setup_comparison_tracking"
+_LOG_COMPARISON_ARTIFACTS = (
+    "neuralls.composition.experiments.comparison_batch.log_comparison_artifacts_to_mlflow"
+)
 
 
 def _write_comparison_config(path: Path) -> None:
@@ -349,6 +352,7 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
         patch(_SETUP_TRACKING) as mock_setup_tracking,
+        patch(_LOG_COMPARISON_ARTIFACTS),
     ):
         _configure_mock_mlflow(mock_mlflow)
         outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
@@ -392,21 +396,22 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
     entry = _make_entry()
     settings = _make_settings(tmp_path)
 
-    def _capture_logged_artifacts(path: str) -> None:
+    def _capture_work_root(tracking_uri: str, run_id: str, work_root: Path) -> None:  # noqa: ARG001
         nonlocal logged_files, comparison_json
-        root = Path(path)
         logged_files = {
-            item.relative_to(root).as_posix() for item in root.rglob("*") if item.is_file()
+            item.relative_to(work_root).as_posix()
+            for item in work_root.rglob("*")
+            if item.is_file()
         }
-        comparison_json = json.loads((root / "comparison.json").read_text(encoding="utf-8"))
+        comparison_json = json.loads((work_root / "comparison.json").read_text(encoding="utf-8"))
 
     with (
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
         patch(_SETUP_TRACKING),
+        patch(_LOG_COMPARISON_ARTIFACTS, side_effect=_capture_work_root),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        mock_mlflow.log_artifacts.side_effect = _capture_logged_artifacts
         outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
 
     assert outcomes[0].success is True
@@ -444,6 +449,7 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
         patch(_SETUP_TRACKING),
+        patch(_LOG_COMPARISON_ARTIFACTS),
         patch(
             "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(
@@ -559,6 +565,7 @@ model = "valid-model"
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
         patch(_SETUP_TRACKING),
+        patch(_LOG_COMPARISON_ARTIFACTS),
         patch(
             "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(specs=cfg.preconditioners, warnings=()),

@@ -36,6 +36,7 @@ from neuralls.platform.reporting.artifacts import (
     write_comparison_artifacts,
 )
 from neuralls.platform.tracking.comparison_tracking import setup_comparison_tracking
+from neuralls.platform.tracking.mlflow_client import log_comparison_artifacts_to_mlflow
 from neuralls.composition.comparison.single_run import compare_preconditioners
 from neuralls.composition.experiments.model_resolution import (
     ExperimentModelContext,
@@ -45,6 +46,7 @@ from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.composition.tracking.run_specs import (
     build_comparison_run_spec,
     build_child_comparison_tags,
+    ComparisonRunTags,
 )
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.shared.constants import (
@@ -297,6 +299,153 @@ def _resolve_comparison_topology(
     )
 
 
+def _log_child_residual_runs(
+    result: ComparisonResult,
+    comparison_id: str,
+    parent_run_name: str,
+) -> None:
+    """Open a nested MLflow run per preconditioner and log its residual history.
+
+    Args:
+        result: Completed comparison result containing per-preconditioner histories.
+        comparison_id: Registry id of the parent comparison entry.
+        parent_run_name: Display name of the parent MLflow run.
+    """
+    for name, result_entry in result.results.items():
+        child_tags = build_child_comparison_tags(
+            preconditioner_name=name,
+            comparison_id=comparison_id,
+            parent_run_name=parent_run_name,
+        )
+        with mlflow.start_run(run_name=name, nested=True, tags=child_tags.as_mlflow_tags()):
+            for step, residual in enumerate(result_entry.residual_history_rel):
+                mlflow.log_metric("residual", residual, step=step)
+
+
+def _log_comparison_params(
+    comp_run_id: str,
+    entry: ComparisonRegistryEntry,
+) -> None:
+    """Log final metadata params to the active comparison MLflow run.
+
+    Args:
+        comp_run_id: The run's own id, stored for cross-referencing.
+        entry: Registry entry supplying id, display name, and method path.
+    """
+    config_label = entry.method.stem if entry.method is not None else entry.id
+    mlflow.log_param("comparison_config", config_label)
+    mlflow.log_param("comparison_id", entry.id)
+    mlflow.log_param("comparison_display_name", entry.effective_display_name)
+    mlflow.log_param("comp_run_id", comp_run_id)
+
+
+def _run_comparison_body(
+    cfg: ComparisonConfig,
+    entry: ComparisonRegistryEntry,
+    work_root: Path,
+    topology: ComparisonTopology,
+    experiments_config_path: Path,
+    settings: NeurallsSettings,
+) -> tuple[ComparisonResult, tuple[str, ...]]:
+    """Resolve preconditioners, run comparison, and stage artifacts to disk.
+
+    Args:
+        cfg: Fully resolved comparison configuration.
+        entry: Registry entry for display name and method config path.
+        work_root: Temporary directory for staged outputs.
+        topology: Resolved MLflow topology for model-store lookups.
+        experiments_config_path: Case config path for model resolution context.
+        settings: Runtime settings.
+
+    Returns:
+        Tuple of (comparison result, resolution warning strings).
+
+    Raises:
+        ValueError: When all preconditioners fail to resolve.
+    """
+    resolved_specs, warnings = _resolve_specs(
+        cfg,
+        work_root,
+        experiments_config_path,
+        topology.model_store_tracking_uri,
+        settings,
+    )
+    if not resolved_specs:
+        raise ValueError("No runnable preconditioners remain after model resolution.")
+    raw_result = compare_preconditioners(
+        general_params=cfg.general,
+        preconditioner_configs=resolved_specs,
+        output_root=work_root,
+        display_name=entry.effective_display_name,
+    )
+    write_comparison_artifacts(
+        result=coerce_comparison_result_payload(raw_result),
+        work_root=work_root,
+        comparison_config=entry.method,
+    )
+    return raw_result, warnings
+
+
+def _execute_comparison_in_run(
+    cfg: ComparisonConfig,
+    entry: ComparisonRegistryEntry,
+    topology: ComparisonTopology,
+    run_name: str,
+    comp_tags: ComparisonRunTags,
+    experiments_config_path: Path,
+    settings: NeurallsSettings,
+) -> list[ComparisonOutcome]:
+    """Open an MLflow run, execute the comparison, upload artifacts, and return outcomes.
+
+    Args:
+        cfg: Fully resolved comparison configuration.
+        entry: Registry entry for display name, id, and method config path.
+        topology: Resolved MLflow topology (tracking URI, artifact location).
+        run_name: Display name for the MLflow run.
+        comp_tags: Structured tags applied to the MLflow run.
+        experiments_config_path: Case config path forwarded to body execution.
+        settings: Runtime settings forwarded to body execution.
+
+    Returns:
+        Single-element list with a successful ComparisonOutcome.
+    """
+    with mlflow.start_run(run_name=run_name, tags=comp_tags.as_mlflow_tags()) as comp_run:
+        comp_run_id = comp_run.info.run_id
+        mlflow.log_param("artifact_uri", mlflow.get_artifact_uri())
+
+        with tempfile.TemporaryDirectory() as _tmp:
+            work_root = Path(_tmp)
+            raw_result, warnings = _run_comparison_body(
+                cfg=cfg,
+                entry=entry,
+                work_root=work_root,
+                topology=topology,
+                experiments_config_path=experiments_config_path,
+                settings=settings,
+            )
+            if warnings:
+                mlflow.log_param("skipped_preconditioners", str(len(warnings)))
+            log_comparison_artifacts_to_mlflow(
+                tracking_uri=topology.tracking_uri,
+                run_id=comp_run_id,
+                work_root=work_root,
+            )
+            if isinstance(raw_result, ComparisonResult):
+                _log_child_residual_runs(raw_result, entry.id, run_name)
+
+        _log_comparison_params(comp_run_id, entry)
+
+    return [
+        ComparisonOutcome(
+            comparison_id=entry.id,
+            comparison_display_name=entry.effective_display_name,
+            success=True,
+            payload=raw_result,
+            warnings=warnings,
+        )
+    ]
+
+
 def _run_comparison_from_config(
     cfg: ComparisonConfig,
     entry: ComparisonRegistryEntry,
@@ -314,96 +463,48 @@ def _run_comparison_from_config(
     Returns:
         Single-element list with the outcome of the comparison run.
     """
-    comparison_display_name = entry.effective_display_name
-    comparison_id = entry.id
-    method_config_path = entry.method  # Path | None; None when using defaults only
-    resolution_warnings: tuple[str, ...] = ()
-
     try:
         _preflight_comparison_inputs(cfg)
-        topology = _resolve_comparison_topology(experiments_config_path, settings)
-
-        setup_comparison_tracking(
-            tracking_uri=topology.tracking_uri,
-            artifact_location=topology.artifact_location,
-            experiment_name=topology.experiment_name,
-        )
-        run_name, comp_tags = build_comparison_run_spec(entry=entry)
-
-        with mlflow.start_run(run_name=run_name, tags=comp_tags.as_mlflow_tags()) as comp_run:
-            comp_run_id = comp_run.info.run_id
-            mlflow.log_param("artifact_uri", mlflow.get_artifact_uri())
-
-            with tempfile.TemporaryDirectory() as _tmp:
-                work_root = Path(_tmp)
-                resolved_specs, resolution_warnings = _resolve_specs(
-                    cfg,
-                    work_root,
-                    experiments_config_path,
-                    topology.model_store_tracking_uri,
-                    settings,
-                )
-                if not resolved_specs:
-                    raise ValueError("No runnable preconditioners remain after model resolution.")
-                if resolution_warnings:
-                    mlflow.log_param("skipped_preconditioners", str(len(resolution_warnings)))
-                raw_result = compare_preconditioners(
-                    general_params=cfg.general,
-                    preconditioner_configs=resolved_specs,
-                    output_root=work_root,
-                    display_name=comparison_display_name,
-                )
-                artifact_source = coerce_comparison_result_payload(raw_result)
-                write_comparison_artifacts(
-                    result=artifact_source,
-                    work_root=work_root,
-                    comparison_config=method_config_path,
-                )
-                mlflow.log_artifacts(str(work_root))
-
-                if isinstance(raw_result, ComparisonResult):
-                    for name, result_entry in raw_result.results.items():
-                        child_tags = build_child_comparison_tags(
-                            preconditioner_name=name,
-                            comparison_id=comparison_id,
-                            parent_run_name=run_name,
-                        )
-                        with mlflow.start_run(
-                            run_name=name, nested=True, tags=child_tags.as_mlflow_tags()
-                        ):
-                            for step, residual in enumerate(result_entry.residual_history_rel):
-                                mlflow.log_metric("residual", residual, step=step)
-
-            config_label = (
-                method_config_path.stem if method_config_path is not None else comparison_id
-            )
-            mlflow.log_param("comparison_config", config_label)
-            mlflow.log_param("comparison_id", comparison_id)
-            mlflow.log_param("comparison_display_name", comparison_display_name)
-            mlflow.log_param("comp_run_id", comp_run_id)
-
-    except (ValueError, RuntimeError, OSError, FileNotFoundError, KeyError) as exc:
-        logger.error(f"Comparison failed: {exc}")
+    except (FileNotFoundError, ValueError) as exc:
         return [
             ComparisonOutcome(
-                comparison_id=comparison_id,
-                comparison_display_name=comparison_display_name,
+                comparison_id=entry.id,
+                comparison_display_name=entry.effective_display_name,
                 success=False,
                 error=str(exc),
                 warnings=(),
             )
         ]
 
-    payload = raw_result if isinstance(raw_result, ComparisonResult) else None
-    return [
-        ComparisonOutcome(
-            comparison_id=comparison_id,
-            comparison_display_name=comparison_display_name,
-            success=True,
-            payload=payload,
-            warnings=resolution_warnings,
+    topology = _resolve_comparison_topology(experiments_config_path, settings)
+    setup_comparison_tracking(
+        tracking_uri=topology.tracking_uri,
+        artifact_location=topology.artifact_location,
+        experiment_name=topology.experiment_name,
+    )
+    run_name, comp_tags = build_comparison_run_spec(entry=entry)
+
+    try:
+        return _execute_comparison_in_run(
+            cfg=cfg,
+            entry=entry,
+            topology=topology,
+            run_name=run_name,
+            comp_tags=comp_tags,
+            experiments_config_path=experiments_config_path,
+            settings=settings,
         )
-    ]
+    except (ValueError, RuntimeError, KeyError) as exc:
+        logger.error(f"Comparison failed: {exc}")
+        return [
+            ComparisonOutcome(
+                comparison_id=entry.id,
+                comparison_display_name=entry.effective_display_name,
+                success=False,
+                error=str(exc),
+                warnings=(),
+            )
+        ]
 
 
 def run_comparison_batch(
