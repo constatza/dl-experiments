@@ -54,13 +54,13 @@ def test_save_dataset_from_sparse_keeps_broadcasted_matrix_samples(tmp_path: Pat
         np.testing.assert_allclose(dense, matrix)
 
 
-def test_save_dataset_from_sparse_persists_value_scale(tmp_path: Path) -> None:
+def test_save_dataset_from_sparse_stores_raw_matrix(tmp_path: Path) -> None:
     raw_matrix = np.array([[8.0, 0.0], [2.0, 4.0]], dtype=np.float64)
     value_scale = 2.0
-    stored_matrix = raw_matrix / value_scale
+    normalized_matrix = raw_matrix / value_scale
 
     acc = SparsePackAccumulator()
-    acc.append_dense_matrix(stored_matrix, repeats=1)
+    acc.append_dense_matrix(normalized_matrix, repeats=1)
     indices, values, nnz_ptr, size = acc.build_arrays()
 
     rhs = np.array([[1.0, 0.0]], dtype=np.float64)
@@ -81,8 +81,5 @@ def test_save_dataset_from_sparse_persists_value_scale(tmp_path: Path) -> None:
     )
 
     pack = open_sparse_pack(resolve_dataset_paths(tmp_path).matrix_pack_dir)
-    assert np.isclose(pack.value_scale, value_scale)
-    dense_stored = pack.build_torch_sparse(0).to_dense().numpy()
-    dense_raw = pack.build_torch_sparse(0, denormalize=True).to_dense().numpy()
-    np.testing.assert_allclose(dense_stored, stored_matrix)
-    np.testing.assert_allclose(dense_raw, raw_matrix)
+    dense = pack.build_torch_sparse(0).to_dense().numpy()
+    np.testing.assert_allclose(dense, raw_matrix)

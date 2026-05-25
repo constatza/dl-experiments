@@ -76,7 +76,9 @@ def test_scale_metadata_saved_with_matrix_normalization(temp_matrix_file: Path, 
     assert scale.spectral_radius_bound == metadata["spectral_radius_bound"]
     assert scale.dimension_scale == metadata["dimension_scale"]
     pack = open_sparse_pack(resolve_dataset_paths(output_dir).matrix_pack_dir)
-    assert np.isclose(pack.value_scale, scale.composite_scale)
+    loaded = pack.build_torch_sparse(0).to_dense().numpy()
+    # Pack stores A_raw; the fixture matrix has diagonal 4.0 — verify scale is raw
+    np.testing.assert_allclose(np.diag(loaded), np.full(5, 4.0), rtol=1e-5)
 
 
 def test_scale_metadata_not_saved_with_none_normalization(temp_matrix_file: Path, tmp_path: Path):

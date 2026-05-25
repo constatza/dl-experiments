@@ -326,12 +326,11 @@ def save_dataset_from_sparse(
     save_sparse_pack(
         path=paths.matrix_pack_dir,
         indices=np.asarray(indices, dtype=np.int64),
-        values=np.asarray(values, dtype=np.float64),
+        values=np.asarray(values, dtype=np.float64) * value_scale,
         nnz_ptr=nnz_ptr_arr,
         size=size,
         format=SparseFormat.COO,
         dtype=np.dtype(np.float64),
-        value_scale=value_scale,
     )
 
     manifest = {
@@ -352,7 +351,6 @@ def save_dataset_from_sparse(
             "dtype": "float64",
             "n_samples": matrix_samples,
             "size": list(size),
-            "value_scale": value_scale,
         },
         "normalization": {
             "type": normalization_type,
@@ -392,14 +390,9 @@ def load_dense_training_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, np.
 def load_matrix_dense_sample(
     dataset_dir: str | Path,
     sample_index: int = 0,
-    *,
-    denormalize: bool = False,
 ) -> np.ndarray:
     """Load one sparse matrix sample and convert to dense numpy array."""
     paths = resolve_dataset_paths(dataset_dir)
     reader = open_sparse_pack(paths.matrix_pack_dir)
-    matrix_tensor = reader.build_torch_sparse(
-        sample_index=sample_index,
-        denormalize=denormalize,
-    )
+    matrix_tensor = reader.build_torch_sparse(sample_index=sample_index)
     return matrix_tensor.to_dense().detach().cpu().numpy().astype(np.float64, copy=False)
