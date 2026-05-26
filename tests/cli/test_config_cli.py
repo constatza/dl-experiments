@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-from click import Group
+from typer.core import TyperGroup as Group
 from typer.models import OptionInfo
 from typer.main import get_command
 from typer.testing import CliRunner

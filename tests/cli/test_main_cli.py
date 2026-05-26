@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
-from click import Group
+from typer.core import TyperGroup as Group
 from typer.models import ArgumentInfo
 from typer.main import get_command
 from typer.testing import CliRunner
