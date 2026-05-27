@@ -12,6 +12,7 @@ import tomli_w
 
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.composition.experiments.comparison_batch import (
+    _log_child_residual_runs,
     _log_comparison_metrics,
     _resolve_neural_preconditioners,
     _run_comparison_from_config,
@@ -717,3 +718,26 @@ def test_run_comparison_logs_scalar_metrics_to_mlflow(tmp_path: Path) -> None:
     assert "iterations/none" in logged_metric_names
     assert "final_residual/none" in logged_metric_names
     assert "converged/none" in logged_metric_names
+
+
+def test_log_child_residual_runs_logs_scalar_metrics(tmp_path: Path) -> None:
+    """Each child run must log scalar summary metrics for its preconditioner."""
+    result = _typed_comparison_result(tmp_path / "conv.png")
+    captured_metrics: list[tuple[str, float]] = []
+
+    def _fake_start_run(*args: object, **kwargs: object) -> MagicMock:
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=MagicMock())
+        ctx.__exit__ = MagicMock(return_value=False)
+        return ctx
+
+    with patch(_MLFLOW_MODULE) as mock_mlflow:
+        mock_mlflow.start_run.side_effect = _fake_start_run
+        mock_mlflow.log_metric.side_effect = lambda k, v, **kw: captured_metrics.append((k, v))
+        _log_child_residual_runs(result, "test-id", "parent-run")
+
+    metric_map = {k: v for k, v in captured_metrics}
+    assert metric_map["condition_number"] == 1.0
+    assert metric_map["iterations"] == 2
+    assert metric_map["final_residual"] == pytest.approx(1.0e-8)
+    assert metric_map["converged"] == 1

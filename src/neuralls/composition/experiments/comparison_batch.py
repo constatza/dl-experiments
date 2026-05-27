@@ -320,6 +320,10 @@ def _log_child_residual_runs(
         with mlflow.start_run(run_name=name, nested=True, tags=child_tags.as_mlflow_tags()):
             for step, residual in enumerate(result_entry.residual_history_rel):
                 mlflow.log_metric("residual", residual, step=step)
+            mlflow.log_metric("condition_number", result.condition_numbers.get(name, float("nan")))
+            mlflow.log_metric("iterations", result_entry.iterations)
+            mlflow.log_metric("final_residual", result_entry.residual)
+            mlflow.log_metric("converged", int(result_entry.converged))
 
 
 def _log_comparison_metrics(result: ComparisonResult) -> None:
