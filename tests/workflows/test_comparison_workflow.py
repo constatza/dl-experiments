@@ -7,10 +7,12 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 import tomli_w
 
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.composition.experiments.comparison_batch import (
+    _log_comparison_metrics,
     _resolve_neural_preconditioners,
     _run_comparison_from_config,
     _validate_neural_preconditioner,
@@ -663,3 +665,55 @@ def test_run_comparison_batch_preserves_declared_order(tmp_path: Path) -> None:
 
     assert [outcome.comparison_id for outcome in outcomes] == ["a", "b"]
     assert [call.args[1].id for call in mock_run.call_args_list] == ["a", "b"]
+
+
+def test_log_comparison_metrics_logs_scalar_metrics_per_preconditioner(
+    tmp_path: Path,
+) -> None:
+    """_log_comparison_metrics must emit one metric set per preconditioner."""
+    result = _typed_comparison_result(tmp_path / "conv.png")
+
+    with patch(_MLFLOW_MODULE) as mock_mlflow:
+        _log_comparison_metrics(result)
+
+    metric_calls = {call.args[0]: call.args[1] for call in mock_mlflow.log_metric.call_args_list}
+    assert metric_calls["condition_number/none"] == 1.0
+    assert metric_calls["iterations/none"] == 2
+    assert metric_calls["final_residual/none"] == pytest.approx(1.0e-8)
+    assert metric_calls["converged/none"] == 1
+    mock_mlflow.log_param.assert_called_once_with("best_preconditioner", "none")
+
+
+def test_run_comparison_logs_scalar_metrics_to_mlflow(tmp_path: Path) -> None:
+    """compare workflow must log per-preconditioner metrics to the parent run."""
+    experiments_config = tmp_path / "experiments.toml"
+    _write_experiments_config(experiments_config)
+    matrix_path, rhs_path = _write_system_inputs(tmp_path)
+    cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ],
+    )
+    plot_path = tmp_path / "conv.png"
+    plot_path.write_text("x", encoding="utf-8")
+    payload = _typed_comparison_result(plot_path)
+    entry = _make_entry()
+    settings = _make_settings(tmp_path)
+
+    with (
+        patch(_COMPARE_PRECONDITIONERS, return_value=payload),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_SETUP_TRACKING),
+        patch(_LOG_COMPARISON_ARTIFACTS),
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+
+    assert outcomes[0].success is True
+    logged_metric_names = {call.args[0] for call in mock_mlflow.log_metric.call_args_list}
+    assert "condition_number/none" in logged_metric_names
+    assert "iterations/none" in logged_metric_names
+    assert "final_residual/none" in logged_metric_names
+    assert "converged/none" in logged_metric_names

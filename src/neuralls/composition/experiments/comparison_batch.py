@@ -322,6 +322,24 @@ def _log_child_residual_runs(
                 mlflow.log_metric("residual", residual, step=step)
 
 
+def _log_comparison_metrics(result: ComparisonResult) -> None:
+    """Log per-preconditioner scalar summary metrics to the active MLflow run.
+
+    Args:
+        result: Completed comparison result containing per-preconditioner data.
+    """
+    for name, cg in result.results.items():
+        safe = name.replace(" ", "_")
+        mlflow.log_metric(
+            f"condition_number/{safe}", result.condition_numbers.get(name, float("nan"))
+        )
+        mlflow.log_metric(f"iterations/{safe}", cg.iterations)
+        mlflow.log_metric(f"final_residual/{safe}", cg.residual)
+        mlflow.log_metric(f"converged/{safe}", int(cg.converged))
+    if result.recommendations.overall_best is not None:
+        mlflow.log_param("best_preconditioner", result.recommendations.overall_best.label)
+
+
 def _log_comparison_params(
     comp_run_id: str,
     entry: ComparisonRegistryEntry,
@@ -431,6 +449,7 @@ def _execute_comparison_in_run(
                 work_root=work_root,
             )
             if isinstance(raw_result, ComparisonResult):
+                _log_comparison_metrics(raw_result)
                 _log_child_residual_runs(raw_result, entry.id, run_name)
 
         _log_comparison_params(comp_run_id, entry)
