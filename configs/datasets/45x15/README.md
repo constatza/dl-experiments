@@ -35,6 +35,7 @@ Residual Gaussian sweeps:
 - `res-gaussian-20.toml`
 - `res-gaussian-50.toml`
 - `res-gaussian-100.toml`
+- `residuals-50.toml`
 
 Comparison and benchmark datasets: `solutions.toml`, `gaussian-rhs.toml`,
 `scaled-solutions.toml`, `sparse-rhs.toml`, `eig-*.toml`, `residuals-100.toml`.
@@ -47,6 +48,7 @@ Residual Gaussian sweeps:
 - `res-gaussian-2.toml`
 - `res-gaussian-5.toml`
 - `res-gaussian-10.toml`
+- `res-gaussian-50.toml`
 - `res-gaussian-100.toml`
 
 Comparison datasets: `solutions.toml`, `gaussian-rhs.toml`.

@@ -4,12 +4,10 @@ workflow = "train"
 precision = "float64"
 
 [MODEL]
-# DLKit scale-equivariant embedded SPD-factorized residual FFNN.
-name = "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
 module_path = "dlkit.nn"
 num_layers = 1
-bias = false
-min_diag = 1e-4
+bias = true
 norm = "l2"
 dropout = 0.0
 
@@ -26,7 +24,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "embedded-spd-factorized-lbfgs"
+filename = "scale-equivariant-embedded-factorized"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
@@ -40,13 +38,19 @@ patience = 30
 mode = "min"
 check_finite = true
 
-[[TRAINING.optimizer.stages]]
-optimizer = {name = "AdamW", lr = 1e-3, weight_decay = 1e-2}
-scheduler = {name = "ReduceLROnPlateau", mode = "min", factor = 0.5, patience = 10, cooldown = 5, threshold = 1e-4, min_lr = 1e-6}
-trigger = {at_epoch = 200}
+[TRAINING.optimizer.default_optimizer]
+name = "AdamW"
+lr = 1e-3
+weight_decay = 1e-2
 
-[[TRAINING.optimizer.stages]]
-optimizer = {name = "LBFGS", lr = 1.0, max_iter = 20, line_search_fn = "strong_wolfe"}
+[TRAINING.optimizer.default_scheduler]
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = 10
+cooldown = 5
+threshold = 1e-4
+min_lr = 1e-6
 
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"
@@ -80,4 +84,3 @@ n_trials = 40
 num_layers = {choices = [1, 6, 9]}
 dropout = {low = 0.0, high = 0.3, step = 0.05}
 hidden_size = {choices = [256, 512, 768]}
-min_diag = {choices = [1e-5, 1e-4, 1e-3]}

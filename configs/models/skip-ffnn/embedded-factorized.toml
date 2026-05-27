@@ -7,7 +7,6 @@ precision = "float64"
 # DLKit scale-equivariant embedded factorized residual FFNN.
 name = "ScaleEquivariantEmbeddedFactorizedFFNN"
 module_path = "dlkit.nn"
-hidden_size = 500
 num_layers = 1
 bias = true
 norm = "l2"

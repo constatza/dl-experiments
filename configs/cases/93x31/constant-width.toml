@@ -1,4 +1,4 @@
-# Constant-width factorized FFNN registry for Gaussian residual sweeps — 93x31 matrix.
+# Scale-equivariant constant-width FFNN registry for Gaussian residual sweeps — 93x31 matrix.
 
 [mlflow]
 tracking_uri = "http://localhost:5000"
@@ -37,29 +37,9 @@ type = "ic0"
 # ───────────────────────────────────────────────────────────────────────────
 
 [[datasets]]
-id   = "res-gaussian-1-93x31"
-path = "../../datasets/93x31/res-gaussian-1.toml"
-display_name = "Residual-Error 1 Gaussian 93x31"
-
-[[datasets]]
-id   = "res-gaussian-2-93x31"
-path = "../../datasets/93x31/res-gaussian-2.toml"
-display_name = "Residual-Error 2 Gaussian 93x31"
-
-[[datasets]]
-id   = "res-gaussian-5-93x31"
-path = "../../datasets/93x31/res-gaussian-5.toml"
-display_name = "Residual-Error 5 Gaussian 93x31"
-
-[[datasets]]
-id   = "res-gaussian-10-93x31"
-path = "../../datasets/93x31/res-gaussian-10.toml"
-display_name = "Residual-Error 10 Gaussian 93x31"
-
-[[datasets]]
-id   = "res-gaussian-100-93x31"
-path = "../../datasets/93x31/res-gaussian-100.toml"
-display_name = "Residual-Error 100 Gaussian 93x31"
+id   = "res-gaussian-50-93x31"
+path = "../../datasets/93x31/res-gaussian-50.toml"
+display_name = "Residual-Error 50 Gaussian 93x31"
 
 [[datasets]]
 id   = "solutions"
@@ -76,9 +56,9 @@ display_name = "Gaussian RHS"
 # ───────────────────────
 
 [[models]]
-id   = "constant-width-factorized"
-path = "../../models/skip-ffnn/constant-width-factorized.toml"
-display_name = "Constant-Width Factorized"
+id   = "scale-equivariant-constant-width-3000"
+path = "../../models/scale-equivariant/constant-width-3000.toml"
+display_name = "Scale-Equivariant Constant-Width 3000"
 
 # ───────────────────────────────────────────────────────────────────────────
 # Comparisons  (data binding — methodology from [comparison_defaults] above)
@@ -95,31 +75,7 @@ display_name   = "Gaussian RHS"
 # ───────────────────────
 
 [[experiments]]
-id      = "res-gaussian-1-93x31-constant-width-factorized"
-dataset = "res-gaussian-1-93x31"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 1 Gaussian 93x31 | Constant-Width Factorized"
-
-[[experiments]]
-id      = "res-gaussian-2-93x31-constant-width-factorized"
-dataset = "res-gaussian-2-93x31"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 2 Gaussian 93x31 | Constant-Width Factorized"
-
-[[experiments]]
-id      = "res-gaussian-5-93x31-constant-width-factorized"
-dataset = "res-gaussian-5-93x31"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 5 Gaussian 93x31 | Constant-Width Factorized"
-
-[[experiments]]
-id      = "res-gaussian-10-93x31-constant-width-factorized"
-dataset = "res-gaussian-10-93x31"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 10 Gaussian 93x31 | Constant-Width Factorized"
-
-[[experiments]]
-id      = "res-gaussian-100-93x31-constant-width-factorized"
-dataset = "res-gaussian-100-93x31"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 100 Gaussian 93x31 | Constant-Width Factorized"
+id      = "res-gaussian-50-93x31-scale-equivariant-constant-width-3000"
+dataset = "res-gaussian-50-93x31"
+model   = "scale-equivariant-constant-width-3000"
+display_name = "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Constant-Width 3000"

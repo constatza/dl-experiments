@@ -89,16 +89,6 @@ id   = "sparse-rhs"
 path = "../../datasets/45x15/sparse-rhs.toml"
 display_name = "Sparse RHS"
 
-[[datasets]]
-id   = "eig-few-solutions-smallest"
-path = "../../datasets/45x15/eig-few-solutions-smallest.toml"
-display_name = "Eig Few Solutions Smallest"
-
-[[datasets]]
-id   = "eig-few-rhs-smallest"
-path = "../../datasets/45x15/eig-few-rhs-smallest.toml"
-display_name = "Eig Few RHS Smallest"
-
 # ───────────────────────
 # Models
 # ───────────────────────
@@ -144,18 +134,6 @@ id             = "sparse-rhs"
 matrix_dataset = "solutions"
 rhs_dataset    = "sparse-rhs"
 display_name   = "Sparse RHS"
-
-[[comparisons]]
-id             = "eig-few-solutions-smallest"
-matrix_dataset = "solutions"
-rhs_dataset    = "eig-few-solutions-smallest"
-display_name   = "Eig Few Solutions Smallest"
-
-[[comparisons]]
-id             = "eig-few-rhs-smallest"
-matrix_dataset = "solutions"
-rhs_dataset    = "eig-few-rhs-smallest"
-display_name   = "Eig Few RHS Smallest"
 
 # ───────────────────────
 # Experiments

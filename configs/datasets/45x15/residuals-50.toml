@@ -1,0 +1,28 @@
+id = "residuals-50"
+
+# Residual-error trace dataset built from the spectral solution archive.
+# Loads archived true solutions x_true, computes b = A @ x_true, then records:
+#   residual = r_k
+#   dx = x_true - x_k
+# at each CG iteration. The persisted training pairs therefore satisfy r_k = A @ dx_k.
+#
+# Usage: uv run python src/neuralls/cli/process_data.py configs/datasets/45x15/residuals-50.toml
+# Output: residuals-50-{normalization}/
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+solutions_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "residuals"
+samples = 20000
+cg_iters = 50
+solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"

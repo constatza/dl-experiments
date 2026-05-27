@@ -1,4 +1,4 @@
-# Residual FFNN registry for archive-backed and Gaussian residual sweeps.
+# Scale-equivariant FFNN registry for the 93x31 Gaussian residual sweep.
 
 [mlflow]
 tracking_uri = "http://localhost:5000"
@@ -35,39 +35,9 @@ type = "ic0"
 # ───────────────────────
 
 [[datasets]]
-id   = "residuals-100"
-path = "../../datasets/45x15/residuals-100.toml"
-display_name = "Residual-Error 100"
-
-[[datasets]]
-id   = "res-gaussian-100"
-path = "../../datasets/45x15/res-gaussian-100.toml"
-display_name = "Residual-Error 100 Gaussian"
-
-[[datasets]]
-id   = "res-gaussian-0"
-path = "../../datasets/45x15/res-gaussian-0.toml"
-display_name = "Residual-Error 0 Gaussian"
-
-[[datasets]]
-id   = "res-gaussian-10"
-path = "../../datasets/45x15/res-gaussian-10.toml"
-display_name = "Residual-Error 10 Gaussian"
-
-[[datasets]]
-id   = "res-gaussian-20"
-path = "../../datasets/45x15/res-gaussian-20.toml"
-display_name = "Residual-Error 20 Gaussian"
-
-[[datasets]]
-id   = "res-gaussian-50"
-path = "../../datasets/45x15/res-gaussian-50.toml"
-display_name = "Residual-Error 50 Gaussian"
-
-[[datasets]]
-id   = "res-gaussian-100-93x31"
-path = "../../datasets/93x31/res-gaussian-100.toml"
-display_name = "Residual-Error 100 Gaussian 93x31"
+id   = "res-gaussian-50-93x31"
+path = "../../datasets/93x31/res-gaussian-50.toml"
+display_name = "Residual-Error 50 Gaussian 93x31"
 
 [[datasets]]
 id   = "solutions"
@@ -89,39 +59,29 @@ id   = "sparse-rhs"
 path = "../../datasets/45x15/sparse-rhs.toml"
 display_name = "Sparse RHS"
 
-[[datasets]]
-id   = "eig-few-solutions-smallest"
-path = "../../datasets/45x15/eig-few-solutions-smallest.toml"
-display_name = "Eig Few Solutions Smallest"
-
-[[datasets]]
-id   = "eig-few-rhs-smallest"
-path = "../../datasets/45x15/eig-few-rhs-smallest.toml"
-display_name = "Eig Few RHS Smallest"
-
 # ───────────────────────
 # Models
 # ───────────────────────
 
 [[models]]
-id   = "constant-width-factorized"
-path = "../../models/skip-ffnn/constant-width-factorized.toml"
-display_name = "Constant-Width Factorized"
+id   = "scale-equivariant-constant-width-3000"
+path = "../../models/scale-equivariant/constant-width-3000.toml"
+display_name = "Scale-Equivariant Constant-Width 3000"
 
 [[models]]
 id   = "embedded-factorized"
-path = "../../models/skip-ffnn/embedded-factorized.toml"
-display_name = "Embedded Factorized"
+path = "../../models/scale-equivariant/embedded-factorized.toml"
+display_name = "Scale-Equivariant Embedded Factorized"
 
 [[models]]
 id   = "embedded-spd"
-path = "../../models/skip-ffnn/embedded-spd.toml"
-display_name = "Embedded SPD"
+path = "../../models/scale-equivariant/embedded-spd.toml"
+display_name = "Scale-Equivariant Embedded SPD"
 
 [[models]]
 id   = "embedded-spd-factorized"
-path = "../../models/skip-ffnn/embedded-spd-factorized.toml"
-display_name = "Embedded SPD-Factorized"
+path = "../../models/scale-equivariant/embedded-spd-factorized.toml"
+display_name = "Scale-Equivariant Embedded SPD-Factorized"
 
 # ───────────────────────────────────────────────────────────────────────────
 # Comparisons  (data binding — methodology from [comparison_defaults] above)
@@ -133,78 +93,30 @@ matrix_dataset = "solutions"
 rhs_dataset    = "gaussian-rhs"
 display_name   = "Gaussian RHS"
 
-[[comparisons]]
-id             = "scaled-solutions"
-matrix_dataset = "solutions"
-rhs_dataset    = "scaled-solutions"
-display_name   = "Scaled Solutions"
-
-[[comparisons]]
-id             = "sparse-rhs"
-matrix_dataset = "solutions"
-rhs_dataset    = "sparse-rhs"
-display_name   = "Sparse RHS"
-
-[[comparisons]]
-id             = "eig-few-solutions-smallest"
-matrix_dataset = "solutions"
-rhs_dataset    = "eig-few-solutions-smallest"
-display_name   = "Eig Few Solutions Smallest"
-
-[[comparisons]]
-id             = "eig-few-rhs-smallest"
-matrix_dataset = "solutions"
-rhs_dataset    = "eig-few-rhs-smallest"
-display_name   = "Eig Few RHS Smallest"
-
 # ───────────────────────
 # Experiments
 # ───────────────────────
 
 [[experiments]]
-id      = "residuals-100-constant-width-factorized"
-dataset = "residuals-100"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 100 | Constant-Width Factorized"
+id      = "res-gaussian-50-93x31-scale-equivariant-constant-width-3000"
+dataset = "res-gaussian-50-93x31"
+model   = "scale-equivariant-constant-width-3000"
+display_name = "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Constant-Width 3000"
 
 [[experiments]]
-id      = "res-gaussian-100-constant-width-factorized"
-dataset = "res-gaussian-100"
-model   = "constant-width-factorized"
-display_name = "Residual-Error 100 Gaussian | Constant-Width Factorized"
-
-[[experiments]]
-id      = "residuals-100-embedded-factorized"
-dataset = "residuals-100"
+id      = "res-gaussian-50-93x31-embedded-factorized"
+dataset = "res-gaussian-50-93x31"
 model   = "embedded-factorized"
-display_name = "Residual-Error 100 | Embedded Factorized"
+display_name = "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Embedded Factorized"
 
 [[experiments]]
-id      = "res-gaussian-100-embedded-factorized"
-dataset = "res-gaussian-100"
-model   = "embedded-factorized"
-display_name = "Residual-Error 100 Gaussian | Embedded Factorized"
-
-[[experiments]]
-id      = "residuals-100-embedded-spd"
-dataset = "residuals-100"
+id      = "res-gaussian-50-93x31-embedded-spd"
+dataset = "res-gaussian-50-93x31"
 model   = "embedded-spd"
-display_name = "Residual-Error 100 | Embedded SPD"
+display_name = "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Embedded SPD"
 
 [[experiments]]
-id      = "res-gaussian-100-embedded-spd"
-dataset = "res-gaussian-100"
-model   = "embedded-spd"
-display_name = "Residual-Error 100 Gaussian | Embedded SPD"
-
-[[experiments]]
-id      = "residuals-100-embedded-spd-factorized"
-dataset = "residuals-100"
+id      = "res-gaussian-50-93x31-embedded-spd-factorized"
+dataset = "res-gaussian-50-93x31"
 model   = "embedded-spd-factorized"
-display_name = "Residual-Error 100 | Embedded SPD-Factorized"
-
-[[experiments]]
-id      = "res-gaussian-100-embedded-spd-factorized"
-dataset = "res-gaussian-100"
-model   = "embedded-spd-factorized"
-display_name = "Residual-Error 100 Gaussian | Embedded SPD-Factorized"
+display_name = "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Embedded SPD-Factorized"

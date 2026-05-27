@@ -7,7 +7,6 @@ precision = "float64"
 # DLKit scale-equivariant embedded SPD-factorized residual FFNN.
 name = "ScaleEquivariantEmbeddedSPDFactorizedFFNN"
 module_path = "dlkit.nn"
-hidden_size = 500
 num_layers = 1
 bias = false
 min_diag = 1e-4
