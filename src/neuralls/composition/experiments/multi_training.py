@@ -23,7 +23,6 @@ from neuralls.platform.config.registry import (
     resolve_model_config_path,
 )
 from neuralls.platform.config.resolution import (
-    build_mlflow_environment,
     derive_output_root_from_tracking_uri,
     is_sqlite_tracking_uri,
 )
@@ -32,6 +31,7 @@ from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.plots import plot_metric_comparison
 from neuralls.platform.reporting.predictions import read_mlflow_sidecar
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
+from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
 from neuralls.platform.tracking.model_registry import (
     register_logged_model,
@@ -434,16 +434,11 @@ def train_batch(
     else:
         base_output = settings.output_dir
 
-    if tracking_uri is None:
-        training_mlflow_env = build_mlflow_environment(
-            tracking_uri=f"sqlite:///{(base_output / 'mlruns' / 'mlflow.db').as_posix()}",
-            artifacts_destination=str((base_output / "mlartifacts").resolve()),
-        )
-    else:
-        training_mlflow_env = build_mlflow_environment(
-            tracking_uri=tracking_uri,
-            artifacts_destination=cfg.mlflow.artifacts_destination,
-        )
+    training_mlflow_env = build_workflow_environment(
+        tracking_uri=tracking_uri,
+        artifact_location=cfg.mlflow.artifacts_destination,
+        default_output_root=base_output,
+    ).env
     mlflow_experiment_name = cfg.names.training
 
     # ------------------------------------------------------------------

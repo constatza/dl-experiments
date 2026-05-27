@@ -26,6 +26,7 @@ from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 from dlkit.io import save_sparse_pack
 
 from neuralls.platform.storage.training_artifacts import TrainingArrays
+from neuralls.platform.tracking.mlflow import resolve_runtime_tracking_config
 from neuralls.platform.tracking.mlflow_client import parent_run_context
 from neuralls.composition.experiments.training import (
     _configure_dataloader_runtime,
@@ -33,7 +34,6 @@ from neuralls.composition.experiments.training import (
     _configure_output_paths,
     _create_feature_configs,
     _extract_evaluation_arrays,
-    _resolve_mlflow_logging_config,
     _resolve_dataset,
     _validate_dataset_section,
     GRAPH_DATASET_NAME,
@@ -328,7 +328,7 @@ def test_resolve_mlflow_logging_config_reads_runtime_env(
     monkeypatch.setenv("MLFLOW_TRACKING_URI", expected_tracking_uri)
     monkeypatch.setenv("MLFLOW_ARTIFACT_URI", artifact_uri)
 
-    tracking_uri, artifacts_destination = _resolve_mlflow_logging_config()
+    tracking_uri, artifacts_destination = resolve_runtime_tracking_config()
     assert tracking_uri == expected_tracking_uri
     assert artifacts_destination == artifact_uri
 
@@ -340,6 +340,6 @@ def test_resolve_mlflow_logging_config_handles_missing_env(
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
 
-    tracking_uri, artifacts_destination = _resolve_mlflow_logging_config()
+    tracking_uri, artifacts_destination = resolve_runtime_tracking_config()
     assert tracking_uri is None
     assert artifacts_destination == ""

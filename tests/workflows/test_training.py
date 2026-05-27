@@ -429,7 +429,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             return_value=checkpoint_path,
         ),
         patch(
-            "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
+            "neuralls.composition.experiments.training.resolve_runtime_tracking_config",
             return_value=(
                 build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
                 str((tmp_path / "mlartifacts").resolve()),
@@ -536,7 +536,7 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
             return_value=checkpoint_path,
         ),
         patch(
-            "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
+            "neuralls.composition.experiments.training.resolve_runtime_tracking_config",
             return_value=(
                 build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
                 str((tmp_path / "mlartifacts").resolve()),
@@ -649,7 +649,7 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
             return_value=checkpoint_path,
         ),
         patch(
-            "neuralls.composition.experiments.training._resolve_mlflow_logging_config",
+            "neuralls.composition.experiments.training.resolve_runtime_tracking_config",
             return_value=(
                 build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
                 str((tmp_path / "mlartifacts").resolve()),

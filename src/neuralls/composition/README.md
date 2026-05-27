@@ -41,6 +41,17 @@ Training uses `names.training` and comparison uses `names.comparison`, with the
 defaults owned by the case-config Pydantic models rather than composition-layer
 constants.
 
+Comparison parent-run summary metrics sanitize each preconditioner label into an
+MLflow-safe metric-key segment before appending it under namespaced keys such as
+`iterations/<preconditioner>`. Composition does not implement that MLflow policy
+itself: it delegates metric-key sanitization, comparison-run metric logging, and
+nested child-run writes to `platform.tracking`, while only assembling child tag
+payloads and deciding when the logging happens.
+
+Comparison input preflight also stays out of composition. Workflow code invokes
+platform-owned validation for matrix/RHS inputs rather than inspecting dataset
+manifests or sparse-pack layout directly.
+
 Comparison model resolution treats one resolved MLflow `run_id` as the hard
 boundary for checkpoint discovery. When downloaded run artifacts contain
 multiple `.ckpt` files, composition canonicalizes byte-identical duplicate

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from hashlib import sha256
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -13,6 +12,8 @@ from mlflow.tracking import MlflowClient
 from mlflow.entities import Run
 
 from neuralls.platform.config.models.dataset_identity import normalize_registry_id
+from neuralls.platform.storage.filesystem import sanitize_identifier
+from neuralls.platform.tracking.mlflow import quote_filter_value
 
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
@@ -22,8 +23,6 @@ from neuralls.platform.config.models.preconditioner import (
 )
 
 _DATASET_ALIAS_PLACEHOLDER = "@dataset"
-_SAFE_DIRNAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
-_MULTIPLE_UNDERSCORES_PATTERN = re.compile(r"_+")
 
 
 @dataclass(frozen=True)
@@ -61,12 +60,7 @@ class LoggedModelSearchResult:
 
 def _sanitize_download_dirname(value: str) -> str:
     """Convert one arbitrary label into a filesystem-safe directory name."""
-    sanitized = _SAFE_DIRNAME_PATTERN.sub("_", value.strip())
-    collapsed = _MULTIPLE_UNDERSCORES_PATTERN.sub("_", sanitized)
-    stripped = collapsed.strip("._-")
-    if stripped:
-        return stripped
-    return "neural-model"
+    return sanitize_identifier(value, default="neural-model")
 
 
 def build_neural_download_dirname(spec: NeuralPreconditionerConfig) -> str:
@@ -118,11 +112,6 @@ def get_model_version(*, model_name: str, version: int, tracking_uri: str) -> An
     return client.get_model_version(model_name, str(version))
 
 
-def _quote_mlflow_value(value: str) -> str:
-    """Escape one string value for MLflow search filters."""
-    return value.replace("\\", "\\\\").replace("'", "\\'")
-
-
 def _resolve_experiment_ids(
     *,
     client: MlflowClient,
@@ -143,9 +132,9 @@ def _build_run_filter(*, run_name: str | None, tags: dict[str, str] | None) -> s
     """Build an MLflow run filter string for logged-model lookup."""
     clauses: list[str] = []
     if run_name is not None:
-        clauses.append(f"attributes.run_name = '{_quote_mlflow_value(run_name)}'")
+        clauses.append(f"attributes.run_name = '{quote_filter_value(run_name)}'")
     for key, value in sorted((tags or {}).items()):
-        clauses.append(f"tags.`{key}` = '{_quote_mlflow_value(value)}'")
+        clauses.append(f"tags.`{key}` = '{quote_filter_value(value)}'")
     return " and ".join(clauses)
 
 

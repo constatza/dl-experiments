@@ -6,7 +6,7 @@ The platform package isolates external integrations and side-effecting helpers.
 
 - `config/`: settings, config-validation context, workflow config models, registry resolution, TOML loaders, and DLKit workflow bridging
 - `storage/`: filesystem, workspaces, dataset I/O, and storage validation helpers
-- `tracking/`: MLflow run and client helpers
+- `tracking/`: MLflow run helpers, naming/query policy, workflow topology resolution, and client adapters
 - `reporting/`: plotting, artifact staging, and inference output adapters
 - `dlkit/`: DLKit-backed adapters for solver preconditioners and batch inference
 - `caching.py`: directory hashing for workflow cache invalidation
@@ -38,3 +38,12 @@ Tracking helpers treat DLKit as the authoritative checkpoint artifact logger.
 Workspace uploads therefore exclude the local `checkpoints/` tree and only
 forward staged diagnostics/config artifacts, avoiding duplicate MLflow artifact
 layouts such as `checkpoints/checkpoints/...`.
+
+MLflow-specific policy also belongs here: safe metric-key sanitization, search
+filter escaping, workflow tracking-environment resolution, and comparison-run
+metric logging all stay under `platform.tracking` so orchestration code does
+not reimplement third-party rules.
+
+Storage validation owns concrete dataset-layout checks. Comparison matrix/RHS
+preflight belongs under `platform.storage` because it depends on manifest and
+sparse-pack layout knowledge rather than workflow sequencing.

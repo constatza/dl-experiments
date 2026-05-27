@@ -12,12 +12,18 @@ from neuralls.platform.config.resolution import MlflowPaths, resolve_mlflow_path
 from neuralls.platform.tracking.mlflow import (
     DEFAULT_ARTIFACT_SUBDIRS,
     MlflowRunConfig,
+    build_runtime_environment,
+    build_workflow_environment,
     collect_artifacts,
     ensure_experiment,
     finalize_run,
     log_artifacts,
     log_metrics,
     open_run,
+    quote_filter_value,
+    resolve_runtime_tracking_config,
+    runtime_paths_from_env,
+    sanitize_metric_key_segment,
     start_run_if_needed,
 )
 from neuralls.platform.tracking.mlflow_client import log_artifacts_to_mlflow
@@ -113,6 +119,63 @@ def test_collect_artifacts_filters_missing(tmp_path: Path) -> None:
     names = {path.name for path in collected}
     assert {"figures", "checkpoints"} <= names
     assert "reports" not in names
+
+
+def test_sanitize_metric_key_segment_replaces_invalid_characters() -> None:
+    assert sanitize_metric_key_segment("Residual | Error / Foo") == "Residual_Error_Foo"
+    assert sanitize_metric_key_segment("///", default="fallback") == "fallback"
+
+
+def test_quote_filter_value_escapes_backslashes_and_quotes() -> None:
+    assert quote_filter_value(r"foo\bar'baz") == r"foo\\bar\'baz"
+
+
+def test_build_workflow_environment_uses_default_output_root(tmp_path: Path) -> None:
+    runtime = build_workflow_environment(
+        tracking_uri=None,
+        artifact_location=None,
+        default_output_root=tmp_path,
+    )
+
+    assert runtime.tracking_uri.endswith("/mlruns/mlflow.db")
+    assert runtime.artifact_uri == str((tmp_path / "mlartifacts").resolve())
+
+
+def test_runtime_paths_from_env_reads_tracking_values() -> None:
+    paths = runtime_paths_from_env(
+        {
+            "MLFLOW_TRACKING_URI": "sqlite:////tmp/mlruns.db",
+            "MLFLOW_ARTIFACT_URI": "/tmp/mlartifacts",
+        }
+    )
+
+    assert paths == MlflowPaths(
+        tracking_uri="sqlite:////tmp/mlruns.db",
+        artifact_uri="/tmp/mlartifacts",
+    )
+
+
+def test_resolve_runtime_tracking_config_reads_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:////tmp/runtime.db")
+    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", "/tmp/runtime-artifacts")
+
+    assert resolve_runtime_tracking_config() == (
+        "sqlite:////tmp/runtime.db",
+        "/tmp/runtime-artifacts",
+    )
+
+
+def test_build_runtime_environment_prefers_existing_tracking_uri(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:////tmp/existing.db")
+
+    runtime = build_runtime_environment(tmp_path / "unused", default_output_root=tmp_path)
+
+    assert runtime.tracking_uri == "sqlite:////tmp/existing.db"
 
 
 def test_start_run_and_logging(dummy_mlflow: DummyMlflow, tmp_path: Path) -> None:

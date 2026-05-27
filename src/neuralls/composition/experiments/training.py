@@ -4,7 +4,6 @@ from __future__ import annotations
 
 
 import json
-import os
 import shutil
 import tempfile
 from collections.abc import Mapping
@@ -35,15 +34,15 @@ import numpy as np
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.config.models.experiments import ExperimentEntry, ExperimentNamesConfig
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
-from neuralls.platform.config.resolution import (
-    build_mlflow_environment,
-    build_sqlite_tracking_uri,
-    MlflowPaths,
-)
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
-from neuralls.platform.tracking.mlflow import MlflowRunConfig
+from neuralls.platform.tracking.mlflow import (
+    MlflowRunConfig,
+    build_runtime_environment,
+    resolve_runtime_tracking_config,
+    runtime_paths_from_env,
+)
 from neuralls.platform.storage.training_artifacts import (
     TrainingArrays,
     coerce_jsonable,
@@ -351,22 +350,9 @@ def _configure_training_pipeline(
     return settings, workspace
 
 
-def _resolve_mlflow_logging_config() -> tuple[str | None, str]:
-    """Resolve tracking URI and artifact destination from runtime env."""
-    return os.environ.get("MLFLOW_TRACKING_URI"), os.environ.get("MLFLOW_ARTIFACT_URI", "")
-
-
 def _unwrap_execution_result(result: Any) -> Any:
     """Normalize DLKit execute() results to the underlying training result."""
     return getattr(result, "training_result", result)
-
-
-def _build_runtime_mlflow_paths(runtime_mlflow_env: Mapping[str, str]) -> MlflowPaths:
-    """Build resolved MLflow paths from the active runtime environment."""
-    return MlflowPaths(
-        tracking_uri=runtime_mlflow_env["MLFLOW_TRACKING_URI"],
-        artifact_uri=runtime_mlflow_env.get("MLFLOW_ARTIFACT_URI", ""),
-    )
 
 
 def _build_training_run_config(
@@ -383,7 +369,7 @@ def _build_training_run_config(
     """Build the execute()-time MLflow run config for training."""
     _ = dataset_display_name
     experiment_name = _resolve_training_experiment_name(mlflow_experiment_name)
-    paths = _build_runtime_mlflow_paths(runtime_mlflow_env)
+    paths = runtime_paths_from_env(runtime_mlflow_env)
     if experiment_id and dataset_registry_id and model_registry_id:
         entry = ExperimentEntry(
             id=experiment_id,
@@ -660,33 +646,6 @@ def _extract_evaluation_arrays(
     return y_pred, y_true
 
 
-def _resolve_runtime_mlflow_env(
-    output_root: Path | str | None,
-    settings: NeurallsSettings,
-) -> dict[str, str]:
-    """Return the MLflow env vars to activate for this training run.
-
-    If the caller already set ``MLFLOW_TRACKING_URI`` in the environment (e.g.
-    via ``scoped_mlflow_environment`` in ``train_batch``), honour it verbatim.
-    Otherwise fall back to a local SQLite database under ``output_root``.
-
-    Args:
-        output_root: Permanent output root; used only for the sqlite fall-back.
-
-    Returns:
-        Dict suitable for ``scoped_mlflow_environment``.
-    """
-    existing_uri = os.environ.get("MLFLOW_TRACKING_URI")
-    if existing_uri:
-        return build_mlflow_environment(tracking_uri=existing_uri)
-
-    permanent_root = Path(output_root).resolve() if output_root else settings.output_dir
-    return build_mlflow_environment(
-        tracking_uri=build_sqlite_tracking_uri(permanent_root / "mlruns" / "mlflow.db"),
-        artifacts_destination=str((permanent_root / "mlartifacts").resolve()),
-    )
-
-
 def _log_training_context(
     *,
     tracking_uri: str,
@@ -778,7 +737,10 @@ def train_model(
     resolved_case_config_path = Path(case_config_path) if case_config_path else None
     settings = require_settings(settings, case_config_path=resolved_case_config_path)
     permanent_root = Path(output_root).resolve() if output_root else settings.output_dir
-    runtime_mlflow_env = _resolve_runtime_mlflow_env(output_root, settings)
+    runtime_mlflow_env = build_runtime_environment(
+        output_root,
+        default_output_root=settings.output_dir,
+    ).env
     if data_config_path is None:
         raise ValueError("data_config_path is required for training.")
 
@@ -851,7 +813,7 @@ def train_model(
                 training_result = _unwrap_execution_result(execution_result)
 
             # Step 6: Resolve MLflow run metadata and retrieve the checkpoint
-            tracking_uri, artifacts_destination = _resolve_mlflow_logging_config()
+            tracking_uri, artifacts_destination = resolve_runtime_tracking_config()
             mlflow_coords = _resolve_mlflow_run_ids(
                 training_result=training_result,
                 fallback_tracking_uri=tracking_uri,

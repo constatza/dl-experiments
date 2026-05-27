@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,7 @@ from mlflow import ActiveRun
 
 from neuralls.platform.config.resolution import (
     MlflowPaths,
+    build_mlflow_environment,
     build_sqlite_tracking_uri,
     resolve_mlflow_paths,
     to_mlflow_artifact_location,
@@ -39,6 +41,15 @@ class MlflowRunState:
     started: bool
 
 
+@dataclass(frozen=True)
+class MlflowRuntimeEnvironment:
+    """Resolved MLflow environment values for one workflow."""
+
+    env: dict[str, str]
+    tracking_uri: str
+    artifact_uri: str | None
+
+
 DEFAULT_ARTIFACT_SUBDIRS: tuple[str, ...] = (
     "checkpoints",
     "figures",
@@ -46,6 +57,7 @@ DEFAULT_ARTIFACT_SUBDIRS: tuple[str, ...] = (
     "reports",
     "metrics",
 )
+_MLFLOW_METRIC_SEGMENT_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 def build_run_config(
@@ -101,6 +113,83 @@ def make_run_tags(
     if session_name:
         tags["session"] = session_name
     return tags
+
+
+def sanitize_metric_key_segment(name: str, default: str = "unnamed") -> str:
+    """Return an MLflow-safe metric key segment."""
+    sanitized = _MLFLOW_METRIC_SEGMENT_PATTERN.sub("_", name).strip("._-")
+    return sanitized or default
+
+
+def quote_filter_value(value: str) -> str:
+    """Escape one string value for MLflow search filters."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def runtime_paths_from_env(runtime_mlflow_env: Mapping[str, str]) -> MlflowPaths:
+    """Build resolved MLflow paths from an active MLflow environment."""
+    return MlflowPaths(
+        tracking_uri=runtime_mlflow_env["MLFLOW_TRACKING_URI"],
+        artifact_uri=runtime_mlflow_env.get("MLFLOW_ARTIFACT_URI", ""),
+    )
+
+
+def resolve_runtime_tracking_config() -> tuple[str | None, str]:
+    """Resolve tracking URI and artifact destination from runtime env."""
+    return os.environ.get("MLFLOW_TRACKING_URI"), os.environ.get("MLFLOW_ARTIFACT_URI", "")
+
+
+def build_runtime_environment(
+    output_root: Path | str | None,
+    *,
+    default_output_root: Path,
+) -> MlflowRuntimeEnvironment:
+    """Resolve the MLflow environment for a runtime workflow execution."""
+    existing_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    if existing_uri:
+        env = build_mlflow_environment(tracking_uri=existing_uri)
+        return MlflowRuntimeEnvironment(
+            env=env,
+            tracking_uri=env["MLFLOW_TRACKING_URI"],
+            artifact_uri=env.get("MLFLOW_ARTIFACT_URI"),
+        )
+
+    permanent_root = Path(output_root).resolve() if output_root else default_output_root
+    env = build_mlflow_environment(
+        tracking_uri=build_sqlite_tracking_uri(permanent_root / "mlruns" / "mlflow.db"),
+        artifacts_destination=str((permanent_root / "mlartifacts").resolve()),
+    )
+    return MlflowRuntimeEnvironment(
+        env=env,
+        tracking_uri=env["MLFLOW_TRACKING_URI"],
+        artifact_uri=env.get("MLFLOW_ARTIFACT_URI"),
+    )
+
+
+def build_workflow_environment(
+    *,
+    tracking_uri: str | None,
+    artifact_location: str | None,
+    default_output_root: Path,
+    config_path: Path | None = None,
+) -> MlflowRuntimeEnvironment:
+    """Build the MLflow environment for a case-driven workflow."""
+    if tracking_uri is None:
+        env = build_mlflow_environment(
+            tracking_uri=build_sqlite_tracking_uri(default_output_root / "mlruns" / "mlflow.db"),
+            artifacts_destination=str((default_output_root / "mlartifacts").resolve()),
+        )
+    else:
+        env = build_mlflow_environment(
+            tracking_uri=tracking_uri,
+            artifacts_destination=artifact_location,
+            config_path=config_path,
+        )
+    return MlflowRuntimeEnvironment(
+        env=env,
+        tracking_uri=env["MLFLOW_TRACKING_URI"],
+        artifact_uri=env.get("MLFLOW_ARTIFACT_URI"),
+    )
 
 
 def ensure_experiment(name: str, paths: MlflowPaths) -> str:

@@ -12,8 +12,6 @@ import tomli_w
 
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.composition.experiments.comparison_batch import (
-    _log_child_residual_runs,
-    _log_comparison_metrics,
     _resolve_neural_preconditioners,
     _run_comparison_from_config,
     _validate_neural_preconditioner,
@@ -43,6 +41,10 @@ from neuralls.platform.reporting.artifacts import (
     extract_array_artifacts,
     serialize_comparison_payload,
 )
+from neuralls.platform.tracking.comparison_tracking import (
+    log_comparison_result_metrics,
+)
+from neuralls.platform.tracking.mlflow import sanitize_metric_key_segment
 
 
 def test_resolve_comparison_config_importable_from_composition() -> None:
@@ -57,6 +59,7 @@ _COMPARE_PRECONDITIONERS = (
     "neuralls.composition.experiments.comparison_batch.compare_preconditioners"
 )
 _MLFLOW_MODULE = "neuralls.composition.experiments.comparison_batch.mlflow"
+_COMPARISON_TRACKING_MLFLOW_MODULE = "neuralls.platform.tracking.comparison_tracking.mlflow"
 _SETUP_TRACKING = "neuralls.composition.experiments.comparison_batch.setup_comparison_tracking"
 _LOG_COMPARISON_ARTIFACTS = (
     "neuralls.composition.experiments.comparison_batch.log_comparison_artifacts_to_mlflow"
@@ -354,6 +357,7 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
     with (
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING) as mock_setup_tracking,
         patch(_LOG_COMPARISON_ARTIFACTS),
     ):
@@ -363,6 +367,61 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
     assert outcomes[0].success is True
     mock_setup_tracking.assert_called_once()
     assert mock_setup_tracking.call_args.kwargs["experiment_name"] == "CustomComparison"
+
+
+def test_sanitize_mlflow_metric_segment_replaces_invalid_characters() -> None:
+    assert (
+        sanitize_metric_key_segment(
+            "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Constant-Width 3000"
+        )
+        == "Residual-Error_50_Gaussian_93x31_Scale-Equivariant_Constant-Width_3000"
+    )
+
+
+def test_log_comparison_metrics_uses_mlflow_safe_metric_names(tmp_path: Path) -> None:
+    result = ComparisonResult(
+        results={
+            "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Constant-Width 3000": (
+                CGComparisonResult(
+                    x=np.array([1.0, 2.0]),
+                    converged=True,
+                    iterations=2,
+                    residual=1.0e-8,
+                    residual_abs=1.0e-9,
+                    residual_history_rel=[1.0, 1.0e-8],
+                    residual_history_abs=[1.0, 1.0e-9],
+                    preconditioner="neural",
+                    initial_guess=np.zeros(2),
+                    exact_error=None,
+                    rhs_norm=1.0,
+                    breakdown=False,
+                )
+            )
+        },
+        summary="ok",
+        solver_params=_solver_params(tmp_path),
+        preconditioners=("neural",),
+        condition_numbers={
+            "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Constant-Width 3000": 1.0
+        },
+        recommendations=ComparisonRecommendations(),
+    )
+
+    with patch(_COMPARISON_TRACKING_MLFLOW_MODULE) as mock_mlflow:
+        log_comparison_result_metrics(
+            result,
+            child_run_tags={
+                "Residual-Error 50 Gaussian 93x31 | Scale-Equivariant Constant-Width 3000": {}
+            },
+        )
+
+    logged_names = [call.args[0] for call in mock_mlflow.log_metric.call_args_list[:4]]
+    assert logged_names == [
+        "condition_number/Residual-Error_50_Gaussian_93x31_Scale-Equivariant_Constant-Width_3000",
+        "iterations/Residual-Error_50_Gaussian_93x31_Scale-Equivariant_Constant-Width_3000",
+        "final_residual/Residual-Error_50_Gaussian_93x31_Scale-Equivariant_Constant-Width_3000",
+        "converged/Residual-Error_50_Gaussian_93x31_Scale-Equivariant_Constant-Width_3000",
+    ]
 
 
 def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None:
@@ -411,6 +470,7 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
     with (
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING),
         patch(_LOG_COMPARISON_ARTIFACTS, side_effect=_capture_work_root),
     ):
@@ -451,6 +511,7 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
     with (
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING),
         patch(_LOG_COMPARISON_ARTIFACTS),
         patch(
@@ -493,6 +554,7 @@ def test_run_comparison_fails_if_all_preconditioners_are_skipped(
 
     with (
         patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING),
         patch(
             "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
@@ -567,6 +629,7 @@ model = "valid-model"
     with (
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING),
         patch(_LOG_COMPARISON_ARTIFACTS),
         patch(
@@ -600,6 +663,7 @@ def test_run_comparison_fails_before_tracking_when_matrix_input_is_missing(
 
     with (
         patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING) as mock_setup_tracking,
     ):
         outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
@@ -674,8 +738,8 @@ def test_log_comparison_metrics_logs_scalar_metrics_per_preconditioner(
     """_log_comparison_metrics must emit one metric set per preconditioner."""
     result = _typed_comparison_result(tmp_path / "conv.png")
 
-    with patch(_MLFLOW_MODULE) as mock_mlflow:
-        _log_comparison_metrics(result)
+    with patch(_COMPARISON_TRACKING_MLFLOW_MODULE) as mock_mlflow:
+        log_comparison_result_metrics(result, child_run_tags={"none": {}})
 
     metric_calls = {call.args[0]: call.args[1] for call in mock_mlflow.log_metric.call_args_list}
     assert metric_calls["condition_number/none"] == 1.0
@@ -706,6 +770,7 @@ def test_run_comparison_logs_scalar_metrics_to_mlflow(tmp_path: Path) -> None:
     with (
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING),
         patch(_LOG_COMPARISON_ARTIFACTS),
     ):
@@ -720,7 +785,7 @@ def test_run_comparison_logs_scalar_metrics_to_mlflow(tmp_path: Path) -> None:
     assert "converged/none" in logged_metric_names
 
 
-def test_log_child_residual_runs_logs_scalar_metrics(tmp_path: Path) -> None:
+def test_log_comparison_result_metrics_logs_child_scalar_metrics(tmp_path: Path) -> None:
     """Each child run must log scalar summary metrics for its preconditioner."""
     result = _typed_comparison_result(tmp_path / "conv.png")
     captured_metrics: list[tuple[str, float]] = []
@@ -731,10 +796,10 @@ def test_log_child_residual_runs_logs_scalar_metrics(tmp_path: Path) -> None:
         ctx.__exit__ = MagicMock(return_value=False)
         return ctx
 
-    with patch(_MLFLOW_MODULE) as mock_mlflow:
+    with patch(_COMPARISON_TRACKING_MLFLOW_MODULE) as mock_mlflow:
         mock_mlflow.start_run.side_effect = _fake_start_run
         mock_mlflow.log_metric.side_effect = lambda k, v, **kw: captured_metrics.append((k, v))
-        _log_child_residual_runs(result, "test-id", "parent-run")
+        log_comparison_result_metrics(result, child_run_tags={"none": {}})
 
     metric_map = {k: v for k, v in captured_metrics}
     assert metric_map["condition_number"] == 1.0

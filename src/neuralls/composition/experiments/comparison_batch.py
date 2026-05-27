@@ -21,7 +21,6 @@ from neuralls.platform.config.models.experiments import (
 from neuralls.platform.config.registry import get_experiment_binding
 from neuralls.composition.comparison.config_assembler import resolve_comparison_config
 from neuralls.composition.experiments.assembler import load_validated_case_config
-from neuralls.platform.config.resolution import build_mlflow_environment, build_sqlite_tracking_uri
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
@@ -30,12 +29,19 @@ from neuralls.platform.config.models.preconditioner import (
     RegisteredModelRefConfig,
 )
 from neuralls.platform.config.loaders import load_data_config
-from neuralls.platform.storage.datasets import load_dataset_manifest, resolve_dataset_paths
 from neuralls.platform.reporting.artifacts import (
     coerce_comparison_result_payload,
     write_comparison_artifacts,
 )
-from neuralls.platform.tracking.comparison_tracking import setup_comparison_tracking
+from neuralls.platform.storage.validation import validate_comparison_inputs
+from neuralls.platform.tracking.comparison_tracking import (
+    log_comparison_artifact_uri,
+    log_comparison_result_metrics,
+    log_comparison_run_params,
+    log_skipped_preconditioners,
+    setup_comparison_tracking,
+)
+from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import log_comparison_artifacts_to_mlflow
 from neuralls.composition.comparison.single_run import compare_preconditioners
 from neuralls.composition.experiments.model_resolution import (
@@ -49,13 +55,6 @@ from neuralls.composition.tracking.run_specs import (
     ComparisonRunTags,
 )
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
-from neuralls.shared.constants import (
-    DATASET_MANIFEST_FILENAME,
-    MATRIX_COO_DIRNAME,
-    RHS_ARRAY_FILENAME,
-)
-
-_SUPPORTED_COMPARISON_FILE_SUFFIXES = {"", ".npy", ".txt"}
 
 
 @dataclass(frozen=True)
@@ -66,66 +65,6 @@ class ComparisonTopology:
     artifact_location: str | None
     experiment_name: str
     model_store_tracking_uri: str
-
-
-def _build_missing_input_error(path: Path) -> FileNotFoundError:
-    """Build a user-facing missing-input error for a comparison dataset path."""
-    return FileNotFoundError(f"Comparison input not found: {path}.")
-
-
-def _validate_matrix_input(path: Path) -> None:
-    """Validate one comparison matrix input without fully executing the comparison."""
-    if not path.exists():
-        raise _build_missing_input_error(path)
-    if not path.is_dir():
-        if path.suffix not in _SUPPORTED_COMPARISON_FILE_SUFFIXES:
-            raise ValueError(
-                f"Unsupported comparison matrix input format: {path}. "
-                "Use a dataset directory, .npy file, or text matrix file."
-            )
-        return
-    try:
-        load_dataset_manifest(path)
-    except FileNotFoundError, ValueError:
-        manifest_path = path / DATASET_MANIFEST_FILENAME
-        values_path = path / "values.npy"
-        if not (manifest_path.exists() and values_path.exists()):
-            raise ValueError(
-                f"Comparison matrix dataset directory is not loadable: {path}. "
-                f"Expected a dataset root with {DATASET_MANIFEST_FILENAME} or a sparse-pack "
-                "matrix directory containing manifest.json and values.npy."
-            ) from None
-        return
-    matrix_pack_dir = resolve_dataset_paths(path).matrix_pack_dir
-    if not matrix_pack_dir.exists():
-        raise ValueError(
-            f"Comparison matrix dataset directory is missing {MATRIX_COO_DIRNAME}: {path}"
-        )
-
-
-def _validate_rhs_input(path: Path) -> None:
-    """Validate one comparison RHS input without fully executing the comparison."""
-    if not path.exists():
-        raise _build_missing_input_error(path)
-    if not path.is_dir():
-        if path.suffix not in _SUPPORTED_COMPARISON_FILE_SUFFIXES:
-            raise ValueError(
-                f"Unsupported comparison RHS input format: {path}. "
-                "Use a dataset directory, .npy file, or text vector file."
-            )
-        return
-    load_dataset_manifest(path)
-    rhs_path = resolve_dataset_paths(path).rhs_path
-    if not rhs_path.exists():
-        raise ValueError(
-            f"Comparison RHS dataset directory is missing {RHS_ARRAY_FILENAME}: {path}"
-        )
-
-
-def _preflight_comparison_inputs(cfg: ComparisonConfig) -> None:
-    """Validate comparison matrix/RHS inputs before opening tracking runs."""
-    _validate_matrix_input(Path(cfg.general.data.matrix_path))
-    _validate_rhs_input(Path(cfg.general.data.rhs_path))
 
 
 def _validate_neural_preconditioner(spec: Any) -> None:
@@ -280,85 +219,18 @@ def _resolve_comparison_topology(
 ) -> ComparisonTopology:
     """Resolve comparison MLflow topology from the case config."""
     master_cfg, _ = _load_master_config(experiments_config_path, settings)
-    if master_cfg.mlflow.tracking_uri is None:
-        env = build_mlflow_environment(
-            tracking_uri=build_sqlite_tracking_uri(settings.output_dir / "mlruns" / "mlflow.db"),
-            artifacts_destination=str((settings.output_dir / "mlartifacts").resolve()),
-        )
-    else:
-        env = build_mlflow_environment(
-            tracking_uri=master_cfg.mlflow.tracking_uri,
-            artifacts_destination=master_cfg.mlflow.artifacts_destination,
-            config_path=experiments_config_path,
-        )
-    return ComparisonTopology(
-        tracking_uri=env["MLFLOW_TRACKING_URI"],
-        artifact_location=env.get("MLFLOW_ARTIFACT_URI"),
-        experiment_name=master_cfg.names.comparison,
-        model_store_tracking_uri=env["MLFLOW_TRACKING_URI"],
+    runtime = build_workflow_environment(
+        tracking_uri=master_cfg.mlflow.tracking_uri,
+        artifact_location=master_cfg.mlflow.artifacts_destination,
+        default_output_root=settings.output_dir,
+        config_path=experiments_config_path,
     )
-
-
-def _log_child_residual_runs(
-    result: ComparisonResult,
-    comparison_id: str,
-    parent_run_name: str,
-) -> None:
-    """Open a nested MLflow run per preconditioner and log its residual history.
-
-    Args:
-        result: Completed comparison result containing per-preconditioner histories.
-        comparison_id: Registry id of the parent comparison entry.
-        parent_run_name: Display name of the parent MLflow run.
-    """
-    for name, result_entry in result.results.items():
-        child_tags = build_child_comparison_tags(
-            preconditioner_name=name,
-            comparison_id=comparison_id,
-            parent_run_name=parent_run_name,
-        )
-        with mlflow.start_run(run_name=name, nested=True, tags=child_tags.as_mlflow_tags()):
-            for step, residual in enumerate(result_entry.residual_history_rel):
-                mlflow.log_metric("residual", residual, step=step)
-            mlflow.log_metric("condition_number", result.condition_numbers.get(name, float("nan")))
-            mlflow.log_metric("iterations", result_entry.iterations)
-            mlflow.log_metric("final_residual", result_entry.residual)
-            mlflow.log_metric("converged", int(result_entry.converged))
-
-
-def _log_comparison_metrics(result: ComparisonResult) -> None:
-    """Log per-preconditioner scalar summary metrics to the active MLflow run.
-
-    Args:
-        result: Completed comparison result containing per-preconditioner data.
-    """
-    for name, cg in result.results.items():
-        safe = name.replace(" ", "_")
-        mlflow.log_metric(
-            f"condition_number/{safe}", result.condition_numbers.get(name, float("nan"))
-        )
-        mlflow.log_metric(f"iterations/{safe}", cg.iterations)
-        mlflow.log_metric(f"final_residual/{safe}", cg.residual)
-        mlflow.log_metric(f"converged/{safe}", int(cg.converged))
-    if result.recommendations.overall_best is not None:
-        mlflow.log_param("best_preconditioner", result.recommendations.overall_best.label)
-
-
-def _log_comparison_params(
-    comp_run_id: str,
-    entry: ComparisonRegistryEntry,
-) -> None:
-    """Log final metadata params to the active comparison MLflow run.
-
-    Args:
-        comp_run_id: The run's own id, stored for cross-referencing.
-        entry: Registry entry supplying id, display name, and method path.
-    """
-    config_label = entry.method.stem if entry.method is not None else entry.id
-    mlflow.log_param("comparison_config", config_label)
-    mlflow.log_param("comparison_id", entry.id)
-    mlflow.log_param("comparison_display_name", entry.effective_display_name)
-    mlflow.log_param("comp_run_id", comp_run_id)
+    return ComparisonTopology(
+        tracking_uri=runtime.tracking_uri,
+        artifact_location=runtime.artifact_uri,
+        experiment_name=master_cfg.names.comparison,
+        model_store_tracking_uri=runtime.tracking_uri,
+    )
 
 
 def _run_comparison_body(
@@ -433,7 +305,7 @@ def _execute_comparison_in_run(
     """
     with mlflow.start_run(run_name=run_name, tags=comp_tags.as_mlflow_tags()) as comp_run:
         comp_run_id = comp_run.info.run_id
-        mlflow.log_param("artifact_uri", mlflow.get_artifact_uri())
+        log_comparison_artifact_uri()
 
         with tempfile.TemporaryDirectory() as _tmp:
             work_root = Path(_tmp)
@@ -445,18 +317,29 @@ def _execute_comparison_in_run(
                 experiments_config_path=experiments_config_path,
                 settings=settings,
             )
-            if warnings:
-                mlflow.log_param("skipped_preconditioners", str(len(warnings)))
+            log_skipped_preconditioners(warnings)
             log_comparison_artifacts_to_mlflow(
                 tracking_uri=topology.tracking_uri,
                 run_id=comp_run_id,
                 work_root=work_root,
             )
             if isinstance(raw_result, ComparisonResult):
-                _log_comparison_metrics(raw_result)
-                _log_child_residual_runs(raw_result, entry.id, run_name)
+                child_run_tags = {
+                    name: build_child_comparison_tags(
+                        preconditioner_name=name,
+                        comparison_id=entry.id,
+                        parent_run_name=run_name,
+                    ).as_mlflow_tags()
+                    for name in raw_result.results
+                }
+                log_comparison_result_metrics(raw_result, child_run_tags=child_run_tags)
 
-        _log_comparison_params(comp_run_id, entry)
+        log_comparison_run_params(
+            comp_run_id=comp_run_id,
+            comparison_id=entry.id,
+            comparison_display_name=entry.effective_display_name,
+            comparison_config=entry.method.stem if entry.method is not None else entry.id,
+        )
 
     return [
         ComparisonOutcome(
@@ -487,7 +370,10 @@ def _run_comparison_from_config(
         Single-element list with the outcome of the comparison run.
     """
     try:
-        _preflight_comparison_inputs(cfg)
+        validate_comparison_inputs(
+            matrix_path=Path(cfg.general.data.matrix_path),
+            rhs_path=Path(cfg.general.data.rhs_path),
+        )
     except (FileNotFoundError, ValueError) as exc:
         return [
             ComparisonOutcome(

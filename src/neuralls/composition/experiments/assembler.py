@@ -15,8 +15,6 @@ from neuralls.platform.config.models.workspace import (
 from neuralls.platform.config.models.experiments import CaseConfig, resolve_display_name
 from neuralls.platform.config.registry import list_experiment_bindings
 from neuralls.platform.config.resolution import (
-    build_mlflow_environment,
-    build_sqlite_tracking_uri,
     derive_output_root_from_tracking_uri,
     resolve_case_config_path,
     resolve_path_context,
@@ -36,6 +34,7 @@ from neuralls.platform.config.loaders import (
     load_data_config,
 )
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
+from neuralls.platform.tracking.mlflow import build_workflow_environment
 
 
 @dataclass(frozen=True)
@@ -96,11 +95,12 @@ def _resolve_output_override(
 
 def _build_default_mlflow_topology(path_ctx_output_root: Path) -> MlflowTopology:
     """Build default MLflow env rooted under the output directory."""
-    env = build_mlflow_environment(
-        tracking_uri=build_sqlite_tracking_uri(path_ctx_output_root / "mlruns" / "mlflow.db"),
-        artifacts_destination=str((path_ctx_output_root / "mlartifacts").resolve()),
+    runtime = build_workflow_environment(
+        tracking_uri=None,
+        artifact_location=None,
+        default_output_root=path_ctx_output_root,
     )
-    return MlflowTopology(env=env, force_enabled=True)
+    return MlflowTopology(env=runtime.env, force_enabled=True)
 
 
 def _build_case_mlflow_topology(
@@ -109,16 +109,14 @@ def _build_case_mlflow_topology(
     neuralls_settings: NeurallsSettings,
 ) -> MlflowTopology:
     """Build MLflow env from case config or derive it from output_dir."""
-    tracking_uri = case_cfg.mlflow.tracking_uri
-    if tracking_uri is None:
-        return _build_default_mlflow_topology(neuralls_settings.output_dir)
-    env = build_mlflow_environment(
-        tracking_uri=tracking_uri,
-        artifacts_destination=case_cfg.mlflow.artifacts_destination,
+    runtime = build_workflow_environment(
+        tracking_uri=case_cfg.mlflow.tracking_uri,
+        artifact_location=case_cfg.mlflow.artifacts_destination,
+        default_output_root=neuralls_settings.output_dir,
         config_path=case_config_path,
     )
     return MlflowTopology(
-        env=env,
+        env=runtime.env,
         experiment_name=case_cfg.names.training,
         force_enabled=True,
     )
