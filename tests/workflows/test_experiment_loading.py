@@ -117,7 +117,7 @@ class TestTrainingPipelineWithMLflow:
                 "name": "MLflowTestModel",
             },
             "MODEL": {
-                "name": "NormScaledConstantWidthFFNN",
+                "name": "ScaleEquivariantFFNN",
                 "module_path": "dlkit.nn",
                 "hidden_size": 2,
                 "num_layers": 1,

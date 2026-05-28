@@ -10,19 +10,20 @@ environment, then use plain `uv run neuralls ...` commands.
 
 Choose the config type that matches the case you want to run:
 
-- `datasets/<system>/*.toml`: define one dataset source or generation strategy
-- `models/*.toml`: define one model architecture and trainer setup (shared across systems)
+- `datasets/train/<system>/*.toml`: training dataset configs (gaussian-cg{N}, solutions-cg{N})
+- `datasets/test/<system>/*.toml`: comparison/test dataset configs (gaussian-rhs, scaled-solutions, sparse-rhs)
+- `models/<family>/*.toml`: model architecture and trainer setup (shared across systems)
 - `cases/<system>/*.toml`: case configs that tie datasets, models, comparisons,
   MLflow, and experiment ids together
 
-Current systems: `cases/45x15/` and `cases/93x31/`. Each system directory
-contains focused sweep cases such as `constant-width.toml` and
-`factorized-linear.toml`.
+Current systems: `45x15` and `93x31`. Each system has two cases:
+`evaluate-all.toml` (all candidate models) and `optimize.toml` (single model, all dataset variants).
 
-Current model families include `linear/`, `skip-ffnn/`, `gnn/`, and
-`advanced/`. The `advanced/` family now targets the scale-equivariant DLKit
-models `ScaleEquivariantFourierFeatureNetwork`,
-`ScaleEquivariantSiren`, and `ScaleEquivariantModifiedMLP`.
+Model families (all `ScaleEquivariant*`, `module_path = "dlkit.nn"`):
+- `ffnn/`: `ScaleEquivariantFFNN` — plain skip residual FFNN
+- `embedded/`: `ScaleEquivariantEmbedded{Factorized,SPD,SPDFactorized}FFNN` — embedded square-output
+- `symmetric/`: `ScaleEquivariant{SPD,Factorized}FFNN` — non-embedded square-output
+- `spectral/`: `ScaleEquivariant{Siren,FourierFeatureNetwork,ModifiedMLP}` — sine/Fourier networks
 
 ## Recommended Progression
 
@@ -58,12 +59,11 @@ uv run neuralls run /path/to/case.toml
 uv run neuralls compare /path/to/case.toml
 ```
 
-If one comparison profile depends on an extra benchmark dataset such as
-`configs/datasets/solutions.toml`, build it explicitly first:
+If one comparison profile depends on a test dataset, build it explicitly first:
 
 ```bash
-uv run neuralls generate-single configs/datasets/45x15/solutions.toml \
-  --case-config configs/cases/45x15/ffnn.toml
+uv run neuralls generate-single configs/datasets/test/45x15/gaussian-rhs.toml \
+  --case-config configs/cases/45x15/evaluate-all.toml
 ```
 
 When a benchmark dataset is missing, `neuralls compare <case.toml>` now fails
@@ -208,5 +208,4 @@ config file directory instead of assuming a Unix-only working directory layout.
 
 ## What To Read Next
 
-- [`datasets/45x15/README.md`](datasets/45x15/README.md) for strategy details and schema examples
 - [`../README.md`](../README.md) for the end-to-end workflow

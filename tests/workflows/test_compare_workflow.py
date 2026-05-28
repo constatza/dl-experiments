@@ -85,7 +85,7 @@ def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
                 'workflow = "train"',
                 "",
                 "[MODEL]",
-                'name = "NormScaledConstantWidthFFNN"',
+                'name = "ScaleEquivariantFFNN"',
                 'module_path = "dlkit.nn"',
                 "",
                 "[TRAINING.trainer]",

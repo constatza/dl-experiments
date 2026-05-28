@@ -1,0 +1,18 @@
+id = "sparse-rhs-45x15"
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = false
+seed = 42
+
+[[generation.strategy]]
+name = "sparse_rhs"
+samples = 1000
+indices = [0, 1, -1]
+values = [90.0, 100.0, -100.0]
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"

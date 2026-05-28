@@ -28,6 +28,9 @@ Install the project environment:
 uv sync
 ```
 
+The project is packaged with `uv_build`, so editable installs and local builds
+use the native uv backend instead of the legacy setuptools fallback.
+
 ## Quickstart
 
 The shortest useful path for a new user is:

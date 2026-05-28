@@ -100,7 +100,7 @@ def test_run_experiments_full_flow(
             "name": "test_model",
         },
         "MODEL": {
-            "name": "NormScaledConstantWidthFFNN",
+            "name": "ScaleEquivariantFFNN",
             "module_path": "dlkit.nn",
             "hidden_size": 2,
             "num_layers": 1,
@@ -262,7 +262,7 @@ def test_run_experiment_matrix_with_mlflow(
             "name": "mlflow_test_model",
         },
         "MODEL": {
-            "name": "NormScaledConstantWidthFFNN",
+            "name": "ScaleEquivariantFFNN",
             "module_path": "dlkit.nn",
             "hidden_size": 2,
             "num_layers": 1,

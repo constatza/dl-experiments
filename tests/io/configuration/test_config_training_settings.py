@@ -28,7 +28,7 @@ name = "NormalizedVectorNormError"
 name = "FlexibleDataset"
 memmap_cache = true
 [MODEL]
-name = "NormScaledConstantWidthFFNN"
+name = "ScaleEquivariantFFNN"
 module_path = "dlkit.nn"
 """
 

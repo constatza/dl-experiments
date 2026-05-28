@@ -1,0 +1,161 @@
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training   = "Train-45x15"
+comparison = "Compare-45x15"
+
+[comparison_defaults]
+rtol               = 1.0e-6
+atol               = 1.0e-14
+max_iterations     = 200
+stopping_criterion = "residual_norm"
+m_max              = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+# ── Training datasets (all CG-iter variants) ──────────────────────────────────
+
+[[datasets]]
+id           = "gaussian-cg1-45x15"
+path         = "../../datasets/train/45x15/gaussian-cg1.toml"
+display_name = "Gaussian CG-1 45x15"
+
+[[datasets]]
+id           = "gaussian-cg10-45x15"
+path         = "../../datasets/train/45x15/gaussian-cg10.toml"
+display_name = "Gaussian CG-10 45x15"
+
+[[datasets]]
+id           = "gaussian-cg50-45x15"
+path         = "../../datasets/train/45x15/gaussian-cg50.toml"
+display_name = "Gaussian CG-50 45x15"
+
+[[datasets]]
+id           = "gaussian-cg100-45x15"
+path         = "../../datasets/train/45x15/gaussian-cg100.toml"
+display_name = "Gaussian CG-100 45x15"
+
+[[datasets]]
+id           = "solutions-cg1-45x15"
+path         = "../../datasets/train/45x15/solutions-cg1.toml"
+display_name = "Solutions CG-1 45x15"
+
+[[datasets]]
+id           = "solutions-cg10-45x15"
+path         = "../../datasets/train/45x15/solutions-cg10.toml"
+display_name = "Solutions CG-10 45x15"
+
+[[datasets]]
+id           = "solutions-cg50-45x15"
+path         = "../../datasets/train/45x15/solutions-cg50.toml"
+display_name = "Solutions CG-50 45x15"
+
+[[datasets]]
+id           = "solutions-cg100-45x15"
+path         = "../../datasets/train/45x15/solutions-cg100.toml"
+display_name = "Solutions CG-100 45x15"
+
+# ── Test / compare datasets ───────────────────────────────────────────────────
+
+[[datasets]]
+id           = "gaussian-rhs-45x15"
+path         = "../../datasets/test/45x15/gaussian-rhs.toml"
+display_name = "Gaussian RHS 45x15"
+
+[[datasets]]
+id           = "scaled-solutions-45x15"
+path         = "../../datasets/test/45x15/scaled-solutions.toml"
+display_name = "Scaled Solutions 45x15"
+
+[[datasets]]
+id           = "sparse-rhs-45x15"
+path         = "../../datasets/test/45x15/sparse-rhs.toml"
+display_name = "Sparse RHS 45x15"
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+[[models]]
+id           = "ffnn-standard"
+path         = "../../models/ffnn/standard.toml"
+display_name = "FFNN Standard"
+
+# ── Comparisons ───────────────────────────────────────────────────────────────
+
+[[comparisons]]
+id             = "gaussian"
+matrix_dataset = "gaussian-rhs-45x15"
+rhs_dataset    = "gaussian-rhs-45x15"
+display_name   = "Gaussian RHS"
+
+[[comparisons]]
+id             = "scaled"
+matrix_dataset = "scaled-solutions-45x15"
+rhs_dataset    = "scaled-solutions-45x15"
+display_name   = "Scaled Solutions"
+
+[[comparisons]]
+id             = "sparse"
+matrix_dataset = "sparse-rhs-45x15"
+rhs_dataset    = "sparse-rhs-45x15"
+display_name   = "Sparse RHS"
+
+# ── Experiments (ffnn-standard × 8 training datasets) ────────────────────────
+
+[[experiments]]
+id           = "gaussian-cg1-45x15-ffnn-standard"
+dataset      = "gaussian-cg1-45x15"
+model        = "ffnn-standard"
+display_name = "Gaussian CG-1 45x15 | FFNN Standard"
+
+[[experiments]]
+id           = "gaussian-cg10-45x15-ffnn-standard"
+dataset      = "gaussian-cg10-45x15"
+model        = "ffnn-standard"
+display_name = "Gaussian CG-10 45x15 | FFNN Standard"
+
+[[experiments]]
+id           = "gaussian-cg50-45x15-ffnn-standard"
+dataset      = "gaussian-cg50-45x15"
+model        = "ffnn-standard"
+display_name = "Gaussian CG-50 45x15 | FFNN Standard"
+
+[[experiments]]
+id           = "gaussian-cg100-45x15-ffnn-standard"
+dataset      = "gaussian-cg100-45x15"
+model        = "ffnn-standard"
+display_name = "Gaussian CG-100 45x15 | FFNN Standard"
+
+[[experiments]]
+id           = "solutions-cg1-45x15-ffnn-standard"
+dataset      = "solutions-cg1-45x15"
+model        = "ffnn-standard"
+display_name = "Solutions CG-1 45x15 | FFNN Standard"
+
+[[experiments]]
+id           = "solutions-cg10-45x15-ffnn-standard"
+dataset      = "solutions-cg10-45x15"
+model        = "ffnn-standard"
+display_name = "Solutions CG-10 45x15 | FFNN Standard"
+
+[[experiments]]
+id           = "solutions-cg50-45x15-ffnn-standard"
+dataset      = "solutions-cg50-45x15"
+model        = "ffnn-standard"
+display_name = "Solutions CG-50 45x15 | FFNN Standard"
+
+[[experiments]]
+id           = "solutions-cg100-45x15-ffnn-standard"
+dataset      = "solutions-cg100-45x15"
+model        = "ffnn-standard"
+display_name = "Solutions CG-100 45x15 | FFNN Standard"

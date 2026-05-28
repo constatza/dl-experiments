@@ -1,0 +1,172 @@
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training   = "Train-93x31"
+comparison = "Compare-93x31"
+
+[comparison_defaults]
+rtol               = 1.0e-6
+atol               = 1.0e-14
+max_iterations     = 200
+stopping_criterion = "residual_norm"
+m_max              = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+# ── Training datasets (max CG-iter only) ─────────────────────────────────────
+
+[[datasets]]
+id           = "gaussian-cg100-93x31"
+path         = "../../datasets/train/93x31/gaussian-cg100.toml"
+display_name = "Gaussian CG-100 93x31"
+
+# ── Test / compare datasets ───────────────────────────────────────────────────
+
+[[datasets]]
+id           = "gaussian-rhs-93x31"
+path         = "../../datasets/test/93x31/gaussian-rhs.toml"
+display_name = "Gaussian RHS 93x31"
+
+[[datasets]]
+id           = "sparse-rhs-93x31"
+path         = "../../datasets/test/93x31/sparse-rhs.toml"
+display_name = "Sparse RHS 93x31"
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+[[models]]
+id           = "ffnn-standard"
+path         = "../../models/ffnn/standard.toml"
+display_name = "FFNN Standard"
+
+[[models]]
+id           = "embedded-factorized"
+path         = "../../models/embedded/embedded-factorized.toml"
+display_name = "Embedded Factorized"
+
+[[models]]
+id           = "symmetric-embedded-spd"
+path         = "../../models/symmetric/embedded-spd.toml"
+display_name = "Symmetric Embedded SPD"
+
+[[models]]
+id           = "symmetric-embedded-spd-factorized"
+path         = "../../models/symmetric/embedded-spd-factorized.toml"
+display_name = "Symmetric Embedded SPD-Factorized"
+
+[[models]]
+id           = "symmetric-spd"
+path         = "../../models/symmetric/spd.toml"
+display_name = "Symmetric SPD"
+
+[[models]]
+id           = "symmetric-spd-factorized"
+path         = "../../models/symmetric/spd-factorized.toml"
+display_name = "Symmetric SPD-Factorized"
+
+[[models]]
+id           = "spectral-siren"
+path         = "../../models/spectral/siren.toml"
+display_name = "Spectral SIREN"
+
+[[models]]
+id           = "spectral-fourier"
+path         = "../../models/spectral/fourier.toml"
+display_name = "Spectral Fourier"
+
+[[models]]
+id           = "spectral-modified-mlp"
+path         = "../../models/spectral/modified-mlp.toml"
+display_name = "Spectral Modified MLP"
+
+[[models]]
+id           = "spectral-factorized"
+path         = "../../models/spectral/factorized.toml"
+display_name = "Spectral Factorized"
+
+# ── Comparisons ───────────────────────────────────────────────────────────────
+
+[[comparisons]]
+id             = "gaussian"
+matrix_dataset = "gaussian-rhs-93x31"
+rhs_dataset    = "gaussian-rhs-93x31"
+display_name   = "Gaussian RHS"
+
+[[comparisons]]
+id             = "sparse"
+matrix_dataset = "sparse-rhs-93x31"
+rhs_dataset    = "sparse-rhs-93x31"
+display_name   = "Sparse RHS"
+
+# ── Experiments (10 models × gaussian-cg100-93x31) ───────────────────────────
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-ffnn-standard"
+dataset      = "gaussian-cg100-93x31"
+model        = "ffnn-standard"
+display_name = "Gaussian CG-100 93x31 | FFNN Standard"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-embedded-factorized"
+dataset      = "gaussian-cg100-93x31"
+model        = "embedded-factorized"
+display_name = "Gaussian CG-100 93x31 | Embedded Factorized"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-symmetric-embedded-spd"
+dataset      = "gaussian-cg100-93x31"
+model        = "symmetric-embedded-spd"
+display_name = "Gaussian CG-100 93x31 | Symmetric Embedded SPD"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-symmetric-embedded-spd-factorized"
+dataset      = "gaussian-cg100-93x31"
+model        = "symmetric-embedded-spd-factorized"
+display_name = "Gaussian CG-100 93x31 | Symmetric Embedded SPD-Factorized"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-symmetric-spd"
+dataset      = "gaussian-cg100-93x31"
+model        = "symmetric-spd"
+display_name = "Gaussian CG-100 93x31 | Symmetric SPD"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-symmetric-spd-factorized"
+dataset      = "gaussian-cg100-93x31"
+model        = "symmetric-spd-factorized"
+display_name = "Gaussian CG-100 93x31 | Symmetric SPD-Factorized"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-spectral-siren"
+dataset      = "gaussian-cg100-93x31"
+model        = "spectral-siren"
+display_name = "Gaussian CG-100 93x31 | Spectral SIREN"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-spectral-fourier"
+dataset      = "gaussian-cg100-93x31"
+model        = "spectral-fourier"
+display_name = "Gaussian CG-100 93x31 | Spectral Fourier"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-spectral-modified-mlp"
+dataset      = "gaussian-cg100-93x31"
+model        = "spectral-modified-mlp"
+display_name = "Gaussian CG-100 93x31 | Spectral Modified MLP"
+
+[[experiments]]
+id           = "gaussian-cg100-93x31-spectral-factorized"
+dataset      = "gaussian-cg100-93x31"
+model        = "spectral-factorized"
+display_name = "Gaussian CG-100 93x31 | Spectral Factorized"
