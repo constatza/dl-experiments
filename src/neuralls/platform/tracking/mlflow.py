@@ -147,11 +147,14 @@ def build_runtime_environment(
     """Resolve the MLflow environment for a runtime workflow execution."""
     existing_uri = os.environ.get("MLFLOW_TRACKING_URI")
     if existing_uri:
-        env = build_mlflow_environment(tracking_uri=existing_uri)
+        existing_artifact_uri = os.environ.get("MLFLOW_ARTIFACT_URI")
+        env = {"MLFLOW_TRACKING_URI": existing_uri}
+        if existing_artifact_uri:
+            env["MLFLOW_ARTIFACT_URI"] = existing_artifact_uri
         return MlflowRuntimeEnvironment(
             env=env,
-            tracking_uri=env["MLFLOW_TRACKING_URI"],
-            artifact_uri=env.get("MLFLOW_ARTIFACT_URI"),
+            tracking_uri=existing_uri,
+            artifact_uri=existing_artifact_uri,
         )
 
     permanent_root = Path(output_root).resolve() if output_root else default_output_root

@@ -43,6 +43,9 @@ MLflow-specific policy also belongs here: safe metric-key sanitization, search
 filter escaping, workflow tracking-environment resolution, and comparison-run
 metric logging all stay under `platform.tracking` so orchestration code does
 not reimplement third-party rules.
+When runtime `MLFLOW_TRACKING_URI` or `MLFLOW_ARTIFACT_URI` values are already
+exported, platform tracking helpers preserve them verbatim instead of
+re-normalizing them against the local operating system.
 
 Storage validation owns concrete dataset-layout checks. Comparison matrix/RHS
 preflight belongs under `platform.storage` because it depends on manifest and

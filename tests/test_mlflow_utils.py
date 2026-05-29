@@ -176,6 +176,24 @@ def test_build_runtime_environment_prefers_existing_tracking_uri(
     runtime = build_runtime_environment(tmp_path / "unused", default_output_root=tmp_path)
 
     assert runtime.tracking_uri == "sqlite:////tmp/existing.db"
+    assert runtime.artifact_uri is None
+
+
+def test_build_runtime_environment_preserves_existing_artifact_uri(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:////tmp/existing.db")
+    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", "/tmp/existing-artifacts")
+
+    runtime = build_runtime_environment(tmp_path / "unused", default_output_root=tmp_path)
+
+    assert runtime.env == {
+        "MLFLOW_TRACKING_URI": "sqlite:////tmp/existing.db",
+        "MLFLOW_ARTIFACT_URI": "/tmp/existing-artifacts",
+    }
+    assert runtime.tracking_uri == "sqlite:////tmp/existing.db"
+    assert runtime.artifact_uri == "/tmp/existing-artifacts"
 
 
 def test_start_run_and_logging(dummy_mlflow: DummyMlflow, tmp_path: Path) -> None:
