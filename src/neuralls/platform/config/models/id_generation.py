@@ -1,6 +1,6 @@
 """Pure helpers for auto-id and display-name generation in case configs.
 
-This module provides functions to auto-fill missing 'id' and 'display_name' fields
+This module provides functions to infer missing 'id' and 'display_name' fields
 in experiment and comparison entries, with sensible fallback logic and validation.
 No Pydantic imports — only plain Python and regex.
 """
@@ -23,7 +23,7 @@ def _validate_id_chars(id_val: str, context: str = "id") -> None:
     Raises:
         ValueError: If id_val contains invalid characters.
     """
-    if not _ID_PATTERN.match(id_val):
+    if not _ID_PATTERN.fullmatch(id_val):
         raise ValueError(
             f"{context} contains invalid characters: {id_val!r} must match ^[\\w\\-]+$"
         )
@@ -42,13 +42,13 @@ def _slugify(display_name: str) -> str:
         ValueError: If the result is invalid after slugification, or if input is empty.
     """
     if not display_name:
-        raise ValueError("display_name cannot be empty")
+        raise ValueError("invalid display_name: cannot be empty")
 
     # Strip surrounding whitespace, lowercase, and replace spaces with hyphens
     slugified = display_name.strip().lower().replace(" ", "-")
 
     # Validate the result
-    if not _ID_PATTERN.match(slugified):
+    if not _ID_PATTERN.fullmatch(slugified):
         raise ValueError(f"invalid id after slugification: {slugified!r}")
 
     return slugified
@@ -90,142 +90,145 @@ def _build_display_lookup(entries: list[object]) -> dict[str, str]:
     return result
 
 
-def _fill_experiment_entry(
-    exp: dict[str, object],
-    dataset_display: dict[str, str],
-    model_display: dict[str, str],
-) -> None:
-    """Fill missing id and display_name in-place for a raw experiment entry dict.
+def _infer_experiment_id(
+    dataset_id: str,
+    model_id: str,
+    user_id: str | None,
+    user_dn: str | None,
+) -> str:
+    """Return the resolved experiment id.
 
-    Priority for id:
-      1. Explicit user value (non-blank)
-      2. _slugify(display_name) — when display_name provided
-      3. f"{model_id}-{dataset_id}" — model FIRST, then dataset
+    Priority:
+      1. user_id (stripped, if non-blank)
+      2. _slugify(user_dn) if user_dn non-blank
+      3. f"{model_id}-{dataset_id}"  (model first)
 
-    Priority for display_name:
-      1. Explicit user value (non-blank)
-      2. f"{dataset_label} | {model_label}"
-         where labels come from dataset_display/model_display lookups
-         (fall back to the raw id when not in the lookup)
-
-    Also validate the final id with _validate_id_chars.
+    Validates result with _validate_id_chars before returning.
 
     Args:
-        exp: Experiment entry dict to fill (modified in-place).
+        dataset_id: The dataset identifier.
+        model_id: The model identifier.
+        user_id: Explicit user-supplied id (may be None or blank).
+        user_dn: Explicit user-supplied display_name (may be None or blank).
+
+    Returns:
+        The resolved experiment id string.
+
+    Raises:
+        ValueError: If the resolved id contains invalid characters.
+    """
+    if user_id and user_id.strip():
+        final_id = user_id.strip()
+    elif user_dn and user_dn.strip():
+        final_id = _slugify(user_dn)
+    else:
+        final_id = f"{model_id}-{dataset_id}"
+
+    _validate_id_chars(final_id, "id")
+    return final_id
+
+
+def _infer_experiment_display_name(
+    dataset_id: str,
+    model_id: str,
+    user_dn: str | None,
+    dataset_display: dict[str, str],
+    model_display: dict[str, str],
+) -> str:
+    """Return the resolved experiment display name.
+
+    Priority:
+      1. user_dn (stripped, if non-blank)
+      2. f"{dataset_label} | {model_label}"
+         (labels from lookups, fallback to raw id when key absent)
+
+    Args:
+        dataset_id: The dataset identifier.
+        model_id: The model identifier.
+        user_dn: Explicit user-supplied display_name (may be None or blank).
         dataset_display: Lookup from dataset id to display label.
         model_display: Lookup from model id to display label.
 
-    Raises:
-        ValueError: If the final id is invalid or if required keys are missing.
+    Returns:
+        The resolved experiment display name string.
     """
-    # Extract dataset_id and model_id (TOML alias: 'dataset' -> dataset_id, 'model' -> model_id)
-    dataset_id = str(exp.get("dataset", ""))
-    model_id = str(exp.get("model", ""))
+    if user_dn and user_dn.strip():
+        return user_dn.strip()
 
-    # 1. Determine the ID
-    user_id = exp.get("id")
-    if user_id and isinstance(user_id, str) and user_id.strip():
-        # Explicit user value
-        final_id = user_id.strip()
-    elif "display_name" in exp:
-        user_dn = exp.get("display_name")
-        if isinstance(user_dn, str) and user_dn.strip():
-            # Derive from display_name
-            final_id = _slugify(user_dn)
-        else:
-            # display_name exists but is blank, use fallback
-            final_id = f"{model_id}-{dataset_id}"
-    else:
-        # No display_name, use fallback
-        final_id = f"{model_id}-{dataset_id}"
-
-    # Validate the final id
-    _validate_id_chars(final_id, "id")
-    exp["id"] = final_id
-
-    # 2. Determine the display_name
-    user_dn = exp.get("display_name")
-    if user_dn and isinstance(user_dn, str) and user_dn.strip():
-        # Explicit user value, keep as-is
-        pass
-    else:
-        # Auto-generate from lookups
-        dataset_label = dataset_display.get(dataset_id, dataset_id)
-        model_label = model_display.get(model_id, model_id)
-        final_dn = f"{dataset_label} | {model_label}"
-        exp["display_name"] = final_dn
+    dataset_label = dataset_display.get(dataset_id, dataset_id)
+    model_label = model_display.get(model_id, model_id)
+    return f"{dataset_label} | {model_label}"
 
 
-def _fill_comparison_entry(
-    comp: dict[str, object],
-    dataset_display: dict[str, str],
-) -> None:
-    """Fill missing id and display_name in-place for a raw comparison entry dict.
+def _infer_comparison_id(
+    matrix_id: str,
+    rhs_id: str,
+    user_id: str | None,
+    user_dn: str | None,
+) -> str:
+    """Return the resolved comparison id.
 
-    Priority for id:
-      1. Explicit user value
-      2. _slugify(display_name) — when display_name provided
-      3. matrix_dataset_id — when matrix_dataset == rhs_dataset
-         f"{matrix_dataset_id}-{rhs_dataset_id}" — otherwise (single dash)
+    Priority:
+      1. user_id (stripped, if non-blank)
+      2. _slugify(user_dn) if user_dn non-blank
+      3. matrix_id           (when matrix_id == rhs_id)
+         f"{matrix_id}-{rhs_id}"  otherwise (single dash)
 
-    Priority for display_name:
-      1. Explicit user value
-      2. matrix_dataset label — when matrix_dataset == rhs_dataset
-         f"{matrix_dn} | {rhs_dn}" — otherwise (pipe separator)
-
-    Also validate the final id with _validate_id_chars.
+    Validates result with _validate_id_chars before returning.
 
     Args:
-        comp: Comparison entry dict to fill (modified in-place).
-        dataset_display: Lookup from dataset id to display label.
+        matrix_id: The matrix dataset identifier.
+        rhs_id: The right-hand side dataset identifier.
+        user_id: Explicit user-supplied id (may be None or blank).
+        user_dn: Explicit user-supplied display_name (may be None or blank).
+
+    Returns:
+        The resolved comparison id string.
 
     Raises:
-        ValueError: If the final id is invalid or if required keys are missing.
+        ValueError: If the resolved id contains invalid characters.
     """
-    # Extract dataset IDs
-    matrix_dataset_id = str(comp.get("matrix_dataset", ""))
-    rhs_dataset_id = str(comp.get("rhs_dataset", ""))
-
-    # 1. Determine the ID
-    user_id = comp.get("id")
-    if user_id and isinstance(user_id, str) and user_id.strip():
-        # Explicit user value
+    if user_id and user_id.strip():
         final_id = user_id.strip()
-    elif "display_name" in comp:
-        user_dn = comp.get("display_name")
-        if isinstance(user_dn, str) and user_dn.strip():
-            # Derive from display_name
-            final_id = _slugify(user_dn)
-        else:
-            # display_name exists but is blank, use fallback
-            if matrix_dataset_id == rhs_dataset_id:
-                final_id = matrix_dataset_id
-            else:
-                final_id = f"{matrix_dataset_id}-{rhs_dataset_id}"
+    elif user_dn and user_dn.strip():
+        final_id = _slugify(user_dn)
+    elif matrix_id == rhs_id:
+        final_id = matrix_id
     else:
-        # No display_name, use fallback
-        if matrix_dataset_id == rhs_dataset_id:
-            final_id = matrix_dataset_id
-        else:
-            final_id = f"{matrix_dataset_id}-{rhs_dataset_id}"
+        final_id = f"{matrix_id}-{rhs_id}"
 
-    # Validate the final id
     _validate_id_chars(final_id, "id")
-    comp["id"] = final_id
+    return final_id
 
-    # 2. Determine the display_name
-    user_dn = comp.get("display_name")
-    if user_dn and isinstance(user_dn, str) and user_dn.strip():
-        # Explicit user value, keep as-is
-        pass
-    else:
-        # Auto-generate from lookups
-        matrix_label = dataset_display.get(matrix_dataset_id, matrix_dataset_id)
-        rhs_label = dataset_display.get(rhs_dataset_id, rhs_dataset_id)
 
-        if matrix_dataset_id == rhs_dataset_id:
-            final_dn = matrix_label
-        else:
-            final_dn = f"{matrix_label} | {rhs_label}"
+def _infer_comparison_display_name(
+    matrix_id: str,
+    rhs_id: str,
+    user_dn: str | None,
+    dataset_display: dict[str, str],
+) -> str:
+    """Return the resolved comparison display name.
 
-        comp["display_name"] = final_dn
+    Priority:
+      1. user_dn (stripped, if non-blank)
+      2. matrix_label           (when matrix_id == rhs_id)
+         f"{matrix_label} | {rhs_label}"  otherwise
+
+    Args:
+        matrix_id: The matrix dataset identifier.
+        rhs_id: The right-hand side dataset identifier.
+        user_dn: Explicit user-supplied display_name (may be None or blank).
+        dataset_display: Lookup from dataset id to display label.
+
+    Returns:
+        The resolved comparison display name string.
+    """
+    if user_dn and user_dn.strip():
+        return user_dn.strip()
+
+    matrix_label = dataset_display.get(matrix_id, matrix_id)
+    rhs_label = dataset_display.get(rhs_id, rhs_id)
+
+    if matrix_id == rhs_id:
+        return matrix_label
+    return f"{matrix_label} | {rhs_label}"
