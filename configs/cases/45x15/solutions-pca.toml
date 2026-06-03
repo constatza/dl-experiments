@@ -3,7 +3,7 @@ tracking_uri = "http://localhost:5000"
 
 [names]
 training   = "Train-45x15-PCA"
-comparison = "Compare-45x15"
+comparison = "Compare-45x15-PCA"
 
 [comparison_defaults]
 rtol               = 1.0e-6
@@ -98,49 +98,33 @@ display_name   = "Sparse RHS"
 # ── Experiments (4 solutions datasets × 2 PCA models = 8) ────────────────────
 
 [[experiments]]
-id           = "solutions-cg1-45x15-ffnn-pca"
 dataset      = "solutions-cg1-45x15"
 model        = "ffnn-pca"
-display_name = "Solutions CG-1 45x15 | FFNN PCA"
 
 [[experiments]]
-id           = "solutions-cg10-45x15-ffnn-pca"
 dataset      = "solutions-cg10-45x15"
 model        = "ffnn-pca"
-display_name = "Solutions CG-10 45x15 | FFNN PCA"
 
 [[experiments]]
-id           = "solutions-cg50-45x15-ffnn-pca"
 dataset      = "solutions-cg50-45x15"
 model        = "ffnn-pca"
-display_name = "Solutions CG-50 45x15 | FFNN PCA"
 
 [[experiments]]
-id           = "solutions-cg100-45x15-ffnn-pca"
 dataset      = "solutions-cg100-45x15"
 model        = "ffnn-pca"
-display_name = "Solutions CG-100 45x15 | FFNN PCA"
 
 [[experiments]]
-id           = "solutions-cg1-45x15-spd-pca"
 dataset      = "solutions-cg1-45x15"
 model        = "spd-pca"
-display_name = "Solutions CG-1 45x15 | SPD PCA"
 
 [[experiments]]
-id           = "solutions-cg10-45x15-spd-pca"
 dataset      = "solutions-cg10-45x15"
 model        = "spd-pca"
-display_name = "Solutions CG-10 45x15 | SPD PCA"
 
 [[experiments]]
-id           = "solutions-cg50-45x15-spd-pca"
 dataset      = "solutions-cg50-45x15"
 model        = "spd-pca"
-display_name = "Solutions CG-50 45x15 | SPD PCA"
 
 [[experiments]]
-id           = "solutions-cg100-45x15-spd-pca"
 dataset      = "solutions-cg100-45x15"
 model        = "spd-pca"
-display_name = "Solutions CG-100 45x15 | SPD PCA"

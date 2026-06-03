@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train-93x31"
-comparison = "Compare-93x31"
+training   = "Train-93x31-FFNN-Mixed"
+comparison = "Compare-93x31-FFNN-Mixed"
 
 [comparison_defaults]
 rtol               = 1.0e-6
@@ -82,25 +82,17 @@ display_name   = "Sparse RHS"
 # ── Experiments (ffnn-standard × 4 training datasets) ────────────────────────
 
 [[experiments]]
-id           = "gaussian-cg1-93x31-ffnn-standard"
 dataset      = "gaussian-cg1-93x31"
 model        = "ffnn-standard"
-display_name = "Gaussian CG-1 93x31 | FFNN Standard"
 
 [[experiments]]
-id           = "gaussian-cg10-93x31-ffnn-standard"
 dataset      = "gaussian-cg10-93x31"
 model        = "ffnn-standard"
-display_name = "Gaussian CG-10 93x31 | FFNN Standard"
 
 [[experiments]]
-id           = "gaussian-cg50-93x31-ffnn-standard"
 dataset      = "gaussian-cg50-93x31"
 model        = "ffnn-standard"
-display_name = "Gaussian CG-50 93x31 | FFNN Standard"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-ffnn-standard"
 dataset      = "gaussian-cg100-93x31"
 model        = "ffnn-standard"
-display_name = "Gaussian CG-100 93x31 | FFNN Standard"

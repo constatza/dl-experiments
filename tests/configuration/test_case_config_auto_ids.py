@@ -243,6 +243,32 @@ def test_invalid_id_chars_raise_validation_error(
         CaseConfig.model_validate(raw)
 
 
+def test_multi_experiment_auto_ids_all_model_first(
+    minimal_case_raw: dict[str, object],
+    dataset_entry_solutions: dict[str, object],
+) -> None:
+    """All auto-generated ids across multiple datasets are model-first.
+
+    Mirrors the production config pattern: datasets with display_names, one model,
+    multiple experiments with only dataset + model (no id or display_name).
+    """
+    raw = dict(minimal_case_raw)
+    raw["datasets"] = [*list(raw["datasets"]), dataset_entry_solutions]  # type: ignore[arg-type]
+    raw["experiments"] = [
+        {"dataset": "gaussian-cg1-45x15", "model": "ffnn-standard"},
+        {"dataset": "solutions-45x15", "model": "ffnn-standard"},
+    ]
+    config = CaseConfig.model_validate(raw)
+    assert [e.id for e in config.experiments] == [
+        "ffnn-standard-gaussian-cg1-45x15",
+        "ffnn-standard-solutions-45x15",
+    ]
+    assert [e.display_name for e in config.experiments] == [
+        "Gaussian CG-1 45x15 | FFNN Standard",
+        "Solutions 45x15 | FFNN Standard",
+    ]
+
+
 def test_duplicate_auto_ids_raise_validation_error(
     minimal_case_raw: dict[str, object],
 ) -> None:

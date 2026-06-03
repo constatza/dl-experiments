@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train-93x31"
-comparison = "Compare-93x31"
+training   = "Train-93x31-All"
+comparison = "Compare-93x31-All"
 
 [comparison_defaults]
 rtol               = 1.0e-6
@@ -112,61 +112,41 @@ display_name   = "Sparse RHS"
 # ── Experiments (10 models × gaussian-cg100-93x31) ───────────────────────────
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-ffnn-standard"
 dataset      = "gaussian-cg100-93x31"
 model        = "ffnn-standard"
-display_name = "Gaussian CG-100 93x31 | FFNN Standard"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-embedded-factorized"
 dataset      = "gaussian-cg100-93x31"
 model        = "embedded-factorized"
-display_name = "Gaussian CG-100 93x31 | Embedded Factorized"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-symmetric-embedded-spd"
 dataset      = "gaussian-cg100-93x31"
 model        = "symmetric-embedded-spd"
-display_name = "Gaussian CG-100 93x31 | Symmetric Embedded SPD"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-symmetric-embedded-spd-factorized"
 dataset      = "gaussian-cg100-93x31"
 model        = "symmetric-embedded-spd-factorized"
-display_name = "Gaussian CG-100 93x31 | Symmetric Embedded SPD-Factorized"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-symmetric-spd"
 dataset      = "gaussian-cg100-93x31"
 model        = "symmetric-spd"
-display_name = "Gaussian CG-100 93x31 | Symmetric SPD"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-symmetric-spd-factorized"
 dataset      = "gaussian-cg100-93x31"
 model        = "symmetric-spd-factorized"
-display_name = "Gaussian CG-100 93x31 | Symmetric SPD-Factorized"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-spectral-siren"
 dataset      = "gaussian-cg100-93x31"
 model        = "spectral-siren"
-display_name = "Gaussian CG-100 93x31 | Spectral SIREN"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-spectral-fourier"
 dataset      = "gaussian-cg100-93x31"
 model        = "spectral-fourier"
-display_name = "Gaussian CG-100 93x31 | Spectral Fourier"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-spectral-modified-mlp"
 dataset      = "gaussian-cg100-93x31"
 model        = "spectral-modified-mlp"
-display_name = "Gaussian CG-100 93x31 | Spectral Modified MLP"
 
 [[experiments]]
-id           = "gaussian-cg100-93x31-spectral-factorized"
 dataset      = "gaussian-cg100-93x31"
 model        = "spectral-factorized"
-display_name = "Gaussian CG-100 93x31 | Spectral Factorized"
