@@ -13,12 +13,14 @@ from typing import Any
 
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.data_entries import (
+    DataEntry,
     Feature,
     FeatureType,
     SparseFeature,
     Target,
     TargetType,
 )
+from dlkit.infrastructure.config.transform_settings import TransformSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
@@ -178,6 +180,43 @@ def _create_target_configs(arrays: TrainingArrays) -> list[TargetType]:
     ]
 
 
+def _merge_entry_transforms[T: DataEntry](
+    entries: list[T],
+    config_entries: tuple[DataEntry, ...],
+) -> list[T]:
+    """Inject transforms from model-config placeholder entries into file-backed entries.
+
+    Args:
+        entries: File-backed Feature/Target objects built from disk artifacts.
+        config_entries: Placeholder entries parsed from [[DATASET.features]] or
+            [[DATASET.targets]] in the model TOML (name + transforms, no path).
+
+    Returns:
+        New list where each entry whose name matches a config placeholder has
+        that placeholder's transforms applied via patch_model; all others unchanged.
+    """
+    transforms_by_name: dict[str, list[TransformSettings]] = {
+        e.name: list(e.transforms) for e in config_entries if e.name is not None and e.transforms
+    }
+    if not transforms_by_name:
+        return entries
+    result: list[T] = []
+    consumed: set[str] = set()
+    for entry in entries:
+        name = entry.name
+        if name is not None and name in transforms_by_name:
+            entry = patch_model(entry, {"transforms": transforms_by_name[name]}, revalidate=False)
+            consumed.add(name)
+        result.append(entry)
+    unmatched = transforms_by_name.keys() - consumed
+    if unmatched:
+        logger.warning(
+            "Transform config entries not matched to any dataset entry — transforms will be ignored: {}",
+            sorted(unmatched),
+        )
+    return result
+
+
 def _validate_dataset_section(settings: TrainingWorkflowSettings) -> None:
     """Validate that DATASET section exists in settings.
 
@@ -199,7 +238,9 @@ def _resolve_dataset(
     """Resolve and apply dataset configurations to settings.
 
     This is a pure transformation that injects file-backed features/targets
-    into the DATASET section.
+    into the DATASET section. Transforms declared as placeholder entries in
+    [[DATASET.features]] / [[DATASET.targets]] in the model TOML are merged
+    into the programmatic Feature/Target objects by matching on entry name.
 
     Args:
         settings: Current DLKit settings
@@ -214,6 +255,8 @@ def _resolve_dataset(
     """
     _validate_dataset_section(settings)
     base_dataset = settings.DATASET or DatasetSettings()
+    features = _merge_entry_transforms(features, base_dataset.features)
+    targets = _merge_entry_transforms(targets, base_dataset.targets)
     return patch_model(
         settings,
         {
