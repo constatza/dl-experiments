@@ -1,0 +1,268 @@
+"""Integration tests for CaseConfig auto-id and display-name filling.
+
+These tests verify that the CaseConfig validator correctly infers missing id and
+display_name fields in ExperimentEntry and ComparisonRegistryEntry, using the
+registry entries (datasets and models) to fill in labels.
+
+Note: These tests are expected to FAIL before the validator is added to CaseConfig.
+They should raise pydantic.ValidationError when ExperimentEntry.id or
+ComparisonRegistryEntry.id are required but missing.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from neuralls.platform.config.models.experiments import CaseConfig
+
+
+@pytest.fixture
+def dataset_entry_gaussian() -> dict[str, object]:
+    """Registry entry for Gaussian CG-1 45x15 dataset."""
+    return {
+        "id": "gaussian-cg1-45x15",
+        "path": Path("/fake/gaussian.toml"),
+        "display_name": "Gaussian CG-1 45x15",
+    }
+
+
+@pytest.fixture
+def dataset_entry_solutions() -> dict[str, object]:
+    """Registry entry for Solutions 45x15 dataset."""
+    return {
+        "id": "solutions-45x15",
+        "path": Path("/fake/solutions.toml"),
+        "display_name": "Solutions 45x15",
+    }
+
+
+@pytest.fixture
+def model_entry_ffnn() -> dict[str, object]:
+    """Registry entry for FFNN Standard model."""
+    return {
+        "id": "ffnn-standard",
+        "path": Path("/fake/ffnn.toml"),
+        "display_name": "FFNN Standard",
+    }
+
+
+@pytest.fixture
+def minimal_case_raw(
+    dataset_entry_gaussian: dict[str, object],
+    model_entry_ffnn: dict[str, object],
+) -> dict[str, object]:
+    """Minimal valid case config with registry entries but empty experiments/comparisons."""
+    return {
+        "datasets": [dataset_entry_gaussian],
+        "models": [model_entry_ffnn],
+        "experiments": [],
+        "comparisons": [],
+    }
+
+
+# ============================================================================
+# Experiments — auto-fill tests
+# ============================================================================
+
+
+def test_experiment_auto_id_is_model_first(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Auto-generate experiment id from model and dataset when no id or display_name given.
+
+    The id should be "{model_id}-{dataset_id}" (model first).
+    Display name should be "{dataset_label} | {model_label}".
+    """
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [
+        {
+            "dataset": "gaussian-cg1-45x15",
+            "model": "ffnn-standard",
+            # no id, no display_name
+        }
+    ]
+    config = CaseConfig.model_validate(raw)
+    assert config.experiments[0].id == "ffnn-standard-gaussian-cg1-45x15"
+    assert config.experiments[0].display_name == "Gaussian CG-1 45x15 | FFNN Standard"
+
+
+def test_experiment_id_derived_from_display_name(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Auto-generate experiment id from display_name via slugification when no id given."""
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [
+        {
+            "dataset": "gaussian-cg1-45x15",
+            "model": "ffnn-standard",
+            "display_name": "My Run",
+            # no id
+        }
+    ]
+    config = CaseConfig.model_validate(raw)
+    assert config.experiments[0].id == "my-run"
+    assert config.experiments[0].display_name == "My Run"
+
+
+def test_experiment_display_name_auto_filled_when_only_id_given(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Auto-fill display_name from dataset and model labels when only id is given."""
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [
+        {
+            "id": "my-id",
+            "dataset": "gaussian-cg1-45x15",
+            "model": "ffnn-standard",
+            # no display_name
+        }
+    ]
+    config = CaseConfig.model_validate(raw)
+    assert config.experiments[0].id == "my-id"
+    assert config.experiments[0].display_name == "Gaussian CG-1 45x15 | FFNN Standard"
+
+
+def test_experiment_explicit_id_and_display_name_unchanged(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Explicit id and display_name should remain unchanged."""
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [
+        {
+            "id": "my-id",
+            "dataset": "gaussian-cg1-45x15",
+            "model": "ffnn-standard",
+            "display_name": "My Label",
+        }
+    ]
+    config = CaseConfig.model_validate(raw)
+    assert config.experiments[0].id == "my-id"
+    assert config.experiments[0].display_name == "My Label"
+
+
+# ============================================================================
+# Comparisons — auto-fill tests
+# ============================================================================
+
+
+def test_comparison_auto_id_when_same_datasets(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Auto-generate comparison id when matrix_dataset == rhs_dataset."""
+    raw = dict(minimal_case_raw)
+    raw["comparisons"] = [
+        {
+            "matrix_dataset": "gaussian-cg1-45x15",
+            "rhs_dataset": "gaussian-cg1-45x15",
+            # no id, no display_name
+        }
+    ]
+    config = CaseConfig.model_validate(raw)
+    assert config.comparisons[0].id == "gaussian-cg1-45x15"
+    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15"
+
+
+def test_comparison_auto_id_when_different_datasets(
+    minimal_case_raw: dict[str, object],
+    dataset_entry_solutions: dict[str, object],
+) -> None:
+    """Auto-generate comparison id with both datasets when matrix_dataset != rhs_dataset."""
+    raw = dict(minimal_case_raw)
+    # Add the second dataset to the registry
+    datasets = raw["datasets"]
+    if isinstance(datasets, list):
+        datasets.append(dataset_entry_solutions)
+    raw["comparisons"] = [
+        {
+            "matrix_dataset": "gaussian-cg1-45x15",
+            "rhs_dataset": "solutions-45x15",
+            # no id, no display_name
+        }
+    ]
+    config = CaseConfig.model_validate(raw)
+    assert config.comparisons[0].id == "gaussian-cg1-45x15-solutions-45x15"
+    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | Solutions 45x15"
+
+
+# ============================================================================
+# Backward compatibility tests
+# ============================================================================
+
+
+def test_explicit_id_and_display_name_preserved(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Explicit id and display_name in both experiments and comparisons are preserved."""
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [
+        {
+            "id": "my-exp",
+            "dataset": "gaussian-cg1-45x15",
+            "model": "ffnn-standard",
+            "display_name": "My Experiment",
+        }
+    ]
+    raw["comparisons"] = [
+        {
+            "id": "my-comp",
+            "matrix_dataset": "gaussian-cg1-45x15",
+            "rhs_dataset": "gaussian-cg1-45x15",
+            "display_name": "My Comparison",
+        }
+    ]
+    config = CaseConfig.model_validate(raw)
+
+    assert config.experiments[0].id == "my-exp"
+    assert config.experiments[0].display_name == "My Experiment"
+
+    assert config.comparisons[0].id == "my-comp"
+    assert config.comparisons[0].display_name == "My Comparison"
+
+
+# ============================================================================
+# Validation error tests
+# ============================================================================
+
+
+def test_invalid_id_chars_raise_validation_error(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Reject experiment entries with invalid characters in auto-generated id."""
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [
+        {
+            "id": "bad id!",
+            "dataset": "gaussian-cg1-45x15",
+            "model": "ffnn-standard",
+        }
+    ]
+    with pytest.raises(ValidationError):
+        CaseConfig.model_validate(raw)
+
+
+def test_duplicate_auto_ids_raise_validation_error(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Reject experiment entries when auto-id generation results in duplicates.
+
+    Two experiments with the same dataset and model but no explicit id will
+    both auto-generate the same id, which should be rejected.
+    """
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [
+        {
+            "dataset": "gaussian-cg1-45x15",
+            "model": "ffnn-standard",
+            # auto-generates "ffnn-standard-gaussian-cg1-45x15"
+        },
+        {
+            "dataset": "gaussian-cg1-45x15",
+            "model": "ffnn-standard",
+            # also auto-generates "ffnn-standard-gaussian-cg1-45x15" -> duplicate!
+        },
+    ]
+    with pytest.raises(ValidationError, match="[Dd]uplicate"):
+        CaseConfig.model_validate(raw)
