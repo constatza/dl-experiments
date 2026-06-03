@@ -16,8 +16,10 @@ Choose the config type that matches the case you want to run:
 - `cases/<system>/*.toml`: case configs that tie datasets, models, comparisons,
   MLflow, and experiment ids together
 
-Current systems: `45x15` and `93x31`. Each system has two cases:
-`evaluate-all.toml` (all candidate models) and `optimize.toml` (single model, all dataset variants).
+Current systems: `45x15` and `93x31`. Each system has case configs named
+`{model}-{dataset}.toml` with an optional `-pca` suffix for PCA-transform variants.
+`evaluate-all.toml` runs all candidate models; `ffnn-mixed.toml` runs FFNN on all dataset
+variants; `solutions-pca.toml` (45x15 only) runs FFNN + SPD with PCA on solutions datasets.
 
 Model families (all `ScaleEquivariant*`, `module_path = "dlkit.nn"`):
 - `ffnn/`: `ScaleEquivariantFFNN` — plain skip residual FFNN

@@ -1,15 +1,16 @@
 [SESSION]
 seed = 42
-workflow = "train"
+workflow = "optimize"
 precision = "float64"
 
 [MODEL]
-name = "ScaleEquivariantFactorizedFFNN"
+name = "ScaleEquivariantFourierFeatureNetwork"
 module_path = "dlkit.nn"
+hidden_size = 256
 num_layers = 1
-bias = true
-mean = 0.0
-std = 0.1
+n_frequencies = 64
+sigma = 1.0
+learnable_B = false
 norm = "l2"
 dropout = 0.0
 
@@ -26,7 +27,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "factorized"
+filename = "fourier-feature-network-optuna"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
@@ -77,3 +78,13 @@ num_workers = 0
 batch_size = 256
 pin_memory = true
 shuffle = true
+
+[OPTUNA]
+enabled = true
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 2, 4]}
+hidden_size = {choices = [128, 256, 512]}
+n_frequencies = {choices = [32, 64, 128]}
+sigma = {low = 0.5, high = 2.0, step = 0.5}

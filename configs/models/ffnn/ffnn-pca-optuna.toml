@@ -1,15 +1,12 @@
 [SESSION]
 seed = 42
-workflow = "train"
+workflow = "optimize"
 precision = "float64"
 
 [MODEL]
-name = "ScaleEquivariantFactorizedFFNN"
+name = "ScaleEquivariantFFNN"
 module_path = "dlkit.nn"
 num_layers = 1
-bias = true
-mean = 0.0
-std = 0.1
 norm = "l2"
 dropout = 0.0
 
@@ -26,7 +23,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "factorized"
+filename = "ffnn-pca-optuna"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
@@ -67,7 +64,19 @@ vector_dim = -1
 
 [DATASET]
 name = "FlexibleDataset"
-memmap_cache = true
+memmap_cache = false
+
+[[DATASET.features]]
+name = "x"
+transforms = [{name = "PCA", n_components = 50}]
+
+[[DATASET.targets]]
+name = "y"
+transforms = [{name = "PCA", n_components = 50}]
+
+[[DATASET.targets]]
+name = "solutions"
+transforms = [{name = "PCA", n_components = 50}]
 
 [DATAMODULE]
 name = "InMemoryModule"
@@ -77,3 +86,11 @@ num_workers = 0
 batch_size = 256
 pin_memory = true
 shuffle = true
+
+[OPTUNA]
+enabled = true
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 2, 4]}
+dropout = {low = 0.0, high = 0.3, step = 0.05}

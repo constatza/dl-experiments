@@ -1,17 +1,15 @@
 [SESSION]
 seed = 42
-workflow = "train"
+workflow = "optimize"
 precision = "float64"
 
 [MODEL]
-name = "ScaleEquivariantFactorizedFFNN"
+name = "ScaleEquivariantSiren"
 module_path = "dlkit.nn"
+hidden_size = 504
 num_layers = 1
-bias = true
-mean = 0.0
-std = 0.1
+omega0 = 30.0
 norm = "l2"
-dropout = 0.0
 
 [TRAINING.lr_tuner]
 min_lr = 1e-5
@@ -26,7 +24,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "factorized"
+filename = "siren-optuna"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
@@ -77,3 +75,12 @@ num_workers = 0
 batch_size = 256
 pin_memory = true
 shuffle = true
+
+[OPTUNA]
+enabled = true
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 2, 4]}
+hidden_size = {choices = [256, 504, 768]}
+omega0 = {choices = [10.0, 30.0, 60.0]}

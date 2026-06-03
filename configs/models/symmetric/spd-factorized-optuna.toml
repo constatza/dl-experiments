@@ -1,13 +1,14 @@
 [SESSION]
 seed = 42
-workflow = "train"
+workflow = "optimize"
 precision = "float64"
 
 [MODEL]
-name = "ScaleEquivariantFactorizedFFNN"
+name = "ScaleEquivariantSPDFactorizedFFNN"
 module_path = "dlkit.nn"
 num_layers = 1
-bias = true
+bias = false
+min_diag = 1e-4
 mean = 0.0
 std = 0.1
 norm = "l2"
@@ -26,7 +27,7 @@ enable_checkpointing = true
 
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
-filename = "factorized"
+filename = "spd-factorized-optuna"
 monitor = "val_loss"
 save_top_k = 1
 save_weights_only = false
@@ -77,3 +78,11 @@ num_workers = 0
 batch_size = 256
 pin_memory = true
 shuffle = true
+
+[OPTUNA]
+enabled = true
+n_trials = 40
+
+[OPTUNA.model]
+num_layers = {choices = [1, 2, 4]}
+min_diag = {choices = [1e-5, 1e-4, 1e-3]}

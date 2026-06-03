@@ -75,12 +75,3 @@ num_workers = 0
 batch_size = 256
 pin_memory = true
 shuffle = true
-
-[OPTUNA]
-enabled = false
-n_trials = 40
-
-[OPTUNA.model]
-num_layers = {choices = [1, 2, 4]}
-hidden_size = {choices = [256, 504, 768]}
-omega0 = {choices = [10.0, 30.0, 60.0]}
