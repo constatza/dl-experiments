@@ -35,6 +35,9 @@ The `dlkit/` package is the runtime adapter boundary. It hides predictor and
 inference integration details behind local abstractions so solver and
 application code depend on structural contracts rather than DLKit return-shape
 quirks or registry helpers.
+Solver-side DLKit predictors must preserve fitted checkpoint transforms during
+load so transform-aware models such as PCA-preprocessed preconditioners receive
+inputs in the feature space they were trained on.
 
 ## Boundary
 

@@ -168,10 +168,16 @@ def test_solver_factory_uses_dlkit_structural_prediction_contract(
     loaded_predictor = FakeLoadedPredictor(
         FakePredictionOutput(predictions=solver_prediction_tensor)
     )
+    captured_kwargs: dict[str, Any] = {}
+
+    def fake_load_model(*args: Any, **kwargs: Any) -> FakeLoadedPredictor:
+        del args
+        captured_kwargs.update(kwargs)
+        return loaded_predictor
 
     monkeypatch.setattr(
         "neuralls.platform.dlkit.predictor_adapter.load_model",
-        lambda *args, **kwargs: loaded_predictor,
+        fake_load_model,
     )
 
     predictor = DLKitAdapter().create_predictor(checkpoint_path)
@@ -180,6 +186,7 @@ def test_solver_factory_uses_dlkit_structural_prediction_contract(
 
     assert_array_equal(result, np.array([4.0, 5.0, 6.0], dtype=np.float64))
     assert len(loaded_predictor.calls) == 1
+    assert captured_kwargs["apply_transforms"] is True
 
 
 def test_inference_factory_uses_dlkit_structural_prediction_contract(

@@ -153,7 +153,10 @@ class DLKitAdapter(PredictorAdapter):
             dlkit_predictor = load_model(
                 checkpoint_path,
                 device="auto",
-                apply_transforms=False,
+                # Neural preconditioners must honor fitted checkpoint transforms.
+                # PCA-trained models, for example, expect DLKit to project the
+                # raw residual into the learned feature space before forward().
+                apply_transforms=True,
                 precision=PrecisionStrategy.FULL_64,
             )
 
