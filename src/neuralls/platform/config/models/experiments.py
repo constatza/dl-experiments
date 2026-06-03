@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from neuralls.shared.constants import DEFAULT_RTOL, DEFAULT_ATOL, DEFAULT_M_MAX
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
+from neuralls.platform.config.models.id_generation import (
+    _build_display_lookup,
+    _infer_comparison_display_name,
+    _infer_comparison_id,
+    _infer_experiment_display_name,
+    _infer_experiment_id,
+)
 
 
 def resolve_display_name(entity_id: str, display_name: str | None) -> str:
@@ -377,6 +384,76 @@ class CaseConfig(BaseModel):
     comparison_defaults: ComparisonDefaults | None = None
 
     model_config = ConfigDict(extra="allow", frozen=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _auto_fill_ids_and_display_names(cls, data: object) -> object:
+        """Auto-generate missing ids and display names before child validation.
+
+        Args:
+            data: Raw input dict (or other type, passed through unchanged).
+
+        Returns:
+            The mutated dict with any missing id/display_name fields filled in,
+            or the original data if it is not a dict.
+
+        Raises:
+            ValueError: If any inferred or user-supplied id contains invalid characters,
+                or if a display_name cannot be slugified into a valid id.
+        """
+        if not isinstance(data, dict):
+            return data
+        raw = cast("dict[str, object]", data)
+
+        datasets: list[object] = cast("list[object]", raw.get("datasets", []))
+        models: list[object] = cast("list[object]", raw.get("models", []))
+        experiments: list[object] = cast("list[object]", raw.get("experiments", []))
+        comparisons: list[object] = cast("list[object]", raw.get("comparisons", []))
+
+        dataset_display = _build_display_lookup(datasets)
+        model_display = _build_display_lookup(models)
+
+        for exp in experiments:
+            if not isinstance(exp, dict):
+                continue
+            exp_dict = cast("dict[str, object]", exp)
+            dataset_id = str(exp_dict.get("dataset") or "")
+            model_id = str(exp_dict.get("model") or "")
+            raw_id = exp_dict.get("id")
+            raw_dn = exp_dict.get("display_name")
+            user_id = str(raw_id).strip() if isinstance(raw_id, str) else None
+            user_id = user_id or None
+            user_dn = str(raw_dn).strip() if isinstance(raw_dn, str) else None
+            user_dn = user_dn or None
+
+            exp_dict["id"] = _infer_experiment_id(dataset_id, model_id, user_id, user_dn)
+
+            if not user_dn:
+                exp_dict["display_name"] = _infer_experiment_display_name(
+                    dataset_id, model_id, user_dn, dataset_display, model_display
+                )
+
+        for comp in comparisons:
+            if not isinstance(comp, dict):
+                continue
+            comp_dict = cast("dict[str, object]", comp)
+            matrix_id = str(comp_dict.get("matrix_dataset") or "")
+            rhs_id = str(comp_dict.get("rhs_dataset") or "")
+            raw_id = comp_dict.get("id")
+            raw_dn = comp_dict.get("display_name")
+            user_id = str(raw_id).strip() if isinstance(raw_id, str) else None
+            user_id = user_id or None
+            user_dn = str(raw_dn).strip() if isinstance(raw_dn, str) else None
+            user_dn = user_dn or None
+
+            comp_dict["id"] = _infer_comparison_id(matrix_id, rhs_id, user_id, user_dn)
+
+            if not user_dn:
+                comp_dict["display_name"] = _infer_comparison_display_name(
+                    matrix_id, rhs_id, user_dn, dataset_display
+                )
+
+        return data
 
     @model_validator(mode="before")
     @classmethod
