@@ -1,0 +1,146 @@
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training   = "Train-45x15-PCA"
+comparison = "Compare-45x15"
+
+[comparison_defaults]
+rtol               = 1.0e-6
+atol               = 1.0e-14
+max_iterations     = 200
+stopping_criterion = "residual_norm"
+m_max              = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+# ── Training datasets (solutions/spectral, LHS=solutions → residuals) ─────────
+
+[[datasets]]
+id           = "solutions-cg1-45x15"
+path         = "../../datasets/train/45x15/solutions-cg1.toml"
+display_name = "Solutions CG-1 45x15"
+
+[[datasets]]
+id           = "solutions-cg10-45x15"
+path         = "../../datasets/train/45x15/solutions-cg10.toml"
+display_name = "Solutions CG-10 45x15"
+
+[[datasets]]
+id           = "solutions-cg50-45x15"
+path         = "../../datasets/train/45x15/solutions-cg50.toml"
+display_name = "Solutions CG-50 45x15"
+
+[[datasets]]
+id           = "solutions-cg100-45x15"
+path         = "../../datasets/train/45x15/solutions-cg100.toml"
+display_name = "Solutions CG-100 45x15"
+
+# ── Test / compare datasets ───────────────────────────────────────────────────
+
+[[datasets]]
+id           = "gaussian-rhs-45x15"
+path         = "../../datasets/test/45x15/gaussian-rhs.toml"
+display_name = "Gaussian RHS 45x15"
+
+[[datasets]]
+id           = "scaled-solutions-45x15"
+path         = "../../datasets/test/45x15/scaled-solutions.toml"
+display_name = "Scaled Solutions 45x15"
+
+[[datasets]]
+id           = "sparse-rhs-45x15"
+path         = "../../datasets/test/45x15/sparse-rhs.toml"
+display_name = "Sparse RHS 45x15"
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+[[models]]
+id           = "ffnn-pca"
+path         = "../../models/ffnn/ffnn-pca.toml"
+display_name = "FFNN PCA"
+
+[[models]]
+id           = "spd-pca"
+path         = "../../models/symmetric/spd-pca.toml"
+display_name = "SPD PCA"
+
+# ── Comparisons ───────────────────────────────────────────────────────────────
+
+[[comparisons]]
+id             = "gaussian"
+matrix_dataset = "gaussian-rhs-45x15"
+rhs_dataset    = "gaussian-rhs-45x15"
+display_name   = "Gaussian RHS"
+
+[[comparisons]]
+id             = "scaled"
+matrix_dataset = "scaled-solutions-45x15"
+rhs_dataset    = "scaled-solutions-45x15"
+display_name   = "Scaled Solutions"
+
+[[comparisons]]
+id             = "sparse"
+matrix_dataset = "sparse-rhs-45x15"
+rhs_dataset    = "sparse-rhs-45x15"
+display_name   = "Sparse RHS"
+
+# ── Experiments (4 solutions datasets × 2 PCA models = 8) ────────────────────
+
+[[experiments]]
+id           = "solutions-cg1-45x15-ffnn-pca"
+dataset      = "solutions-cg1-45x15"
+model        = "ffnn-pca"
+display_name = "Solutions CG-1 45x15 | FFNN PCA"
+
+[[experiments]]
+id           = "solutions-cg10-45x15-ffnn-pca"
+dataset      = "solutions-cg10-45x15"
+model        = "ffnn-pca"
+display_name = "Solutions CG-10 45x15 | FFNN PCA"
+
+[[experiments]]
+id           = "solutions-cg50-45x15-ffnn-pca"
+dataset      = "solutions-cg50-45x15"
+model        = "ffnn-pca"
+display_name = "Solutions CG-50 45x15 | FFNN PCA"
+
+[[experiments]]
+id           = "solutions-cg100-45x15-ffnn-pca"
+dataset      = "solutions-cg100-45x15"
+model        = "ffnn-pca"
+display_name = "Solutions CG-100 45x15 | FFNN PCA"
+
+[[experiments]]
+id           = "solutions-cg1-45x15-spd-pca"
+dataset      = "solutions-cg1-45x15"
+model        = "spd-pca"
+display_name = "Solutions CG-1 45x15 | SPD PCA"
+
+[[experiments]]
+id           = "solutions-cg10-45x15-spd-pca"
+dataset      = "solutions-cg10-45x15"
+model        = "spd-pca"
+display_name = "Solutions CG-10 45x15 | SPD PCA"
+
+[[experiments]]
+id           = "solutions-cg50-45x15-spd-pca"
+dataset      = "solutions-cg50-45x15"
+model        = "spd-pca"
+display_name = "Solutions CG-50 45x15 | SPD PCA"
+
+[[experiments]]
+id           = "solutions-cg100-45x15-spd-pca"
+dataset      = "solutions-cg100-45x15"
+model        = "spd-pca"
+display_name = "Solutions CG-100 45x15 | SPD PCA"
