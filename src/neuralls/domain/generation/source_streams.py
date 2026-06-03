@@ -10,15 +10,45 @@ generation strategy logic. It supports:
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Protocol, runtime_checkable
-from collections.abc import Iterator
 
 import numpy as np
 
 _GLOB_CHARS = ("*", "?", "[", "]")
 _DEFAULT_SAMPLE_ID_REGEX = r"(\d+)(?!.*\d)"
+
+
+class EnumerateBy(StrEnum):
+    """Criterion for assigning sequential IDs to glob-matched files.
+
+    Use when filenames carry no natural integer ID (e.g. parameter-encoded names
+    like ``E1_3000_E2_78000_matrix.txt``).  Files are sorted by the chosen
+    criterion and assigned sequential IDs 0, 1, 2, …
+    """
+
+    NAME = "name"
+    CTIME = "ctime"
+    MTIME = "mtime"
+
+
+def _sort_key_for(path: Path, by: EnumerateBy) -> float | str:
+    """Return the sort key for *path* under the given *by* strategy."""
+    match by:
+        case EnumerateBy.NAME:
+            return path.name
+        case EnumerateBy.CTIME:
+            return path.stat().st_ctime
+        case EnumerateBy.MTIME:
+            return path.stat().st_mtime
+
+
+def _enumerate_files(paths: Sequence[Path], by: EnumerateBy) -> dict[int, Path]:
+    """Assign sequential IDs to *paths* sorted by *by*, returning ``{id: path}``."""
+    return {i: p for i, p in enumerate(sorted(paths, key=lambda p: _sort_key_for(p, by)))}
 
 
 def _is_glob_expression(expr: str) -> bool:
@@ -225,7 +255,12 @@ class TxtMatrixStream:
 class GlobMatrixStream:
     """Matrix stream backed by glob-matched .txt/.npy files."""
 
-    def __init__(self, expr: str, sample_id_regex: str | None = None) -> None:
+    def __init__(
+        self,
+        expr: str,
+        sample_id_regex: str | None = None,
+        enumerate_by: EnumerateBy | None = None,
+    ) -> None:
         pattern_path = Path(expr)
         parent = pattern_path.parent
         if not parent.exists():
@@ -233,15 +268,18 @@ class GlobMatrixStream:
         paths = sorted(parent.glob(pattern_path.name))
         if not paths:
             raise FileNotFoundError(f"No matrix files match glob: {expr}")
-        regex = re.compile(sample_id_regex or _DEFAULT_SAMPLE_ID_REGEX)
-        mapping: dict[int, Path] = {}
-        for path in paths:
-            sample_id = _extract_sample_id(path, regex)
-            if sample_id in mapping:
-                raise ValueError(
-                    f"Duplicate matrix sample id {sample_id} for files {mapping[sample_id]} and {path}"
-                )
-            mapping[sample_id] = path
+        if enumerate_by is not None:
+            mapping: dict[int, Path] = _enumerate_files(paths, enumerate_by)
+        else:
+            regex = re.compile(sample_id_regex or _DEFAULT_SAMPLE_ID_REGEX)
+            mapping = {}
+            for path in paths:
+                sample_id = _extract_sample_id(path, regex)
+                if sample_id in mapping:
+                    raise ValueError(
+                        f"Duplicate matrix sample id {sample_id} for files {mapping[sample_id]} and {path}"
+                    )
+                mapping[sample_id] = path
         self._mapping = mapping
         self._sample_ids = tuple(sorted(mapping.keys()))
 
@@ -345,7 +383,12 @@ class TxtVectorStream:
 class GlobVectorStream:
     """Vector stream backed by glob-matched .txt/.npy files."""
 
-    def __init__(self, expr: str, sample_id_regex: str | None = None) -> None:
+    def __init__(
+        self,
+        expr: str,
+        sample_id_regex: str | None = None,
+        enumerate_by: EnumerateBy | None = None,
+    ) -> None:
         pattern_path = Path(expr)
         parent = pattern_path.parent
         if not parent.exists():
@@ -353,15 +396,18 @@ class GlobVectorStream:
         paths = sorted(parent.glob(pattern_path.name))
         if not paths:
             raise FileNotFoundError(f"No vector files match glob: {expr}")
-        regex = re.compile(sample_id_regex or _DEFAULT_SAMPLE_ID_REGEX)
-        mapping: dict[int, Path] = {}
-        for path in paths:
-            sample_id = _extract_sample_id(path, regex)
-            if sample_id in mapping:
-                raise ValueError(
-                    f"Duplicate vector sample id {sample_id} for files {mapping[sample_id]} and {path}"
-                )
-            mapping[sample_id] = path
+        if enumerate_by is not None:
+            mapping: dict[int, Path] = _enumerate_files(paths, enumerate_by)
+        else:
+            regex = re.compile(sample_id_regex or _DEFAULT_SAMPLE_ID_REGEX)
+            mapping = {}
+            for path in paths:
+                sample_id = _extract_sample_id(path, regex)
+                if sample_id in mapping:
+                    raise ValueError(
+                        f"Duplicate vector sample id {sample_id} for files {mapping[sample_id]} and {path}"
+                    )
+                mapping[sample_id] = path
         self._mapping = mapping
         self._sample_ids = tuple(sorted(mapping.keys()))
 
@@ -390,10 +436,15 @@ class GlobVectorStream:
 def open_matrix_stream(
     matrix_path_expr: str,
     sample_id_regex: str | None = None,
+    enumerate_by: EnumerateBy | None = None,
 ) -> MatrixSampleStream:
     """Create a matrix sample stream from path expression."""
     if _is_glob_expression(matrix_path_expr):
-        return GlobMatrixStream(matrix_path_expr, sample_id_regex=sample_id_regex)
+        return GlobMatrixStream(
+            matrix_path_expr,
+            sample_id_regex=sample_id_regex,
+            enumerate_by=enumerate_by,
+        )
     path = Path(matrix_path_expr)
     if not path.exists():
         raise FileNotFoundError(f"Matrix source not found: {path}")
@@ -409,10 +460,15 @@ def open_matrix_stream(
 def open_vector_stream(
     vector_path_expr: str,
     sample_id_regex: str | None = None,
+    enumerate_by: EnumerateBy | None = None,
 ) -> VectorSampleStream:
     """Create a vector sample stream from path expression."""
     if _is_glob_expression(vector_path_expr):
-        return GlobVectorStream(vector_path_expr, sample_id_regex=sample_id_regex)
+        return GlobVectorStream(
+            vector_path_expr,
+            sample_id_regex=sample_id_regex,
+            enumerate_by=enumerate_by,
+        )
     path = Path(vector_path_expr)
     if not path.exists():
         raise FileNotFoundError(f"Vector source not found: {path}")
@@ -485,13 +541,17 @@ def bind_sources(
 
 
 __all__ = [
+    "EnumerateBy",
     "DenseMatrixSample",
     "SparseMatrixSample",
     "VectorSample",
     "SystemBinding",
     "MatrixSampleStream",
     "VectorSampleStream",
+    "GlobMatrixStream",
+    "GlobVectorStream",
     "open_matrix_stream",
     "open_vector_stream",
     "bind_sources",
+    "_enumerate_files",
 ]

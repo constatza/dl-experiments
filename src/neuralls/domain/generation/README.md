@@ -4,6 +4,38 @@ The generation package turns matrices and optional archives into processed
 training datasets. Most users should interact with it through `process-data`
 first and only then drop into the package internals.
 
+## Handling Arbitrarily-Named Matrix Files
+
+When a colleague provides matrices with parameter-encoded filenames (no sequential
+integer ID), set `enumerate_by` in the `[source]` block of the dataset TOML:
+
+```toml
+[source]
+matrix_path = "/data/matrices/E1_*_E2_*.txt"
+enumerate_by = "name"   # lexicographic — deterministic across runs
+```
+
+`enumerate_by` sorts the glob results by the chosen criterion and assigns sequential
+IDs 0, 1, 2, …  No renaming or modification of the source files is required.
+
+| Value | Sort criterion | When to use |
+| --- | --- | --- |
+| `"name"` | Lexicographic filename | **Default choice** — fully reproducible |
+| `"ctime"` | File creation timestamp | Files arrived in a known order |
+| `"mtime"` | Last-modified timestamp | Files were last touched in a known order |
+
+`enumerate_by` and `sample_id_regex` are mutually exclusive; specifying both raises
+a validation error.
+
+**Python API:**
+
+```python
+from neuralls.domain.generation.source_streams import GlobMatrixStream, EnumerateBy
+
+stream = GlobMatrixStream("data/E1_*_E2_*.txt", enumerate_by=EnumerateBy.NAME)
+# stream.sample_ids → (0, 1, 2, …)
+```
+
 ## User Path
 
 ### Basic

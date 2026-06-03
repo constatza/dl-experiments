@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 from pydantic import model_validator
 
+from neuralls.domain.generation.source_streams import EnumerateBy
 from neuralls.platform.config.context import ConfigContext, expand_config_glob, expand_config_path
 
 
@@ -53,8 +54,26 @@ class SourceConfig(BaseModel):
         default=None,
         description="Regex used to extract sample IDs from glob filenames for source pairing",
     )
+    enumerate_by: EnumerateBy | None = Field(
+        default=None,
+        description=(
+            "Sort glob-matched files by this criterion and assign sequential IDs (0, 1, 2, …). "
+            "Use when filenames carry no natural integer ID. "
+            "Mutually exclusive with sample_id_regex."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @model_validator(mode="after")
+    def _check_id_strategy_exclusivity(self) -> SourceConfig:
+        """Raise when both sample_id_regex and enumerate_by are set."""
+        if self.sample_id_regex is not None and self.enumerate_by is not None:
+            raise ValueError(
+                "sample_id_regex and enumerate_by are mutually exclusive: "
+                "use one or the other, not both."
+            )
+        return self
 
     @field_validator("case_path", mode="before")
     @classmethod

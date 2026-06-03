@@ -6,9 +6,13 @@ import numpy as np
 import pytest
 
 from neuralls.domain.generation.source_streams import (
+    EnumerateBy,
     bind_sources,
     open_matrix_stream,
     open_vector_stream,
+    GlobMatrixStream,
+    GlobVectorStream,
+    _enumerate_files,
 )
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.platform.storage.datasets import load_dense_training_arrays, resolve_dataset_paths
@@ -274,3 +278,122 @@ def test_glob_matrix_solution_archive_pairs_each_matrix_with_shared_vectors(
 
     pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
     assert pack.n_samples == 3 * n_solutions
+
+
+# ---------------------------------------------------------------------------
+# enumerate_by tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def arbitrary_named_txt_matrices(tmp_path: Path) -> tuple[Path, int]:
+    """Three 5×5 SPD matrices with parameter-encoded filenames (no sequential integer ID)."""
+    rng = np.random.default_rng(99)
+    mat_dir = tmp_path / "arbitrary_matrices"
+    mat_dir.mkdir()
+    n = 5
+    for E1, E2 in [(3000, 78000), (5000, 100000), (1000, 50000)]:
+        A = rng.standard_normal((n, n))
+        A = A @ A.T + n * np.eye(n)
+        np.savetxt(mat_dir / f"E1_{E1}_E2_{E2}_matrix.txt", A)
+    return mat_dir, n
+
+
+def test_enumerate_files_assigns_sequential_ids_in_name_order(tmp_path: Path) -> None:
+    paths = [tmp_path / f"file_z_{suffix}.txt" for suffix in ["c", "a", "b"]]
+    for p in paths:
+        p.touch()
+
+    result = _enumerate_files(paths, EnumerateBy.NAME)
+
+    assert sorted(result.keys()) == [0, 1, 2]
+    assert [result[i].name for i in range(3)] == [
+        "file_z_a.txt",
+        "file_z_b.txt",
+        "file_z_c.txt",
+    ]
+
+
+def test_enumerate_files_assigns_sequential_ids_by_mtime(tmp_path: Path) -> None:
+    import time
+
+    paths = []
+    for suffix in ["c", "a", "b"]:
+        p = tmp_path / f"file_{suffix}.txt"
+        p.touch()
+        paths.append(p)
+        time.sleep(0.01)
+
+    result = _enumerate_files(paths, EnumerateBy.MTIME)
+
+    # Creation order was c, a, b — IDs should follow mtime order
+    assert result[0].name == "file_c.txt"
+    assert result[1].name == "file_a.txt"
+    assert result[2].name == "file_b.txt"
+
+
+def test_glob_matrix_stream_enumerate_by_name_with_arbitrary_filenames(
+    arbitrary_named_txt_matrices: tuple[Path, int],
+) -> None:
+    mat_dir, n = arbitrary_named_txt_matrices
+    stream = GlobMatrixStream(str(mat_dir / "E1_*_matrix.txt"), enumerate_by=EnumerateBy.NAME)
+
+    assert stream.sample_ids == (0, 1, 2)
+    sample = stream.load_dense_sample(0)
+    assert sample.matrix.shape == (n, n)
+
+
+def test_glob_vector_stream_enumerate_by_name_with_arbitrary_filenames(tmp_path: Path) -> None:
+    vec_dir = tmp_path / "vecs"
+    vec_dir.mkdir()
+    rng = np.random.default_rng(42)
+    for E1, E2 in [(3000, 78000), (5000, 100000), (1000, 50000)]:
+        np.savetxt(vec_dir / f"E1_{E1}_E2_{E2}_rhs.txt", rng.standard_normal(5))
+
+    stream = GlobVectorStream(str(vec_dir / "E1_*_rhs.txt"), enumerate_by=EnumerateBy.NAME)
+
+    assert stream.sample_ids == (0, 1, 2)
+    assert stream.load_sample(0).vector.shape == (5,)
+
+
+def test_open_matrix_stream_glob_with_enumerate_by_name(
+    arbitrary_named_txt_matrices: tuple[Path, int],
+) -> None:
+    mat_dir, _ = arbitrary_named_txt_matrices
+    stream = open_matrix_stream(
+        str(mat_dir / "E1_*_matrix.txt"),
+        enumerate_by=EnumerateBy.NAME,
+    )
+
+    assert stream.sample_ids == (0, 1, 2)
+
+
+def test_glob_matrix_stream_enumerate_by_name_is_reproducible(
+    arbitrary_named_txt_matrices: tuple[Path, int],
+) -> None:
+    mat_dir, _ = arbitrary_named_txt_matrices
+    expr = str(mat_dir / "E1_*_matrix.txt")
+
+    stream1 = GlobMatrixStream(expr, enumerate_by=EnumerateBy.NAME)
+    stream2 = GlobMatrixStream(expr, enumerate_by=EnumerateBy.NAME)
+
+    assert stream1.sample_ids == stream2.sample_ids
+    for sid in stream1.sample_ids:
+        np.testing.assert_array_equal(
+            stream1.load_dense_sample(sid).matrix,
+            stream2.load_dense_sample(sid).matrix,
+        )
+
+
+def test_source_config_rejects_both_sample_id_regex_and_enumerate_by() -> None:
+    from neuralls.platform.config.models.data_models import SourceConfig
+
+    with pytest.raises(Exception):
+        SourceConfig(sample_id_regex=r"(\d+)", enumerate_by=EnumerateBy.NAME)
+
+
+def test_source_config_accepts_enumerate_by_without_regex() -> None:
+    from neuralls.platform.config.models.data_models import SourceConfig
+
+    config = SourceConfig(enumerate_by=EnumerateBy.NAME)
+    assert config.enumerate_by == EnumerateBy.NAME
