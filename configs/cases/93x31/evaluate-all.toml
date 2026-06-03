@@ -27,16 +27,16 @@ type = "ic0"
 # ── Training datasets (max CG-iter only) ─────────────────────────────────────
 
 [[datasets]]
+id           = "gaussian-cg1-93x31"
+path         = "../../datasets/train/93x31/gaussian-cg1.toml"
+display_name = "Gaussian CG-1 93x31"
+
+[[datasets]]
 id           = "gaussian-cg100-93x31"
 path         = "../../datasets/train/93x31/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 93x31"
 
 # ── Test / compare datasets ───────────────────────────────────────────────────
-
-[[datasets]]
-id           = "gaussian-rhs-93x31"
-path         = "../../datasets/test/93x31/gaussian-rhs.toml"
-display_name = "Gaussian RHS 93x31"
 
 [[datasets]]
 id           = "sparse-rhs-93x31"
@@ -99,8 +99,8 @@ display_name = "Spectral Factorized"
 
 [[comparisons]]
 id             = "gaussian"
-matrix_dataset = "gaussian-rhs-93x31"
-rhs_dataset    = "gaussian-rhs-93x31"
+matrix_dataset = "gaussian-cg1-93x31"
+rhs_dataset    = "gaussian-cg1-93x31"
 
 [[comparisons]]
 id             = "sparse"

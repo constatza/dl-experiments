@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train-45x15-All"
-comparison = "Compare-45x15-All"
+training   = "Train-45x15randomE-All"
+comparison = "Compare-45x15randomE-All"
 
 [comparison_defaults]
 rtol               = 1.0e-6
@@ -27,19 +27,14 @@ type = "ic0"
 # ── Training datasets (max CG-iter only) ─────────────────────────────────────
 
 [[datasets]]
-id           = "gaussian-cg1-45x15"
-path         = "../../datasets/train/45x15/gaussian-cg1.toml"
-display_name = "Gaussian CG-1 45x15"
+id           = "gaussian-cg1-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg1.toml"
+display_name = "Gaussian CG-1 45x15randomE"
 
 [[datasets]]
-id           = "gaussian-cg100-45x15"
-path         = "../../datasets/train/45x15/gaussian-cg100.toml"
-display_name = "Gaussian CG-100 45x15"
-
-[[datasets]]
-id           = "solutions-cg100-45x15"
-path         = "../../datasets/train/45x15/solutions-cg100.toml"
-display_name = "Solutions CG-100 45x15"
+id           = "gaussian-cg100-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg100.toml"
+display_name = "Gaussian CG-100 45x15randomE"
 
 # ── Test / compare datasets ───────────────────────────────────────────────────
 
@@ -47,11 +42,6 @@ display_name = "Solutions CG-100 45x15"
 id           = "scaled-solutions-45x15"
 path         = "../../datasets/test/45x15/scaled-solutions.toml"
 display_name = "Scaled Solutions 45x15"
-
-[[datasets]]
-id           = "sparse-rhs-45x15"
-path         = "../../datasets/test/45x15/sparse-rhs.toml"
-display_name = "Sparse RHS 45x15"
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
@@ -109,97 +99,52 @@ display_name = "Spectral Factorized"
 
 [[comparisons]]
 id             = "gaussian"
-matrix_dataset = "gaussian-cg1-45x15"
-rhs_dataset    = "gaussian-cg1-45x15"
+matrix_dataset = "gaussian-cg1-45x15randomE"
+rhs_dataset    = "gaussian-cg1-45x15randomE"
 
 [[comparisons]]
 id             = "scaled"
 matrix_dataset = "scaled-solutions-45x15"
 rhs_dataset    = "scaled-solutions-45x15"
 
-[[comparisons]]
-id             = "sparse"
-matrix_dataset = "sparse-rhs-45x15"
-rhs_dataset    = "sparse-rhs-45x15"
-
-# ── Experiments (10 models × 2 training datasets = 20) ───────────────────────
+# ── Experiments (10 models × 1 training dataset = 10) ────────────────────────
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "ffnn-standard"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "embedded-factorized"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "symmetric-embedded-spd"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "symmetric-embedded-spd-factorized"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "symmetric-spd"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "symmetric-spd-factorized"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "spectral-siren"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "spectral-fourier"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "spectral-modified-mlp"
 
 [[experiments]]
-dataset      = "gaussian-cg100-45x15"
-model        = "spectral-factorized"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "ffnn-standard"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "embedded-factorized"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "symmetric-embedded-spd"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "symmetric-embedded-spd-factorized"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "symmetric-spd"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "symmetric-spd-factorized"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "spectral-siren"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "spectral-fourier"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "spectral-modified-mlp"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
+dataset      = "gaussian-cg100-45x15randomE"
 model        = "spectral-factorized"

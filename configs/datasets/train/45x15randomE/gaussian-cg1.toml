@@ -1,0 +1,18 @@
+id = "gaussian-cg1-45x15randomE"
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_subdomain_1_Kaa.txt"
+enumerate_by = "name"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "gaussian_residuals"
+samples = 10000
+cg_iters = 1
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"

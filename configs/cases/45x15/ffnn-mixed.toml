@@ -69,11 +69,6 @@ display_name = "Solutions CG-100 45x15"
 # ── Test / compare datasets ───────────────────────────────────────────────────
 
 [[datasets]]
-id           = "gaussian-rhs-45x15"
-path         = "../../datasets/test/45x15/gaussian-rhs.toml"
-display_name = "Gaussian RHS 45x15"
-
-[[datasets]]
 id           = "scaled-solutions-45x15"
 path         = "../../datasets/test/45x15/scaled-solutions.toml"
 display_name = "Scaled Solutions 45x15"
@@ -94,8 +89,8 @@ display_name = "FFNN Standard"
 
 [[comparisons]]
 id             = "gaussian"
-matrix_dataset = "gaussian-rhs-45x15"
-rhs_dataset    = "gaussian-rhs-45x15"
+matrix_dataset = "gaussian-cg1-45x15"
+rhs_dataset    = "gaussian-cg1-45x15"
 
 [[comparisons]]
 id             = "scaled"

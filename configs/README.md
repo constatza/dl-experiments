@@ -11,15 +11,21 @@ environment, then use plain `uv run neuralls ...` commands.
 Choose the config type that matches the case you want to run:
 
 - `datasets/train/<system>/*.toml`: training dataset configs (gaussian-cg{N}, solutions-cg{N})
-- `datasets/test/<system>/*.toml`: comparison/test dataset configs (gaussian-rhs, scaled-solutions, sparse-rhs)
+- `datasets/test/<system>/*.toml`: comparison/test dataset configs (scaled-solutions, sparse-rhs, and any non-Gaussian benchmarks)
 - `models/<family>/*.toml`: model architecture and trainer setup (shared across systems)
 - `cases/<system>/*.toml`: case configs that tie datasets, models, comparisons,
   MLflow, and experiment ids together
 
-Current systems: `45x15` and `93x31`. Each system has case configs named
-`{model}-{dataset}.toml` with an optional `-pca` suffix for PCA-transform variants.
-`evaluate-all.toml` runs all candidate models; `ffnn-mixed.toml` runs FFNN on all dataset
-variants; `solutions-pca.toml` (45x15 only) runs FFNN + SPD with PCA on solutions datasets.
+Current systems: `45x15`, `45x15randomE`, and `93x31`. Each system has case
+configs named `{model}-{dataset}.toml` with an optional `-pca` suffix for PCA-transform
+variants where that family exists. `evaluate-all.toml` runs all candidate models;
+`ffnn-mixed.toml` runs FFNN on all dataset variants; `solutions-pca.toml`
+remains specific to the plain `45x15` system.
+Gaussian benchmark comparisons now reuse the corresponding `gaussian-cg1`
+training dataset instead of carrying duplicate `gaussian-rhs` TOMLs. The
+`45x15randomE` case family also reuses the existing `45x15`
+`scaled-solutions` benchmark dataset rather than defining a separate solution
+archive.
 
 Model families (all `ScaleEquivariant*`, `module_path = "dlkit.nn"`):
 - `ffnn/`: `ScaleEquivariantFFNN` — plain skip residual FFNN
@@ -64,7 +70,7 @@ uv run neuralls compare /path/to/case.toml
 If one comparison profile depends on a test dataset, build it explicitly first:
 
 ```bash
-uv run neuralls generate-single configs/datasets/test/45x15/gaussian-rhs.toml \
+uv run neuralls generate-single configs/datasets/train/45x15/gaussian-cg1.toml \
   --case-config configs/cases/45x15/evaluate-all.toml
 ```
 
