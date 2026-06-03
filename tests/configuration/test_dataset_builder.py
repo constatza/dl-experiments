@@ -27,6 +27,9 @@ from neuralls.platform.config.models.dataset import (
     create_targets_from_array,
     with_dataset_arrays,
 )
+from neuralls.composition.experiments.runtime_dataset_contract import (
+    default_training_dataset_contract,
+)
 
 # Skip all tests if dlkit has circular import issue
 pytestmark = pytest.mark.skipif(
@@ -72,10 +75,11 @@ class TestCreateFeaturesFromArray:
     """Tests for create_features_from_array function."""
 
     def test_create_features_default_name(self, sample_rhs_array: np.ndarray) -> None:
-        features = create_features_from_array(sample_rhs_array)
+        contract = default_training_dataset_contract()
+        features = create_features_from_array(sample_rhs_array, name=contract.primary_input_name)
         assert isinstance(features, tuple)
         assert len(features) == 1
-        assert features[0].name == "rhs"
+        assert features[0].name == "x"
 
     def test_create_features_custom_name(self, sample_rhs_array: np.ndarray) -> None:
         features = create_features_from_array(sample_rhs_array, name="custom_feature")
@@ -91,15 +95,20 @@ class TestCreateMatrixFeature:
         assert feature.name == "matrix"
         assert feature is not None
 
+    def test_create_matrix_feature_custom_name(self, sample_matrix_array: np.ndarray) -> None:
+        feature = create_matrix_feature(sample_matrix_array, name="stiffness")
+        assert feature.name == "stiffness"
+
 
 class TestCreateTargetsFromArray:
     """Tests for create_targets_from_array function."""
 
     def test_create_targets_default_name(self, sample_solutions_array: np.ndarray) -> None:
-        targets = create_targets_from_array(sample_solutions_array)
+        contract = default_training_dataset_contract()
+        targets = create_targets_from_array(sample_solutions_array, name=contract.target_name)
         assert isinstance(targets, tuple)
         assert len(targets) == 1
-        assert targets[0].name == "solutions"
+        assert targets[0].name == "y"
 
 
 class TestWithDatasetArrays:
@@ -112,10 +121,20 @@ class TestWithDatasetArrays:
         sample_solutions_array: np.ndarray,
     ) -> None:
         """Test dataset injection for standard dataset."""
-        updated = with_dataset_arrays(mock_settings, sample_rhs_array, sample_solutions_array)
+        contract = default_training_dataset_contract()
+        updated = with_dataset_arrays(
+            mock_settings,
+            sample_rhs_array,
+            sample_solutions_array,
+            primary_input_name=contract.primary_input_name,
+            target_name=contract.target_name,
+            matrix_input_name=contract.matrix_input_name,
+        )
         assert updated.DATASET is not None
         assert hasattr(updated.DATASET, "features")
         assert hasattr(updated.DATASET, "targets")
+        assert updated.DATASET.features[0].name == "x"
+        assert updated.DATASET.targets[0].name == "y"
 
     def test_with_dataset_arrays_graph_dataset_includes_matrix(
         self,
@@ -126,11 +145,15 @@ class TestWithDatasetArrays:
     ) -> None:
         """Test dataset injection includes matrix for GraphDataset."""
         graph_settings = patch_model(mock_settings, {"DATASET": {"name": "GraphDataset"}})
+        contract = default_training_dataset_contract()
         updated = with_dataset_arrays(
             graph_settings,
             sample_rhs_array,
             sample_solutions_array,
             sample_matrix_array,
+            primary_input_name=contract.primary_input_name,
+            target_name=contract.target_name,
+            matrix_input_name=contract.matrix_input_name,
         )
         assert any(f.name == "matrix" for f in updated.DATASET.features)
 
@@ -141,10 +164,14 @@ class TestWithDatasetArrays:
         sample_solutions_array: np.ndarray,
     ) -> None:
         """Dataset injection returns a new settings object."""
+        contract = default_training_dataset_contract()
         updated = with_dataset_arrays(
             mock_settings,
             sample_rhs_array,
             sample_solutions_array,
+            primary_input_name=contract.primary_input_name,
+            target_name=contract.target_name,
+            matrix_input_name=contract.matrix_input_name,
         )
 
         assert updated is not mock_settings

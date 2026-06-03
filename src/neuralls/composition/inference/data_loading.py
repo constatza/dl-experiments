@@ -14,6 +14,9 @@ from loguru import logger
 
 from dlkit.io import load_array
 
+from neuralls.composition.experiments.runtime_dataset_contract import (
+    default_training_dataset_contract,
+)
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.reporting.synthetic import generate_synthetic_test_case
 from neuralls.platform.config.loaders import load_comparison_config
@@ -82,6 +85,7 @@ def load_standard_data(
         - Uses explicit array files under the dataset artifact layout
         - Returns None if files don't exist (allows fallback to synthetic)
     """
+    contract = default_training_dataset_contract()
     feat_path, tgt_path = resolve_standard_data_paths(workspace, features_path, targets_path)
 
     if not feat_path.exists() or not tgt_path.exists():
@@ -102,8 +106,8 @@ def load_standard_data(
         targets = targets.ravel()
 
     # Store as dict for compatibility with DLKit feature entry system
-    feature_dict = {"x": features}
-    target_dict = {"y": targets}
+    feature_dict = {contract.primary_input_name: features}
+    target_dict = {contract.target_name: targets}
 
     return InferenceData(
         features=feature_dict,
@@ -138,6 +142,7 @@ def load_synthetic_data(
         ValueError: If comparison config doesn't specify matrix_path
         FileNotFoundError: If matrix file doesn't exist
     """
+    contract = default_training_dataset_contract()
     logger.info("Preparing SYNTHETIC benchmark data (x_true = ones).")
 
     comparison_cfg = load_comparison_config(comparison_config_path, settings)
@@ -154,8 +159,8 @@ def load_synthetic_data(
     targets = targets_raw.reshape(1, -1)
 
     # Store as dict for compatibility with DLKit feature entry system
-    feature_dict = {"x": features}
-    target_dict = {"y": targets}
+    feature_dict = {contract.primary_input_name: features}
+    target_dict = {contract.target_name: targets}
 
     return InferenceData(
         features=feature_dict,

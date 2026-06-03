@@ -34,6 +34,10 @@ from mlflow.tracking import MlflowClient
 import numpy as np
 
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.composition.experiments.runtime_dataset_contract import (
+    RuntimeDatasetContract,
+    default_training_dataset_contract,
+)
 from neuralls.platform.config.models.experiments import ExperimentEntry, ExperimentNamesConfig
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.composition.experiments.assembler import load_experiment
@@ -95,6 +99,7 @@ def _resolve_training_experiment_name(mlflow_experiment_name: str | None) -> str
 def _load_and_prepare_data(
     settings: TrainingWorkflowSettings,
     workspace: ExperimentWorkspace,
+    contract: RuntimeDatasetContract,
 ) -> tuple[TrainingArrays, list[FeatureType], list[TargetType]]:
     """Load training data and create Feature/Target configurations.
 
@@ -119,12 +124,16 @@ def _load_and_prepare_data(
         if settings.DATASET and isinstance(settings.DATASET.name, str)
         else None
     )
-    features = _create_feature_configs(arrays, dataset_name)
-    targets = _create_target_configs(arrays)
+    features = _create_feature_configs(arrays, dataset_name, contract)
+    targets = _create_target_configs(arrays, contract)
     return arrays, features, targets
 
 
-def _create_feature_configs(arrays: TrainingArrays, dataset_name: str | None) -> list[FeatureType]:
+def _create_feature_configs(
+    arrays: TrainingArrays,
+    dataset_name: str | None,
+    contract: RuntimeDatasetContract,
+) -> list[FeatureType]:
     """Create file-backed Feature configs from dataset artifacts.
 
     Args:
@@ -136,7 +145,7 @@ def _create_feature_configs(arrays: TrainingArrays, dataset_name: str | None) ->
     """
     _ = dataset_name
     sparse_feature = SparseFeature(
-        name="matrix",
+        name=contract.matrix_input_name,
         path=arrays.matrix_pack,
         model_input=False,
     )
@@ -152,32 +161,100 @@ def _create_feature_configs(arrays: TrainingArrays, dataset_name: str | None) ->
     )
     return [
         Feature(
-            name="x",
+            name=contract.primary_input_name,
             path=arrays.rhs,
         ),
         sparse_feature,
     ]
 
 
-def _create_target_configs(arrays: TrainingArrays) -> list[TargetType]:
+def _create_target_configs(
+    arrays: TrainingArrays,
+    contract: RuntimeDatasetContract,
+) -> list[TargetType]:
     """Create file-backed Target configs from dataset artifacts.
 
     Args:
         arrays: Training data artifact paths
 
     Returns:
-        Targets with both model-compatible and loss-compatible keys.
+        The canonical supervised target entry for the current workflow.
     """
     return [
         Target(
-            name="y",
-            path=arrays.solutions,
-        ),
-        Target(
-            name="solutions",
+            name=contract.target_name,
             path=arrays.solutions,
         ),
     ]
+
+
+def _find_duplicate_entry_names(entries: tuple[DataEntry, ...]) -> set[str]:
+    """Return duplicated non-null dataset entry names."""
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for entry in entries:
+        if entry.name is None:
+            continue
+        if entry.name in seen:
+            duplicates.add(entry.name)
+        seen.add(entry.name)
+    return duplicates
+
+
+def _validate_runtime_dataset_contract(
+    settings: TrainingWorkflowSettings,
+    contract: RuntimeDatasetContract,
+) -> None:
+    """Validate the local runtime dataset-entry contract for training.
+
+    This training bridge keeps storage artifact names separate from runtime
+    entry names. Runtime placeholder entries and loss routing must resolve
+    through the caller-supplied contract.
+    """
+    _validate_dataset_section(settings)
+    dataset = settings.DATASET or DatasetSettings()
+
+    duplicate_features = _find_duplicate_entry_names(dataset.features)
+    if duplicate_features:
+        raise ValueError(
+            f"Duplicate DATASET feature entry names are not allowed: {sorted(duplicate_features)}"
+        )
+
+    feature_names = {entry.name for entry in dataset.features if entry.name is not None}
+    unsupported_feature_names = sorted(
+        name
+        for name in feature_names
+        if name not in {contract.primary_input_name, contract.matrix_input_name}
+    )
+    if unsupported_feature_names:
+        raise ValueError(
+            "DATASET feature placeholders must use only the resolved runtime "
+            f"feature names '{contract.primary_input_name}' and optional "
+            f"'{contract.matrix_input_name}', got {unsupported_feature_names}."
+        )
+
+    duplicate_targets = _find_duplicate_entry_names(dataset.targets)
+    if duplicate_targets:
+        raise ValueError(
+            f"Duplicate DATASET target entry names are not allowed: {sorted(duplicate_targets)}"
+        )
+
+    target_names = {entry.name for entry in dataset.targets if entry.name is not None}
+    unsupported_target_names = sorted(name for name in target_names if name != contract.target_name)
+    if unsupported_target_names:
+        raise ValueError(
+            "DATASET target placeholders must use only the resolved supervised "
+            f"target name '{contract.target_name}', got {unsupported_target_names}."
+        )
+
+    training_cfg = settings.TRAINING
+    loss_function = getattr(training_cfg, "loss_function", None) if training_cfg else None
+    target_key = getattr(loss_function, "target_key", None)
+    if target_key is not None and target_key != contract.loss_target_key:
+        raise ValueError(
+            "TRAINING.loss_function.target_key must resolve to the runtime "
+            f"supervised target '{contract.loss_target_key}', got '{target_key}'."
+        )
 
 
 def _merge_entry_transforms[T: DataEntry](
@@ -210,9 +287,9 @@ def _merge_entry_transforms[T: DataEntry](
         result.append(entry)
     unmatched = transforms_by_name.keys() - consumed
     if unmatched:
-        logger.warning(
-            "Transform config entries not matched to any dataset entry — transforms will be ignored: {}",
-            sorted(unmatched),
+        raise ValueError(
+            "DATASET placeholder entries must match injected runtime entry names. "
+            f"Unmatched entries: {sorted(unmatched)}"
         )
     return result
 
@@ -234,6 +311,7 @@ def _resolve_dataset(
     settings: TrainingWorkflowSettings,
     features: list[FeatureType],
     targets: list[TargetType],
+    contract: RuntimeDatasetContract,
 ) -> TrainingWorkflowSettings:
     """Resolve and apply dataset configurations to settings.
 
@@ -253,7 +331,7 @@ def _resolve_dataset(
     Raises:
         ValueError: If DATASET section missing from config
     """
-    _validate_dataset_section(settings)
+    _validate_runtime_dataset_contract(settings, contract)
     base_dataset = settings.DATASET or DatasetSettings()
     features = _merge_entry_transforms(features, base_dataset.features)
     targets = _merge_entry_transforms(targets, base_dataset.targets)
@@ -357,6 +435,7 @@ def _configure_training_pipeline(
     workspace: ExperimentWorkspace,
     features: list[FeatureType],
     targets: list[TargetType],
+    contract: RuntimeDatasetContract,
     mlflow_experiment_name: str,
     mlflow_run_name: str,
 ) -> tuple[TrainingWorkflowSettings, ExperimentWorkspace]:
@@ -382,7 +461,7 @@ def _configure_training_pipeline(
     Returns:
         Tuple of (updated_settings, workspace) ready for DLKit execute()
     """
-    settings = _resolve_dataset(settings, features, targets)
+    settings = _resolve_dataset(settings, features, targets, contract)
     settings = _configure_dataloader_runtime(settings)
     settings = _configure_output_paths(settings, workspace.root_dir)
     settings = _configure_mlflow(
@@ -438,8 +517,9 @@ def _build_training_run_config(
 def _log_training_evaluation(
     tracking_uri: str,
     run_id: str,
-    training_result: Any,
+    numpy_payload: Mapping[str, Any] | None,
     figures_dir: Path,
+    contract: RuntimeDatasetContract,
 ) -> None:
     """Compute diagnostics from training predictions and log to existing MLflow run.
 
@@ -450,11 +530,10 @@ def _log_training_evaluation(
     Args:
         tracking_uri: MLflow tracking URI (HTTP or SQLite).
         run_id: Existing MLflow run ID to reopen.
-        training_result: DLKit TrainingResult with captured predictions and targets.
+        numpy_payload: Normalized DLKit prediction/target payload.
         figures_dir: Directory to write the diagnostics figure.
     """
-    all_numpy = training_result.to_numpy()
-    selected = _extract_evaluation_arrays(all_numpy)
+    selected = _extract_evaluation_arrays(numpy_payload, contract)
     if selected is None:
         logger.warning(
             "Skipping training diagnostics logging: unable to resolve prediction/target arrays."
@@ -484,6 +563,7 @@ def _stage_training_artifacts(
     *,
     workspace: ExperimentWorkspace,
     training_result: Any,
+    numpy_payload: Mapping[str, Any] | None,
     model_config_path: Path,
     data_config_path: Path | None,
 ) -> None:
@@ -503,7 +583,11 @@ def _stage_training_artifacts(
         encoding="utf-8",
     )
 
-    save_training_predictions(training_result, workspace.predictions_dir)
+    save_training_predictions(
+        training_result,
+        workspace.predictions_dir,
+        numpy_payload=numpy_payload,
+    )
 
 
 def _resolve_mlflow_run_ids(
@@ -613,72 +697,20 @@ def _resolve_training_checkpoint(
     raise RuntimeError(f"No checkpoint found in {workspace.checkpoint_dir}")
 
 
-_PREDICTION_KEYS: tuple[str, ...] = (
-    "output",
-    "predictions",
-    "y_pred",
-    "y_hat",
-    "y",
-    "solutions",
-)
-_TARGET_KEYS: tuple[str, ...] = (
-    "y",
-    "solutions",
-    "targets",
-    "target",
-    "y_true",
-    "output",
-)
-
-
-def _select_mapping_value(
-    payload: Mapping[str, Any],
-    preferred_keys: tuple[str, ...],
-    fallback_keys: list[str],
-) -> Any | None:
-    for key in preferred_keys:
-        value = payload.get(key)
-        if value is not None:
-            return value
-    for key in fallback_keys:
-        value = payload.get(key)
-        if value is not None:
-            return value
-    return next((value for value in payload.values() if value is not None), None)
-
-
 def _extract_evaluation_arrays(
     all_numpy: Any,
+    contract: RuntimeDatasetContract,
 ) -> tuple[np.ndarray, np.ndarray] | None:
     if not isinstance(all_numpy, Mapping):
         return None
 
     predictions_raw = all_numpy.get("predictions")
     targets_raw = all_numpy.get("targets")
-    if predictions_raw is None or targets_raw is None:
+    if not isinstance(predictions_raw, Mapping) or not isinstance(targets_raw, Mapping):
         return None
 
-    prediction_keys = (
-        [key for key in predictions_raw if isinstance(key, str)]
-        if isinstance(predictions_raw, Mapping)
-        else []
-    )
-    target_keys = (
-        [key for key in targets_raw if isinstance(key, str)]
-        if isinstance(targets_raw, Mapping)
-        else []
-    )
-
-    y_pred_raw = (
-        _select_mapping_value(predictions_raw, _PREDICTION_KEYS, prediction_keys)
-        if isinstance(predictions_raw, Mapping)
-        else predictions_raw
-    )
-    y_true_raw = (
-        _select_mapping_value(targets_raw, _TARGET_KEYS, target_keys)
-        if isinstance(targets_raw, Mapping)
-        else targets_raw
-    )
+    y_pred_raw = predictions_raw.get(contract.prediction_name)
+    y_true_raw = targets_raw.get(contract.target_name)
     if y_pred_raw is None or y_true_raw is None:
         return None
 
@@ -687,6 +719,46 @@ def _extract_evaluation_arrays(
     if y_pred.size == 0 or y_true.size == 0:
         return None
     return y_pred, y_true
+
+
+def _normalize_training_numpy_payload(
+    all_numpy: Any,
+    contract: RuntimeDatasetContract,
+) -> Mapping[str, Any] | None:
+    """Normalize DLKit prediction payloads into the local runtime contract once."""
+    if not isinstance(all_numpy, Mapping):
+        return None
+
+    predictions_raw = all_numpy.get("predictions")
+    targets_raw = all_numpy.get("targets")
+    if not isinstance(predictions_raw, Mapping) or not isinstance(targets_raw, Mapping):
+        return None
+
+    if contract.prediction_name in predictions_raw:
+        prediction_value = predictions_raw[contract.prediction_name]
+    elif "output" in predictions_raw:
+        prediction_value = predictions_raw["output"]
+    else:
+        raise ValueError(
+            "Training prediction payload must expose either the canonical prediction key "
+            f"'{contract.prediction_name}' or the DLKit boundary key 'output'."
+        )
+
+    normalized = dict(all_numpy)
+    normalized["predictions"] = {contract.prediction_name: prediction_value}
+    normalized["targets"] = dict(targets_raw)
+    return normalized
+
+
+def _get_normalized_training_numpy_payload(
+    training_result: Any,
+    contract: RuntimeDatasetContract,
+) -> Mapping[str, Any] | None:
+    """Read and normalize DLKit numpy payloads when the result exposes them."""
+    to_numpy = getattr(training_result, "to_numpy", None)
+    if not callable(to_numpy):
+        return None
+    return _normalize_training_numpy_payload(to_numpy(), contract)
 
 
 def _log_training_context(
@@ -808,12 +880,13 @@ def train_model(
         )
         workflow_settings = experiment.settings
         workspace = experiment.workspace
+        contract = default_training_dataset_contract()
         dataset_id = workspace.dataset_id
         resolved_experiment_display_name = experiment.spec.experiment_display_name
         resolved_dataset_display_name = experiment.spec.dataset_display_name or dataset_id
 
         # Step 2: Resolve training dataset artifacts
-        _, features, targets = _load_and_prepare_data(workflow_settings, workspace)
+        _, features, targets = _load_and_prepare_data(workflow_settings, workspace, contract)
 
         # Step 3: Build execute()-time MLflow naming and tags
         run_config = _build_training_run_config(
@@ -833,6 +906,7 @@ def train_model(
             workspace,
             features,
             targets,
+            contract,
             run_config.experiment_name,
             run_config.run_name,
         )
@@ -899,17 +973,23 @@ def train_model(
                     tracking_uri=tracking_uri,
                     artifacts_destination=artifacts_destination,
                 )
+                normalized_numpy = _get_normalized_training_numpy_payload(
+                    training_result,
+                    contract,
+                )
                 _stage_training_artifacts(
                     workspace=workspace,
                     training_result=training_result,
+                    numpy_payload=normalized_numpy,
                     model_config_path=config_path,
                     data_config_path=resolved_data_config_path,
                 )
                 _log_training_evaluation(
                     tracking_uri,
                     run_id,
-                    training_result,
+                    normalized_numpy,
                     workspace.figures_dir,
+                    contract,
                 )
                 log_artifacts_to_mlflow(
                     tracking_uri=tracking_uri,

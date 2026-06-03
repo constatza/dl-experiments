@@ -24,6 +24,13 @@ resolution, DLKit-specific config bridging, and MLflow client operations.
 These concerns stay here so composition can assemble workflows without owning
 filesystem, environment, or third-party policy details.
 
+The DLKit dataset bridge stays generic. Platform helpers construct and patch
+DLKit-native dataset entries with the names supplied by composition, but
+platform does not own the canonical runtime naming policy itself. Storage-layer
+artifact names such as `rhs.npy`, `solutions.npy`, and `matrix_coo/` stay in
+platform storage, while the composition dataset contract decides which runtime
+entry names those artifacts map to.
+
 The `dlkit/` package is the runtime adapter boundary. It hides predictor and
 inference integration details behind local abstractions so solver and
 application code depend on structural contracts rather than DLKit return-shape
@@ -50,3 +57,7 @@ re-normalizing them against the local operating system.
 Storage validation owns concrete dataset-layout checks. Comparison matrix/RHS
 preflight belongs under `platform.storage` because it depends on manifest and
 sparse-pack layout knowledge rather than workflow sequencing.
+
+Training artifact persistence also stays generic: platform storage writes the
+already-normalized numpy payload it receives from composition without
+reintroducing DLKit prediction-key fallback logic.

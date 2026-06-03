@@ -31,6 +31,20 @@ right collaborators, construct workflow-local DTOs, and hand execution to
 application or platform entrypoints without re-implementing path, environment,
 or client policy.
 
+For DLKit-supervised training, composition is also the only layer allowed to
+translate repository storage names into runtime dataset-entry names. That
+translation is owned by a composition-level runtime dataset contract. The
+current supervised bridge maps `rhs.npy` to feature entry `x`,
+`solutions.npy` to target entry `y`, and sparse matrices to auxiliary feature
+entry `matrix`. Domain terms such as `solutions.npy` remain valid on disk, but
+composition does not expose `solutions` as a runtime target alias.
+
+Prediction payload normalization follows the same rule. Composition accepts
+DLKit's raw boundary output once, normalizes it into the canonical prediction
+key `y_pred`, and then hands the normalized payload to diagnostics and artifact
+staging. Downstream reporting code does not keep a fallback list of prediction
+aliases.
+
 Training, inference, comparison, and generation assembly all follow the same
 rule: composition may decide which collaborators participate in a workflow, but
 it must not absorb low-level IO mechanics, config normalization policy, or

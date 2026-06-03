@@ -58,7 +58,7 @@ min_lr = 1e-6
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"
 module_path = "dlkit.domain.losses"
-target_key = "targets.solutions"
+target_key = "targets.y"
 
 [[TRAINING.metrics]]
 name = "NormalizedVectorNormError"

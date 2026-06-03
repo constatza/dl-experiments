@@ -113,14 +113,23 @@ def flatten_numpy_payload(
 def save_training_predictions(
     training_result: Any,
     predictions_dir: Path,
+    *,
+    numpy_payload: Mapping[str, Any] | None = None,
 ) -> None:
     """Persist training predictions/targets captured by dlkit.
 
     Args:
         training_result: DLKit training result with ``to_numpy()`` method.
         predictions_dir: Directory to write ``.npy`` files and manifest.
+        numpy_payload: Optional pre-normalized payload to persist.
     """
-    all_numpy = training_result.to_numpy()
+    if numpy_payload is not None:
+        all_numpy = numpy_payload
+    else:
+        to_numpy = getattr(training_result, "to_numpy", None)
+        if not callable(to_numpy):
+            return
+        all_numpy = to_numpy()
     if not isinstance(all_numpy, Mapping):
         return
 

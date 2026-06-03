@@ -1,8 +1,4 @@
-"""Dataset construction from arrays.
-
-This module provides functions to build dlkit dataset structures (Features and
-Targets) from numpy arrays, and inject them into DLKit workflow settings.
-"""
+"""Dataset construction helpers for DLKit runtime settings."""
 
 from __future__ import annotations
 
@@ -16,7 +12,7 @@ from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 def create_features_from_array(
     array: np.ndarray,
-    name: str = "rhs",
+    name: str,
 ) -> tuple[Any, ...]:
     """Create Feature tuple from numpy array.
 
@@ -30,7 +26,10 @@ def create_features_from_array(
     return (ValueFeature(name=name, value=array),)
 
 
-def create_matrix_feature(array: np.ndarray) -> Any:
+def create_matrix_feature(
+    array: np.ndarray,
+    name: str = "matrix",
+) -> Any:
     """Create matrix Feature from numpy array.
 
     Args:
@@ -39,12 +38,12 @@ def create_matrix_feature(array: np.ndarray) -> Any:
     Returns:
         Feature object for matrix data.
     """
-    return ValueFeature(name="matrix", value=array)
+    return ValueFeature(name=name, value=array)
 
 
 def create_targets_from_array(
     array: np.ndarray,
-    name: str = "solutions",
+    name: str,
 ) -> tuple[Any, ...]:
     """Create Target tuple from numpy array.
 
@@ -63,11 +62,16 @@ def with_dataset_arrays(
     rhs: np.ndarray,
     solutions: np.ndarray,
     matrix: np.ndarray | None = None,
+    *,
+    primary_input_name: str,
+    target_name: str,
+    matrix_input_name: str = "matrix",
 ) -> Any:
     """Inject dataset arrays into DLKit workflow settings.
 
-    Creates Features from RHS (and matrix if provided) and Targets from
-    solutions, then injects them into settings via patch_model().
+    Creates runtime features from RHS (and matrix if provided) and maps the
+    solutions artifact into the caller-supplied supervised target entry before
+    injecting everything via ``patch_model()``.
 
     For datasets named "GraphDataset", includes matrix in features.
 
@@ -80,17 +84,15 @@ def with_dataset_arrays(
     Returns:
         Updated settings object with injected dataset arrays.
     """
-    # Create features from RHS
-    features = list(create_features_from_array(rhs, name="rhs"))
+    features = list(create_features_from_array(rhs, name=primary_input_name))
 
     # Include matrix if provided and dataset is GraphDataset
     dataset_name = getattr(settings.DATASET, "name", None) if hasattr(settings, "DATASET") else None
 
     if matrix is not None and dataset_name == "GraphDataset":
-        features.append(create_matrix_feature(matrix))
+        features.append(create_matrix_feature(matrix, name=matrix_input_name))
 
-    # Create targets from solutions
-    targets = create_targets_from_array(solutions, name="solutions")
+    targets = create_targets_from_array(solutions, name=target_name)
 
     # Build DATASET dict
     dataset_dict = {

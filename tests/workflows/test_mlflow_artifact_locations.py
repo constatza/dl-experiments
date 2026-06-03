@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import mlflow
 import numpy as np
@@ -14,10 +14,16 @@ from mlflow.tracking import MlflowClient
 
 from neuralls.platform.storage.datasets import save_dataset
 from neuralls.composition.experiments.comparison_batch import run_comparison_batch
+from neuralls.composition.experiments.runtime_dataset_contract import (
+    default_training_dataset_contract,
+)
 from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
 from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
 from neuralls.composition.comparison.models import ComparisonParams
-from neuralls.composition.experiments.training import _log_training_evaluation
+from neuralls.composition.experiments.training import (
+    _log_training_evaluation,
+    _normalize_training_numpy_payload,
+)
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 
 
@@ -65,11 +71,14 @@ def test_training_logs_diagnostics_artifact_to_mlflow_with_sqlite(tmp_path: Path
     mlflow.set_tracking_uri(tracking_uri)
     predictions = np.array([[1.0], [2.0], [3.0]], dtype=np.float64)
     targets = np.array([[1.1], [1.9], [3.2]], dtype=np.float64)
-    fake_training_result = MagicMock()
-    fake_training_result.to_numpy.return_value = {
-        "predictions": {"output": predictions.flatten()},
-        "targets": {"solutions": targets.flatten()},
-    }
+    contract = default_training_dataset_contract()
+    normalized_payload = _normalize_training_numpy_payload(
+        {
+            "predictions": {"output": predictions.flatten()},
+            "targets": {"y": targets.flatten()},
+        },
+        contract,
+    )
 
     with mlflow.start_run(experiment_id=experiment_id, run_name="diag-train") as run:
         run_id = run.info.run_id
@@ -77,8 +86,9 @@ def test_training_logs_diagnostics_artifact_to_mlflow_with_sqlite(tmp_path: Path
     _log_training_evaluation(
         tracking_uri=tracking_uri,
         run_id=run_id,
-        training_result=fake_training_result,
+        numpy_payload=normalized_payload,
         figures_dir=tmp_path / "tmp-figures",
+        contract=contract,
     )
 
     run_data = client.get_run(run_id).data

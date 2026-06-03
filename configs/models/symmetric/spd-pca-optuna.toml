@@ -56,7 +56,7 @@ min_lr = 1e-6
 [TRAINING.loss_function]
 name = "normalized_vector_norm_loss"
 module_path = "dlkit.domain.losses"
-target_key = "targets.solutions"
+target_key = "targets.y"
 
 [[TRAINING.metrics]]
 name = "NormalizedVectorNormError"
@@ -74,10 +74,6 @@ transforms = [{name = "PCA", n_components = 50}]
 
 [[DATASET.targets]]
 name = "y"
-transforms = [{name = "PCA", n_components = 50}]
-
-[[DATASET.targets]]
-name = "solutions"
 transforms = [{name = "PCA", n_components = 50}]
 
 [DATAMODULE]

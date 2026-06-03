@@ -19,7 +19,7 @@ from dlkit.infrastructure.config import (
     SessionSettings,
     TrainingSettings,
 )
-from dlkit.infrastructure.config.data_entries import IPathBased
+from dlkit.infrastructure.config.data_entries import IPathBased, ValueFeature, ValueTarget
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
@@ -28,13 +28,20 @@ from dlkit.io import save_sparse_pack
 from neuralls.platform.storage.training_artifacts import TrainingArrays
 from neuralls.platform.tracking.mlflow import resolve_runtime_tracking_config
 from neuralls.platform.tracking.mlflow_client import parent_run_context
+from neuralls.composition.experiments.runtime_dataset_contract import (
+    RuntimeDatasetContract,
+    default_training_dataset_contract,
+)
 from neuralls.composition.experiments.training import (
     _configure_dataloader_runtime,
     _configure_mlflow,
     _configure_output_paths,
     _create_feature_configs,
+    _normalize_training_numpy_payload,
+    _create_target_configs,
     _extract_evaluation_arrays,
     _resolve_dataset,
+    _validate_runtime_dataset_contract,
     _validate_dataset_section,
     GRAPH_DATASET_NAME,
     FLEXIBLE_DATASET_NAME,
@@ -116,7 +123,8 @@ def test_validate_dataset_section_passes_if_present() -> None:
 
 def test_create_feature_configs_graph_dataset(sample_arrays: TrainingArrays) -> None:
     """_create_feature_configs returns x and sparse matrix entries for GraphDataset."""
-    features = _create_feature_configs(sample_arrays, GRAPH_DATASET_NAME)
+    contract = default_training_dataset_contract()
+    features = _create_feature_configs(sample_arrays, GRAPH_DATASET_NAME, contract)
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -129,7 +137,8 @@ def test_create_feature_configs_graph_dataset(sample_arrays: TrainingArrays) -> 
 
 def test_create_feature_configs_flexible_dataset(sample_arrays: TrainingArrays) -> None:
     """_create_feature_configs returns x and sparse matrix entries for FlexibleDataset."""
-    features = _create_feature_configs(sample_arrays, FLEXIBLE_DATASET_NAME)
+    contract = default_training_dataset_contract()
+    features = _create_feature_configs(sample_arrays, FLEXIBLE_DATASET_NAME, contract)
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -142,7 +151,8 @@ def test_create_feature_configs_flexible_dataset(sample_arrays: TrainingArrays) 
 
 def test_create_feature_configs_default_to_flexible(sample_arrays: TrainingArrays) -> None:
     """_create_feature_configs defaults to x + sparse matrix behavior."""
-    features = _create_feature_configs(sample_arrays, None)
+    contract = default_training_dataset_contract()
+    features = _create_feature_configs(sample_arrays, None, contract)
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -150,6 +160,19 @@ def test_create_feature_configs_default_to_flexible(sample_arrays: TrainingArray
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, IPathBased)
     assert matrix_feature.get_path() == sample_arrays.matrix_pack
+
+
+def test_create_target_configs_returns_canonical_supervised_target(
+    sample_arrays: TrainingArrays,
+) -> None:
+    """_create_target_configs exposes exactly one runtime target entry."""
+    contract = default_training_dataset_contract()
+    targets = _create_target_configs(sample_arrays, contract)
+
+    assert len(targets) == 1
+    assert targets[0].name == "y"
+    assert isinstance(targets[0], IPathBased)
+    assert targets[0].get_path() == sample_arrays.solutions
 
 
 def test_parent_run_context_manager() -> None:
@@ -181,9 +204,8 @@ def test_resolve_dataset_returns_new_settings(
     """Dataset injection returns a new settings object without mutating the original."""
     features = []
     targets = []
-
-    updated = _resolve_dataset(training_settings, features, targets)
-
+    contract = default_training_dataset_contract()
+    updated = _resolve_dataset(training_settings, features, targets, contract)
     assert updated is not training_settings
     assert updated.DATASET is not None
     assert updated.DATASET.features == tuple(features)
@@ -193,6 +215,121 @@ def test_resolve_dataset_returns_new_settings(
     assert training_settings.DATASET.features == ()
     assert training_settings.DATASET.targets == ()
     assert training_settings.DATASET.memmap_cache is True
+
+
+def test_validate_runtime_dataset_contract_rejects_duplicate_target_names(
+    training_settings: GeneralSettings,
+) -> None:
+    """Duplicate target names must fail fast before dataset injection."""
+    duplicate_targets = DatasetSettings(
+        name="FlexibleDataset",
+        targets=(
+            ValueTarget(name="y", value=np.zeros((1, 1), dtype=np.float64)),
+            ValueTarget(name="y", value=np.ones((1, 1), dtype=np.float64)),
+        ),
+    )
+    duplicate_settings = training_settings.model_copy(update={"DATASET": duplicate_targets})
+
+    contract = default_training_dataset_contract()
+    with pytest.raises(ValueError, match="Duplicate DATASET target entry names"):
+        _validate_runtime_dataset_contract(duplicate_settings, contract)
+
+
+def test_validate_runtime_dataset_contract_rejects_duplicate_feature_names(
+    training_settings: GeneralSettings,
+) -> None:
+    """Duplicate feature names must fail fast before dataset injection."""
+    duplicate_features = DatasetSettings(
+        name="FlexibleDataset",
+        features=(
+            ValueFeature(name="x", value=np.zeros((1, 1), dtype=np.float64)),
+            ValueFeature(name="x", value=np.ones((1, 1), dtype=np.float64)),
+        ),
+    )
+    duplicate_settings = training_settings.model_copy(update={"DATASET": duplicate_features})
+
+    contract = default_training_dataset_contract()
+    with pytest.raises(ValueError, match="Duplicate DATASET feature entry names"):
+        _validate_runtime_dataset_contract(duplicate_settings, contract)
+
+
+def test_validate_runtime_dataset_contract_rejects_unsupported_target_placeholder(
+    training_settings: GeneralSettings,
+) -> None:
+    """Runtime target placeholders must match the resolved contract name."""
+    aliased_settings = training_settings.model_copy(
+        update={
+            "DATASET": DatasetSettings(
+                name="FlexibleDataset",
+                targets=(ValueTarget(name="solutions", value=np.zeros((1, 1), dtype=np.float64)),),
+            )
+        }
+    )
+
+    contract = default_training_dataset_contract()
+    with pytest.raises(ValueError, match="resolved supervised target name 'y'"):
+        _validate_runtime_dataset_contract(aliased_settings, contract)
+
+
+def test_validate_runtime_dataset_contract_rejects_noncanonical_loss_target_key(
+    training_settings: GeneralSettings,
+) -> None:
+    """Loss routing must target the canonical supervised entry."""
+    assert training_settings.TRAINING is not None
+    updated = training_settings.model_copy(
+        update={
+            "TRAINING": training_settings.TRAINING.model_copy(
+                update={
+                    "loss_function": MagicMock(
+                        spec=["target_key"],
+                        **{"target_key": "targets.solutions"},
+                    )
+                }
+            )
+        }
+    )
+
+    contract = default_training_dataset_contract()
+    with pytest.raises(ValueError, match="TRAINING.loss_function.target_key must resolve"):
+        _validate_runtime_dataset_contract(updated, contract)
+
+
+def test_resolve_dataset_rejects_unmatched_target_placeholder(
+    training_settings: GeneralSettings,
+) -> None:
+    """Placeholder target entries must match injected runtime names exactly."""
+    placeholder_settings = training_settings.model_copy(
+        update={
+            "DATASET": DatasetSettings(
+                name="FlexibleDataset",
+                targets=(ValueTarget(name="z", value=np.zeros((1, 1), dtype=np.float64)),),
+            )
+        }
+    )
+
+    contract = default_training_dataset_contract()
+    with pytest.raises(ValueError, match="resolved supervised target name 'y'"):
+        _resolve_dataset(placeholder_settings, [], [], contract)
+
+
+def test_resolve_dataset_rejects_unmatched_feature_placeholder(
+    training_settings: GeneralSettings,
+) -> None:
+    """Placeholder feature entries must match injected runtime names exactly."""
+    placeholder_settings = training_settings.model_copy(
+        update={
+            "DATASET": DatasetSettings(
+                name="FlexibleDataset",
+                features=(ValueFeature(name="rhs", value=np.zeros((1, 1), dtype=np.float64)),),
+            )
+        }
+    )
+
+    contract = default_training_dataset_contract()
+    with pytest.raises(
+        ValueError, match="resolved runtime feature names 'x' and optional 'matrix'"
+    ):
+        _resolve_dataset(placeholder_settings, [], [], contract)
 
 
 def test_configure_output_paths_returns_new_settings(
@@ -251,6 +388,44 @@ def test_configure_mlflow_returns_new_settings(
     assert training_settings.MLFLOW.run_name is None
 
 
+def test_contract_override_drives_injection_and_validation(
+    sample_arrays: TrainingArrays,
+    training_settings: GeneralSettings,
+) -> None:
+    """Contract-driven helpers honor non-default runtime names."""
+    assert training_settings.TRAINING is not None
+    contract = RuntimeDatasetContract(
+        primary_input_name="lhs",
+        matrix_input_name="matrix",
+        target_name="rhs",
+        prediction_name="rhs_pred",
+        loss_target_key="targets.rhs",
+    )
+    features = _create_feature_configs(sample_arrays, GRAPH_DATASET_NAME, contract)
+    targets = _create_target_configs(sample_arrays, contract)
+    settings = training_settings.model_copy(
+        update={
+            "DATASET": DatasetSettings(
+                name="FlexibleDataset",
+                features=(ValueFeature(name="lhs", value=np.zeros((1, 1), dtype=np.float64)),),
+                targets=(ValueTarget(name="rhs", value=np.zeros((1, 1), dtype=np.float64)),),
+            ),
+            "TRAINING": training_settings.TRAINING.model_copy(
+                update={
+                    "loss_function": MagicMock(spec=["target_key"], **{"target_key": "targets.rhs"})
+                }
+            ),
+        }
+    )
+
+    _validate_runtime_dataset_contract(settings, contract)
+    updated = _resolve_dataset(settings, features, targets, contract)
+
+    assert updated.DATASET is not None
+    assert [feature.name for feature in updated.DATASET.features] == ["lhs", "matrix"]
+    assert [target.name for target in updated.DATASET.targets] == ["rhs"]
+
+
 @patch("neuralls.composition.experiments.training.compute_diagnostics")
 @patch("neuralls.composition.experiments.training.write_diagnostics_figure")
 @patch("neuralls.composition.experiments.training.log_diagnostics_to_mlflow")
@@ -263,12 +438,11 @@ def test_log_training_evaluation_orchestration(
     """_log_training_evaluation delegates to diagnostics and figure helpers."""
     from neuralls.composition.experiments.training import _log_training_evaluation
 
-    mock_result = MagicMock()
-    mock_result.to_numpy.return_value = {
-        "predictions": {"output": np.zeros((10, 1))},
+    contract = default_training_dataset_contract()
+    normalized_payload = {
+        "predictions": {contract.prediction_name: np.zeros((10, 1))},
         "targets": {"y": np.zeros((10, 1))},
     }
-
     mock_compute.return_value = MagicMock()
     mock_write.return_value = Path("dummy.png")
     tracking_uri = f"sqlite:///{(tmp_path / 'mlruns' / 'mlflow.db').as_posix()}"
@@ -276,8 +450,9 @@ def test_log_training_evaluation_orchestration(
     _log_training_evaluation(
         tracking_uri=tracking_uri,
         run_id="run123",
-        training_result=mock_result,
+        numpy_payload=normalized_payload,
         figures_dir=tmp_path / "figures",
+        contract=contract,
     )
 
     mock_compute.assert_called_once()
@@ -285,13 +460,15 @@ def test_log_training_evaluation_orchestration(
     mock_mlflow_log.assert_called_once()
 
 
-def test_extract_evaluation_arrays_with_array_predictions() -> None:
-    """Extraction supports numpy prediction arrays with dict targets."""
+def test_extract_evaluation_arrays_with_canonical_prediction_key() -> None:
+    """Extraction uses one explicit prediction and target key from the contract."""
+    contract = default_training_dataset_contract()
     selected = _extract_evaluation_arrays(
         {
-            "predictions": np.array([[1.0], [2.0], [3.0]]),
-            "targets": {"y": np.array([[1.1], [1.9], [3.2]])},
-        }
+            "predictions": {contract.prediction_name: np.array([[1.0], [2.0], [3.0]])},
+            "targets": {contract.target_name: np.array([[1.1], [1.9], [3.2]])},
+        },
+        contract,
     )
     assert selected is not None
     y_pred, y_true = selected
@@ -299,23 +476,57 @@ def test_extract_evaluation_arrays_with_array_predictions() -> None:
     np.testing.assert_allclose(y_true.ravel(), [1.1, 1.9, 3.2])
 
 
-def test_extract_evaluation_arrays_with_non_output_prediction_key() -> None:
-    """Extraction falls back to target-matching prediction keys."""
-    selected = _extract_evaluation_arrays(
-        {
-            "predictions": {"solutions": np.array([[1.0], [2.0]])},
-            "targets": {"solutions": np.array([[0.8], [2.2]])},
-        }
+def test_extract_evaluation_arrays_rejects_noncanonical_prediction_key() -> None:
+    """Extraction no longer tolerates fallback prediction aliases."""
+    contract = default_training_dataset_contract()
+    assert (
+        _extract_evaluation_arrays(
+            {
+                "predictions": {"y_hat": np.array([[1.0], [2.0]])},
+                "targets": {contract.target_name: np.array([[0.8], [2.2]])},
+            },
+            contract,
+        )
+        is None
     )
-    assert selected is not None
-    y_pred, y_true = selected
-    np.testing.assert_allclose(y_pred.ravel(), [1.0, 2.0])
-    np.testing.assert_allclose(y_true.ravel(), [0.8, 2.2])
 
 
 def test_extract_evaluation_arrays_returns_none_when_missing_keys() -> None:
     """Extraction returns None when predictions/targets are unavailable."""
-    assert _extract_evaluation_arrays({"predictions": np.array([1.0, 2.0])}) is None
+    contract = default_training_dataset_contract()
+    assert _extract_evaluation_arrays({"predictions": np.array([1.0, 2.0])}, contract) is None
+
+
+def test_normalize_training_numpy_payload_maps_dlkit_output_once() -> None:
+    """The DLKit boundary output key is normalized into the contract prediction key."""
+    contract = default_training_dataset_contract()
+    normalized = _normalize_training_numpy_payload(
+        {
+            "predictions": {"output": np.array([[1.0], [2.0]])},
+            "targets": {contract.target_name: np.array([[0.8], [2.2]])},
+        },
+        contract,
+    )
+
+    assert normalized is not None
+    assert set(normalized["predictions"]) == {contract.prediction_name}
+    np.testing.assert_allclose(
+        normalized["predictions"][contract.prediction_name].ravel(),
+        [1.0, 2.0],
+    )
+
+
+def test_normalize_training_numpy_payload_rejects_unknown_prediction_shape() -> None:
+    """Normalization fails fast when no accepted boundary prediction key exists."""
+    contract = default_training_dataset_contract()
+    with pytest.raises(ValueError, match="canonical prediction key"):
+        _normalize_training_numpy_payload(
+            {
+                "predictions": {"y_hat": np.array([[1.0], [2.0]])},
+                "targets": {contract.target_name: np.array([[0.8], [2.2]])},
+            },
+            contract,
+        )
 
 
 def test_resolve_mlflow_logging_config_reads_runtime_env(
