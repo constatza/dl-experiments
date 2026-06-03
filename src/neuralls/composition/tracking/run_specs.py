@@ -101,6 +101,21 @@ class ChildComparisonRunTags:
 
 
 @dataclass(frozen=True)
+class TrainingSessionRunTags:
+    """Structured tags for a batch-training session parent run."""
+
+    phase: Literal["session_training"]
+    case_config: str
+    case_config_path: str
+    started_at: str
+    training_experiment_name: str
+
+    def as_mlflow_tags(self) -> dict[str, str]:
+        """Serialize to MLflow-compatible string tag dict."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class RegistrationTags:
     """Structured tags for a registered model version.
 
@@ -144,7 +159,7 @@ def build_training_run_spec(
 ) -> MlflowRunConfig:
     """Build complete MlflowRunConfig for a training run.
 
-    Run name format: ``{display_name}-{readable_timestamp}``
+    Run name format: ``{display_name} | {readable_timestamp}``
 
     Args:
         entry: Experiment registry entry.
@@ -166,7 +181,7 @@ def build_training_run_spec(
     )
     return MlflowRunConfig(
         experiment_name=experiment_name,
-        run_name=f"{entry.effective_display_name}-{ts}",
+        run_name=f"{entry.effective_display_name} | {ts}",
         tags=tags.as_mlflow_tags(),
         paths=paths,
         workspace_root=workspace_root,
@@ -190,7 +205,7 @@ def build_comparison_run_spec(
         Tuple of ``(run_name, ComparisonRunTags)``.
     """
     ts = timestamp or iso_timestamp()
-    run_name = f"{entry.effective_display_name}-{ts}"
+    run_name = f"{entry.effective_display_name} | {ts}"
     method_label = entry.method.stem if entry.method is not None else entry.id
     tags = ComparisonRunTags(
         phase="comparison",
@@ -200,6 +215,25 @@ def build_comparison_run_spec(
         comparison_path=entry.method.as_posix() if entry.method is not None else entry.id,
         started_at=ts,
         run_name=run_name,
+    )
+    return run_name, tags
+
+
+def build_training_session_run_spec(
+    *,
+    case_config_path: Path,
+    training_experiment_name: str,
+    timestamp: str | None = None,
+) -> tuple[str, TrainingSessionRunTags]:
+    """Build (run_name, TrainingSessionRunTags) for one batch-training invocation."""
+    ts = timestamp or iso_timestamp()
+    run_name = f"{case_config_path.stem} | {ts}"
+    tags = TrainingSessionRunTags(
+        phase="session_training",
+        case_config=case_config_path.stem,
+        case_config_path=case_config_path.as_posix(),
+        started_at=ts,
+        training_experiment_name=training_experiment_name,
     )
     return run_name, tags
 

@@ -38,6 +38,7 @@ def train_case_batch(
             configs_dir=config.resolve().parent,
             settings=settings,
             output_root=output_dir,
+            case_config_path=config.resolve(),
         )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         typer.echo(f"Error during batch training: {exc}", err=True)

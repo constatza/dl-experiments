@@ -101,13 +101,11 @@ display_name = "Spectral Factorized"
 id             = "gaussian"
 matrix_dataset = "gaussian-rhs-93x31"
 rhs_dataset    = "gaussian-rhs-93x31"
-display_name   = "Gaussian RHS"
 
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "sparse-rhs-93x31"
 rhs_dataset    = "sparse-rhs-93x31"
-display_name   = "Sparse RHS"
 
 # ── Experiments (10 models × gaussian-cg100-93x31) ───────────────────────────
 

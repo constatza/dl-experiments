@@ -139,7 +139,7 @@ def _infer_experiment_display_name(
 
     Priority:
       1. user_dn (stripped, if non-blank)
-      2. f"{dataset_label} | {model_label}"
+      2. f"{model_label} | {dataset_label}"
          (labels from lookups, fallback to raw id when key absent)
 
     Args:
@@ -157,7 +157,7 @@ def _infer_experiment_display_name(
 
     dataset_label = dataset_display.get(dataset_id, dataset_id)
     model_label = model_display.get(model_id, model_id)
-    return f"{dataset_label} | {model_label}"
+    return f"{model_label} | {dataset_label}"
 
 
 def _infer_comparison_id(

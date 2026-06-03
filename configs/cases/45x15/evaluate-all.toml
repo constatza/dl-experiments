@@ -111,19 +111,16 @@ display_name = "Spectral Factorized"
 id             = "gaussian"
 matrix_dataset = "gaussian-rhs-45x15"
 rhs_dataset    = "gaussian-rhs-45x15"
-display_name   = "Gaussian RHS"
 
 [[comparisons]]
 id             = "scaled"
 matrix_dataset = "scaled-solutions-45x15"
 rhs_dataset    = "scaled-solutions-45x15"
-display_name   = "Scaled Solutions"
 
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "sparse-rhs-45x15"
 rhs_dataset    = "sparse-rhs-45x15"
-display_name   = "Sparse RHS"
 
 # ── Experiments (10 models × 2 training datasets = 20) ───────────────────────
 

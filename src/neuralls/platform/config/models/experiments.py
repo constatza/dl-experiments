@@ -450,7 +450,10 @@ class CaseConfig(BaseModel):
 
             if not user_dn:
                 comp_dict["display_name"] = _infer_comparison_display_name(
-                    matrix_id, rhs_id, user_dn, dataset_display
+                    matrix_id,
+                    rhs_id,
+                    user_dn,
+                    dataset_display,
                 )
 
         return data

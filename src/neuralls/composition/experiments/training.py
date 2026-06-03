@@ -507,7 +507,7 @@ def _build_training_run_config(
         )
     return MlflowRunConfig(
         experiment_name=experiment_name,
-        run_name=f"{experiment_display_name}-{format_run_timestamp()}",
+        run_name=f"{experiment_display_name} | {format_run_timestamp()}",
         tags={},
         paths=paths,
         workspace_root=workspace_root,

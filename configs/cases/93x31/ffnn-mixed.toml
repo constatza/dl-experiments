@@ -71,13 +71,11 @@ display_name = "FFNN Standard"
 id             = "gaussian"
 matrix_dataset = "gaussian-rhs-93x31"
 rhs_dataset    = "gaussian-rhs-93x31"
-display_name   = "Gaussian RHS"
 
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "sparse-rhs-93x31"
 rhs_dataset    = "sparse-rhs-93x31"
-display_name   = "Sparse RHS"
 
 # ── Experiments (ffnn-standard × 4 training datasets) ────────────────────────
 

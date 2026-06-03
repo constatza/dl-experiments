@@ -312,6 +312,7 @@ def test_train_invokes_batch_workflow(
         configs_dir=config.resolve().parent,
         settings=settings,
         output_root=None,
+        case_config_path=config.resolve(),
     )
     mock_write_metric_report.assert_called_once_with(
         batch, metric="eval/rel_error", output_dir=None

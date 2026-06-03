@@ -55,6 +55,12 @@ Training uses `names.training` and comparison uses `names.comparison`, with the
 defaults owned by the case-config Pydantic models rather than composition-layer
 constants.
 
+Batch training adds one session-scoped parent run per case-config invocation.
+That parent is identified by case-config path plus launch time and exists only
+to group the per-experiment child runs. Comparison workflows do not add an
+equivalent wrapper: their parent run identity stays defined by the dataset
+selection encoded in each comparison entry.
+
 Comparison parent-run summary metrics sanitize each preconditioner label into an
 MLflow-safe metric-key segment before appending it under namespaced keys such as
 `iterations/<preconditioner>`. Composition does not implement that MLflow policy

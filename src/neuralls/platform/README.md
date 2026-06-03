@@ -24,6 +24,14 @@ resolution, DLKit-specific config bridging, and MLflow client operations.
 These concerns stay here so composition can assemble workflows without owning
 filesystem, environment, or third-party policy details.
 
+Case-config auto naming also lives at this boundary. Auto-generated experiment
+ids are model-first (`{model_id}-{dataset_id}`), and auto-generated experiment
+display names follow the same order (`{model_label} | {dataset_label}`).
+Auto-generated comparison display names stay dataset-defined: they resolve to
+the matrix dataset label alone when matrix and RHS come from the same dataset,
+or to `{matrix_label} | {rhs_label}` when they differ. Explicitly configured
+comparison display names still override the generated label.
+
 The DLKit dataset bridge stays generic. Platform helpers construct and patch
 DLKit-native dataset entries with the names supplied by composition, but
 platform does not own the canonical runtime naming policy itself. Storage-layer

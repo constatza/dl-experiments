@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +17,7 @@ from neuralls.composition.experiments.multi_training import (
     TrainingRunResult,
     _annotate_mlflow_run,
     _collect_batch_metrics,
+    _create_training_session_parent_run,
     _make_label_map,
     _resolve_config_paths,
     _train_single,
@@ -184,6 +186,46 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_setting
     assert result.metrics["eval/rel_error"] == pytest.approx(0.1)
 
 
+def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) -> None:
+    """Single training forwards the optional batch parent run id unchanged."""
+    model_cfg = tmp_path / "model.toml"
+    model_cfg.write_text("[MODEL]\nname = 'NormScaledLinearFFNN'\n")
+    data_cfg = tmp_path / "dataset.toml"
+    data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
+    ckpt_dir = tmp_path / "ckpt"
+    ckpt_dir.mkdir()
+    ckpt = ckpt_dir / "model.ckpt"
+    ckpt.touch()
+
+    with (
+        patch(
+            "neuralls.composition.experiments.multi_training.train_model", return_value=ckpt
+        ) as mock_train,
+        patch("neuralls.composition.experiments.multi_training.load_data_config"),
+        patch(
+            "neuralls.composition.experiments.multi_training.resolve_dataset_identity"
+        ) as mock_identity,
+        patch("neuralls.composition.experiments.multi_training.read_registered_model_name"),
+        patch(
+            "neuralls.composition.experiments.multi_training.read_mlflow_sidecar", return_value=None
+        ),
+    ):
+        mock_identity.return_value.name = "dataset-id"
+        _train_single(
+            settings=neuralls_settings,
+            experiment_id="exp-1",
+            experiment_display_name="exp-1",
+            model_config_path=model_cfg,
+            data_config_path=data_cfg,
+            label="1",
+            output_root=None,
+            mlflow_experiment_name="Train",
+            parent_run_id="parent-123",
+        )
+
+    assert mock_train.call_args.kwargs["parent_run_id"] == "parent-123"
+
+
 @pytest.fixture
 def model_config_with_model_name(tmp_path: Path) -> Path:
     """Model config TOML with [MODEL].name set."""
@@ -259,17 +301,30 @@ def test_train_batch_returns_local_output_dir(
     fake_ckpt.touch()
     cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
 
-    with patch(
-        "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
-    ) as mock_train:
+    with (
+        patch(
+            "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
+        ) as mock_train,
+        patch(
+            "neuralls.composition.experiments.multi_training._create_training_session_parent_run",
+            return_value="parent-run-1",
+        ) as mock_create_parent,
+        patch(
+            "neuralls.composition.experiments.multi_training._finalize_training_session_parent_run"
+        ) as mock_finalize_parent,
+    ):
         result = train_batch(
             cfg=cfg,
             configs_dir=valid_experiments_toml.parent,
             settings=neuralls_settings,
+            case_config_path=valid_experiments_toml,
         )
 
     assert mock_train.call_count == 1
     assert mock_train.call_args.kwargs["mlflow_experiment_name"] == ExperimentNamesConfig().training
+    assert mock_train.call_args.kwargs["parent_run_id"] == "parent-run-1"
+    mock_create_parent.assert_called_once()
+    mock_finalize_parent.assert_called_once()
     assert result.output_dir == (tmp_path / "training")
     assert result.label_map["1"]["experiment_id"] == "ffnn_test"
 
@@ -312,16 +367,73 @@ def test_train_batch_forwards_custom_training_experiment_name(
     )
     cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
 
-    with patch(
-        "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
-    ) as mock_train:
+    with (
+        patch(
+            "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
+        ) as mock_train,
+        patch(
+            "neuralls.composition.experiments.multi_training._create_training_session_parent_run",
+            return_value="parent-run-1",
+        ),
+        patch(
+            "neuralls.composition.experiments.multi_training._finalize_training_session_parent_run"
+        ),
+    ):
         train_batch(
             cfg=cfg,
             configs_dir=valid_experiments_toml.parent,
             settings=neuralls_settings,
+            case_config_path=valid_experiments_toml,
         )
 
     assert mock_train.call_args.kwargs["mlflow_experiment_name"] == "CustomTrain"
+
+
+def test_create_training_session_parent_run_uses_case_config_identity(tmp_path: Path) -> None:
+    """Training session parents are named from case config stem and timestamp."""
+    with (
+        patch(
+            "neuralls.composition.experiments.multi_training._ensure_training_experiment",
+            return_value="exp-1",
+        ),
+        patch("neuralls.composition.experiments.multi_training.MlflowClient") as mock_client_cls,
+        patch(
+            "neuralls.composition.experiments.multi_training.build_training_session_run_spec",
+            return_value=(
+                "ffnn | 2026-03-12T12:00:00",
+                SimpleNamespace(
+                    as_mlflow_tags=lambda: {
+                        "phase": "session_training",
+                        "case_config": "ffnn",
+                        "case_config_path": "/tmp/ffnn.toml",
+                        "started_at": "2026-03-12T12:00:00",
+                        "training_experiment_name": "Train",
+                    }
+                ),
+            ),
+        ),
+    ):
+        mock_client = mock_client_cls.return_value
+        mock_client.create_run.return_value.info.run_id = "parent-123"
+        run_id = _create_training_session_parent_run(
+            tracking_uri="sqlite:///tmp/mlflow.db",
+            artifact_uri="/tmp/mlartifacts",
+            case_config_path=tmp_path / "ffnn.toml",
+            training_experiment_name="Train",
+        )
+
+    assert run_id == "parent-123"
+    mock_client.create_run.assert_called_once_with(
+        experiment_id="exp-1",
+        tags={
+            "mlflow.runName": "ffnn | 2026-03-12T12:00:00",
+            "phase": "session_training",
+            "case_config": "ffnn",
+            "case_config_path": "/tmp/ffnn.toml",
+            "started_at": "2026-03-12T12:00:00",
+            "training_experiment_name": "Train",
+        },
+    )
 
 
 def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -> None:

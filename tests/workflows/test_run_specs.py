@@ -11,6 +11,7 @@ from neuralls.composition.tracking.run_specs import (
     build_child_comparison_tags,
     build_comparison_run_spec,
     build_registration_tags,
+    build_training_session_run_spec,
     build_training_run_spec,
 )
 
@@ -56,7 +57,7 @@ def test_training_run_spec_name_has_readable_timestamp() -> None:
     )
 
     assert spec.experiment_name == "Train"
-    assert spec.run_name == "Experiment One-Thu 12 Mar 2026 - 12:00:00"
+    assert spec.run_name == "Experiment One | Thu 12 Mar 2026 - 12:00:00"
     assert dict(spec.tags) == {
         "phase": "training",
         "experiment_id": "exp-1",
@@ -81,7 +82,7 @@ def test_comparison_run_spec_name_and_tags() -> None:
         timestamp="2026-03-12T12:00:00",
     )
 
-    assert run_name == "Comparison One-2026-03-12T12:00:00"
+    assert run_name == "Comparison One | 2026-03-12T12:00:00"
     assert tags.as_mlflow_tags() == {
         "phase": "comparison",
         "comparison_id": "cmp-1",
@@ -89,7 +90,7 @@ def test_comparison_run_spec_name_and_tags() -> None:
         "comparison_config": "compare",
         "comparison_path": "configs/compare.toml",
         "started_at": "2026-03-12T12:00:00",
-        "run_name": "Comparison One-2026-03-12T12:00:00",
+        "run_name": "Comparison One | 2026-03-12T12:00:00",
     }
 
 
@@ -98,14 +99,32 @@ def test_child_tags_no_timestamp_has_parent_run_name() -> None:
     tags = build_child_comparison_tags(
         preconditioner_name="jacobi",
         comparison_id="cmp-1",
-        parent_run_name="Comparison One-2026-03-12T12:00:00",
+        parent_run_name="Comparison One | 2026-03-12T12:00:00",
     )
 
     assert tags.as_mlflow_tags() == {
         "phase": "preconditioner_run",
         "preconditioner": "jacobi",
         "comparison_id": "cmp-1",
-        "parent_run_name": "Comparison One-2026-03-12T12:00:00",
+        "parent_run_name": "Comparison One | 2026-03-12T12:00:00",
+    }
+
+
+def test_training_session_run_spec_name_and_tags() -> None:
+    """Training session parents carry case identity and launch time."""
+    run_name, tags = build_training_session_run_spec(
+        case_config_path=Path("/tmp/cases/ffnn.toml"),
+        training_experiment_name="Train",
+        timestamp="2026-03-12T12:00:00",
+    )
+
+    assert run_name == "ffnn | 2026-03-12T12:00:00"
+    assert tags.as_mlflow_tags() == {
+        "phase": "session_training",
+        "case_config": "ffnn",
+        "case_config_path": "/tmp/cases/ffnn.toml",
+        "started_at": "2026-03-12T12:00:00",
+        "training_experiment_name": "Train",
     }
 
 

@@ -470,7 +470,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
     overrides = execute_kwargs["overrides"]
     assert overrides.experiment_name == "CustomTrain"
     assert re.match(
-        r"^Experiment One-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
+        r"^Experiment One \| [A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
         overrides.run_name,
     )
     assert overrides.tags == {
@@ -570,7 +570,7 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
     overrides = execute_kwargs["overrides"]
     assert overrides.experiment_name == ExperimentNamesConfig().training
     assert re.match(
-        r"^Legacy Experiment-[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
+        r"^Legacy Experiment \| [A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
         overrides.run_name,
     )
     assert overrides.tags == {}

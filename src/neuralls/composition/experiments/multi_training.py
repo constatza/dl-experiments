@@ -25,6 +25,7 @@ from neuralls.platform.config.registry import (
 from neuralls.platform.config.resolution import (
     derive_output_root_from_tracking_uri,
     is_sqlite_tracking_uri,
+    to_mlflow_artifact_location,
 )
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
@@ -37,7 +38,10 @@ from neuralls.platform.tracking.model_registry import (
     register_logged_model,
     read_registered_model_name,
 )
-from neuralls.composition.tracking.run_specs import build_registration_tags
+from neuralls.composition.tracking.run_specs import (
+    build_registration_tags,
+    build_training_session_run_spec,
+)
 from neuralls.composition.experiments.training import train_model
 
 
@@ -287,6 +291,7 @@ def _train_single(
     label: str,
     output_root: Path | None,
     mlflow_experiment_name: str,
+    parent_run_id: str | None = None,
     dataset_registry_id: str | None = None,
     dataset_display_name: str | None = None,
     model_registry_id: str | None = None,
@@ -321,6 +326,7 @@ def _train_single(
         model_registry_id=model_registry_id,
         model_display_name=model_display_name,
         mlflow_experiment_name=mlflow_experiment_name,
+        parent_run_id=parent_run_id,
     )
     data_cfg = load_data_config(data_config_path, settings)
     dataset_id = resolve_dataset_identity(
@@ -393,16 +399,106 @@ def _find_registry_entry(
     return None
 
 
+def _resolve_training_entry_metadata(
+    *,
+    entry: RunEntry | ExperimentEntry,
+    cfg: CaseConfig,
+    data_config_path: Path,
+) -> tuple[str, str | None, str | None, str | None]:
+    """Return registry/display metadata for one training entry."""
+    if isinstance(entry, RunEntry):
+        return data_config_path.stem, None, None, None
+
+    dataset_entry = _find_registry_entry(cfg.datasets, entry.dataset_id)
+    model_entry = _find_registry_entry(cfg.models, entry.model_id)
+    dataset_display_name = (
+        dataset_entry.effective_display_name if dataset_entry is not None else entry.dataset_id
+    )
+    model_display_name = (
+        model_entry.effective_display_name if model_entry is not None else entry.model_id
+    )
+    return (
+        entry.dataset_id,
+        dataset_display_name,
+        entry.model_id,
+        model_display_name,
+    )
+
+
+def _resolve_case_config_path(case_config_path: Path | None, configs_dir: Path) -> Path:
+    """Return a stable case-config identity path for training session parents."""
+    if case_config_path is not None:
+        return case_config_path.resolve()
+    return (configs_dir / "case.toml").resolve()
+
+
+def _ensure_training_experiment(
+    *,
+    tracking_uri: str,
+    artifact_uri: str | None,
+    training_experiment_name: str,
+) -> str:
+    """Create or reuse the training MLflow experiment and return its id."""
+    client = MlflowClient(tracking_uri=tracking_uri)
+    existing = client.get_experiment_by_name(training_experiment_name)
+    if existing is not None:
+        return existing.experiment_id
+
+    return client.create_experiment(
+        training_experiment_name,
+        artifact_location=(
+            to_mlflow_artifact_location(artifact_uri) if artifact_uri is not None else None
+        ),
+    )
+
+
+def _create_training_session_parent_run(
+    *,
+    tracking_uri: str,
+    artifact_uri: str | None,
+    case_config_path: Path,
+    training_experiment_name: str,
+) -> str:
+    """Create a non-active MLflow parent run for one batch-training session."""
+    run_name, tags = build_training_session_run_spec(
+        case_config_path=case_config_path,
+        training_experiment_name=training_experiment_name,
+    )
+    experiment_id = _ensure_training_experiment(
+        tracking_uri=tracking_uri,
+        artifact_uri=artifact_uri,
+        training_experiment_name=training_experiment_name,
+    )
+    client = MlflowClient(tracking_uri=tracking_uri)
+    parent_run = client.create_run(
+        experiment_id=experiment_id,
+        tags={"mlflow.runName": run_name, **tags.as_mlflow_tags()},
+    )
+    return parent_run.info.run_id
+
+
+def _finalize_training_session_parent_run(
+    *,
+    tracking_uri: str,
+    run_id: str,
+    status: str,
+) -> None:
+    """Terminate the training session parent run created via MlflowClient."""
+    MlflowClient(tracking_uri=tracking_uri).set_terminated(run_id, status=status)
+
+
 def train_batch(
     cfg: CaseConfig,
     configs_dir: Path,
     settings: NeurallsSettings | None = None,
     output_root: Path | None = None,
+    case_config_path: Path | None = None,
 ) -> BatchResult:
     """Train all experiments defined in a case config and collect metrics.
 
-    Phase 1: Trains each experiment sequentially. dlkit manages all individual
-    MLflow runs independently — no parent run is opened during training.
+    Phase 1: Trains each experiment sequentially. Each batch invocation opens
+    one MLflow session parent, while dlkit still manages the individual child
+    training runs independently.
 
     Args:
         cfg: Validated case configuration.
@@ -438,57 +534,66 @@ def train_batch(
         tracking_uri=tracking_uri,
         artifact_location=cfg.mlflow.artifacts_destination,
         default_output_root=base_output,
-    ).env
+    )
     mlflow_experiment_name = cfg.names.training
+    resolved_case_config_path = _resolve_case_config_path(case_config_path, configs_dir)
 
     # ------------------------------------------------------------------
-    # Phase 1: Train — dlkit manages all individual MLflow runs independently
+    # Phase 1: Train — one session parent groups the independent child runs
     # ------------------------------------------------------------------
     results: list[TrainingRunResult] = []
     n = len(run_entries)
-    with scoped_mlflow_environment(training_mlflow_env):
-        for i, entry in enumerate(run_entries, start=1):
-            label = str(i)
-            experiment_id = entry.id
-            experiment_display_name = entry.effective_display_name
-            model_config, data_config = _resolve_config_paths(entry, configs_dir, cfg)
-            dataset_display_name = None
-            model_registry_id = None
-            model_display_name = None
-            if not isinstance(entry, RunEntry):
-                dataset_registry_id = entry.dataset_id
-                model_registry_id = entry.model_id
-                dataset_entry = _find_registry_entry(cfg.datasets, entry.dataset_id)
-                model_entry = _find_registry_entry(cfg.models, entry.model_id)
-                dataset_display_name = (
-                    dataset_entry.effective_display_name
-                    if dataset_entry is not None
-                    else entry.dataset_id
+    with scoped_mlflow_environment(training_mlflow_env.env):
+        parent_run_id = _create_training_session_parent_run(
+            tracking_uri=training_mlflow_env.tracking_uri,
+            artifact_uri=training_mlflow_env.artifact_uri,
+            case_config_path=resolved_case_config_path,
+            training_experiment_name=mlflow_experiment_name,
+        )
+        session_status = "FINISHED"
+        try:
+            for i, entry in enumerate(run_entries, start=1):
+                label = str(i)
+                experiment_id = entry.id
+                experiment_display_name = entry.effective_display_name
+                model_config, data_config = _resolve_config_paths(entry, configs_dir, cfg)
+                (
+                    dataset_registry_id,
+                    dataset_display_name,
+                    model_registry_id,
+                    model_display_name,
+                ) = _resolve_training_entry_metadata(
+                    entry=entry,
+                    cfg=cfg,
+                    data_config_path=data_config,
                 )
-                model_display_name = (
-                    model_entry.effective_display_name
-                    if model_entry is not None
-                    else entry.model_id
-                )
-            else:
-                dataset_registry_id = data_config.stem
 
-            result = _train_single(
-                settings=settings,
-                experiment_id=experiment_id,
-                experiment_display_name=experiment_display_name,
-                model_config_path=model_config,
-                data_config_path=data_config,
-                label=label,
-                output_root=base_output,
-                mlflow_experiment_name=mlflow_experiment_name,
-                dataset_registry_id=dataset_registry_id,
-                dataset_display_name=dataset_display_name,
-                model_registry_id=model_registry_id,
-                model_display_name=model_display_name,
+                result = _train_single(
+                    settings=settings,
+                    experiment_id=experiment_id,
+                    experiment_display_name=experiment_display_name,
+                    model_config_path=model_config,
+                    data_config_path=data_config,
+                    label=label,
+                    output_root=base_output,
+                    mlflow_experiment_name=mlflow_experiment_name,
+                    parent_run_id=parent_run_id,
+                    dataset_registry_id=dataset_registry_id,
+                    dataset_display_name=dataset_display_name,
+                    model_registry_id=model_registry_id,
+                    model_display_name=model_display_name,
+                )
+                results.append(result)
+                logger.info(f"Completed {i}/{n} experiments")
+        except Exception:
+            session_status = "FAILED"
+            raise
+        finally:
+            _finalize_training_session_parent_run(
+                tracking_uri=training_mlflow_env.tracking_uri,
+                run_id=parent_run_id,
+                status=session_status,
             )
-            results.append(result)
-            logger.info(f"Completed {i}/{n} experiments")
 
     label_map = _make_label_map(results)
     output_dir = base_output / "training"

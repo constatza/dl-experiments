@@ -74,7 +74,7 @@ def test_experiment_auto_id_is_model_first(
     """Auto-generate experiment id from model and dataset when no id or display_name given.
 
     The id should be "{model_id}-{dataset_id}" (model first).
-    Display name should be "{dataset_label} | {model_label}".
+    Display name should be "{model_label} | {dataset_label}".
     """
     raw = dict(minimal_case_raw)
     raw["experiments"] = [
@@ -86,7 +86,7 @@ def test_experiment_auto_id_is_model_first(
     ]
     config = CaseConfig.model_validate(raw)
     assert config.experiments[0].id == "ffnn-standard-gaussian-cg1-45x15"
-    assert config.experiments[0].display_name == "Gaussian CG-1 45x15 | FFNN Standard"
+    assert config.experiments[0].display_name == "FFNN Standard | Gaussian CG-1 45x15"
 
 
 def test_experiment_id_derived_from_display_name(
@@ -122,7 +122,7 @@ def test_experiment_display_name_auto_filled_when_only_id_given(
     ]
     config = CaseConfig.model_validate(raw)
     assert config.experiments[0].id == "my-id"
-    assert config.experiments[0].display_name == "Gaussian CG-1 45x15 | FFNN Standard"
+    assert config.experiments[0].display_name == "FFNN Standard | Gaussian CG-1 45x15"
 
 
 def test_experiment_explicit_id_and_display_name_unchanged(
@@ -157,9 +157,11 @@ def test_comparison_auto_id_when_same_datasets(
         {
             "matrix_dataset": "gaussian-cg1-45x15",
             "rhs_dataset": "gaussian-cg1-45x15",
+            "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
             # no id, no display_name
         }
     ]
+    raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "model": "ffnn-standard"}]
     config = CaseConfig.model_validate(raw)
     assert config.comparisons[0].id == "gaussian-cg1-45x15"
     assert config.comparisons[0].display_name == "Gaussian CG-1 45x15"
@@ -179,9 +181,11 @@ def test_comparison_auto_id_when_different_datasets(
         {
             "matrix_dataset": "gaussian-cg1-45x15",
             "rhs_dataset": "solutions-45x15",
+            "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
             # no id, no display_name
         }
     ]
+    raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "model": "ffnn-standard"}]
     config = CaseConfig.model_validate(raw)
     assert config.comparisons[0].id == "gaussian-cg1-45x15-solutions-45x15"
     assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | Solutions 45x15"
@@ -264,9 +268,41 @@ def test_multi_experiment_auto_ids_all_model_first(
         "ffnn-standard-solutions-45x15",
     ]
     assert [e.display_name for e in config.experiments] == [
-        "Gaussian CG-1 45x15 | FFNN Standard",
-        "Solutions 45x15 | FFNN Standard",
+        "FFNN Standard | Gaussian CG-1 45x15",
+        "FFNN Standard | Solutions 45x15",
     ]
+
+
+def test_comparison_display_name_ignores_experiment_filter_for_parent_name(
+    minimal_case_raw: dict[str, object],
+    dataset_entry_solutions: dict[str, object],
+) -> None:
+    """Comparison parent names stay dataset-defined even with filtered experiments."""
+    raw = dict(minimal_case_raw)
+    raw["datasets"] = [*list(raw["datasets"]), dataset_entry_solutions]  # type: ignore[arg-type]
+    raw["models"] = [
+        *list(raw["models"]),  # type: ignore[arg-type]
+        {
+            "id": "ffnn-large",
+            "path": Path("/fake/ffnn-large.toml"),
+            "display_name": "FFNN Large",
+        },
+    ]
+    raw["experiments"] = [
+        {"dataset": "gaussian-cg1-45x15", "model": "ffnn-standard"},
+        {"dataset": "solutions-45x15", "model": "ffnn-large"},
+    ]
+    raw["comparisons"] = [
+        {
+            "matrix_dataset": "gaussian-cg1-45x15",
+            "rhs_dataset": "solutions-45x15",
+            "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
+        }
+    ]
+
+    config = CaseConfig.model_validate(raw)
+
+    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | Solutions 45x15"
 
 
 def test_duplicate_auto_ids_raise_validation_error(

@@ -250,7 +250,7 @@ def test_infer_experiment_display_name_auto_from_registry(
         dataset_display=dataset_display,
         model_display=model_display,
     )
-    assert result == "Gaussian CG-1 45x15 | FFNN Standard"
+    assert result == "FFNN Standard | Gaussian CG-1 45x15"
 
 
 def test_infer_experiment_display_name_uses_explicit_user_dn(
@@ -279,7 +279,7 @@ def test_infer_experiment_display_name_falls_back_to_raw_id_when_not_in_registry
         dataset_display=dataset_display,
         model_display=model_display,
     )
-    assert result == "unknown-ds | unknown-model"
+    assert result == "unknown-model | unknown-ds"
 
 
 def test_infer_experiment_display_name_auto_when_only_id_given(
@@ -293,7 +293,7 @@ def test_infer_experiment_display_name_auto_when_only_id_given(
         dataset_display=dataset_display,
         model_display=model_display,
     )
-    assert result == "Gaussian CG-1 45x15 | FFNN Standard"
+    assert result == "FFNN Standard | Gaussian CG-1 45x15"
 
 
 # ---------------------------------------------------------------------------
@@ -391,3 +391,16 @@ def test_infer_comparison_display_name_uses_explicit_user_dn(
         dataset_display=dataset_display,
     )
     assert result == "Gaussian Test"
+
+
+def test_infer_comparison_display_name_is_dataset_only(
+    comp_diff_datasets: dict[str, object],
+    dataset_display: dict[str, str],
+) -> None:
+    result = _infer_comparison_display_name(
+        matrix_id=str(comp_diff_datasets["matrix_dataset"]),
+        rhs_id=str(comp_diff_datasets["rhs_dataset"]),
+        user_dn=None,
+        dataset_display=dataset_display,
+    )
+    assert result == "Gaussian CG-1 45x15 | Solutions 45x15"
