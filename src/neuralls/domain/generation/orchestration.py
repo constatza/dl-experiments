@@ -527,7 +527,6 @@ def build_dataset_payload(
     mix: dict[str, float] | None = None,
     total: int | None = None,
     rhs_path: str | None = None,
-    solutions_path: str | None = None,
     sample_id_regex: str | None = None,
     normalize: NormalizeType = "matrix",
     matrix_norm_type: str = "spectral",
@@ -547,7 +546,6 @@ def build_dataset_payload(
         mix: Mixing proportions
         total: Total sample count
         rhs_path: Optional path expression for RHS stream
-        solutions_path: Optional path expression for solutions
         sample_id_regex: Optional regex for sample ID extraction
         normalize: Normalization type to apply
         matrix_norm_type: Type of norm to compute
@@ -560,8 +558,6 @@ def build_dataset_payload(
     """
     logger.info("Building dataset...")
     logger.info(f"  Matrix: {matrix_path}")
-    if solutions_path is not None:
-        logger.info(f"  Solutions source: {solutions_path}")
     if rhs_path is not None:
         logger.info(f"  RHS source: {rhs_path}")
 

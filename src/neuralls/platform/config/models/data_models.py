@@ -56,7 +56,7 @@ class SourceConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    @field_validator("case_path", "matrix_path", mode="before")
+    @field_validator("case_path", mode="before")
     @classmethod
     def _expand_plain_paths(cls, v: str | None, info: ValidationInfo) -> str | None:
         """Expand plain path placeholders and resolve to absolute paths.
@@ -72,17 +72,19 @@ class SourceConfig(BaseModel):
             return v
         return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
 
-    @field_validator("rhs_path", "solutions_path", "rhs_pattern", mode="before")
+    @field_validator("rhs_path", "solutions_path", "rhs_pattern", "matrix_path", mode="before")
     @classmethod
     def _expand_glob_paths(cls, v: str | None, info: ValidationInfo) -> str | None:
         """Expand glob path placeholders, preserving wildcard characters.
 
+        Also handles plain paths without wildcards via fallback to expand_config_path.
+
         Args:
-            v: Raw glob expression from config field.
+            v: Raw string value or glob expression from config field.
             info: Pydantic validation info carrying context.
 
         Returns:
-            Glob expression with prefix resolved to absolute path, or None if v is None.
+            Resolved path or glob expression, or None if v is None.
         """
         if v is None or info.context is None:
             return v

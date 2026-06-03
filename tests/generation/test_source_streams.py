@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from neuralls.domain.generation.source_streams import (
     bind_sources,
@@ -12,6 +13,20 @@ from neuralls.domain.generation.source_streams import (
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.platform.storage.datasets import load_dense_training_arrays, resolve_dataset_paths
 from dlkit.io import open_sparse_pack
+
+
+@pytest.fixture
+def three_spd_txt_matrices(tmp_path: Path) -> tuple[Path, int]:
+    """Three 5×5 SPD matrices written to individual .txt files for glob tests."""
+    rng = np.random.default_rng(7)
+    mat_dir = tmp_path / "matrices"
+    mat_dir.mkdir()
+    n = 5
+    for i in range(3):
+        A = rng.standard_normal((n, n))
+        A = A @ A.T + n * np.eye(n)
+        np.savetxt(mat_dir / f"A_{i:03d}.txt", A)
+    return mat_dir, n
 
 
 def test_open_matrix_stream_from_npy_stack(tmp_path: Path) -> None:
@@ -196,3 +211,66 @@ def test_build_dataset_persists_gaussian_residual_pairs(tmp_path: Path) -> None:
     assert saved_rhs.shape == (4, 2)
     assert saved_solutions.shape == (4, 2)
     np.testing.assert_allclose(saved_solutions @ matrix.T, saved_rhs, atol=1e-10)
+
+
+def test_glob_matrix_gaussian_generates_n_times_m_samples(
+    three_spd_txt_matrices: tuple[Path, int],
+    tmp_path: Path,
+) -> None:
+    """build_dataset with a matrix glob and gaussian_forward produces 3 × samples rows."""
+    mat_dir, n = three_spd_txt_matrices
+    samples_per_matrix = 4
+    out_dir = tmp_path / "ds_gaussian"
+
+    build_dataset(
+        matrix_path=str(mat_dir / "A_*.txt"),
+        dataset_dir=str(out_dir),
+        counts={"gaussian_forward": samples_per_matrix},
+        normalize="none",
+        shuffle=False,
+        seed=0,
+    )
+
+    rhs, solutions = load_dense_training_arrays(out_dir)
+    assert rhs.shape == (3 * samples_per_matrix, n)
+    assert solutions.shape == (3 * samples_per_matrix, n)
+
+    pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
+    assert pack.n_samples == 3 * samples_per_matrix
+
+
+def test_glob_matrix_solution_archive_pairs_each_matrix_with_shared_vectors(
+    three_spd_txt_matrices: tuple[Path, int],
+    tmp_path: Path,
+) -> None:
+    """solution_archive strategy with a matrix glob applies each solution to every matrix."""
+    mat_dir, n = three_spd_txt_matrices
+    sol_dir = tmp_path / "solutions"
+    sol_dir.mkdir()
+    rng = np.random.default_rng(13)
+    n_solutions = 5
+    for j in range(n_solutions):
+        np.savetxt(sol_dir / f"sol_{j:04d}.txt", rng.standard_normal(n))
+
+    out_dir = tmp_path / "ds_archive"
+    build_dataset(
+        matrix_path=str(mat_dir / "A_*.txt"),
+        dataset_dir=str(out_dir),
+        counts={"solution_archive": n_solutions},
+        normalize="none",
+        shuffle=False,
+        seed=0,
+        strategy_overrides={
+            "solution_archive": {
+                "solutions_glob": str(sol_dir / "sol_*.txt"),
+                "samples": n_solutions,
+            }
+        },
+    )
+
+    rhs, solutions = load_dense_training_arrays(out_dir)
+    assert rhs.shape == (3 * n_solutions, n)
+    assert solutions.shape == (3 * n_solutions, n)
+
+    pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
+    assert pack.n_samples == 3 * n_solutions

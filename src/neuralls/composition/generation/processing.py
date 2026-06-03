@@ -227,7 +227,7 @@ def _resolve_rhs_source(
     context: DataGenerationContext,
     solution_archive_options: Mapping[str, Any] | None,
     provide_rhs_option: Any,
-    matrix: np.ndarray,
+    matrix: np.ndarray | None,
 ) -> str | None:
     """Determine RHS path for synthetic generation, allowing provide_rhs overrides."""
     if context.rhs_path:
@@ -243,6 +243,11 @@ def _resolve_rhs_source(
         return str(path)
 
     if isinstance(provide_rhs_option, bool) and provide_rhs_option:
+        if matrix is None:
+            raise ValueError(
+                "provide_rhs=True is not supported with a matrix glob source; "
+                "supply an explicit rhs_path instead."
+            )
         if not solution_archive_options:
             raise ValueError(
                 "provide_rhs=True requires solution archive options to resolve a solutions glob."
@@ -283,7 +288,6 @@ def _execute_solution_archive(
         matrix_path=context.matrix_path,
         dataset_dir=str(context.dataset_dir),
         counts={"solution_archive": strategy.samples},
-        solutions_path=context.solutions_path,
         sample_id_regex=context.sample_id_regex,
         normalize=context.normalize,
         shuffle=bool(shuffle_value),
@@ -305,7 +309,7 @@ def _execute_synthetic_generation(
     rhs_archive_strategy: StrategySpec | None,
     solution_archive_strategy: StrategySpec | None,
     generation_cfg: GenerationConfig,
-    matrix: np.ndarray,
+    matrix: np.ndarray | None,
 ) -> Path:
     """Execute mixed generation using new build_dataset() with all strategies."""
     seed_value = generation_cfg.seed
@@ -370,7 +374,6 @@ def _execute_synthetic_generation(
         dataset_dir=str(context.dataset_dir),
         counts=counts,
         rhs_path=rhs_source_path,
-        solutions_path=context.solutions_path,
         sample_id_regex=context.sample_id_regex,
         normalize=context.normalize,
         shuffle=bool(shuffle_value),
@@ -423,7 +426,7 @@ def _execute_plan(
     context: DataGenerationContext,
     generation_cfg: GenerationConfig,
     plan: GenerationPlan,
-    matrix: np.ndarray,
+    matrix: np.ndarray | None,
 ) -> Path:
     rhs_archive_strategy = plan.rhs_archive
     solution_archive_strategy = plan.solution_archive
@@ -454,7 +457,7 @@ def _execute_plan(
 
 def process_config(
     config: DataConfigFile,
-    matrix: np.ndarray,
+    matrix: np.ndarray | None = None,
 ) -> Path:
     """Process a data config and execute the declared generation plan.
 

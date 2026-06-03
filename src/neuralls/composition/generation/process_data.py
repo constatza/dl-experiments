@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+
+import numpy as np
 from pydantic import ValidationError
 
 from neuralls.composition.generation.processing import process_config
+from neuralls.domain.generation.source_streams import _is_glob_expression
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.settings import NeurallsSettings
 from neuralls.platform.storage.base import load_matrix
@@ -22,6 +25,7 @@ def process_data_from_config(
 
     Args:
         config_path: Path to TOML data configuration file.
+        settings: Resolved runtime settings.
 
     Returns:
         Path to output dataset directory.
@@ -38,7 +42,12 @@ def process_data_from_config(
     matrix_path = config.source.matrix_path
     if matrix_path is None:
         raise ValueError("Missing 'source.matrix_path' in config")
-    matrix = load_matrix(Path(matrix_path))
+
+    # Glob paths fan out to multiple matrix files; GlobMatrixStream handles loading.
+    # Eager single-file load is only needed for the provide_rhs=True edge case.
+    matrix: np.ndarray | None = (
+        None if _is_glob_expression(matrix_path) else load_matrix(Path(matrix_path))
+    )
     try:
         return process_config(config, matrix)
     except ValidationError as exc:

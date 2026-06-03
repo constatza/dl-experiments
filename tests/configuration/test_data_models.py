@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from neuralls.platform.config.context import ConfigContext
 from neuralls.platform.config.models.data_models import (
     DataConfigFile,
     DataTestConfig,
@@ -15,6 +16,36 @@ from neuralls.platform.config.models.data_models import (
     SourceConfig,
     StrategyConfig,
 )
+
+
+def test_source_config_matrix_path_glob_preserves_wildcard(
+    config_context: ConfigContext,
+    tmp_path: Path,
+) -> None:
+    """matrix_path with a glob wildcard must survive validator expansion intact."""
+    glob_expr = str(tmp_path / "A_*.txt")
+    config = SourceConfig.model_validate(
+        {"matrix_path": glob_expr},
+        context=config_context.as_pydantic_context(),
+    )
+    assert config.matrix_path is not None
+    assert "*" in config.matrix_path
+    assert config.matrix_path.endswith("/A_*.txt")
+
+
+def test_source_config_matrix_path_plain_still_resolves(
+    config_context: ConfigContext,
+    tmp_path: Path,
+) -> None:
+    """matrix_path without wildcards resolves to an absolute path as before."""
+    plain = str(tmp_path / "A.txt")
+    config = SourceConfig.model_validate(
+        {"matrix_path": plain},
+        context=config_context.as_pydantic_context(),
+    )
+    assert config.matrix_path is not None
+    assert "*" not in config.matrix_path
+    assert config.matrix_path == plain
 
 
 def test_source_config_defaults() -> None:
