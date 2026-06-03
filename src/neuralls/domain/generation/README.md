@@ -27,6 +27,10 @@ IDs 0, 1, 2, …  No renaming or modification of the source files is required.
 `enumerate_by` and `sample_id_regex` are mutually exclusive; specifying both raises
 a validation error.
 
+Config-driven generation and the public composition entrypoint
+`neuralls.composition.generation.dataset_builder.build_dataset(...)` both honor
+`enumerate_by` and pass it through to the glob source streams.
+
 **Python API:**
 
 ```python

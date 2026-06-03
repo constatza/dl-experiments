@@ -26,6 +26,7 @@ from neuralls.composition.generation.default_services import (
     make_residual_solver,
 )
 from neuralls.domain.generation.ports import TracingSolverPort
+from neuralls.domain.generation.source_streams import EnumerateBy
 
 
 def _make_residual_solver() -> TracingSolverPort:
@@ -77,6 +78,7 @@ class DataGenerationContext:
     rhs_path: str | None
     solutions_path: str | None
     sample_id_regex: str | None
+    enumerate_by: EnumerateBy | None
     dataset_dir: Path
     normalize: NormalizeType
     seed: int
@@ -99,6 +101,7 @@ def _build_context(
     rhs_path = config.source.rhs_path
     solutions_path = config.source.solutions_path
     sample_id_regex = config.source.sample_id_regex
+    enumerate_by = config.source.enumerate_by
     normalize_value = config.generation.normalize
     if isinstance(normalize_value, bool):
         raise ValueError(
@@ -115,6 +118,7 @@ def _build_context(
         rhs_path=rhs_path,
         solutions_path=solutions_path,
         sample_id_regex=sample_id_regex,
+        enumerate_by=enumerate_by,
         dataset_dir=dataset_dir,
         normalize=normalize,
         seed=config.generation.seed,
@@ -289,6 +293,7 @@ def _execute_solution_archive(
         dataset_dir=str(context.dataset_dir),
         counts={"solution_archive": strategy.samples},
         sample_id_regex=context.sample_id_regex,
+        enumerate_by=context.enumerate_by,
         normalize=context.normalize,
         shuffle=bool(shuffle_value),
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
@@ -375,6 +380,7 @@ def _execute_synthetic_generation(
         counts=counts,
         rhs_path=rhs_source_path,
         sample_id_regex=context.sample_id_regex,
+        enumerate_by=context.enumerate_by,
         normalize=context.normalize,
         shuffle=bool(shuffle_value),
         seed=seed,
@@ -410,6 +416,7 @@ def _execute_rhs_archive_only(
         dataset_dir=str(context.dataset_dir),
         counts={"rhs_archive": strategy.samples},
         sample_id_regex=context.sample_id_regex,
+        enumerate_by=context.enumerate_by,
         normalize=context.normalize,
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
         strategy_overrides={

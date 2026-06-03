@@ -8,6 +8,7 @@ from typing import Any
 from neuralls.domain.generation.data_types import NormalizeType
 from neuralls.domain.generation.orchestration import build_dataset_payload
 from neuralls.domain.generation.ports import DatasetWriterPort, TracingSolverPort
+from neuralls.domain.generation.source_streams import EnumerateBy
 from neuralls.platform.storage.datasets import SparseDatasetWriter
 
 
@@ -20,6 +21,7 @@ def build_dataset(
     total: int | None = None,
     rhs_path: str | None = None,
     sample_id_regex: str | None = None,
+    enumerate_by: EnumerateBy | None = None,
     normalize: NormalizeType = "matrix",
     matrix_norm_type: str = "spectral",
     shuffle: bool = True,
@@ -36,6 +38,7 @@ def build_dataset(
         total=total,
         rhs_path=rhs_path,
         sample_id_regex=sample_id_regex,
+        enumerate_by=enumerate_by,
         normalize=normalize,
         matrix_norm_type=matrix_norm_type,
         shuffle=shuffle,

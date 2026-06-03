@@ -24,7 +24,7 @@ from .trace_utils import (
 )
 from .interfaces import ArchiveData, TracingSolverCallable
 from .payloads import GeneratedDatasetPayload, SparsePackAccumulator
-from .source_streams import bind_sources, open_matrix_stream, open_vector_stream
+from .source_streams import EnumerateBy, bind_sources, open_matrix_stream, open_vector_stream
 
 
 def _shuffle_samples(
@@ -262,6 +262,7 @@ def _open_streams(
     matrix_path: str,
     rhs_path: str | None,
     sample_id_regex: str | None,
+    enumerate_by: EnumerateBy | None,
 ) -> tuple[Any, Any, list[Any]]:
     """Open matrix and optional RHS streams and bind them.
 
@@ -269,6 +270,7 @@ def _open_streams(
         matrix_path: Path expression for matrix stream
         rhs_path: Optional path expression for RHS stream
         sample_id_regex: Optional regex for sample ID extraction
+        enumerate_by: Optional sequential ID assignment strategy for glob sources
 
     Returns:
         Tuple of (matrix_stream, rhs_stream, bindings)
@@ -276,9 +278,14 @@ def _open_streams(
     matrix_stream = open_matrix_stream(
         matrix_path_expr=matrix_path,
         sample_id_regex=sample_id_regex,
+        enumerate_by=enumerate_by,
     )
     rhs_stream = (
-        open_vector_stream(rhs_path, sample_id_regex=sample_id_regex)
+        open_vector_stream(
+            rhs_path,
+            sample_id_regex=sample_id_regex,
+            enumerate_by=enumerate_by,
+        )
         if rhs_path is not None
         else None
     )
@@ -528,6 +535,7 @@ def build_dataset_payload(
     total: int | None = None,
     rhs_path: str | None = None,
     sample_id_regex: str | None = None,
+    enumerate_by: EnumerateBy | None = None,
     normalize: NormalizeType = "matrix",
     matrix_norm_type: str = "spectral",
     shuffle: bool = True,
@@ -547,6 +555,7 @@ def build_dataset_payload(
         total: Total sample count
         rhs_path: Optional path expression for RHS stream
         sample_id_regex: Optional regex for sample ID extraction
+        enumerate_by: Optional sequential ID assignment strategy for glob sources
         normalize: Normalization type to apply
         matrix_norm_type: Type of norm to compute
         shuffle: Whether to shuffle samples
@@ -562,7 +571,12 @@ def build_dataset_payload(
         logger.info(f"  RHS source: {rhs_path}")
 
     # Open streams and bind sources
-    matrix_stream, rhs_stream, bindings = _open_streams(matrix_path, rhs_path, sample_id_regex)
+    matrix_stream, rhs_stream, bindings = _open_streams(
+        matrix_path,
+        rhs_path,
+        sample_id_regex,
+        enumerate_by,
+    )
     logger.info(
         f"  Matrix samples: {len(matrix_stream.sample_ids)} | System bindings: {len(bindings)}"
     )

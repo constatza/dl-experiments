@@ -44,6 +44,40 @@ solutions_glob = "{(solutions_dir / "solution_*.txt").as_posix()}"
     return config_path
 
 
+def _write_enumerated_generation_config(tmp_path: Path, dataset_id: str) -> Path:
+    """Create a generation config that relies on enumerate_by for globbed matrices."""
+    matrices_dir = tmp_path / "matrices"
+    matrices_dir.mkdir()
+    for idx, stem in enumerate(
+        (
+            "E1_10554158_E2_20662154_E3_19907116_E4_20715669_subdomain_1_Kaa",
+            "E1_10846921_E2_25611823_E3_31377296_E4_28205425_subdomain_1_Kaa",
+        )
+    ):
+        np.savetxt(matrices_dir / f"{stem}.txt", np.eye(2) * float(idx + 2))
+
+    config_path = tmp_path / f"{dataset_id}.toml"
+    config_path.write_text(
+        f"""
+id = "{dataset_id}"
+
+[source]
+matrix_path = "{(matrices_dir / "*_subdomain_1_Kaa.txt").as_posix()}"
+enumerate_by = "name"
+
+[generation]
+normalize = "none"
+
+[[generation.strategy]]
+name = "neutral_ones"
+samples = 1
+
+[output]
+"""
+    )
+    return config_path
+
+
 def test_process_config_accepts_dataconfig_file(
     tmp_path: Path,
     neuralls_settings: NeurallsSettings,
@@ -78,6 +112,7 @@ def test_data_generation_context_from_typed_config(
     context, _ = _build_context(config=config)
     assert context.matrix_path == config.source.matrix_path
     assert context.solutions_path == config.source.solutions_path
+    assert context.enumerate_by == config.source.enumerate_by
     assert context.dataset_dir == neuralls_settings.processed_dir / "context-dataset"
     assert context.seed == config.generation.seed
     assert context.shuffle is config.generation.shuffle
@@ -91,4 +126,35 @@ def test_process_data_from_config_end_to_end(
     config_path = _write_solution_archive_config(tmp_path, "end-to-end-dataset")
     output_dir = process_data_from_config(config_path, neuralls_settings)
     assert output_dir == neuralls_settings.processed_dir / "end-to-end-dataset"
+    assert output_dir.exists()
+
+
+def test_build_context_preserves_enumerate_by_from_config(
+    tmp_path: Path,
+    neuralls_settings: NeurallsSettings,
+) -> None:
+    config_path = _write_enumerated_generation_config(tmp_path, "enumerated-context")
+    config = load_data_config(config_path, neuralls_settings).model_copy(
+        update={
+            "output": load_data_config(config_path, neuralls_settings).output.model_copy(
+                update={"data_dir": neuralls_settings.processed_dir}
+            )
+        }
+    )
+
+    context, _ = _build_context(config=config)
+
+    assert context.enumerate_by is not None
+    assert context.enumerate_by.value == "name"
+
+
+def test_process_data_from_config_honors_enumerate_by(
+    tmp_path: Path,
+    neuralls_settings: NeurallsSettings,
+) -> None:
+    config_path = _write_enumerated_generation_config(tmp_path, "enumerated-end-to-end")
+
+    output_dir = process_data_from_config(config_path, neuralls_settings)
+
+    assert output_dir == neuralls_settings.processed_dir / "enumerated-end-to-end"
     assert output_dir.exists()

@@ -299,6 +299,28 @@ def arbitrary_named_txt_matrices(tmp_path: Path) -> tuple[Path, int]:
     return mat_dir, n
 
 
+@pytest.fixture
+def subdomain_named_txt_matrices(tmp_path: Path) -> tuple[Path, int]:
+    """Three SPD matrices whose stems would collide under the default trailing-digit regex."""
+    rng = np.random.default_rng(123)
+    mat_dir = tmp_path / "subdomain_matrices"
+    mat_dir.mkdir()
+    n = 4
+    parameter_sets = [
+        (10554158, 20662154, 19907116, 20715669),
+        (10846921, 25611823, 31377296, 28205425),
+        (12000001, 22000002, 32000003, 42000004),
+    ]
+    for e1, e2, e3, e4 in parameter_sets:
+        A = rng.standard_normal((n, n))
+        A = A @ A.T + n * np.eye(n)
+        np.savetxt(
+            mat_dir / f"E1_{e1}_E2_{e2}_E3_{e3}_E4_{e4}_subdomain_1_Kaa.txt",
+            A,
+        )
+    return mat_dir, n
+
+
 def test_enumerate_files_assigns_sequential_ids_in_name_order(tmp_path: Path) -> None:
     paths = [tmp_path / f"file_z_{suffix}.txt" for suffix in ["c", "a", "b"]]
     for p in paths:
@@ -383,6 +405,31 @@ def test_glob_matrix_stream_enumerate_by_name_is_reproducible(
             stream1.load_dense_sample(sid).matrix,
             stream2.load_dense_sample(sid).matrix,
         )
+
+
+def test_build_dataset_honors_enumerate_by_for_globbed_matrix_files(
+    subdomain_named_txt_matrices: tuple[Path, int],
+    tmp_path: Path,
+) -> None:
+    mat_dir, n = subdomain_named_txt_matrices
+    out_dir = tmp_path / "enumerated_dataset"
+
+    build_dataset(
+        matrix_path=str(mat_dir / "*_subdomain_1_Kaa.txt"),
+        dataset_dir=str(out_dir),
+        counts={"neutral_ones": 1},
+        enumerate_by=EnumerateBy.NAME,
+        normalize="none",
+        shuffle=False,
+        seed=42,
+    )
+
+    rhs, solutions = load_dense_training_arrays(out_dir)
+    assert rhs.shape == (3, n)
+    assert solutions.shape == (3, n)
+
+    pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
+    assert pack.n_samples == 3
 
 
 def test_source_config_rejects_both_sample_id_regex_and_enumerate_by() -> None:
