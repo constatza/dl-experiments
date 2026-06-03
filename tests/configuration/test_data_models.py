@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 from pydantic import ValidationError
@@ -30,7 +30,7 @@ def test_source_config_matrix_path_glob_preserves_wildcard(
     )
     assert config.matrix_path is not None
     assert "*" in config.matrix_path
-    assert config.matrix_path.endswith("/A_*.txt")
+    assert PurePath(config.matrix_path).name == "A_*.txt"
 
 
 def test_source_config_matrix_path_plain_still_resolves(
