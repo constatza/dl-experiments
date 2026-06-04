@@ -83,6 +83,7 @@ class DataGenerationContext:
     normalize: NormalizeType
     seed: int
     shuffle: bool
+    replacement: bool
 
 
 def _build_context(
@@ -123,6 +124,7 @@ def _build_context(
         normalize=normalize,
         seed=config.generation.seed,
         shuffle=config.generation.shuffle,
+        replacement=config.generation.replacement,
     ), plan
 
 
@@ -294,6 +296,7 @@ def _execute_solution_archive(
         counts={"solution_archive": strategy.samples},
         sample_id_regex=context.sample_id_regex,
         enumerate_by=context.enumerate_by,
+        replacement=context.replacement,
         normalize=context.normalize,
         shuffle=bool(shuffle_value),
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
@@ -381,6 +384,7 @@ def _execute_synthetic_generation(
         rhs_path=rhs_source_path,
         sample_id_regex=context.sample_id_regex,
         enumerate_by=context.enumerate_by,
+        replacement=context.replacement,
         normalize=context.normalize,
         shuffle=bool(shuffle_value),
         seed=seed,
@@ -417,6 +421,7 @@ def _execute_rhs_archive_only(
         counts={"rhs_archive": strategy.samples},
         sample_id_regex=context.sample_id_regex,
         enumerate_by=context.enumerate_by,
+        replacement=context.replacement,
         normalize=context.normalize,
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
         strategy_overrides={

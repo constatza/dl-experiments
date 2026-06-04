@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,7 +24,14 @@ from .trace_utils import (
 )
 from .interfaces import ArchiveData, TracingSolverCallable
 from .payloads import GeneratedDatasetPayload, SparsePackAccumulator
-from .source_streams import EnumerateBy, bind_sources, open_matrix_stream, open_vector_stream
+from .runner import strategy_supports_matrix_replacement
+from .source_streams import (
+    EnumerateBy,
+    SystemBinding,
+    bind_sources,
+    open_matrix_stream,
+    open_vector_stream,
+)
 
 
 def _shuffle_samples(
@@ -297,6 +304,138 @@ def _open_streams(
     return matrix_stream, rhs_stream, bindings
 
 
+def _strategy_uses_finite_source(
+    strategy_name: str,
+    strategy_overrides: Mapping[str, Mapping[str, Any]] | None,
+    has_rhs_source: bool,
+) -> bool:
+    """Return whether a strategy is configured to use a finite external source."""
+    if strategy_name in {
+        "solution_archive",
+        "rhs_archive",
+        "scaled_solutions",
+        "validated_archive",
+    }:
+        return True
+
+    overrides = strategy_overrides.get(strategy_name, {}) if strategy_overrides is not None else {}
+    if strategy_name in {"residual_traces", "residuals", "gaussian_residuals"}:
+        return has_rhs_source or isinstance(overrides.get("solutions_glob"), str)
+    if strategy_name == "search_directions":
+        return has_rhs_source
+    return False
+
+
+def _validate_replacement_support(
+    strategy_counts: Mapping[str, int],
+    *,
+    replacement: bool,
+    num_matrix_samples: int,
+    strategy_overrides: Mapping[str, Mapping[str, Any]] | None,
+    has_rhs_source: bool,
+) -> None:
+    """Fail fast when replacement is requested for unsupported strategy allocations."""
+    if not replacement or num_matrix_samples <= 1:
+        return
+
+    for strategy_name, count in strategy_counts.items():
+        if count == 0:
+            continue
+        if not strategy_supports_matrix_replacement(strategy_name):
+            raise ValueError(
+                f"Strategy '{strategy_name}' does not support matrix replacement allocation."
+            )
+        if _strategy_uses_finite_source(strategy_name, strategy_overrides, has_rhs_source):
+            raise ValueError(
+                f"Strategy '{strategy_name}' does not support matrix replacement when configured "
+                "with a finite external source."
+            )
+
+
+def _append_binding_count(
+    counts_by_binding: list[dict[str, int]],
+    binding_idx: int,
+    strategy_name: str,
+    count: int,
+) -> None:
+    """Accumulate one per-binding strategy count."""
+    if count == -1:
+        counts_by_binding[binding_idx][strategy_name] = -1
+        return
+    if count <= 0:
+        return
+    counts_by_binding[binding_idx][strategy_name] = (
+        counts_by_binding[binding_idx].get(strategy_name, 0) + count
+    )
+
+
+def _allocate_strategy_counts_across_bindings(
+    *,
+    count: int,
+    bindings: Sequence[SystemBinding],
+    replacement: bool,
+    rng: np.random.Generator,
+) -> list[int]:
+    """Distribute one strategy's global row budget across bindings."""
+    num_bindings = len(bindings)
+    if num_bindings < 1:
+        raise ValueError("At least one binding is required for allocation.")
+    if count == -1:
+        return [-1] * num_bindings
+    if count <= 0:
+        return [0] * num_bindings
+
+    if not replacement:
+        base = count // num_bindings
+        remainder = count % num_bindings
+        return [base + (1 if idx < remainder else 0) for idx in range(num_bindings)]
+
+    allocations = [0] * num_bindings
+    sampled_indices = rng.integers(0, num_bindings, size=count)
+    for binding_idx in sampled_indices.tolist():
+        allocations[binding_idx] += 1
+    return allocations
+
+
+def _resolve_binding_strategy_counts(
+    *,
+    bindings: Sequence[SystemBinding],
+    counts: Mapping[str, int] | None,
+    mix: Mapping[str, float] | None,
+    total: int | None,
+    replacement: bool,
+    seed: int,
+    strategy_overrides: Mapping[str, Mapping[str, Any]] | None,
+    has_rhs_source: bool,
+    num_matrix_samples: int,
+) -> list[dict[str, int]]:
+    """Resolve global strategy counts into per-binding count maps."""
+    strategy_counts = _resolve_strategy_counts(counts, mix, total)
+    _validate_replacement_support(
+        strategy_counts,
+        replacement=replacement,
+        num_matrix_samples=num_matrix_samples,
+        strategy_overrides=strategy_overrides,
+        has_rhs_source=has_rhs_source,
+    )
+
+    if num_matrix_samples <= 1:
+        return [dict(strategy_counts) for _ in bindings]
+
+    rng = rng_from_seed(seed)
+    counts_by_binding = [{} for _ in bindings]
+    for strategy_name, count in strategy_counts.items():
+        allocations = _allocate_strategy_counts_across_bindings(
+            count=count,
+            bindings=bindings,
+            replacement=replacement,
+            rng=rng,
+        )
+        for binding_idx, allocated_count in enumerate(allocations):
+            _append_binding_count(counts_by_binding, binding_idx, strategy_name, allocated_count)
+    return counts_by_binding
+
+
 @dataclass(frozen=True)
 class _BindingResult:
     """Result from processing one binding.
@@ -536,6 +675,7 @@ def build_dataset_payload(
     rhs_path: str | None = None,
     sample_id_regex: str | None = None,
     enumerate_by: EnumerateBy | None = None,
+    replacement: bool = False,
     normalize: NormalizeType = "matrix",
     matrix_norm_type: str = "spectral",
     shuffle: bool = True,
@@ -556,6 +696,8 @@ def build_dataset_payload(
         rhs_path: Optional path expression for RHS stream
         sample_id_regex: Optional regex for sample ID extraction
         enumerate_by: Optional sequential ID assignment strategy for glob sources
+        replacement: Whether multi-matrix allocation may reuse matrix bindings for supported
+            random strategies.
         normalize: Normalization type to apply
         matrix_norm_type: Type of norm to compute
         shuffle: Whether to shuffle samples
@@ -580,6 +722,17 @@ def build_dataset_payload(
     logger.info(
         f"  Matrix samples: {len(matrix_stream.sample_ids)} | System bindings: {len(bindings)}"
     )
+    binding_counts = _resolve_binding_strategy_counts(
+        bindings=bindings,
+        counts=counts,
+        mix=mix,
+        total=total,
+        replacement=replacement,
+        seed=seed,
+        strategy_overrides=strategy_overrides,
+        has_rhs_source=rhs_stream is not None,
+        num_matrix_samples=len(matrix_stream.sample_ids),
+    )
 
     # Setup accumulators
     sparse_acc = SparsePackAccumulator()
@@ -591,10 +744,13 @@ def build_dataset_payload(
     matrix_value_scale_values: list[float] = []
     scale_metadata_values: list[ScaleMetadata | None] = []
     matrix_cache: dict[int, _CachedMatrix] = {}
+    emitted_binding_count = 0
 
     # Process each binding
     logger.info(f"  Normalization: {normalize}")
-    for binding in bindings:
+    for binding, binding_strategy_counts in zip(bindings, binding_counts, strict=True):
+        if not binding_strategy_counts:
+            continue
         result = _process_binding(
             binding,
             matrix_stream,
@@ -602,9 +758,9 @@ def build_dataset_payload(
             matrix_cache,
             normalize,
             matrix_norm_type,
-            counts,
-            mix,
-            total,
+            binding_strategy_counts,
+            None,
+            None,
             seed,
             shuffle,
             strategy_overrides,
@@ -618,6 +774,7 @@ def build_dataset_payload(
         # Accumulate blocks and metadata
         rhs_blocks.append(result.rhs_block)
         solution_blocks.append(result.solution_block)
+        emitted_binding_count += 1
 
         # Cache matrix in appropriate format and accumulate
         cached = matrix_cache.get(binding.matrix_sample_id)
@@ -660,11 +817,11 @@ def build_dataset_payload(
         matrix_norm_value,
         matrix_value_scale,
         scale_metadata,
-        len(bindings),
+        emitted_binding_count,
     )
     logger.info(
         "Dataset payload built successfully: "
-        f"samples={rhs_all.shape[0]}, matrix_samples={len(bindings)}"
+        f"samples={rhs_all.shape[0]}, matrix_samples={emitted_binding_count}"
     )
     return payload
 

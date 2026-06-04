@@ -31,6 +31,13 @@ Config-driven generation and the public composition entrypoint
 `neuralls.composition.generation.dataset_builder.build_dataset(...)` both honor
 `enumerate_by` and pass it through to the glob source streams.
 
+For multi-matrix sources, dataset-level `counts` and `mix/total` budgets are
+global across the matrix family rather than applied once per matrix. Set
+`replacement = true` under `[generation]` only when you want supported random
+strategies to reuse matrix bindings explicitly during that global allocation.
+Archive-backed and deterministic strategies remain strict and do not honor
+matrix replacement.
+
 **Python API:**
 
 ```python

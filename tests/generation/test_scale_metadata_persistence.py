@@ -6,6 +6,7 @@ from pathlib import Path
 
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.platform.storage.datasets import (
+    as_sparse_pack_reader,
     load_dataset_manifest,
     load_dense_training_arrays,
     resolve_dataset_paths,
@@ -75,8 +76,10 @@ def test_scale_metadata_saved_with_matrix_normalization(temp_matrix_file: Path, 
     assert isinstance(scale, MatrixScale)
     assert scale.spectral_radius_bound == metadata["spectral_radius_bound"]
     assert scale.dimension_scale == metadata["dimension_scale"]
-    pack = open_sparse_pack(resolve_dataset_paths(output_dir).matrix_pack_dir)
-    loaded = pack.build_torch_sparse(0).to_dense().numpy()
+    pack = as_sparse_pack_reader(
+        open_sparse_pack(resolve_dataset_paths(output_dir).matrix_pack_dir)
+    )
+    loaded = pack.collect(0).to_dense().numpy()
     # Pack stores A_raw; the fixture matrix has diagonal 4.0 — verify scale is raw
     np.testing.assert_allclose(np.diag(loaded), np.full(5, 4.0), rtol=1e-5)
 

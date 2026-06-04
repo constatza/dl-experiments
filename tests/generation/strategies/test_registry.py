@@ -6,7 +6,7 @@ import numpy as np
 
 import neuralls.domain.generation
 from neuralls.domain.generation import run_generation
-from neuralls.domain.generation.runner import _registry
+from neuralls.domain.generation.runner import _registry, strategy_supports_matrix_replacement
 
 
 EXPECTED_STRATEGIES = {
@@ -70,3 +70,12 @@ def test_removed_legacy_trace_names_fail(spd_matrix: np.ndarray) -> None:
             assert False, f"{legacy_name} should be removed"
         except KeyError:
             pass
+
+
+def test_matrix_replacement_capabilities_are_centrally_registered() -> None:
+    """Replacement support is opt-in and queried through registry metadata."""
+    assert strategy_supports_matrix_replacement("random") is True
+    assert strategy_supports_matrix_replacement("gaussian_forward") is True
+    assert strategy_supports_matrix_replacement("residual_traces") is True
+    assert strategy_supports_matrix_replacement("solution_archive") is False
+    assert strategy_supports_matrix_replacement("neutral_ones") is False

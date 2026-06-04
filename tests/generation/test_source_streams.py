@@ -15,7 +15,11 @@ from neuralls.domain.generation.source_streams import (
     _enumerate_files,
 )
 from neuralls.composition.generation.dataset_builder import build_dataset
-from neuralls.platform.storage.datasets import load_dense_training_arrays, resolve_dataset_paths
+from neuralls.platform.storage.datasets import (
+    as_sparse_pack_reader,
+    load_dense_training_arrays,
+    resolve_dataset_paths,
+)
 from dlkit.io import open_sparse_pack
 
 
@@ -81,7 +85,7 @@ def test_build_dataset_streams_matrix_stack_without_dense_batch(tmp_path: Path) 
     build_dataset(
         matrix_path=str(matrix_path),
         dataset_dir=str(out_dir),
-        counts={"neutral_ones": 1},
+        counts={"neutral_ones": 2},
         normalize="none",
         shuffle=False,
         seed=42,
@@ -91,10 +95,10 @@ def test_build_dataset_streams_matrix_stack_without_dense_batch(tmp_path: Path) 
     assert rhs.shape == (2, 2)
     assert solutions.shape == (2, 2)
 
-    pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
+    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
     assert pack.n_samples == 2
-    dense0 = pack.build_torch_sparse(0).to_dense().numpy()
-    dense1 = pack.build_torch_sparse(1).to_dense().numpy()
+    dense0 = pack.collect(0).to_dense().numpy()
+    dense1 = pack.collect(1).to_dense().numpy()
     np.testing.assert_allclose(dense0, matrix_stack[0])
     np.testing.assert_allclose(dense1, matrix_stack[1])
 
@@ -133,9 +137,9 @@ def test_single_matrix_not_broadcasted_in_sparse_pack(tmp_path: Path) -> None:
     assert saved_rhs.shape == (3, 2)
     assert saved_solutions.shape == (3, 2)
 
-    pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
+    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
     assert pack.n_samples == 1
-    dense_last = pack.build_torch_sparse(sample_index=2).to_dense().numpy()
+    dense_last = pack.collect(sample_index=2).to_dense().numpy()
     np.testing.assert_allclose(dense_last, matrix)
 
 
@@ -217,37 +221,37 @@ def test_build_dataset_persists_gaussian_residual_pairs(tmp_path: Path) -> None:
     np.testing.assert_allclose(saved_solutions @ matrix.T, saved_rhs, atol=1e-10)
 
 
-def test_glob_matrix_gaussian_generates_n_times_m_samples(
+def test_glob_matrix_gaussian_uses_global_sample_budget(
     three_spd_txt_matrices: tuple[Path, int],
     tmp_path: Path,
 ) -> None:
-    """build_dataset with a matrix glob and gaussian_forward produces 3 × samples rows."""
+    """Multi-matrix gaussian generation treats counts as a global budget."""
     mat_dir, n = three_spd_txt_matrices
-    samples_per_matrix = 4
+    total_samples = 4
     out_dir = tmp_path / "ds_gaussian"
 
     build_dataset(
         matrix_path=str(mat_dir / "A_*.txt"),
         dataset_dir=str(out_dir),
-        counts={"gaussian_forward": samples_per_matrix},
+        counts={"gaussian_forward": total_samples},
         normalize="none",
         shuffle=False,
         seed=0,
     )
 
     rhs, solutions = load_dense_training_arrays(out_dir)
-    assert rhs.shape == (3 * samples_per_matrix, n)
-    assert solutions.shape == (3 * samples_per_matrix, n)
+    assert rhs.shape == (total_samples, n)
+    assert solutions.shape == (total_samples, n)
 
-    pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
-    assert pack.n_samples == 3 * samples_per_matrix
+    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
+    assert pack.n_samples == total_samples
 
 
-def test_glob_matrix_solution_archive_pairs_each_matrix_with_shared_vectors(
+def test_glob_matrix_solution_archive_uses_global_sample_budget(
     three_spd_txt_matrices: tuple[Path, int],
     tmp_path: Path,
 ) -> None:
-    """solution_archive strategy with a matrix glob applies each solution to every matrix."""
+    """Multi-matrix solution_archive treats counts as a global budget."""
     mat_dir, n = three_spd_txt_matrices
     sol_dir = tmp_path / "solutions"
     sol_dir.mkdir()
@@ -273,11 +277,11 @@ def test_glob_matrix_solution_archive_pairs_each_matrix_with_shared_vectors(
     )
 
     rhs, solutions = load_dense_training_arrays(out_dir)
-    assert rhs.shape == (3 * n_solutions, n)
-    assert solutions.shape == (3 * n_solutions, n)
+    assert rhs.shape == (n_solutions, n)
+    assert solutions.shape == (n_solutions, n)
 
-    pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
-    assert pack.n_samples == 3 * n_solutions
+    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
+    assert pack.n_samples == n_solutions
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +421,7 @@ def test_build_dataset_honors_enumerate_by_for_globbed_matrix_files(
     build_dataset(
         matrix_path=str(mat_dir / "*_subdomain_1_Kaa.txt"),
         dataset_dir=str(out_dir),
-        counts={"neutral_ones": 1},
+        counts={"neutral_ones": 3},
         enumerate_by=EnumerateBy.NAME,
         normalize="none",
         shuffle=False,
@@ -428,7 +432,7 @@ def test_build_dataset_honors_enumerate_by_for_globbed_matrix_files(
     assert rhs.shape == (3, n)
     assert solutions.shape == (3, n)
 
-    pack = open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir)
+    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
     assert pack.n_samples == 3
 
 

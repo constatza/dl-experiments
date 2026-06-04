@@ -7,6 +7,7 @@ import numpy as np
 from dlkit.io import open_sparse_pack
 from neuralls.platform.storage.datasets import (
     SparsePackAccumulator,
+    as_sparse_pack_reader,
     resolve_dataset_paths,
     save_dataset_from_sparse,
 )
@@ -47,10 +48,10 @@ def test_save_dataset_from_sparse_keeps_broadcasted_matrix_samples(tmp_path: Pat
         scale_metadata={},
     )
 
-    pack = open_sparse_pack(resolve_dataset_paths(tmp_path).matrix_pack_dir)
+    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(tmp_path).matrix_pack_dir))
     assert pack.n_samples == 4
     for sample_idx in range(4):
-        dense = pack.build_torch_sparse(sample_idx).to_dense().numpy()
+        dense = pack.collect(sample_idx).to_dense().numpy()
         np.testing.assert_allclose(dense, matrix)
 
 
@@ -80,6 +81,6 @@ def test_save_dataset_from_sparse_stores_raw_matrix(tmp_path: Path) -> None:
         scale_metadata={},
     )
 
-    pack = open_sparse_pack(resolve_dataset_paths(tmp_path).matrix_pack_dir)
-    dense = pack.build_torch_sparse(0).to_dense().numpy()
+    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(tmp_path).matrix_pack_dir))
+    dense = pack.collect(0).to_dense().numpy()
     np.testing.assert_allclose(dense, raw_matrix)

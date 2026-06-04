@@ -24,6 +24,7 @@ class MatrixStrategyRegistration:
 
     strategy: MatrixGenerationStrategy
     supports_single_rhs: Literal[False] = False
+    supports_matrix_replacement: bool = False
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class SingleRhsStrategyRegistration:
 
     strategy: SingleRhsGenerationStrategy
     supports_single_rhs: Literal[True] = True
+    supports_matrix_replacement: bool = False
 
 
 StrategyRegistration = MatrixStrategyRegistration | SingleRhsStrategyRegistration
@@ -43,11 +45,27 @@ class StrategyRegistry:
     def __init__(self) -> None:
         self._strategies: dict[str, StrategyRegistration] = {}
 
-    def register_matrix(self, strategy: MatrixGenerationStrategy) -> None:
-        self._strategies[strategy.name] = MatrixStrategyRegistration(strategy)
+    def register_matrix(
+        self,
+        strategy: MatrixGenerationStrategy,
+        *,
+        supports_matrix_replacement: bool = False,
+    ) -> None:
+        self._strategies[strategy.name] = MatrixStrategyRegistration(
+            strategy,
+            supports_matrix_replacement=supports_matrix_replacement,
+        )
 
-    def register_single_rhs(self, strategy: SingleRhsGenerationStrategy) -> None:
-        self._strategies[strategy.name] = SingleRhsStrategyRegistration(strategy)
+    def register_single_rhs(
+        self,
+        strategy: SingleRhsGenerationStrategy,
+        *,
+        supports_matrix_replacement: bool = False,
+    ) -> None:
+        self._strategies[strategy.name] = SingleRhsStrategyRegistration(
+            strategy,
+            supports_matrix_replacement=supports_matrix_replacement,
+        )
 
     def get(self, name: str) -> StrategyRegistration:
         if name not in self._strategies:
@@ -76,19 +94,46 @@ def _default_solver() -> TracingSolverCallable:
 
 
 def register_strategy[StrategyClass](
-    strategy_cls: type[StrategyClass],
-) -> type[StrategyClass]:
+    strategy_cls: type[StrategyClass] | None = None,
+    *,
+    supports_matrix_replacement: bool = False,
+) -> type[StrategyClass] | Any:
     """Register a matrix-only generation strategy."""
-    _registry.register_matrix(cast(MatrixGenerationStrategy, strategy_cls()))
-    return strategy_cls
+
+    def _decorate(cls: type[StrategyClass]) -> type[StrategyClass]:
+        _registry.register_matrix(
+            cast(MatrixGenerationStrategy, cls()),
+            supports_matrix_replacement=supports_matrix_replacement,
+        )
+        return cls
+
+    if strategy_cls is None:
+        return _decorate
+    return _decorate(strategy_cls)
 
 
 def register_single_rhs_strategy[StrategyClass](
-    strategy_cls: type[StrategyClass],
-) -> type[StrategyClass]:
+    strategy_cls: type[StrategyClass] | None = None,
+    *,
+    supports_matrix_replacement: bool = False,
+) -> type[StrategyClass] | Any:
     """Register a generation strategy that supports shared RHS dispatch."""
-    _registry.register_single_rhs(cast(SingleRhsGenerationStrategy, strategy_cls()))
-    return strategy_cls
+
+    def _decorate(cls: type[StrategyClass]) -> type[StrategyClass]:
+        _registry.register_single_rhs(
+            cast(SingleRhsGenerationStrategy, cls()),
+            supports_matrix_replacement=supports_matrix_replacement,
+        )
+        return cls
+
+    if strategy_cls is None:
+        return _decorate
+    return _decorate(strategy_cls)
+
+
+def strategy_supports_matrix_replacement(strategy_name: str) -> bool:
+    """Return whether the registered strategy supports matrix replacement allocation."""
+    return _registry.get(strategy_name).supports_matrix_replacement
 
 
 def run_generation(

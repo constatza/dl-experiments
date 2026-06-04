@@ -209,12 +209,12 @@ class _BaseResidualsStrategy:
         )
 
 
-@register_single_rhs_strategy
+@register_single_rhs_strategy(supports_matrix_replacement=True)
 class ResidualsStrategy(_BaseResidualsStrategy):
     name = "residuals"
 
 
-@register_single_rhs_strategy
+@register_single_rhs_strategy(supports_matrix_replacement=True)
 class GaussianResidualsStrategy(_BaseResidualsStrategy):
     name = "gaussian_residuals"
 

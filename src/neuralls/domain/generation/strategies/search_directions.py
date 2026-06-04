@@ -24,7 +24,7 @@ from neuralls.domain.normalization import ResidualTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_residual_traces
 
 
-@register_single_rhs_strategy
+@register_single_rhs_strategy(supports_matrix_replacement=True)
 class SearchDirectionsStrategy:
     """Collect search direction pairs from CG for neural preconditioner training.
 

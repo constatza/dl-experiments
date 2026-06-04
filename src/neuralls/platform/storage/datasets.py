@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 import numpy as np
 from dlkit.io import SparseFormat, open_sparse_pack, save_sparse_pack
@@ -30,6 +30,20 @@ class DatasetPaths:
     rhs_path: Path
     solutions_path: Path
     matrix_pack_dir: Path
+
+
+class SparsePackReaderPort(Protocol):
+    """Protocol for sparse-pack readers that can materialize one sample tensor."""
+
+    n_samples: int
+
+    def collect(
+        self,
+        sample_index: int,
+        *,
+        device: Any | None = None,
+        dtype: Any | None = None,
+    ) -> Any: ...
 
 
 @dataclass
@@ -122,6 +136,196 @@ class SparsePackAccumulator:
             values = np.zeros((0,), dtype=np.float64)
         nnz_ptr = np.asarray(self.nnz_ptr_values, dtype=np.int64)
         return indices, values, nnz_ptr, self.matrix_size
+
+
+def as_sparse_pack_reader(reader: Any) -> SparsePackReaderPort:
+    """Narrow an external sparse-pack reader to the collect-capable protocol."""
+    return cast(SparsePackReaderPort, reader)
+
+
+def _validate_sparse_inputs(
+    indices: np.ndarray, values: np.ndarray, size: tuple[int, int], repeats: int
+) -> None:
+    if repeats < 1:
+        raise ValueError(f"repeats must be >= 1, got {repeats}")
+    if indices.ndim != 2 or indices.shape[0] != 2:
+        raise ValueError(f"indices must have shape (2, nnz), got {indices.shape}")
+    if values.ndim != 1:
+        raise ValueError(f"values must be 1D, got {values.shape}")
+    if indices.shape[1] != values.size:
+        raise ValueError(f"indices nnz ({indices.shape[1]}) != values ({values.size})")
+
+
+def _advance_ptr(ptr: list[int], nnz: int, repeats: int) -> None:
+    last = ptr[-1]
+    for _ in range(repeats):
+        last += nnz
+        ptr.append(last)
+
+
+class DiskBackedSparseAccumulator:
+    """Platform-layer accumulator: writes each binding chunk to disk immediately.
+
+    Keeps per-binding sparse chunks on disk until final assembly.
+    """
+
+    def __init__(self, staging_dir: Path) -> None:
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        self._staging_dir = staging_dir
+        self._pack_dir = staging_dir / "_pack"
+        self._chunk_count = 0
+        self._nnz_ptr_values: list[int] = [0]
+        self._matrix_size: tuple[int, int] | None = None
+
+    def append_dense_matrix(self, matrix: np.ndarray, repeats: int) -> None:
+        rows, cols = np.nonzero(matrix)
+        self.append_sparse_components(
+            indices=np.vstack((rows, cols)).astype(np.int64, copy=False),
+            values=np.asarray(matrix[rows, cols], dtype=np.float64),
+            size=(int(matrix.shape[0]), int(matrix.shape[1])),
+            repeats=repeats,
+        )
+
+    def append_sparse_components(
+        self,
+        *,
+        indices: np.ndarray,
+        values: np.ndarray,
+        size: tuple[int, int],
+        repeats: int,
+    ) -> None:
+        _validate_sparse_inputs(indices, values, size, repeats)
+        if self._matrix_size is not None and self._matrix_size != size:
+            raise ValueError(f"Matrix size mismatch: {size} != {self._matrix_size}")
+        self._matrix_size = size
+
+        nnz = int(values.size)
+        _advance_ptr(self._nnz_ptr_values, nnz, repeats)
+
+        if nnz == 0:
+            return
+
+        np.savez(
+            self._staging_dir / f"chunk_{self._chunk_count:06d}.npz",
+            indices=np.asarray(indices, dtype=np.int64),
+            values=np.asarray(values, dtype=np.float64),
+            repeats=np.int64(repeats),
+        )
+        self._chunk_count += 1
+
+    def build_arrays(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, tuple[int, int]]:
+        if self._matrix_size is None:
+            raise ValueError("DiskBackedSparseAccumulator is empty.")
+        nnz_ptr = np.asarray(self._nnz_ptr_values, dtype=np.int64)
+        if int(nnz_ptr[-1]) == 0:
+            empty_idx = np.zeros((2, 0), dtype=np.int64)
+            empty_val = np.zeros(0, dtype=np.float64)
+            save_sparse_pack(
+                path=self._pack_dir,
+                indices=empty_idx,
+                values=empty_val,
+                nnz_ptr=nnz_ptr,
+                size=self._matrix_size,
+                format=SparseFormat.COO,
+                dtype=np.dtype(np.float64),
+            )
+            return empty_idx, empty_val, nnz_ptr, self._matrix_size
+        indices_parts: list[np.ndarray] = []
+        values_parts: list[np.ndarray] = []
+        for i in range(self._chunk_count):
+            chunk_path = self._staging_dir / f"chunk_{i:06d}.npz"
+            data = np.load(chunk_path)
+            indices = np.asarray(data["indices"], dtype=np.int64)
+            values = np.asarray(data["values"], dtype=np.float64)
+            repeats = int(data["repeats"])
+            if repeats == 1:
+                indices_parts.append(indices)
+                values_parts.append(values)
+            else:
+                indices_parts.append(np.tile(indices, (1, repeats)))
+                values_parts.append(np.tile(values, repeats))
+            chunk_path.unlink()
+
+        indices = np.concatenate(indices_parts, axis=1)
+        values = np.concatenate(values_parts, axis=0)
+        save_sparse_pack(
+            path=self._pack_dir,
+            indices=indices,
+            values=values,
+            nnz_ptr=nnz_ptr,
+            size=self._matrix_size,
+            format=SparseFormat.COO,
+            dtype=np.dtype(np.float64),
+        )
+        return indices, values, nnz_ptr, self._matrix_size
+
+    @property
+    def pack_dir(self) -> Path:
+        return self._pack_dir
+
+
+def _write_dataset_manifest(
+    paths: DatasetPaths,
+    payload: GeneratedDatasetPayload,
+) -> None:
+    matrix_samples = int(payload.nnz_ptr.size - 1)
+    manifest = {
+        "schema": "neuralls.dataset",
+        "rhs": {
+            "path": RHS_ARRAY_FILENAME,
+            "dtype": "float64",
+            "shape": list(payload.rhs.shape),
+        },
+        "solutions": {
+            "path": SOLUTIONS_ARRAY_FILENAME,
+            "dtype": "float64",
+            "shape": list(payload.solutions.shape),
+        },
+        "matrix": {
+            "path": MATRIX_COO_DIRNAME,
+            "format": "coo_pack",
+            "dtype": "float64",
+            "n_samples": matrix_samples,
+            "size": list(payload.matrix_size),
+        },
+        "normalization": {
+            "type": payload.normalization_type,
+            "matrix_norm": float(payload.matrix_norm),
+            "matrix_norm_type": payload.matrix_norm_type,
+            "scale": payload.scale_metadata or {},
+        },
+    }
+    with paths.manifest_path.open("w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2, sort_keys=True)
+
+
+class StreamingSparseDatasetWriter:
+    """DatasetWriterPort that persists sparse arrays assembled by DiskBackedSparseAccumulator."""
+
+    def __init__(self, disk_acc: DiskBackedSparseAccumulator) -> None:
+        self._disk_acc = disk_acc
+
+    def write_dataset(
+        self,
+        dataset_dir: Path,
+        payload: GeneratedDatasetPayload,
+    ) -> None:
+        paths = resolve_dataset_paths(dataset_dir)
+        paths.root.mkdir(parents=True, exist_ok=True)
+        np.save(paths.rhs_path, payload.rhs)
+        np.save(paths.solutions_path, payload.solutions)
+        if payload.matrix_value_scale != 1.0:
+            payload.values[:] *= payload.matrix_value_scale
+        save_sparse_pack(
+            path=paths.matrix_pack_dir,
+            indices=payload.indices,
+            values=payload.values,
+            nnz_ptr=payload.nnz_ptr,
+            size=payload.matrix_size,
+            format=SparseFormat.COO,
+            dtype=np.dtype(np.float64),
+        )
+        _write_dataset_manifest(paths, payload)
 
 
 class SparseDatasetWriter(DatasetWriterPort):
@@ -393,6 +597,6 @@ def load_matrix_dense_sample(
 ) -> np.ndarray:
     """Load one sparse matrix sample and convert to dense numpy array."""
     paths = resolve_dataset_paths(dataset_dir)
-    reader = open_sparse_pack(paths.matrix_pack_dir)
-    matrix_tensor = reader.build_torch_sparse(sample_index=sample_index)
+    reader = as_sparse_pack_reader(open_sparse_pack(paths.matrix_pack_dir))
+    matrix_tensor = reader.collect(sample_index=sample_index)
     return matrix_tensor.to_dense().detach().cpu().numpy().astype(np.float64, copy=False)

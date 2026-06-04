@@ -194,6 +194,13 @@ class GenerationConfig(BaseModel):
         default=42,
         description="Random seed for reproducibility",
     )
+    replacement: bool = Field(
+        default=False,
+        description=(
+            "Whether global multi-matrix generation may reuse matrix bindings for "
+            "supported random strategies."
+        ),
+    )
     num_samples: int | None = Field(
         default=None,
         description="Total number of samples (legacy, use strategy.samples)",

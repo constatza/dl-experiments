@@ -10,6 +10,7 @@ from neuralls.composition.generation.process_data import process_data_from_confi
 from neuralls.composition.generation.processing import _build_context, process_config
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.settings import NeurallsSettings
+from neuralls.platform.storage.datasets import load_dense_training_arrays
 
 
 def _write_solution_archive_config(tmp_path: Path, dataset_id: str) -> Path:
@@ -78,6 +79,36 @@ samples = 1
     return config_path
 
 
+def _write_replacement_generation_config(tmp_path: Path, dataset_id: str) -> Path:
+    """Create a config that exercises dataset-level replacement plumbing."""
+    matrices_dir = tmp_path / "replacement_matrices"
+    matrices_dir.mkdir()
+    for idx, stem in enumerate(("matrix_alpha", "matrix_beta", "matrix_gamma")):
+        np.savetxt(matrices_dir / f"{stem}.txt", np.eye(2) * float(idx + 2))
+
+    config_path = tmp_path / f"{dataset_id}.toml"
+    config_path.write_text(
+        f"""
+id = "{dataset_id}"
+
+[source]
+matrix_path = "{(matrices_dir / "matrix_*.txt").as_posix()}"
+enumerate_by = "name"
+
+[generation]
+normalize = "none"
+replacement = true
+
+[[generation.strategy]]
+name = "random"
+samples = 5
+
+[output]
+"""
+    )
+    return config_path
+
+
 def test_process_config_accepts_dataconfig_file(
     tmp_path: Path,
     neuralls_settings: NeurallsSettings,
@@ -113,6 +144,7 @@ def test_data_generation_context_from_typed_config(
     assert context.matrix_path == config.source.matrix_path
     assert context.solutions_path == config.source.solutions_path
     assert context.enumerate_by == config.source.enumerate_by
+    assert context.replacement is config.generation.replacement
     assert context.dataset_dir == neuralls_settings.processed_dir / "context-dataset"
     assert context.seed == config.generation.seed
     assert context.shuffle is config.generation.shuffle
@@ -158,3 +190,35 @@ def test_process_data_from_config_honors_enumerate_by(
 
     assert output_dir == neuralls_settings.processed_dir / "enumerated-end-to-end"
     assert output_dir.exists()
+
+
+def test_build_context_preserves_replacement_from_config(
+    tmp_path: Path,
+    neuralls_settings: NeurallsSettings,
+) -> None:
+    config_path = _write_replacement_generation_config(tmp_path, "replacement-context")
+    config = load_data_config(config_path, neuralls_settings).model_copy(
+        update={
+            "output": load_data_config(config_path, neuralls_settings).output.model_copy(
+                update={"data_dir": neuralls_settings.processed_dir}
+            )
+        }
+    )
+
+    context, _ = _build_context(config=config)
+
+    assert context.replacement is True
+
+
+def test_process_data_from_config_honors_replacement(
+    tmp_path: Path,
+    neuralls_settings: NeurallsSettings,
+) -> None:
+    config_path = _write_replacement_generation_config(tmp_path, "replacement-end-to-end")
+
+    output_dir = process_data_from_config(config_path, neuralls_settings)
+
+    rhs, solutions = load_dense_training_arrays(output_dir)
+    assert output_dir == neuralls_settings.processed_dir / "replacement-end-to-end"
+    assert rhs.shape == (5, 2)
+    assert solutions.shape == (5, 2)

@@ -33,3 +33,20 @@ class DatasetWriterPort(Protocol):
         dataset_dir: Path,
         payload: GeneratedDatasetPayload,
     ) -> None: ...
+
+
+class SparseAccumulatorPort(Protocol):
+    """Protocol for accumulating sparse matrix samples during dataset generation."""
+
+    def append_dense_matrix(self, matrix: NDArray, repeats: int) -> None: ...
+
+    def append_sparse_components(
+        self,
+        *,
+        indices: NDArray,
+        values: NDArray,
+        size: tuple[int, int],
+        repeats: int,
+    ) -> None: ...
+
+    def build_arrays(self) -> tuple[NDArray, NDArray, NDArray, tuple[int, int]]: ...
