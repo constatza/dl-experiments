@@ -63,7 +63,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 from loguru import logger
@@ -663,7 +663,10 @@ def compare_preconditioners(
     preconditioners = service.create_preconditioner_set(system.matrix, preconditioner_configs)
 
     # Step 5: Compute condition numbers for diagnostics
-    cond_numbers = compute_condition_numbers(system.matrix, preconditioners)
+    cond_numbers = compute_condition_numbers(
+        system.matrix,
+        cast(dict[str, Callable[[np.ndarray], np.ndarray]], preconditioners),
+    )
 
     # Step 6: Wrap preconditioners with scheduling if configured
     scheduled_preconditioners = _create_scheduled_preconditioners(
