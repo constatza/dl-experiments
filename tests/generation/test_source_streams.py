@@ -15,12 +15,12 @@ from neuralls.domain.generation.source_streams import (
     _enumerate_files,
 )
 from neuralls.composition.generation.dataset_builder import build_dataset
+import zarr
 from neuralls.platform.storage.datasets import (
-    as_sparse_pack_reader,
     load_dense_training_arrays,
+    load_matrix_dense_sample,
     resolve_dataset_paths,
 )
-from dlkit.io import open_sparse_pack
 
 
 @pytest.fixture
@@ -95,10 +95,10 @@ def test_build_dataset_streams_matrix_stack_without_dense_batch(tmp_path: Path) 
     assert rhs.shape == (2, 2)
     assert solutions.shape == (2, 2)
 
-    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
-    assert pack.n_samples == 2
-    dense0 = pack.collect(0).to_dense().numpy()
-    dense1 = pack.collect(1).to_dense().numpy()
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    assert mat_arr.shape[0] == 2
+    dense0 = load_matrix_dense_sample(out_dir, 0)
+    dense1 = load_matrix_dense_sample(out_dir, 1)
     np.testing.assert_allclose(dense0, matrix_stack[0])
     np.testing.assert_allclose(dense1, matrix_stack[1])
 
@@ -113,7 +113,7 @@ def test_open_vector_stream_from_npy_stack(tmp_path: Path) -> None:
     np.testing.assert_allclose(stream.load_sample(1).vector, rhs[1])
 
 
-def test_single_matrix_not_broadcasted_in_sparse_pack(tmp_path: Path) -> None:
+def test_single_matrix_stored_once_in_zarr(tmp_path: Path) -> None:
     matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
     matrix_path = tmp_path / "matrix.npy"
     np.save(matrix_path, matrix)
@@ -137,9 +137,9 @@ def test_single_matrix_not_broadcasted_in_sparse_pack(tmp_path: Path) -> None:
     assert saved_rhs.shape == (3, 2)
     assert saved_solutions.shape == (3, 2)
 
-    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
-    assert pack.n_samples == 1
-    dense_last = pack.collect(sample_index=2).to_dense().numpy()
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    assert mat_arr.shape[0] == 1
+    dense_last = load_matrix_dense_sample(out_dir, 0)
     np.testing.assert_allclose(dense_last, matrix)
 
 
@@ -243,8 +243,8 @@ def test_glob_matrix_gaussian_uses_global_sample_budget(
     assert rhs.shape == (total_samples, n)
     assert solutions.shape == (total_samples, n)
 
-    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
-    assert pack.n_samples == total_samples
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    assert mat_arr.shape[0] == total_samples
 
 
 def test_glob_matrix_solution_archive_uses_global_sample_budget(
@@ -280,8 +280,8 @@ def test_glob_matrix_solution_archive_uses_global_sample_budget(
     assert rhs.shape == (n_solutions, n)
     assert solutions.shape == (n_solutions, n)
 
-    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
-    assert pack.n_samples == n_solutions
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    assert mat_arr.shape[0] == n_solutions
 
 
 # ---------------------------------------------------------------------------
@@ -432,8 +432,8 @@ def test_build_dataset_honors_enumerate_by_for_globbed_matrix_files(
     assert rhs.shape == (3, n)
     assert solutions.shape == (3, n)
 
-    pack = as_sparse_pack_reader(open_sparse_pack(resolve_dataset_paths(out_dir).matrix_pack_dir))
-    assert pack.n_samples == 3
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    assert mat_arr.shape[0] == 3
 
 
 def test_source_config_rejects_both_sample_id_regex_and_enumerate_by() -> None:

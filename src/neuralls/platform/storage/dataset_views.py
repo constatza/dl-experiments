@@ -103,7 +103,7 @@ def list_available_variants(dataset_dir: str | Path) -> list[str]:
         paths.manifest_path.exists()
         and paths.rhs_path.exists()
         and paths.solutions_path.exists()
-        and paths.matrix_pack_dir.exists()
+        and paths.matrix_zarr_dir.exists()
     ):
         return ["dataset"]
     return []

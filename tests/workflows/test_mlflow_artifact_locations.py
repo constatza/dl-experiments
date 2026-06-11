@@ -12,7 +12,8 @@ import tomli_w
 from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
-from neuralls.platform.storage.datasets import save_dataset
+from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
+from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 from neuralls.composition.experiments.comparison_batch import run_comparison_batch
 from neuralls.composition.experiments.runtime_dataset_contract import (
     default_training_dataset_contract,
@@ -240,15 +241,22 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
     artifact_root.mkdir(parents=True, exist_ok=True)
 
     dataset_dir = tmp_path / "benchmark"
-    save_dataset(
-        dataset_dir=dataset_dir,
-        rhs=np.ones((1, 2), dtype=np.float64),
-        solutions=np.ones((1, 2), dtype=np.float64),
-        matrix=np.eye(2, dtype=np.float64),
-        normalization_type="matrix",
-        matrix_norm=1.0,
-        matrix_norm_type="spectral",
-        scale_metadata={},
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    _A = np.eye(2, dtype=np.float64)
+    acc = DenseZarrAccumulator(dataset_dir / "matrix.zarr")
+    acc.append_dense_matrix(_A, repeats=1)
+    zarr_path = acc.finalize()
+    DenseDatasetWriter().write_dataset(
+        dataset_dir,
+        GeneratedDatasetPayload(
+            rhs=np.ones((1, 2), dtype=np.float64),
+            solutions=np.ones((1, 2), dtype=np.float64),
+            matrix_pack_path=zarr_path,
+            matrix_size=(2, 2),
+            normalization_type="matrix",
+            matrix_norm=1.0,
+            matrix_norm_type="spectral",
+        ),
     )
 
     # Write a method config to test that config artifacts are logged under config/.

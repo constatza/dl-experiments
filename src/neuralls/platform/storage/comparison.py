@@ -77,16 +77,11 @@ def load_system_arrays(
 
     def _load_array(path: Path, key: str) -> np.ndarray:
         if path.is_dir():
-            try:
-                load_dataset_manifest(path)
-                if key == "matrix":
-                    return load_matrix_dense_sample(path, sample_index=matrix_index)
-                rhs, _ = load_dense_training_arrays(path)
-                return np.asarray(rhs, dtype=np.float64)
-            except FileNotFoundError, ValueError:
-                if key == "matrix" and (path / "values.npy").exists():
-                    return load_matrix_dense_sample(path.parent, sample_index=matrix_index)
-                raise
+            load_dataset_manifest(path)
+            if key == "matrix":
+                return load_matrix_dense_sample(path, sample_index=matrix_index)
+            rhs, _ = load_dense_training_arrays(path)
+            return np.asarray(rhs, dtype=np.float64)
         match path.suffix:
             case ".npy":
                 return np.load(path).astype(np.float64, copy=False)

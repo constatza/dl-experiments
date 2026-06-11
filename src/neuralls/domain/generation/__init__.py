@@ -29,7 +29,7 @@ Usage:
 from __future__ import annotations
 
 from .orchestration import generate_mixture, build_dataset_payload
-from .payloads import GeneratedDatasetPayload, SparsePackAccumulator
+from .payloads import GeneratedDatasetPayload
 from .types import StrategyOutput, ArchiveData, GeneratedSamples
 from .data_types import NormalizeType
 from .helpers import rng_from_seed, rounded_counts, select_archive_files
@@ -57,7 +57,6 @@ __all__ = [
     "StrategySpec",
     "NormalizeType",
     "GeneratedDatasetPayload",
-    "SparsePackAccumulator",
     # Helpers
     "rng_from_seed",
     "rounded_counts",

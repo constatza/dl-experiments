@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -23,7 +24,8 @@ from .trace_utils import (
     _merge_error_traces,
 )
 from .interfaces import ArchiveData, TracingSolverCallable
-from .payloads import GeneratedDatasetPayload, SparsePackAccumulator
+from .payloads import GeneratedDatasetPayload
+from .ports import ZarrAccumulatorPort
 from .runner import strategy_supports_matrix_replacement
 from .source_streams import (
     EnumerateBy,
@@ -638,9 +640,7 @@ def _resolve_final_scale(
 def _build_dataset_payload(
     rhs_all: np.ndarray,
     solutions_all: np.ndarray,
-    indices: np.ndarray,
-    values: np.ndarray,
-    nnz_ptr: np.ndarray,
+    matrix_pack_path: Path,
     matrix_size: tuple[int, int],
     normalize: NormalizeType,
     matrix_norm_type: str,
@@ -653,9 +653,7 @@ def _build_dataset_payload(
     return GeneratedDatasetPayload(
         rhs=rhs_all,
         solutions=solutions_all,
-        indices=indices,
-        values=values,
-        nnz_ptr=nnz_ptr,
+        matrix_pack_path=matrix_pack_path,
         matrix_size=matrix_size,
         normalization_type=str(normalize),
         matrix_norm=matrix_norm,
@@ -682,6 +680,7 @@ def build_dataset_payload(
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
     solver_overrides: dict[str, TracingSolverCallable] | None = None,
+    accumulator: ZarrAccumulatorPort,
 ) -> GeneratedDatasetPayload:
     """Build an in-memory dataset payload from streamed matrix sources.
 
@@ -735,7 +734,6 @@ def build_dataset_payload(
     )
 
     # Setup accumulators
-    sparse_acc = SparsePackAccumulator()
     single_matrix_mode = len(matrix_stream.sample_ids) == 1
     single_matrix_written = False
     rhs_blocks: list[np.ndarray] = []
@@ -781,10 +779,10 @@ def build_dataset_payload(
         if cached is not None:
             if single_matrix_mode:
                 if not single_matrix_written:
-                    sparse_acc.append_dense_matrix(cached.matrix_norm, repeats=1)
+                    accumulator.append_dense_matrix(cached.matrix_norm, repeats=1)
                     single_matrix_written = True
             else:
-                sparse_acc.append_dense_matrix(
+                accumulator.append_dense_matrix(
                     cached.matrix_norm, repeats=int(result.rhs_block.shape[0])
                 )
 
@@ -795,10 +793,14 @@ def build_dataset_payload(
     if not rhs_blocks or not solution_blocks:
         raise ValueError("No samples were generated for dataset persistence.")
 
-    # Build sparse arrays
+    # Build dense arrays and finalize the accumulator
     rhs_all = np.vstack(rhs_blocks)
     solutions_all = np.vstack(solution_blocks)
-    indices, values, nnz_ptr, matrix_size = sparse_acc.build_arrays()
+    matrix_pack_path = accumulator.finalize()
+    matrix_size = accumulator.matrix_size
+
+    if matrix_size is None:
+        raise ValueError("Accumulator is empty — no matrix samples were written.")
 
     # Resolve final scaling parameters
     matrix_norm_value, matrix_value_scale, scale_metadata = _resolve_final_scale(
@@ -808,9 +810,7 @@ def build_dataset_payload(
     payload = _build_dataset_payload(
         rhs_all,
         solutions_all,
-        indices,
-        values,
-        nnz_ptr,
+        matrix_pack_path,
         matrix_size,
         normalize,
         matrix_norm_type,

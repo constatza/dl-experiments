@@ -18,7 +18,6 @@ import pytest
 
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.platform.storage.datasets import (
-    load_dataset_manifest,
     load_dense_training_arrays,
     load_matrix_dense_sample,
 )
@@ -58,23 +57,11 @@ def solutions_glob(tmp_path: Path, matrix_path: str) -> str:
     return str(solutions_dir / "solution_*.txt")
 
 
-def _composite_scale_from_manifest(manifest: dict) -> float:
-    """Return the matrix_value_scale used at save time (1.0 for non-matrix norms)."""
-    norm_type = manifest["normalization"]["type"]
-    if norm_type == "matrix":
-        meta = manifest["normalization"].get("scale", {})
-        return float(meta.get("spectral_radius_bound", 1.0)) * float(
-            meta.get("dimension_scale", 1.0)
-        )
-    return 1.0
-
-
 def verify_dataset_consistency(dataset_dir: Path) -> tuple[bool, float]:
     """Verify that A_norm @ x == b_norm for all samples in dataset.
 
-    The pack stores A_raw (values pre-multiplied by matrix_value_scale at save time).
-    RHS/solutions remain in normalized space. We divide A by the same composite
-    scale to recover A_norm before checking.
+    The zarr pack stores A_norm directly (already in normalized space). RHS and
+    solutions are also in normalized space, so no additional scaling is needed.
 
     Args:
         dataset_dir: Path to dataset directory.
@@ -82,9 +69,7 @@ def verify_dataset_consistency(dataset_dir: Path) -> tuple[bool, float]:
     Returns:
         Tuple of (is_consistent, max_relative_error).
     """
-    manifest = load_dataset_manifest(dataset_dir)
-    composite_scale = _composite_scale_from_manifest(manifest)
-    A = load_matrix_dense_sample(dataset_dir, sample_index=0) / composite_scale
+    A = load_matrix_dense_sample(dataset_dir, sample_index=0)
     X_rhs, Y_sol = load_dense_training_arrays(dataset_dir)
 
     max_error = 0.0

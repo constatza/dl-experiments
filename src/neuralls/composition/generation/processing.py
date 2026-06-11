@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -25,8 +25,9 @@ from neuralls.composition.generation.default_services import (
     make_direction_solver,
     make_residual_solver,
 )
-from neuralls.domain.generation.ports import TracingSolverPort
+from neuralls.domain.generation.ports import DatasetWriterPort, TracingSolverPort
 from neuralls.domain.generation.source_streams import EnumerateBy
+from neuralls.platform.storage.datasets import DenseDatasetWriter
 
 
 def _make_residual_solver() -> TracingSolverPort:
@@ -84,6 +85,7 @@ class DataGenerationContext:
     seed: int
     shuffle: bool
     replacement: bool
+    dataset_format: Literal["zarr_dense"] = "zarr_dense"
 
 
 def _build_context(
@@ -125,6 +127,7 @@ def _build_context(
         seed=config.generation.seed,
         shuffle=config.generation.shuffle,
         replacement=config.generation.replacement,
+        dataset_format=config.output.dataset_format,
     ), plan
 
 
@@ -273,6 +276,25 @@ def _resolve_rhs_source(
     return None
 
 
+def _make_writer(dataset_format: Literal["zarr_dense"]) -> DatasetWriterPort:
+    """Instantiate the correct dataset writer for the configured format.
+
+    Args:
+        dataset_format: Format string from OutputConfig.
+
+    Returns:
+        DatasetWriterPort implementation for the requested format.
+
+    Raises:
+        ValueError: If dataset_format is not recognized.
+    """
+    match dataset_format:
+        case "zarr_dense":
+            return DenseDatasetWriter()
+        case _:
+            raise ValueError(f"Unknown dataset_format: {dataset_format!r}")
+
+
 def _execute_solution_archive(
     context: DataGenerationContext,
     strategy: StrategySpec,
@@ -307,6 +329,7 @@ def _execute_solution_archive(
                 "seed": seed_value,
             }
         },
+        writer=_make_writer(context.dataset_format),
     )
     return Path(dataset_path)
 
@@ -395,6 +418,7 @@ def _execute_synthetic_generation(
             "residual_traces": _DEFAULT_RESIDUAL_SOLVER,
             "search_directions": _DEFAULT_DIRECTION_SOLVER,
         },
+        writer=_make_writer(context.dataset_format),
     )
     return Path(dataset_path)
 
@@ -430,6 +454,7 @@ def _execute_rhs_archive_only(
                 **collection_kwargs,
             }
         },
+        writer=_make_writer(context.dataset_format),
     )
     return Path(dataset_path)
 

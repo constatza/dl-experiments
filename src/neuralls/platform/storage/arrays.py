@@ -73,15 +73,10 @@ def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
     """
     matrix_path = Path(matrix_path)
 
-    # If it's a dataset directory, load first matrix sample from sparse pack.
+    # If it's a dataset directory, load first matrix sample.
     if matrix_path.is_dir():
-        try:
-            load_dataset_manifest(matrix_path)
-            return load_matrix_dense_sample(matrix_path, sample_index=0)
-        except FileNotFoundError, ValueError:
-            # Fallback: allow direct sparse pack directory path.
-            if (matrix_path / "manifest.json").exists() and (matrix_path / "values.npy").exists():
-                return load_matrix_dense_sample(matrix_path.parent, sample_index=0)
+        load_dataset_manifest(matrix_path)
+        return load_matrix_dense_sample(matrix_path, sample_index=0)
 
     # Handle .npy binary format or text files
     if matrix_path.suffix == ".npy":

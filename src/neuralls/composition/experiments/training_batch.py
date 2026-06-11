@@ -34,9 +34,9 @@ from neuralls.platform.storage.validation import validate_data_exists
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
 from neuralls.shared.constants import (
     DATASET_MANIFEST_FILENAME,
-    MATRIX_COO_DIRNAME,
-    RHS_ARRAY_FILENAME,
-    SOLUTIONS_ARRAY_FILENAME,
+    MATRIX_ZARR_DIRNAME,
+    RHS_ZARR_FILENAME,
+    SOLUTIONS_ZARR_FILENAME,
 )
 
 
@@ -114,9 +114,9 @@ def run_experiment(
             data_dir,
             [
                 DATASET_MANIFEST_FILENAME,
-                RHS_ARRAY_FILENAME,
-                SOLUTIONS_ARRAY_FILENAME,
-                MATRIX_COO_DIRNAME,
+                RHS_ZARR_FILENAME,
+                SOLUTIONS_ZARR_FILENAME,
+                MATRIX_ZARR_DIRNAME,
             ],
         )
 

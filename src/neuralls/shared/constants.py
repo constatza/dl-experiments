@@ -162,11 +162,11 @@ def get_overflow_threshold(dtype: type[np.floating[Any]] = np.float64) -> float:
 # =============================================================================
 DEFAULT_NUM_SAMPLES = 6000
 
-# Dataset artifacts (split format)
+# Dataset artifacts (zarr dense format)
 DATASET_MANIFEST_FILENAME = "manifest.json"
-RHS_ARRAY_FILENAME = "rhs.npy"
-SOLUTIONS_ARRAY_FILENAME = "solutions.npy"
-MATRIX_COO_DIRNAME = "matrix_coo"
+MATRIX_ZARR_DIRNAME = "matrix.zarr"
+RHS_ZARR_FILENAME = "rhs.zarr"
+SOLUTIONS_ZARR_FILENAME = "solutions.zarr"
 
 # Strategy-specific iteration parameters
 # These are now configured at the strategy level (not generation level):

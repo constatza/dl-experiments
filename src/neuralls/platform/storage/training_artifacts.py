@@ -56,7 +56,7 @@ def load_training_arrays(data_dir: Path) -> TrainingArrays:
     return TrainingArrays(
         rhs=paths.rhs_path,
         solutions=paths.solutions_path,
-        matrix_pack=paths.matrix_pack_dir,
+        matrix_pack=paths.matrix_zarr_dir,
         sample_count=int(rhs.shape[0]),
     )
 

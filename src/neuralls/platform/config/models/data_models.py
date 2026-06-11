@@ -245,9 +245,9 @@ class OutputConfig(BaseModel):
         default=None,
         description="Output directory for generated data",
     )
-    dataset_format: Literal["npy_coo"] = Field(
-        default="npy_coo",
-        description="Dataset storage format",
+    dataset_format: Literal["zarr_dense"] = Field(
+        default="zarr_dense",
+        description="Dataset storage format ('zarr_dense' for dense zarr arrays)",
     )
     matrix_codec: Literal["coo"] = Field(
         default="coo",

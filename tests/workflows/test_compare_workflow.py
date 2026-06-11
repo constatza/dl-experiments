@@ -10,23 +10,27 @@ from neuralls.composition.comparison.single_run import (
     compare_preconditioners,
 )
 from neuralls.platform.config.loaders import load_comparison_config
-from neuralls.platform.storage.datasets import save_dataset
+from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
+from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 
 
 def _write_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:
     solutions = np.linalg.solve(A, b)
     rhs = b.reshape(1, -1)
     sols = solutions.reshape(1, -1)
-    save_dataset(
-        dataset_dir=root,
+    acc = DenseZarrAccumulator(root / "matrix.zarr")
+    acc.append_dense_matrix(A, repeats=1)
+    zarr_path = acc.finalize()
+    payload = GeneratedDatasetPayload(
         rhs=rhs,
         solutions=sols,
-        matrix=A,
+        matrix_pack_path=zarr_path,
+        matrix_size=(int(A.shape[0]), int(A.shape[1])),
         normalization_type="matrix",
         matrix_norm=float(np.linalg.norm(A, ord=2)),
         matrix_norm_type="spectral",
-        scale_metadata={},
     )
+    DenseDatasetWriter().write_dataset(root, payload)
 
 
 def _write_comparison_config(path: Path, system_path: Path) -> None:

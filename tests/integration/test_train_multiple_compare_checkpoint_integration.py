@@ -310,7 +310,7 @@ def test_train_multiple_checkpoint_then_compare_model_loading(
     assert dataset_paths.manifest_path.exists()
     assert dataset_paths.rhs_path.exists()
     assert dataset_paths.solutions_path.exists()
-    assert dataset_paths.matrix_pack_dir.exists()
+    assert dataset_paths.matrix_zarr_dir.exists()
 
     outcomes = run_comparison_batch(
         experiments_config_path=runs_config_path,

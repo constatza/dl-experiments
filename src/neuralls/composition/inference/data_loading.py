@@ -22,7 +22,7 @@ from neuralls.platform.reporting.synthetic import generate_synthetic_test_case
 from neuralls.platform.config.loaders import load_comparison_config
 from neuralls.platform.config.settings import NeurallsSettings
 from neuralls.application.inference.models import InferenceData
-from neuralls.shared.constants import RHS_ARRAY_FILENAME, SOLUTIONS_ARRAY_FILENAME
+from neuralls.shared.constants import RHS_ZARR_FILENAME, SOLUTIONS_ZARR_FILENAME
 
 
 def validate_data_availability(
@@ -60,8 +60,8 @@ def resolve_standard_data_paths(
     Returns:
         Tuple of (features_path, targets_path)
     """
-    feat_path = Path(features_path) if features_path else workspace.data_dir / RHS_ARRAY_FILENAME
-    tgt_path = Path(targets_path) if targets_path else workspace.data_dir / SOLUTIONS_ARRAY_FILENAME
+    feat_path = Path(features_path) if features_path else workspace.data_dir / RHS_ZARR_FILENAME
+    tgt_path = Path(targets_path) if targets_path else workspace.data_dir / SOLUTIONS_ZARR_FILENAME
     return feat_path, tgt_path
 
 

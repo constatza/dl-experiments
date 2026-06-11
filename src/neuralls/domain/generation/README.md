@@ -103,8 +103,11 @@ tests.
 
 ## Package Map
 
-- `orchestration.py`: mixed-strategy payload assembly
-- `payloads.py`: pure sparse dataset payload types and accumulation helpers
+- `orchestration.py`: mixed-strategy payload assembly; `build_dataset_payload()` requires an
+  injected `ZarrAccumulatorPort` — the domain never creates storage objects directly
+- `payloads.py`: pure DTO — `GeneratedDatasetPayload` only; no accumulation helpers
+- `ports.py`: `ZarrAccumulatorPort`, `DatasetWriterPort`, and `TracingSolverPort` protocol
+  definitions consumed by the composition layer
 - `runner.py`: strategy registry and dispatch
 - `providers.py`: archive or synthetic sample providers
 - `transforms.py`: pure transforms such as `A @ x`
@@ -114,6 +117,25 @@ tests.
 Config-driven generation entrypoints now live in
 `neuralls.composition.generation.processing`, which wires the generation domain
 to default tracing solvers through `neuralls.domain.generation.ports`.
+
+## Dataset Storage
+
+Zarr is the default on-disk format for new datasets (`zarr_coo`). Matrix samples
+stream directly to disk via `ZarrSparseAccumulator` during generation — no
+in-memory COO buffer is accumulated, so arbitrarily large datasets can be built
+without OOM risk.
+
+| Component | Location | Role |
+| --- | --- | --- |
+| `ZarrAccumulatorPort` | `domain/generation/ports.py` | Protocol — append samples, `finalize() -> Path` |
+| `ZarrSparseAccumulator` | `platform/storage/datasets.py` | Concrete implementation; streams via `ZarrPackWriter` |
+| `ZarrDatasetWriter` | `platform/storage/datasets.py` | Writes `rhs.npy`, `solutions.npy`, and the zarr pack |
+| `SparseDatasetWriter` | `platform/storage/datasets.py` | Legacy writer — re-materialises zarr pack as `npy_coo` |
+
+The `[output] dataset_format` field in dataset TOML selects the storage format
+(`"zarr_coo"` default, or `"npy_coo"` for backward compatibility).
+`open_sparse_pack()` from dlkit auto-detects the format at load time, so
+existing `npy_coo` datasets continue to work without conversion.
 
 ## Extension Rules
 
@@ -133,6 +155,8 @@ Generation stays inside the domain layer and depends only on:
 - normalization trace containers
 - shared constants and math helpers
 
-Persistent dataset writing happens in
-`neuralls.composition.generation.dataset_builder` via the platform storage
-adapter, so the generation domain no longer writes files directly.
+`build_dataset()` in `neuralls.composition.generation.dataset_builder` creates a
+`ZarrSparseAccumulator` and injects it into `build_dataset_payload()`. The
+generation domain receives the accumulator via `ZarrAccumulatorPort` and never
+imports or instantiates storage objects directly. All file I/O is confined to the
+composition and platform layers.

@@ -6,13 +6,11 @@ from pathlib import Path
 
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.platform.storage.datasets import (
-    as_sparse_pack_reader,
     load_dataset_manifest,
     load_dense_training_arrays,
-    resolve_dataset_paths,
+    load_matrix_dense_sample,
 )
 from neuralls.domain.normalization import load_scale_from_metadata, MatrixScale
-from dlkit.io import open_sparse_pack
 
 
 @pytest.fixture
@@ -76,12 +74,13 @@ def test_scale_metadata_saved_with_matrix_normalization(temp_matrix_file: Path, 
     assert isinstance(scale, MatrixScale)
     assert scale.spectral_radius_bound == metadata["spectral_radius_bound"]
     assert scale.dimension_scale == metadata["dimension_scale"]
-    pack = as_sparse_pack_reader(
-        open_sparse_pack(resolve_dataset_paths(output_dir).matrix_pack_dir)
+    loaded = load_matrix_dense_sample(output_dir, 0)
+    # Pack stores A_norm (zarr writer does not scale back to raw space).
+    # Verify the diagonal is in normalized space: A_norm = A_raw / composite_scale.
+    composite_scale = float(scale_metadata["spectral_radius_bound"]) * float(
+        scale_metadata["dimension_scale"]
     )
-    loaded = pack.collect(0).to_dense().numpy()
-    # Pack stores A_raw; the fixture matrix has diagonal 4.0 — verify scale is raw
-    np.testing.assert_allclose(np.diag(loaded), np.full(5, 4.0), rtol=1e-5)
+    np.testing.assert_allclose(np.diag(loaded), np.full(5, 4.0 / composite_scale), rtol=1e-5)
 
 
 def test_scale_metadata_not_saved_with_none_normalization(temp_matrix_file: Path, tmp_path: Path):

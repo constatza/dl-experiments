@@ -297,17 +297,23 @@ def sample_dataset_npz(tmp_path, small_spd_matrix, archive_solutions, archive_rh
     """
     dataset_dir = tmp_path / "test-dataset"
     dataset_dir.mkdir()
-    from neuralls.platform.storage.datasets import save_dataset
+    from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
+    from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 
-    save_dataset(
-        dataset_dir=dataset_dir,
-        rhs=archive_rhs,
-        solutions=archive_solutions,
-        matrix=small_spd_matrix,
-        normalization_type="matrix",
-        matrix_norm=float(np.linalg.norm(small_spd_matrix, ord=2)),
-        matrix_norm_type="spectral",
-        scale_metadata={},
+    acc = DenseZarrAccumulator(dataset_dir / "matrix.zarr")
+    acc.append_dense_matrix(small_spd_matrix, repeats=1)
+    zarr_path = acc.finalize()
+    DenseDatasetWriter().write_dataset(
+        dataset_dir,
+        GeneratedDatasetPayload(
+            rhs=archive_rhs,
+            solutions=archive_solutions,
+            matrix_pack_path=zarr_path,
+            matrix_size=(int(small_spd_matrix.shape[0]), int(small_spd_matrix.shape[1])),
+            normalization_type="matrix",
+            matrix_norm=float(np.linalg.norm(small_spd_matrix, ord=2)),
+            matrix_norm_type="spectral",
+        ),
     )
 
     return dataset_dir
@@ -328,17 +334,23 @@ def sample_dataset_with_raw(tmp_path, small_spd_matrix, archive_solutions, archi
     """
     dataset_dir = tmp_path / "test-dataset-with-raw"
     dataset_dir.mkdir()
-    from neuralls.platform.storage.datasets import save_dataset
+    from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
+    from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 
-    save_dataset(
-        dataset_dir=dataset_dir,
-        rhs=archive_rhs,
-        solutions=archive_solutions,
-        matrix=small_spd_matrix,
-        normalization_type="matrix",
-        matrix_norm=float(np.linalg.norm(small_spd_matrix, ord=2)),
-        matrix_norm_type="spectral",
-        scale_metadata={},
+    acc = DenseZarrAccumulator(dataset_dir / "matrix.zarr")
+    acc.append_dense_matrix(small_spd_matrix, repeats=1)
+    zarr_path = acc.finalize()
+    DenseDatasetWriter().write_dataset(
+        dataset_dir,
+        GeneratedDatasetPayload(
+            rhs=archive_rhs,
+            solutions=archive_solutions,
+            matrix_pack_path=zarr_path,
+            matrix_size=(int(small_spd_matrix.shape[0]), int(small_spd_matrix.shape[1])),
+            normalization_type="matrix",
+            matrix_norm=float(np.linalg.norm(small_spd_matrix, ord=2)),
+            matrix_norm_type="spectral",
+        ),
     )
 
     raw_dir = dataset_dir / "raw"
