@@ -63,7 +63,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from loguru import logger
@@ -73,7 +73,8 @@ from neuralls.platform.config.models.comparison import ComparisonGeneral
 from neuralls.domain.analysis.spectra import compute_condition_numbers, plot_condition_numbers
 from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.storage.filesystem import ensure_dir
-from neuralls.platform.storage.comparison import load_system_arrays
+from neuralls.platform.storage.comparison import load_system_arrays, load_system_extras
+from neuralls.domain.solver.preconditioners.base import Preconditioner
 from neuralls.domain.linalg import compute_condition_number
 from neuralls.domain.normalization import IScale, create_scale_from_config
 from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
@@ -170,7 +171,7 @@ class PreconditionerService:
         self,
         matrix: np.ndarray,
         config: PreconditionerConfig,
-    ) -> Callable:
+    ) -> Preconditioner:
         """Create a single preconditioner.
 
         Args:
@@ -194,7 +195,7 @@ class PreconditionerService:
         self,
         matrix: np.ndarray,
         configs: Sequence[PreconditionerConfig],
-    ) -> dict[str, Callable]:
+    ) -> dict[str, Preconditioner]:
         """Create multiple preconditioners for comparison.
 
         Args:
@@ -202,7 +203,7 @@ class PreconditionerService:
             configs: Sequence of preconditioner configurations
 
         Returns:
-            Dictionary mapping preconditioner names to functions
+            Dictionary mapping preconditioner names to Preconditioner instances
 
         Example:
             >>> service = PreconditionerService()
@@ -529,6 +530,26 @@ def _generate_comparison_plots(
     )
 
 
+def _bind_system_inputs(
+    preconditioners: dict[str, Preconditioner],
+    system_data: dict[str, np.ndarray],
+) -> None:
+    """Bind dataset-sourced extra inputs to preconditioners that declare them.
+
+    Reads extra_input_names from each preconditioner. For each name present in
+    system_data, calls bind_inputs() so the preconditioner can forward them to
+    the model without changing the CG-facing apply(residual) interface.
+
+    Args:
+        preconditioners: Map of name to preconditioner.
+        system_data: Available named arrays (always includes "matrix").
+    """
+    for precond in preconditioners.values():
+        needed = {k: v for k, v in system_data.items() if k in precond.extra_input_names}
+        if needed:
+            precond.bind_inputs(**needed)
+
+
 def compare_preconditioners(
     *,
     general_params: ComparisonGeneral,
@@ -638,6 +659,25 @@ def compare_preconditioners(
     # Step 4: Create preconditioners via service (uses factory function)
     service = PreconditionerService()
     preconditioners = service.create_preconditioner_set(system.matrix, preconditioner_configs)
+
+    # Step 4.5: Bind extra inputs from dataset to preconditioners that need them.
+    # "matrix" is always available from the loaded system. Other named arrays
+    # (e.g. coordinates) are loaded from the dataset directory when matrix_path
+    # is a dataset dir containing matching {name}.zarr or {name}.npy files.
+    _needed_extra_names = frozenset(
+        name for p in preconditioners.values() for name in p.extra_input_names if name != "matrix"
+    )
+    _extra_data: dict[str, np.ndarray] = {}
+    if _needed_extra_names and paths.matrix.is_dir():
+        _extra_data = load_system_extras(
+            paths.matrix,
+            _needed_extra_names,
+            sample_index=general_params.data.matrix_index,
+        )
+    _bind_system_inputs(
+        preconditioners,
+        {"matrix": system.matrix, **_extra_data},
+    )
 
     # Step 5: Compute condition numbers for diagnostics
     cond_numbers = compute_condition_numbers(system.matrix, preconditioners)
