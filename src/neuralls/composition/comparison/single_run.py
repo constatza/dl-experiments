@@ -74,7 +74,7 @@ from neuralls.domain.analysis.spectra import compute_condition_numbers, plot_con
 from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.storage.filesystem import ensure_dir
 from neuralls.platform.storage.comparison import load_system_arrays, load_system_extras
-from neuralls.domain.solver.preconditioners.base import Preconditioner
+from neuralls.domain.solver.preconditioners.base import BindableInputs, Preconditioner
 from neuralls.domain.linalg import compute_condition_number
 from neuralls.domain.normalization import IScale, create_scale_from_config
 from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
@@ -545,6 +545,8 @@ def _bind_system_inputs(
         system_data: Available named arrays (always includes "matrix").
     """
     for precond in preconditioners.values():
+        if not isinstance(precond, BindableInputs):
+            continue
         needed = {k: v for k, v in system_data.items() if k in precond.extra_input_names}
         if needed:
             precond.bind_inputs(**needed)
@@ -665,7 +667,11 @@ def compare_preconditioners(
     # (e.g. coordinates) are loaded from the dataset directory when matrix_path
     # is a dataset dir containing matching {name}.zarr or {name}.npy files.
     _needed_extra_names = frozenset(
-        name for p in preconditioners.values() for name in p.extra_input_names if name != "matrix"
+        name
+        for p in preconditioners.values()
+        if isinstance(p, BindableInputs)
+        for name in p.extra_input_names
+        if name != "matrix"
     )
     _extra_data: dict[str, np.ndarray] = {}
     if _needed_extra_names and paths.matrix.is_dir():

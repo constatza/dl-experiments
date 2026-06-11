@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from numpy.typing import NDArray
 
@@ -126,29 +126,6 @@ class Preconditioner(ABC):
         """
         return False
 
-    @property
-    def extra_input_names(self) -> tuple[str, ...]:
-        """Names of extra inputs this preconditioner expects beyond the residual.
-
-        The comparison workflow reads this to decide which dataset arrays to load
-        and bind. Default is empty — most preconditioners need only the residual.
-        """
-        return ()
-
-    def bind_inputs(self, **inputs: NDArray) -> None:
-        """Pre-bind named extra inputs before the CG loop starts.
-
-        Called once by the composition layer with data loaded from the dataset
-        (stiffness matrix, coordinates, parameters, etc.). The CG solver then
-        calls apply(residual) and implementations forward stored inputs internally.
-
-        Default is a no-op — override in subclasses that need extra inputs.
-
-        Args:
-            **inputs: Named arrays matching extra_input_names entries.
-        """
-        pass
-
     def __call__(self, residual: NDArray) -> NDArray:
         """Make preconditioner callable: precond(r) is alias for precond.apply(r).
 
@@ -172,6 +149,24 @@ class Preconditioner(ABC):
             >>> assert np.allclose(z1, z2)
         """
         return self.apply(residual)
+
+
+@runtime_checkable
+class BindableInputs(Protocol):
+    """Protocol for preconditioners that accept named extra inputs beyond the residual.
+
+    Only preconditioners that declare this need it — base Preconditioner does not.
+    Use isinstance(p, BindableInputs) before calling bind_inputs() or reading extra_input_names.
+    """
+
+    @property
+    def extra_input_names(self) -> tuple[str, ...]:
+        """Names of extra arrays this preconditioner expects beyond the residual."""
+        ...
+
+    def bind_inputs(self, **inputs: NDArray) -> None:
+        """Pre-bind named extra arrays before the CG loop starts."""
+        ...
 
 
 class LinearPreconditioner[T_Operator](Preconditioner):

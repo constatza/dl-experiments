@@ -47,6 +47,7 @@ from .base import (
     LinearPreconditioner,
     NonLinearPreconditioner,
     ContextualPreconditioner,
+    BindableInputs,
 )
 from .implementations import (
     Identity,
@@ -67,6 +68,7 @@ __all__ = [
     "LinearPreconditioner",
     "NonLinearPreconditioner",
     "ContextualPreconditioner",
+    "BindableInputs",
     # Implementations
     "Identity",
     "JacobiPreconditioner",

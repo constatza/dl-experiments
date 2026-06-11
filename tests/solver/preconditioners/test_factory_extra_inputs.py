@@ -171,6 +171,7 @@ def test_factory_preserves_extra_input_names_order(
 
     precond = create_preconditioner(well_conditioned_matrix, config, adapter=mock_adapter)
 
+    assert isinstance(precond, NeuralPreconditioner)
     assert precond.extra_input_names == names
     # Also verify it's a tuple (not mutated to list or other type)
     assert isinstance(precond.extra_input_names, tuple)
