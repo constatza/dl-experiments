@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from neuralls.domain.solver.preconditioners.implementations.jacobi import JacobiPreconditioner
-from neuralls.domain.solver.preconditioners.ports import ExtraInputPredictorPort
+from neuralls.domain.solver.preconditioners.ports import ExtraInputPredictorPort, PredictorPort
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -83,6 +83,25 @@ def residual() -> NDArray:
     return np.ones(4, dtype=np.float64)
 
 
+class _MinimalPredictor(PredictorPort):
+    """Minimal implementation of base PredictorPort — no extra inputs."""
+
+    def apply(self, residual: NDArray) -> NDArray:
+        """Return a copy of the residual unchanged.
+
+        Args:
+            residual: Input residual vector.
+
+        Returns:
+            Copy of the residual.
+        """
+        return residual.copy()
+
+    def cleanup(self) -> None:
+        """No-op cleanup."""
+        pass
+
+
 class _CapturingPredictor(ExtraInputPredictorPort):
     """ExtraInputPredictorPort that records extra inputs for assertion."""
 
@@ -116,3 +135,13 @@ def capturing_predictor() -> _CapturingPredictor:
         Fresh _CapturingPredictor instance
     """
     return _CapturingPredictor()
+
+
+@pytest.fixture
+def minimal_predictor() -> _MinimalPredictor:
+    """Minimal PredictorPort implementation — passes residual through unchanged.
+
+    Returns:
+        Fresh _MinimalPredictor instance
+    """
+    return _MinimalPredictor()

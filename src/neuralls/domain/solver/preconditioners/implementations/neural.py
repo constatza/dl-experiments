@@ -7,7 +7,7 @@ from pathlib import Path
 from numpy.typing import NDArray
 
 from ..base import NonLinearPreconditioner, PreconditionerContext
-from ..ports import ExtraInputPredictorPort
+from ..ports import ExtraInputPredictorPort, PredictorAdapter
 
 
 class NeuralPreconditioner(NonLinearPreconditioner):
@@ -25,7 +25,8 @@ class NeuralPreconditioner(NonLinearPreconditioner):
         checkpoint_path: Path to trained model checkpoint
         config_path: Optional model configuration
         data_config_path: Optional data configuration
-        adapter: Predictor adapter supplied by the composition layer
+        adapter (PredictorAdapter | None): Predictor adapter supplied by the
+            composition layer. Must not be None at runtime.
         extra_input_names: Names of extra inputs the model expects beyond the
             residual (e.g., ``("matrix",)``). Matched against bind_inputs() keys.
 
@@ -42,7 +43,7 @@ class NeuralPreconditioner(NonLinearPreconditioner):
         checkpoint_path: Path,
         config_path: Path | None = None,
         data_config_path: Path | None = None,
-        adapter=None,  # Type: PredictorAdapter | None (avoid circular import)
+        adapter: PredictorAdapter | None = None,
         extra_input_names: tuple[str, ...] = (),
     ):
         """Initialize neural preconditioner from checkpoint.
@@ -51,7 +52,8 @@ class NeuralPreconditioner(NonLinearPreconditioner):
             checkpoint_path: Path to trained model checkpoint
             config_path: Optional model configuration
             data_config_path: Optional data configuration
-            adapter: Predictor adapter supplied by the composition layer
+            adapter (PredictorAdapter | None): Predictor adapter supplied by the
+                composition layer. Must not be None at runtime.
             extra_input_names: Names of extra inputs the model expects beyond the
                 residual (e.g., ``("matrix",)``). Matched against bind_inputs() keys.
         """
