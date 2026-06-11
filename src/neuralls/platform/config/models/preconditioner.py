@@ -203,6 +203,14 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
     data_config_path: Path | None = None
     model_ref: ModelRefConfig | None = None
     resolved_checkpoint_path: Path | None = None
+    extra_input_names: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Names of extra dataset arrays to bind before CG, beyond the residual. "
+            "E.g. ('matrix',) for the stiffness matrix, ('coordinates',) for node coords. "
+            "The comparison workflow loads matching named arrays from the dataset directory."
+        ),
+    )
 
     @field_validator("checkpoint_path", "config_path", "data_config_path", mode="before")
     @classmethod
@@ -221,6 +229,21 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
         from neuralls.platform.config.context import ConfigContext, expand_config_path
 
         return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
+    @field_validator("extra_input_names", mode="before")
+    @classmethod
+    def _coerce_extra_names_to_tuple(cls, v: object) -> tuple[str, ...] | object:
+        """Coerce list to tuple for extra_input_names field.
+
+        Args:
+            v: Raw value that may be list, tuple, or other type.
+
+        Returns:
+            Tuple of strings, or original value if not list/tuple.
+        """
+        if isinstance(v, (list, tuple)):
+            return tuple(str(x) for x in v)
+        return v
 
 
 ConcretePreconditionerConfig = (
