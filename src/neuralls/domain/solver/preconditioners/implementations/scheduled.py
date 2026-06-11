@@ -52,8 +52,11 @@ class ScheduledPreconditioner(ContextualPreconditioner):
             **inputs: Named arrays to forward.
         """
         self._primary.bind_inputs(**inputs)
-        if self._fallback is not None:
-            self._fallback.bind_inputs(**inputs)
+        if self._fallback is None:
+            from .identity import Identity
+
+            self._fallback = Identity()
+        self._fallback.bind_inputs(**inputs)
 
     def apply(self, residual: NDArray, context: PreconditionerContext | None = None) -> NDArray:
         """Apply primary or fallback based on schedule.
