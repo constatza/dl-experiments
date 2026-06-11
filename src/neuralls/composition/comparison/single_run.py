@@ -437,7 +437,7 @@ def _create_scheduled_preconditioners(
     preconditioner_configs: Sequence[PreconditionerConfig],
     matrix: np.ndarray,
     base_preconditioners: dict[str, Any],
-) -> dict[str, Any]:
+) -> dict[str, Preconditioner]:
     """Wrap preconditioners with scheduling if configured.
 
     Args:
@@ -448,7 +448,7 @@ def _create_scheduled_preconditioners(
     Returns:
         Dict mapping names to scheduled preconditioner instances
     """
-    scheduled: dict[str, Any] = {}
+    scheduled: dict[str, Preconditioner] = {}
 
     for cfg in preconditioner_configs:
         primary = base_preconditioners[cfg.name]
@@ -662,13 +662,22 @@ def compare_preconditioners(
     service = PreconditionerService()
     preconditioners = service.create_preconditioner_set(system.matrix, preconditioner_configs)
 
-    # Step 4.5: Bind extra inputs from dataset to preconditioners that need them.
-    # "matrix" is always available from the loaded system. Other named arrays
-    # (e.g. coordinates) are loaded from the dataset directory when matrix_path
-    # is a dataset dir containing matching {name}.zarr or {name}.npy files.
+    # Step 5: Compute condition numbers for diagnostics
+    cond_numbers = compute_condition_numbers(system.matrix, preconditioners)
+
+    # Step 6: Wrap preconditioners with scheduling if configured
+    scheduled_preconditioners = _create_scheduled_preconditioners(
+        preconditioner_configs=preconditioner_configs,
+        matrix=system.matrix,
+        base_preconditioners=preconditioners,
+    )
+
+    # Step 6.5: Bind extra inputs to scheduled preconditioners that declare them.
+    # Binding on the scheduled wrapper ensures ScheduledPreconditioner.bind_inputs()
+    # propagates to the inner preconditioner — no hidden ordering invariant.
     _needed_extra_names = frozenset(
         name
-        for p in preconditioners.values()
+        for p in scheduled_preconditioners.values()
         if isinstance(p, BindableInputs)
         for name in p.extra_input_names
         if name != "matrix"
@@ -681,18 +690,8 @@ def compare_preconditioners(
             sample_index=general_params.data.matrix_index,
         )
     _bind_system_inputs(
-        preconditioners,
+        scheduled_preconditioners,
         {"matrix": system.matrix, **_extra_data},
-    )
-
-    # Step 5: Compute condition numbers for diagnostics
-    cond_numbers = compute_condition_numbers(system.matrix, preconditioners)
-
-    # Step 6: Wrap preconditioners with scheduling if configured
-    scheduled_preconditioners = _create_scheduled_preconditioners(
-        preconditioner_configs=preconditioner_configs,
-        matrix=system.matrix,
-        base_preconditioners=preconditioners,
     )
 
     # Step 7: Run CG comparison with scheduled preconditioners
