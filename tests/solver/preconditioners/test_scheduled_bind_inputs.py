@@ -71,13 +71,11 @@ def test_bind_with_none_fallback_no_error(
     scheduled.bind_inputs(matrix=matrix)  # fallback is None — should not raise
 
 
-def test_bind_with_none_fallback_initializes_identity(
+def test_bind_with_none_fallback_leaves_fallback_none(
     primary: _TrackingPreconditioner, matrix: NDArray
 ) -> None:
-    """bind_inputs should initialize Identity fallback, mirroring apply() lazy init."""
-    from neuralls.domain.solver.preconditioners.implementations.identity import Identity
-
+    """bind_inputs should not mutate _fallback when no fallback was provided."""
     scheduled = ScheduledPreconditioner(primary=primary, limit_iters=5)
     assert scheduled._fallback is None  # noqa: SLF001
     scheduled.bind_inputs(matrix=matrix)
-    assert isinstance(scheduled._fallback, Identity)  # noqa: SLF001
+    assert scheduled._fallback is None  # noqa: SLF001

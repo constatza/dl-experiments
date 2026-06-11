@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from ..base import BindableInputs, ContextualPreconditioner, Preconditioner, PreconditionerContext
 
 
-class ScheduledPreconditioner(ContextualPreconditioner):
+class ScheduledPreconditioner(ContextualPreconditioner, BindableInputs):
     """Preconditioner that switches to fallback after iteration limit.
 
     Use primary preconditioner for first N iterations, then switch to fallback.
@@ -60,19 +60,13 @@ class ScheduledPreconditioner(ContextualPreconditioner):
         return tuple(dict.fromkeys(names))
 
     def bind_inputs(self, **inputs: NDArray) -> None:
-        """Propagate extra inputs to primary and fallback preconditioners that support it.
-
-        Only forwards to sub-preconditioners that implement BindableInputs.
+        """Propagate extra inputs to primary and fallback preconditioners.
 
         Args:
             **inputs: Named arrays to forward.
         """
         if isinstance(self._primary, BindableInputs):
             self._primary.bind_inputs(**inputs)
-        if self._fallback is None:
-            from .identity import Identity
-
-            self._fallback = Identity()
         if isinstance(self._fallback, BindableInputs):
             self._fallback.bind_inputs(**inputs)
 

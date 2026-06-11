@@ -11,8 +11,33 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
+from neuralls.domain.solver.preconditioners.implementations.jacobi import JacobiPreconditioner
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+
+@pytest.fixture
+def small_diagonal_matrix() -> NDArray:
+    """Small 3x3 diagonal matrix for base/bind_inputs tests.
+
+    Returns:
+        3x3 diagonal matrix with entries [2, 4, 8]
+    """
+    return np.diag([2.0, 4.0, 8.0])
+
+
+@pytest.fixture
+def jacobi(small_diagonal_matrix: NDArray) -> JacobiPreconditioner:
+    """JacobiPreconditioner built from small_diagonal_matrix.
+
+    Args:
+        small_diagonal_matrix: 3x3 diagonal matrix fixture
+
+    Returns:
+        JacobiPreconditioner instance
+    """
+    return JacobiPreconditioner(small_diagonal_matrix)
 
 
 @pytest.fixture
