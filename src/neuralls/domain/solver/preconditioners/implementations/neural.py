@@ -13,19 +13,27 @@ class NeuralPreconditioner(NonLinearPreconditioner):
     """Neural network preconditioner with automatic cleanup.
 
     Loads trained model from checkpoint and applies it to residuals.
-    GPU resources are automatically freed when the preconditioner is garbage collected.
+    Extra named inputs (matrix, coordinates, parameters) declared in
+    extra_input_names are pre-bound via bind_inputs() before the CG loop
+    and forwarded to the predictor on each apply() call.
+
+    GPU resources are automatically freed when the preconditioner is garbage
+    collected.
 
     Args:
         checkpoint_path: Path to trained model checkpoint
         config_path: Optional model configuration
         data_config_path: Optional data configuration
         adapter: Predictor adapter supplied by the composition layer
+        extra_input_names: Names of extra inputs the model expects beyond the
+            residual (e.g., ``("matrix",)``). Matched against bind_inputs() keys.
 
     Example:
-        >>> # Simple! Direct instantiation
-        >>> precond = NeuralPreconditioner(Path("model.ckpt"))
-        >>> z = precond.apply(residual)
-        >>> # GPU resources automatically freed when precond is garbage collected
+        >>> precond = NeuralPreconditioner(
+        ...     Path("model.ckpt"), adapter=adapter, extra_input_names=("matrix",)
+        ... )
+        >>> precond.bind_inputs(matrix=A)  # done once before CG loop
+        >>> z = precond.apply(residual)  # called each CG iteration
     """
 
     def __init__(
@@ -34,6 +42,7 @@ class NeuralPreconditioner(NonLinearPreconditioner):
         config_path: Path | None = None,
         data_config_path: Path | None = None,
         adapter=None,  # Type: PredictorAdapter | None (avoid circular import)
+        extra_input_names: tuple[str, ...] = (),
     ):
         """Initialize neural preconditioner from checkpoint.
 
@@ -42,9 +51,14 @@ class NeuralPreconditioner(NonLinearPreconditioner):
             config_path: Optional model configuration
             data_config_path: Optional data configuration
             adapter: Predictor adapter supplied by the composition layer
+            extra_input_names: Names of extra inputs the model expects beyond the
+                residual (e.g., ``("matrix",)``). Matched against bind_inputs() keys.
         """
         if adapter is None:
             raise ValueError("NeuralPreconditioner requires an explicit predictor adapter.")
+
+        self._extra_input_names: tuple[str, ...] = extra_input_names
+        self._extra_inputs: dict[str, NDArray] = {}
 
         # Load predictor (GPU model)
         self._predictor = adapter.create_predictor(
@@ -52,6 +66,21 @@ class NeuralPreconditioner(NonLinearPreconditioner):
             config_path=config_path,
             data_config_path=data_config_path,
         )
+
+    @property
+    def extra_input_names(self) -> tuple[str, ...]:
+        """Names of extra inputs this preconditioner expects beyond the residual."""
+        return self._extra_input_names
+
+    def bind_inputs(self, **inputs: NDArray) -> None:
+        """Store extra named inputs for forwarding on each apply() call.
+
+        Only keys declared in extra_input_names are retained; others are ignored.
+
+        Args:
+            **inputs: Named arrays matching extra_input_names entries.
+        """
+        self._extra_inputs = {k: v for k, v in inputs.items() if k in self._extra_input_names}
 
     def apply(self, residual: NDArray, context: PreconditionerContext | None = None) -> NDArray:
         """Apply neural network to residual.
@@ -61,9 +90,9 @@ class NeuralPreconditioner(NonLinearPreconditioner):
             context: Ignored (neural preconditioner doesn't use context)
 
         Returns:
-            Preconditioned residual z_k = network(r_k)
+            Preconditioned residual z_k = network(r_k, **extra_inputs)
         """
-        return self._predictor.apply(residual)
+        return self._predictor.apply(residual, **self._extra_inputs)
 
     def cleanup(self) -> None:
         """Free GPU resources manually.
