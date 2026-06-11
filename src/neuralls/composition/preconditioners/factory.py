@@ -114,6 +114,7 @@ def create_preconditioner(
             config_path=config.config_path,
             data_config_path=config.data_config_path,
             adapter=adapter,
+            extra_input_names=tuple(config.extra_input_names),
         )
 
     # IC(0) with threshold parameter
