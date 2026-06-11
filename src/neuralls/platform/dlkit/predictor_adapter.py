@@ -20,7 +20,11 @@ from dlkit import load_model
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from loguru import logger
 
-from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.domain.solver.preconditioners.ports import (
+    ExtraInputPredictorPort,
+    PredictorAdapter,
+    PredictorPort,
+)
 from neuralls.domain.solver.preconditioners.tensor_utils import (
     extract_model_output,
     prepare_model_input,
@@ -52,11 +56,12 @@ def _extra_to_tensors(
     return {name: prepare_model_input(arr, device) for name, arr in extra_inputs.items()}
 
 
-class DLKitPredictor(PredictorPort):
+class DLKitPredictor(ExtraInputPredictorPort):
     """DLKit-based predictor with lifecycle management.
 
-    Implements PredictorPort using DLKit framework. Wraps CheckpointPredictor
-    and delegates lifecycle management to it via context manager.
+    Implements ExtraInputPredictorPort using DLKit framework. Wraps
+    CheckpointPredictor and delegates lifecycle management to it via context
+    manager.
 
     Lifecycle:
         Use as a context manager — `__exit__` delegates to CheckpointPredictor,

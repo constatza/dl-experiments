@@ -20,7 +20,10 @@ import pytest
 from numpy.testing import assert_array_equal
 
 from neuralls.platform.config.models.preconditioner import PreconditionerType
-from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.domain.solver.preconditioners.ports import (
+    ExtraInputPredictorPort,
+    PredictorAdapter,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -31,7 +34,7 @@ if TYPE_CHECKING:
 # ==============================================================================
 
 
-class MockPredictor(PredictorPort):
+class MockPredictor(ExtraInputPredictorPort):
     """Mock predictor for testing port contract."""
 
     def __init__(self) -> None:
@@ -42,7 +45,12 @@ class MockPredictor(PredictorPort):
     def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Mock apply that scales residual by 0.5.
 
-        Extra inputs are ignored (typical for mock implementations).
+        Args:
+            residual: Input residual vector.
+            **extra_inputs: Ignored extra inputs.
+
+        Returns:
+            Residual scaled by 0.5 as float64.
         """
         self.apply_count += 1
         # Preserve shape and return float64
@@ -74,8 +82,20 @@ class MockAdapter(PredictorAdapter):
         checkpoint_path: Path,
         config_path: Path | None = None,
         data_config_path: Path | None = None,
-    ) -> PredictorPort:
-        """Create predictor, validating checkpoint exists."""
+    ) -> ExtraInputPredictorPort:
+        """Create predictor, validating checkpoint exists.
+
+        Args:
+            checkpoint_path: Path to checkpoint file (must exist).
+            config_path: Unused.
+            data_config_path: Unused.
+
+        Returns:
+            The shared MockPredictor instance.
+
+        Raises:
+            FileNotFoundError: If checkpoint does not exist.
+        """
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
         return self.predictor

@@ -4,30 +4,60 @@ import numpy as np
 import pytest
 
 from neuralls.domain.solver.preconditioners.implementations.neural import NeuralPreconditioner
-from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.domain.solver.preconditioners.ports import (
+    ExtraInputPredictorPort,
+    PredictorAdapter,
+)
 
 
-class _RecordingPredictor(PredictorPort):
+class _RecordingPredictor(ExtraInputPredictorPort):
     """Mock predictor that records calls for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize with empty call record."""
         self.calls: list[dict] = []
 
-    def apply(self, residual, **extra_inputs):
+    def apply(self, residual: np.ndarray, **extra_inputs: np.ndarray) -> np.ndarray:
+        """Record call details and return a copy of the residual.
+
+        Args:
+            residual: Input residual vector.
+            **extra_inputs: Named extra arrays to record.
+
+        Returns:
+            Copy of the residual.
+        """
         self.calls.append({"residual": residual.copy(), "extra": dict(extra_inputs)})
         return residual.copy()
 
-    def cleanup(self):
+    def cleanup(self) -> None:
+        """No-op cleanup."""
         pass
 
 
 class _MockAdapter(PredictorAdapter):
     """Mock adapter that provides a recording predictor."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize with a fresh recording predictor."""
         self.predictor = _RecordingPredictor()
 
-    def create_predictor(self, checkpoint_path, config_path=None, data_config_path=None):
+    def create_predictor(
+        self,
+        checkpoint_path,
+        config_path=None,
+        data_config_path=None,
+    ) -> ExtraInputPredictorPort:
+        """Return the shared recording predictor instance.
+
+        Args:
+            checkpoint_path: Ignored in mock.
+            config_path: Ignored in mock.
+            data_config_path: Ignored in mock.
+
+        Returns:
+            The shared _RecordingPredictor instance.
+        """
         return self.predictor
 
 

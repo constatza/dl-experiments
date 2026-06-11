@@ -27,7 +27,8 @@ Public API:
         - LinearOperatorPreconditioner: Wrap SciPy LinearOperator
 
     Adapters (for advanced usage):
-        - PredictorPort: Framework-agnostic interface
+        - PredictorPort: Minimal framework-agnostic interface (residual only)
+        - ExtraInputPredictorPort: Extended port for models needing named extra inputs
         - PredictorAdapter: Framework adapter protocol
 
 Example:
@@ -59,7 +60,7 @@ from .implementations import (
 )
 from .callable import CallablePreconditioner
 from .linear_operator import LinearOperatorPreconditioner
-from .ports import PredictorPort, PredictorAdapter
+from .ports import PredictorPort, ExtraInputPredictorPort, PredictorAdapter
 
 __all__ = [
     # Base classes
@@ -80,5 +81,6 @@ __all__ = [
     "LinearOperatorPreconditioner",
     # Adapters
     "PredictorPort",
+    "ExtraInputPredictorPort",
     "PredictorAdapter",
 ]

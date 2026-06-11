@@ -7,6 +7,7 @@ from pathlib import Path
 from numpy.typing import NDArray
 
 from ..base import NonLinearPreconditioner, PreconditionerContext
+from ..ports import ExtraInputPredictorPort
 
 
 class NeuralPreconditioner(NonLinearPreconditioner):
@@ -61,11 +62,18 @@ class NeuralPreconditioner(NonLinearPreconditioner):
         self._extra_inputs: dict[str, NDArray] = {}
 
         # Load predictor (GPU model)
-        self._predictor = adapter.create_predictor(
+        predictor = adapter.create_predictor(
             checkpoint_path=checkpoint_path,
             config_path=config_path,
             data_config_path=data_config_path,
         )
+        if not isinstance(predictor, ExtraInputPredictorPort):
+            raise TypeError(
+                f"NeuralPreconditioner requires an ExtraInputPredictorPort, "
+                f"got {type(predictor).__name__}. "
+                "Ensure the adapter returns an extra-input-capable predictor."
+            )
+        self._predictor: ExtraInputPredictorPort = predictor
 
     @property
     def extra_input_names(self) -> tuple[str, ...]:

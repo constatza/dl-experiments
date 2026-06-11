@@ -27,7 +27,10 @@ from neuralls.composition.preconditioners.factory import (
     create_scheduled_preconditioner,
     PreconditionerScheduleConfig,
 )
-from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.domain.solver.preconditioners.ports import (
+    ExtraInputPredictorPort,
+    PredictorAdapter,
+)
 from neuralls.domain.solver.preconditioners import (
     Identity,
     ILUPreconditioner,
@@ -46,7 +49,7 @@ if TYPE_CHECKING:
 # ==============================================================================
 
 
-class MockPredictor(PredictorPort):
+class MockPredictor(ExtraInputPredictorPort):
     """Lightweight mock predictor for testing."""
 
     def __init__(self) -> None:
@@ -57,7 +60,12 @@ class MockPredictor(PredictorPort):
     def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Mock apply: returns half of input.
 
-        Extra inputs are ignored (typical for mock implementations).
+        Args:
+            residual: Input residual vector.
+            **extra_inputs: Ignored extra inputs.
+
+        Returns:
+            Residual scaled by 0.5.
         """
         self.apply_count += 1
         return residual * 0.5
@@ -87,8 +95,20 @@ class MockAdapter(PredictorAdapter):
         checkpoint_path: Path,
         config_path: Path | None = None,
         data_config_path: Path | None = None,
-    ) -> PredictorPort:
-        """Create mock predictor."""
+    ) -> ExtraInputPredictorPort:
+        """Create mock predictor.
+
+        Args:
+            checkpoint_path: Path to checkpoint file (must exist).
+            config_path: Unused.
+            data_config_path: Unused.
+
+        Returns:
+            The shared MockPredictor instance.
+
+        Raises:
+            FileNotFoundError: If checkpoint does not exist.
+        """
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
         return self.predictor

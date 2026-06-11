@@ -8,6 +8,7 @@ Design Principles:
     - Pure numpy interface: (NDArray) -> NDArray
     - Lifecycle management: Context manager support for resource cleanup
     - SOLID: ABC enforces contracts at runtime (unlike Protocol)
+    - OCP: base port is minimal; subtype ExtraInputPredictorPort extends it
 """
 
 from __future__ import annotations
@@ -23,9 +24,14 @@ if TYPE_CHECKING:
 class PredictorPort(ABC):
     """Abstract port for neural predictors with lifecycle management.
 
-    This port defines the interface for neural network-based preconditioners
-    without coupling to specific ML frameworks. Adapters implement this port
-    for different frameworks (DLKit, PyTorch, etc.).
+    This port defines the minimal interface for neural network-based
+    preconditioners without coupling to specific ML frameworks. Adapters
+    implement this port for different frameworks (DLKit, PyTorch, etc.).
+
+    Implementors that do not need named extra inputs beyond the residual
+    should inherit from this class directly. For models that require
+    additional named arrays (e.g. stiffness matrix, coordinates), use
+    :class:`ExtraInputPredictorPort` instead.
 
     Lifecycle:
         1. Create predictor (loads model)
@@ -39,13 +45,11 @@ class PredictorPort(ABC):
     """
 
     @abstractmethod
-    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
+    def apply(self, residual: NDArray) -> NDArray:
         """Apply neural network to residual vector.
 
         Args:
             residual: Residual vector (numpy array, any dtype)
-            **extra_inputs: Optional named extra arrays (e.g., matrix, coordinates).
-                Implementations that do not use extra inputs should ignore them.
 
         Returns:
             Predicted correction (float64 numpy array)
@@ -58,19 +62,49 @@ class PredictorPort(ABC):
 
     @abstractmethod
     def cleanup(self) -> None:
-        """Release resources (GPU memory, model weights).
-
-        Should be idempotent - safe to call multiple times.
-        """
+        """Release resources (GPU memory, model weights). Idempotent."""
         ...
 
     def __enter__(self) -> PredictorPort:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         """Context manager exit - automatic cleanup."""
         self.cleanup()
+
+
+class ExtraInputPredictorPort(PredictorPort):
+    """PredictorPort extension for models that accept named extra inputs.
+
+    Implement this instead of PredictorPort when the model needs more than
+    the residual — e.g., stiffness matrix, node coordinates, PDE parameters.
+
+    The base PredictorPort.apply(residual) contract is preserved for callers
+    that do not know about extra inputs.
+
+    Example:
+        >>> class MyPredictor(ExtraInputPredictorPort):
+        ...     def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
+        ...         matrix = extra_inputs.get("matrix")
+        ...         return self._model(residual, matrix)
+        ...
+        ...     def cleanup(self) -> None: ...
+    """
+
+    @abstractmethod
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
+        """Apply neural network to residual with optional named extra inputs.
+
+        Args:
+            residual: Residual vector
+            **extra_inputs: Named arrays forwarded to the model as keyword tensors
+                (e.g., matrix=A, coordinates=coords).
+
+        Returns:
+            Predicted correction (float64 numpy array)
+        """
+        ...
 
 
 class PredictorAdapter(ABC):

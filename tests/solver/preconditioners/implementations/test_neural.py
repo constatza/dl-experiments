@@ -8,19 +8,33 @@ import numpy as np
 import pytest
 
 from neuralls.domain.solver.preconditioners.implementations.neural import NeuralPreconditioner
-from neuralls.domain.solver.preconditioners.ports import PredictorAdapter, PredictorPort
+from neuralls.domain.solver.preconditioners.ports import (
+    ExtraInputPredictorPort,
+    PredictorAdapter,
+)
 
 
-class DummyPredictor(PredictorPort):
+class DummyPredictor(ExtraInputPredictorPort):
     """Minimal predictor stub for direct neural preconditioner tests."""
 
     def __init__(self) -> None:
+        """Initialize with cleanup flag."""
         self.cleaned_up = False
 
-    def apply(self, residual: np.ndarray) -> np.ndarray:
+    def apply(self, residual: np.ndarray, **extra_inputs: np.ndarray) -> np.ndarray:
+        """Scale residual by 0.5 and ignore extra inputs.
+
+        Args:
+            residual: Input residual vector.
+            **extra_inputs: Ignored extra inputs.
+
+        Returns:
+            Residual scaled by 0.5.
+        """
         return residual * 0.5
 
     def cleanup(self) -> None:
+        """Mark as cleaned up."""
         self.cleaned_up = True
 
 
@@ -28,6 +42,11 @@ class DummyAdapter(PredictorAdapter):
     """Adapter stub that returns a stable predictor instance."""
 
     def __init__(self, predictor: DummyPredictor) -> None:
+        """Initialize with a fixed predictor.
+
+        Args:
+            predictor: The predictor to return from create_predictor.
+        """
         self.predictor = predictor
 
     def create_predictor(
@@ -35,7 +54,20 @@ class DummyAdapter(PredictorAdapter):
         checkpoint_path: Path,
         config_path: Path | None = None,
         data_config_path: Path | None = None,
-    ) -> PredictorPort:
+    ) -> ExtraInputPredictorPort:
+        """Return the fixed predictor if checkpoint exists.
+
+        Args:
+            checkpoint_path: Must exist.
+            config_path: Unused.
+            data_config_path: Unused.
+
+        Returns:
+            The shared DummyPredictor instance.
+
+        Raises:
+            FileNotFoundError: If checkpoint does not exist.
+        """
         if not checkpoint_path.exists():
             raise FileNotFoundError(checkpoint_path)
         return self.predictor

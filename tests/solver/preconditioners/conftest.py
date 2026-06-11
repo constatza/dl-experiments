@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from neuralls.domain.solver.preconditioners.implementations.jacobi import JacobiPreconditioner
+from neuralls.domain.solver.preconditioners.ports import ExtraInputPredictorPort
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -70,3 +71,48 @@ def residual_vector() -> NDArray:
         4D residual vector
     """
     return np.array([1.0, 2.0, 3.0, 4.0])
+
+
+@pytest.fixture
+def residual() -> NDArray:
+    """4-element residual vector for port contract tests.
+
+    Returns:
+        4D float64 residual vector of ones
+    """
+    return np.ones(4, dtype=np.float64)
+
+
+class _CapturingPredictor(ExtraInputPredictorPort):
+    """ExtraInputPredictorPort that records extra inputs for assertion."""
+
+    def __init__(self) -> None:
+        """Initialize with empty extra inputs record."""
+        self.last_extra: dict[str, NDArray] = {}
+
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:  # type: ignore[override]
+        """Record extra inputs and return a copy of the residual.
+
+        Args:
+            residual: Input residual vector.
+            **extra_inputs: Named extra arrays to capture.
+
+        Returns:
+            Copy of the residual.
+        """
+        self.last_extra = extra_inputs
+        return residual.copy()
+
+    def cleanup(self) -> None:
+        """No-op cleanup."""
+        pass
+
+
+@pytest.fixture
+def capturing_predictor() -> _CapturingPredictor:
+    """ExtraInputPredictorPort that captures extra inputs passed to apply().
+
+    Returns:
+        Fresh _CapturingPredictor instance
+    """
+    return _CapturingPredictor()
