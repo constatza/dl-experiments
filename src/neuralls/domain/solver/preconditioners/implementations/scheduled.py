@@ -45,6 +45,16 @@ class ScheduledPreconditioner(ContextualPreconditioner):
         self._fallback = fallback
         self._limit_iters = limit_iters
 
+    def bind_inputs(self, **inputs: NDArray) -> None:
+        """Propagate extra inputs to primary and fallback preconditioners.
+
+        Args:
+            **inputs: Named arrays to forward.
+        """
+        self._primary.bind_inputs(**inputs)
+        if self._fallback is not None:
+            self._fallback.bind_inputs(**inputs)
+
     def apply(self, residual: NDArray, context: PreconditionerContext | None = None) -> NDArray:
         """Apply primary or fallback based on schedule.
 
