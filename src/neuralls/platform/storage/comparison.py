@@ -14,6 +14,41 @@ from .datasets import (
 )
 
 
+def load_system_extras(
+    dataset_dir: Path,
+    names: frozenset[str],
+    sample_index: int = 0,
+) -> dict[str, np.ndarray]:
+    """Load named extra arrays from a dataset directory.
+
+    Looks for ``{name}.zarr`` (zarr array, indexed by sample_index on the first
+    axis when ndim > 1) or ``{name}.npy`` (numpy file, loaded as-is). Names
+    not found are silently absent — callers decide how to handle gaps.
+
+    Args:
+        dataset_dir: Root dataset directory.
+        names: Set of array names to load (e.g. frozenset({"coordinates"})).
+        sample_index: Which sample to extract from zarr arrays that have a batch
+            dimension (ndim > 1).
+
+    Returns:
+        Dict mapping found names to float64 numpy arrays.
+    """
+    import zarr as _zarr
+
+    result: dict[str, np.ndarray] = {}
+    for name in names:
+        zarr_path = dataset_dir / f"{name}.zarr"
+        npy_path = dataset_dir / f"{name}.npy"
+        if zarr_path.exists():
+            arr = _zarr.open_array(str(zarr_path), mode="r")
+            data = arr[sample_index] if arr.ndim > 1 else arr[:]
+            result[name] = np.asarray(data, dtype=np.float64)
+        elif npy_path.exists():
+            result[name] = np.load(npy_path).astype(np.float64, copy=False)
+    return result
+
+
 def resolve_system_paths(
     *,
     matrix_path: Path | None,
