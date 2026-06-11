@@ -54,8 +54,11 @@ class MockPredictor(PredictorPort):
         self.cleaned_up = False
         self.apply_count = 0
 
-    def apply(self, residual: NDArray) -> NDArray:
-        """Mock apply: returns half of input."""
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
+        """Mock apply: returns half of input.
+
+        Extra inputs are ignored (typical for mock implementations).
+        """
         self.apply_count += 1
         return residual * 0.5
 

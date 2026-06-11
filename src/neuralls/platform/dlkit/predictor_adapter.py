@@ -59,11 +59,12 @@ class DLKitPredictor(PredictorPort):
         self._predictor: CheckpointPredictor = predictor
         self._device: str = device
 
-    def apply(self, residual: NDArray) -> NDArray:
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Apply neural network to residual.
 
         Args:
             residual: Numpy residual vector
+            **extra_inputs: Optional named extra arrays (currently unused by DLKit models).
 
         Returns:
             Predicted correction (float64 numpy)

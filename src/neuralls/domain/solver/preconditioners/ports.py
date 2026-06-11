@@ -39,11 +39,13 @@ class PredictorPort(ABC):
     """
 
     @abstractmethod
-    def apply(self, residual: NDArray) -> NDArray:
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Apply neural network to residual vector.
 
         Args:
             residual: Residual vector (numpy array, any dtype)
+            **extra_inputs: Optional named extra arrays (e.g., matrix, coordinates).
+                Implementations that do not use extra inputs should ignore them.
 
         Returns:
             Predicted correction (float64 numpy array)

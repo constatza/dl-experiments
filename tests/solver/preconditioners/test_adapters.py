@@ -39,8 +39,11 @@ class MockPredictor(PredictorPort):
         self.cleaned_up = False
         self.apply_count = 0
 
-    def apply(self, residual: NDArray) -> NDArray:
-        """Mock apply that scales residual by 0.5."""
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
+        """Mock apply that scales residual by 0.5.
+
+        Extra inputs are ignored (typical for mock implementations).
+        """
         self.apply_count += 1
         # Preserve shape and return float64
         result = residual * 0.5
