@@ -25,13 +25,13 @@ class TrainingArrays:
     Attributes:
         rhs: Path to rhs.npy
         solutions: Path to solutions.npy
-        matrix_pack: Path to matrix_coo sparse pack directory
+        matrix_zarr: Path to matrix.zarr directory
         sample_count: Number of samples in rhs/solutions
     """
 
     rhs: Path
     solutions: Path
-    matrix_pack: Path
+    matrix_zarr: Path
     sample_count: int
 
 
@@ -56,7 +56,7 @@ def load_training_arrays(data_dir: Path) -> TrainingArrays:
     return TrainingArrays(
         rhs=paths.rhs_path,
         solutions=paths.solutions_path,
-        matrix_pack=paths.matrix_zarr_dir,
+        matrix_zarr=paths.matrix_zarr_dir,
         sample_count=int(rhs.shape[0]),
     )
 

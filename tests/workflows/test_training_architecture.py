@@ -23,7 +23,6 @@ from dlkit.infrastructure.config.data_entries import IPathBased, ValueFeature, V
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
-from dlkit.io import save_sparse_pack
 
 from neuralls.platform.storage.training_artifacts import TrainingArrays
 from neuralls.platform.tracking.mlflow import resolve_runtime_tracking_config
@@ -43,41 +42,38 @@ from neuralls.composition.experiments.training import (
     _resolve_dataset,
     _validate_runtime_dataset_contract,
     _validate_dataset_section,
-    GRAPH_DATASET_NAME,
-    FLEXIBLE_DATASET_NAME,
 )
+
+
+@pytest.fixture
+def sample_rhs() -> np.ndarray:
+    """Sample RHS numpy array (10 samples, 5 features)."""
+    return np.random.default_rng(seed=42).random((10, 5)).astype(np.float64)
+
+
+@pytest.fixture
+def sample_solutions() -> np.ndarray:
+    """Sample solutions numpy array (10 samples, 5 features)."""
+    return np.random.default_rng(seed=43).random((10, 5)).astype(np.float64)
 
 
 @pytest.fixture
 def sample_arrays(tmp_path: Path) -> TrainingArrays:
     """Sample training artifact paths."""
-    rhs = np.random.rand(10, 5).astype(np.float64)
-    solutions = np.random.rand(10, 5).astype(np.float64)
+    rng = np.random.default_rng(seed=42)
+    rhs = rng.random((10, 5)).astype(np.float64)
+    solutions = rng.random((10, 5)).astype(np.float64)
     rhs_path = tmp_path / "rhs.npy"
     solutions_path = tmp_path / "solutions.npy"
     np.save(rhs_path, rhs)
     np.save(solutions_path, solutions)
 
-    matrix = np.eye(5, dtype=np.float64)
-    rows, cols = np.nonzero(matrix)
-    indices_single = np.vstack((rows, cols)).astype(np.int64)
-    values_single = matrix[rows, cols].astype(np.float64)
-    n = rhs.shape[0]
-    indices = np.tile(indices_single, (1, n))
-    values = np.tile(values_single, n)
-    nnz_ptr = np.arange(0, values_single.size * n + 1, values_single.size, dtype=np.int64)
-    matrix_pack = tmp_path / "matrix_coo"
-    save_sparse_pack(
-        path=matrix_pack,
-        indices=indices,
-        values=values,
-        nnz_ptr=nnz_ptr,
-        size=(5, 5),
-    )
+    matrix_zarr = tmp_path / "matrix.zarr"
+    matrix_zarr.mkdir()
     return TrainingArrays(
         rhs=rhs_path,
         solutions=solutions_path,
-        matrix_pack=matrix_pack,
+        matrix_zarr=matrix_zarr,
         sample_count=10,
     )
 
@@ -93,7 +89,7 @@ def training_settings(tmp_path: Path) -> GeneralSettings:
         DATAMODULE=DataModuleSettings(
             dataloader=DataloaderSettings(batch_size=8, num_workers=2, pin_memory=True)
         ),
-        DATASET=DatasetSettings(name="FlexibleDataset", memmap_cache=True),
+        DATASET=DatasetSettings(name="FlexibleDataset"),
         TRAINING=TrainingSettings(
             trainer=TrainerSettings(
                 max_epochs=3,
@@ -121,58 +117,73 @@ def test_validate_dataset_section_passes_if_present() -> None:
     _validate_dataset_section(mock_settings)  # Should not raise
 
 
-def test_create_feature_configs_graph_dataset(sample_arrays: TrainingArrays) -> None:
-    """_create_feature_configs returns x and sparse matrix entries for GraphDataset."""
+def test_create_feature_configs_graph_dataset(
+    sample_arrays: TrainingArrays, sample_rhs: np.ndarray
+) -> None:
+    """_create_feature_configs returns in-memory rhs + path-dropped matrix for GraphDataset."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, GRAPH_DATASET_NAME, contract)
+    features = _create_feature_configs(sample_arrays, sample_rhs, contract)
 
     assert len(features) == 2
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
+    rhs_feature = next(f for f in features if f.name == "x")
+    assert isinstance(rhs_feature, ValueFeature)
+    np.testing.assert_array_equal(rhs_feature.value, sample_rhs)
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, IPathBased)
     assert matrix_feature.model_input is False
-    assert matrix_feature.get_path() == sample_arrays.matrix_pack
+    assert matrix_feature.get_path() == sample_arrays.matrix_zarr
 
 
-def test_create_feature_configs_flexible_dataset(sample_arrays: TrainingArrays) -> None:
-    """_create_feature_configs returns x and sparse matrix entries for FlexibleDataset."""
+def test_create_feature_configs_flexible_dataset(
+    sample_arrays: TrainingArrays, sample_rhs: np.ndarray
+) -> None:
+    """_create_feature_configs returns in-memory rhs + path-dropped matrix for FlexibleDataset."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, FLEXIBLE_DATASET_NAME, contract)
+    features = _create_feature_configs(sample_arrays, sample_rhs, contract)
 
     assert len(features) == 2
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
+    rhs_feature = next(f for f in features if f.name == "x")
+    assert isinstance(rhs_feature, ValueFeature)
+    np.testing.assert_array_equal(rhs_feature.value, sample_rhs)
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, IPathBased)
     assert matrix_feature.model_input is False
-    assert matrix_feature.get_path() == sample_arrays.matrix_pack
+    assert matrix_feature.get_path() == sample_arrays.matrix_zarr
 
 
-def test_create_feature_configs_default_to_flexible(sample_arrays: TrainingArrays) -> None:
-    """_create_feature_configs defaults to x + sparse matrix behavior."""
+def test_create_feature_configs_default_to_flexible(
+    sample_arrays: TrainingArrays, sample_rhs: np.ndarray
+) -> None:
+    """_create_feature_configs defaults to in-memory rhs + path-dropped matrix behavior."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, None, contract)
+    features = _create_feature_configs(sample_arrays, sample_rhs, contract)
 
     assert len(features) == 2
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
+    rhs_feature = next(f for f in features if f.name == "x")
+    assert isinstance(rhs_feature, ValueFeature)
+    np.testing.assert_array_equal(rhs_feature.value, sample_rhs)
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, IPathBased)
-    assert matrix_feature.get_path() == sample_arrays.matrix_pack
+    assert matrix_feature.get_path() == sample_arrays.matrix_zarr
 
 
 def test_create_target_configs_returns_canonical_supervised_target(
-    sample_arrays: TrainingArrays,
+    sample_solutions: np.ndarray,
 ) -> None:
-    """_create_target_configs exposes exactly one runtime target entry."""
+    """_create_target_configs exposes exactly one in-memory runtime target entry."""
     contract = default_training_dataset_contract()
-    targets = _create_target_configs(sample_arrays, contract)
+    targets = _create_target_configs(sample_solutions, contract)
 
     assert len(targets) == 1
     assert targets[0].name == "y"
-    assert isinstance(targets[0], IPathBased)
-    assert targets[0].get_path() == sample_arrays.solutions
+    assert isinstance(targets[0], ValueTarget)
+    np.testing.assert_array_equal(targets[0].value, sample_solutions)
 
 
 def test_parent_run_context_manager() -> None:
@@ -210,11 +221,9 @@ def test_resolve_dataset_returns_new_settings(
     assert updated.DATASET is not None
     assert updated.DATASET.features == tuple(features)
     assert updated.DATASET.targets == tuple(targets)
-    assert updated.DATASET.memmap_cache is False
     assert training_settings.DATASET is not None
     assert training_settings.DATASET.features == ()
     assert training_settings.DATASET.targets == ()
-    assert training_settings.DATASET.memmap_cache is True
 
 
 def test_validate_runtime_dataset_contract_rejects_duplicate_target_names(
@@ -390,6 +399,8 @@ def test_configure_mlflow_returns_new_settings(
 
 def test_contract_override_drives_injection_and_validation(
     sample_arrays: TrainingArrays,
+    sample_rhs: np.ndarray,
+    sample_solutions: np.ndarray,
     training_settings: GeneralSettings,
 ) -> None:
     """Contract-driven helpers honor non-default runtime names."""
@@ -401,8 +412,8 @@ def test_contract_override_drives_injection_and_validation(
         prediction_name="rhs_pred",
         loss_target_key="targets.rhs",
     )
-    features = _create_feature_configs(sample_arrays, GRAPH_DATASET_NAME, contract)
-    targets = _create_target_configs(sample_arrays, contract)
+    features = _create_feature_configs(sample_arrays, sample_rhs, contract)
+    targets = _create_target_configs(sample_solutions, contract)
     settings = training_settings.model_copy(
         update={
             "DATASET": DatasetSettings(

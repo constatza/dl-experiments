@@ -171,7 +171,7 @@ class DenseDatasetWriter:
         )
         sol_arr[:] = payload.solutions
 
-        pack_src = Path(payload.matrix_pack_path)
+        pack_src = Path(payload.matrix_zarr_path)
         if pack_src != paths.matrix_zarr_dir:
             if paths.matrix_zarr_dir.exists():
                 shutil.rmtree(str(paths.matrix_zarr_dir))

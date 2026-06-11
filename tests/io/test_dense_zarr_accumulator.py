@@ -83,7 +83,7 @@ def simple_payload(
     return GeneratedDatasetPayload(
         rhs=rhs,
         solutions=solutions,
-        matrix_pack_path=zarr_path,
+        matrix_zarr_path=zarr_path,
         matrix_size=(2, 2),
         normalization_type="none",
         matrix_norm=1.0,
@@ -253,7 +253,7 @@ def test_writer_creates_rhs_and_solutions_zarr(
     payload = GeneratedDatasetPayload(
         rhs=rhs,
         solutions=solutions,
-        matrix_pack_path=zarr_path,
+        matrix_zarr_path=zarr_path,
         matrix_size=(2, 2),
         normalization_type="matrix",
         matrix_norm=1.0,

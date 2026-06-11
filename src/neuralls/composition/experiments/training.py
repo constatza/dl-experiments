@@ -12,13 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.infrastructure.config.core.patching import patch_model
-from dlkit.infrastructure.config.data_entries import (
+from dlkit.infrastructure.config.entry_factories import (
     DataEntry,
-    Feature,
     FeatureType,
-    SparseFeature,
-    Target,
+    PathFeature,
     TargetType,
+    ValueFeature,
+    ValueTarget,
 )
 from dlkit.infrastructure.config.transform_settings import TransformSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
@@ -28,7 +28,6 @@ from dlkit.infrastructure.config.workflow_configs import (
 )
 from dlkit.interfaces.api import execute
 from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
-from dlkit.io import PackFiles
 from loguru import logger
 from mlflow.tracking import MlflowClient
 import numpy as np
@@ -49,6 +48,7 @@ from neuralls.platform.tracking.mlflow import (
     resolve_runtime_tracking_config,
     runtime_paths_from_env,
 )
+from neuralls.platform.storage.datasets import load_dense_training_arrays
 from neuralls.platform.storage.training_artifacts import (
     TrainingArrays,
     coerce_jsonable,
@@ -104,88 +104,64 @@ def _load_and_prepare_data(
     """Load training data and create Feature/Target configurations.
 
     This function:
-    1. Resolves file-backed dataset artifacts
-    2. Creates DLKit feature entries from file paths
-    3. Creates DLKit target entries from file paths
+    1. Resolves file-backed dataset artifacts (paths)
+    2. Loads dense numpy arrays from rhs.zarr/ and solutions.zarr/
+    3. Creates DLKit in-memory feature entries (ValueFeature/PathFeature)
+    4. Creates DLKit in-memory target entries (ValueTarget)
 
     Args:
         settings: DLKit training or optimization workflow settings.
-        workspace: Experiment workspace (provides data_dir path)
+        workspace: Experiment workspace (provides data_dir path).
+        contract: Runtime dataset contract defining canonical entry names.
 
     Returns:
         Tuple of (arrays, features, targets) where:
             - arrays: Resolved data artifact paths
-            - features: List of path-based feature configs for DLKit
-            - targets: List of path-based target configs for DLKit
+            - features: List of in-memory / path-dropped feature configs for DLKit
+            - targets: List of in-memory target configs for DLKit
     """
     arrays = load_training_arrays(workspace.data_dir)
-    dataset_name = (
-        settings.DATASET.name
-        if settings.DATASET and isinstance(settings.DATASET.name, str)
-        else None
-    )
-    features = _create_feature_configs(arrays, dataset_name, contract)
-    targets = _create_target_configs(arrays, contract)
+    rhs_data, solutions_data = load_dense_training_arrays(workspace.data_dir)
+    features = _create_feature_configs(arrays, rhs_data, contract)
+    targets = _create_target_configs(solutions_data, contract)
     return arrays, features, targets
 
 
 def _create_feature_configs(
     arrays: TrainingArrays,
-    dataset_name: str | None,
+    rhs_data: np.ndarray,
     contract: RuntimeDatasetContract,
 ) -> list[FeatureType]:
-    """Create file-backed Feature configs from dataset artifacts.
+    """Create in-memory Feature configs from dataset artifacts.
 
     Args:
-        arrays: Training data artifact paths
-        dataset_name: Name from [DATASET].name in config
+        arrays: Training data artifact paths (used for matrix path).
+        rhs_data: RHS array loaded from rhs.zarr.
+        contract: Runtime dataset entry name contract.
 
     Returns:
-        List of file-backed features to inject into DATASET section
+        List of feature entries: in-memory rhs + path-dropped matrix.
     """
-    _ = dataset_name
-    sparse_feature = SparseFeature(
-        name=contract.matrix_input_name,
-        path=arrays.matrix_pack,
-        model_input=False,
-    )
-    # Bridge config-type mismatch between SparseFeature.files and current dlkit sparse reader.
-    object.__setattr__(
-        sparse_feature,
-        "files",
-        PackFiles(
-            indices=sparse_feature.files.indices,
-            values=sparse_feature.files.values,
-            nnz_ptr=sparse_feature.files.nnz_ptr,
-        ),
-    )
     return [
-        Feature(
-            name=contract.primary_input_name,
-            path=arrays.rhs,
-        ),
-        sparse_feature,
+        ValueFeature(name=contract.primary_input_name, value=rhs_data),
+        PathFeature(name=contract.matrix_input_name, path=arrays.matrix_zarr, model_input=False),
     ]
 
 
 def _create_target_configs(
-    arrays: TrainingArrays,
+    solutions_data: np.ndarray,
     contract: RuntimeDatasetContract,
 ) -> list[TargetType]:
-    """Create file-backed Target configs from dataset artifacts.
+    """Create in-memory Target configs from dataset artifacts.
 
     Args:
-        arrays: Training data artifact paths
+        solutions_data: Solutions array loaded from solutions.zarr.
+        contract: Runtime dataset entry name contract.
 
     Returns:
-        The canonical supervised target entry for the current workflow.
+        The canonical supervised target entry.
     """
-    return [
-        Target(
-            name=contract.target_name,
-            path=arrays.solutions,
-        ),
-    ]
+    return [ValueTarget(name=contract.target_name, value=solutions_data)]
 
 
 def _find_duplicate_entry_names(entries: tuple[DataEntry, ...]) -> set[str]:
@@ -342,8 +318,6 @@ def _resolve_dataset(
                 "features": features,
                 "targets": targets,
                 "name": base_dataset.name or "FlexibleDataset",
-                # SparseFeature entries are not compatible with current memmap cache path.
-                "memmap_cache": False,
             }
         },
     )
@@ -386,11 +360,12 @@ def _configure_output_paths(
 def _configure_dataloader_runtime(
     settings: TrainingWorkflowSettings,
 ) -> TrainingWorkflowSettings:
-    """Configure dataloader for reliable sparse runtime execution.
+    """Configure dataloader for reliable dense zarr runtime execution.
 
-    Sparse pack readers and constrained runtime environments are currently
+    Dense zarr readers and constrained runtime environments are currently
     safer with single-process dataloading.
     """
+    # TODO: zarr readers may support num_workers > 0; revisit when multiprocess zarr is stable
     datamodule_cfg = settings.DATAMODULE
     if datamodule_cfg is None or datamodule_cfg.dataloader is None:
         return settings
@@ -813,7 +788,7 @@ def train_model(
 
     This is the main entry point for model training. It orchestrates:
     1. Load experiment configuration (model + data configs) into a temp dir
-    2. Resolve dataset artifacts (rhs/solutions/matrix_coo)
+    2. Resolve dataset artifacts (rhs/solutions/matrix_zarr)
     3. Build execute()-time MLflow naming and tags
     4. Configure DLKit settings (dataset, paths, MLflow names)
     5. Execute training via DLKit

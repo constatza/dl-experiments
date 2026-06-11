@@ -640,7 +640,7 @@ def _resolve_final_scale(
 def _build_dataset_payload(
     rhs_all: np.ndarray,
     solutions_all: np.ndarray,
-    matrix_pack_path: Path,
+    matrix_zarr_path: Path,
     matrix_size: tuple[int, int],
     normalize: NormalizeType,
     matrix_norm_type: str,
@@ -653,7 +653,7 @@ def _build_dataset_payload(
     return GeneratedDatasetPayload(
         rhs=rhs_all,
         solutions=solutions_all,
-        matrix_pack_path=matrix_pack_path,
+        matrix_zarr_path=matrix_zarr_path,
         matrix_size=matrix_size,
         normalization_type=str(normalize),
         matrix_norm=matrix_norm,
@@ -796,7 +796,7 @@ def build_dataset_payload(
     # Build dense arrays and finalize the accumulator
     rhs_all = np.vstack(rhs_blocks)
     solutions_all = np.vstack(solution_blocks)
-    matrix_pack_path = accumulator.finalize()
+    matrix_zarr_path = accumulator.finalize()
     matrix_size = accumulator.matrix_size
 
     if matrix_size is None:
@@ -810,7 +810,7 @@ def build_dataset_payload(
     payload = _build_dataset_payload(
         rhs_all,
         solutions_all,
-        matrix_pack_path,
+        matrix_zarr_path,
         matrix_size,
         normalize,
         matrix_norm_type,
