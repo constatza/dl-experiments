@@ -86,6 +86,10 @@ class TestCreateFeaturesFromArray:
         assert len(features) == 1
         assert features[0].name == "custom_feature"
 
+    def test_create_features_model_input_is_true(self, sample_rhs_array: np.ndarray) -> None:
+        features = create_features_from_array(sample_rhs_array, name="x")
+        assert features[0].model_input is True
+
 
 class TestCreateMatrixFeature:
     """Tests for create_matrix_feature function."""
@@ -99,6 +103,18 @@ class TestCreateMatrixFeature:
         feature = create_matrix_feature(sample_matrix_array, name="stiffness")
         assert feature.name == "stiffness"
 
+    def test_create_matrix_feature_excludes_model_input(
+        self, sample_matrix_array: np.ndarray
+    ) -> None:
+        feature = create_matrix_feature(sample_matrix_array)
+        assert feature.model_input is False
+
+    def test_create_matrix_feature_custom_name_excludes_model_input(
+        self, sample_matrix_array: np.ndarray
+    ) -> None:
+        feature = create_matrix_feature(sample_matrix_array, name="stiffness")
+        assert feature.model_input is False
+
 
 class TestCreateTargetsFromArray:
     """Tests for create_targets_from_array function."""
@@ -109,6 +125,12 @@ class TestCreateTargetsFromArray:
         assert isinstance(targets, tuple)
         assert len(targets) == 1
         assert targets[0].name == "y"
+
+    def test_create_targets_write_defaults_to_false(
+        self, sample_solutions_array: np.ndarray
+    ) -> None:
+        targets = create_targets_from_array(sample_solutions_array, name="y")
+        assert targets[0].write is False
 
 
 class TestWithDatasetArrays:

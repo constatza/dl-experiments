@@ -32,13 +32,17 @@ def create_matrix_feature(
 ) -> Any:
     """Create matrix Feature from numpy array.
 
+    Matrix entries are context tensors and must not be forwarded to model.forward().
+    The model_input flag is set to False.
+
     Args:
         array: Input numpy array with matrix data.
+        name: Name of the matrix feature (default: "matrix").
 
     Returns:
-        Feature object for matrix data.
+        Feature object for matrix data with model_input=False.
     """
-    return ValueFeature(name=name, value=array)
+    return ValueFeature(name=name, value=array, model_input=False)
 
 
 def create_targets_from_array(
