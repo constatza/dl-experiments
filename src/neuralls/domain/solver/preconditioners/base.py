@@ -126,6 +126,29 @@ class Preconditioner(ABC):
         """
         return False
 
+    @property
+    def extra_input_names(self) -> tuple[str, ...]:
+        """Names of extra inputs this preconditioner expects beyond the residual.
+
+        The comparison workflow reads this to decide which dataset arrays to load
+        and bind. Default is empty — most preconditioners need only the residual.
+        """
+        return ()
+
+    def bind_inputs(self, **inputs: NDArray) -> None:
+        """Pre-bind named extra inputs before the CG loop starts.
+
+        Called once by the composition layer with data loaded from the dataset
+        (stiffness matrix, coordinates, parameters, etc.). The CG solver then
+        calls apply(residual) and implementations forward stored inputs internally.
+
+        Default is a no-op — override in subclasses that need extra inputs.
+
+        Args:
+            **inputs: Named arrays matching extra_input_names entries.
+        """
+        pass
+
     def __call__(self, residual: NDArray) -> NDArray:
         """Make preconditioner callable: precond(r) is alias for precond.apply(r).
 
