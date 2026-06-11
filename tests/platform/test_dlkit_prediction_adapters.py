@@ -209,6 +209,68 @@ def test_inference_factory_uses_dlkit_structural_prediction_contract(
     assert len(loaded_predictor.calls) == 1
 
 
+@pytest.fixture
+def matrix_array() -> np.ndarray:
+    return np.eye(3, dtype=np.float64)
+
+
+@pytest.mark.parametrize("variant", ["prediction_output"])
+def test_apply_no_extras_uses_positional_call(
+    variant: str,
+    residual_vector: np.ndarray,
+    solver_prediction_tensor: torch.Tensor,
+) -> None:
+    checkpoint_predictor = FakeCheckpointPredictor(
+        _make_supported_result(solver_prediction_tensor, variant)
+    )
+    predictor = DLKitPredictor(checkpoint_predictor, device="cpu")
+
+    predictor.apply(residual_vector)
+
+    args, kwargs = checkpoint_predictor.calls[0]
+    assert len(args) == 1
+    assert len(kwargs) == 0
+
+
+@pytest.mark.parametrize("variant", ["prediction_output"])
+def test_apply_with_extras_uses_keyword_call(
+    variant: str,
+    residual_vector: np.ndarray,
+    matrix_array: np.ndarray,
+    solver_prediction_tensor: torch.Tensor,
+) -> None:
+    checkpoint_predictor = FakeCheckpointPredictor(
+        _make_supported_result(solver_prediction_tensor, variant)
+    )
+    predictor = DLKitPredictor(checkpoint_predictor, device="cpu")
+
+    predictor.apply(residual_vector, matrix=matrix_array)
+
+    args, kwargs = checkpoint_predictor.calls[0]
+    assert len(args) == 0
+    assert "x" in kwargs
+    assert "matrix" in kwargs
+
+
+@pytest.mark.parametrize("variant", ["prediction_output"])
+def test_extra_tensor_has_batch_dimension(
+    variant: str,
+    residual_vector: np.ndarray,
+    matrix_array: np.ndarray,
+    solver_prediction_tensor: torch.Tensor,
+) -> None:
+    checkpoint_predictor = FakeCheckpointPredictor(
+        _make_supported_result(solver_prediction_tensor, variant)
+    )
+    predictor = DLKitPredictor(checkpoint_predictor, device="cpu")
+
+    predictor.apply(residual_vector, matrix=matrix_array)
+
+    _, kwargs = checkpoint_predictor.calls[0]
+    assert kwargs["matrix"].shape == (1, 3, 3)
+    assert kwargs["x"].shape == (1, 3)
+
+
 def test_solver_factory_fails_when_loaded_predictor_has_no_model(
     monkeypatch: pytest.MonkeyPatch,
     checkpoint_path: Path,

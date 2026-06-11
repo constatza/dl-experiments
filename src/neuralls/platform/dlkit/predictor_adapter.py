@@ -33,6 +33,25 @@ if TYPE_CHECKING:
     from dlkit.interfaces.inference import CheckpointPredictor
 
 
+def _extra_to_tensors(
+    extra_inputs: dict[str, NDArray],
+    device: str,
+) -> dict[str, torch.Tensor]:
+    """Convert extra numpy arrays to batched float64 tensors.
+
+    Uses prepare_model_input (numpy → float64 tensor → unsqueeze(0)).
+    Works for any rank: (n,) → (1,n), (n,n) → (1,n,n), etc.
+
+    Args:
+        extra_inputs: Named numpy arrays to convert.
+        device: Target device string ("cpu", "cuda", "mps").
+
+    Returns:
+        Dict of name → batched float64 tensor.
+    """
+    return {name: prepare_model_input(arr, device) for name, arr in extra_inputs.items()}
+
+
 class DLKitPredictor(PredictorPort):
     """DLKit-based predictor with lifecycle management.
 
@@ -63,8 +82,10 @@ class DLKitPredictor(PredictorPort):
         """Apply neural network to residual.
 
         Args:
-            residual: Numpy residual vector
-            **extra_inputs: Optional named extra arrays (currently unused by DLKit models).
+            residual: Numpy residual vector.
+            **extra_inputs: Optional named extra arrays forwarded as named tensors.
+                When absent, falls back to positional predict(tensor) for backward
+                compatibility with models trained without named inputs.
 
         Returns:
             Predicted correction (float64 numpy)
@@ -74,7 +95,12 @@ class DLKitPredictor(PredictorPort):
         """
         try:
             input_tensor = prepare_model_input(residual, self._device)
-            output = self._predictor.predict(input_tensor)
+            if extra_inputs:
+                tensors: dict[str, torch.Tensor] = {"x": input_tensor}
+                tensors.update(_extra_to_tensors(extra_inputs, self._device))
+                output = self._predictor.predict(**tensors)
+            else:
+                output = self._predictor.predict(input_tensor)
             primary = extract_prediction_tensor(output)
             return extract_model_output(primary)
 
