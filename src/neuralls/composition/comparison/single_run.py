@@ -63,14 +63,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from loguru import logger
 
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.models.comparison import ComparisonGeneral
-from neuralls.domain.analysis.spectra import compute_condition_numbers, plot_condition_numbers
+from neuralls.domain.analysis.spectra import (
+    PreconditionerCallable,
+    compute_condition_numbers,
+    plot_condition_numbers,
+)
 from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.storage.filesystem import ensure_dir
 from neuralls.platform.storage.comparison import load_system_arrays, load_system_extras
@@ -665,7 +669,7 @@ def compare_preconditioners(
     # Step 5: Compute condition numbers for diagnostics
     cond_numbers = compute_condition_numbers(
         system.matrix,
-        cast(dict[str, Callable[[np.ndarray], np.ndarray]], preconditioners),
+        cast(dict[str, PreconditionerCallable], preconditioners),
     )
 
     # Step 6: Wrap preconditioners with scheduling if configured

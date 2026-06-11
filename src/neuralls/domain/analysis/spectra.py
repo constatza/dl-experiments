@@ -10,9 +10,11 @@ import numpy as np
 import numpy.linalg as linalg
 from loguru import logger
 
+PreconditionerCallable = Callable[[np.ndarray], np.ndarray]
+
 
 def precondition_matrix(
-    preconditioner: Callable[[np.ndarray], np.ndarray],
+    preconditioner: PreconditionerCallable,
     matrix: np.ndarray,
 ) -> np.ndarray:
     """Precondition a matrix by applying preconditioner to each column.
@@ -37,7 +39,7 @@ def precondition_matrix(
 
 def compute_condition_numbers(
     matrix: np.ndarray,
-    preconditioners: dict[str, Callable[[np.ndarray], np.ndarray]],
+    preconditioners: dict[str, PreconditionerCallable],
 ) -> dict[str, float]:
     cond_numbers: dict[str, float] = {}
     for name, preconditioner in preconditioners.items():
