@@ -23,7 +23,6 @@ from loguru import logger
 from neuralls.domain.solver.preconditioners.ports import (
     ExtraInputPredictorPort,
     PredictorAdapter,
-    PredictorPort,
 )
 from neuralls.domain.solver.preconditioners.tensor_utils import (
     extract_model_output,
@@ -159,7 +158,7 @@ class DLKitAdapter(PredictorAdapter):
         checkpoint_path: Path,
         config_path: Path | None = None,
         data_config_path: Path | None = None,
-    ) -> PredictorPort:
+    ) -> ExtraInputPredictorPort:
         """Create predictor from DLKit checkpoint.
 
         Args:

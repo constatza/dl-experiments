@@ -48,7 +48,7 @@ def compute_condition_numbers(
             cond_numbers[name] = float(linalg.cond(precond_matrix))
         except (ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
             cond_numbers[name] = float("nan")
-            print(f"Warning: could not compute condition number for '{name}': {exc}")
+            logger.warning("Could not compute condition number for '{}': {}", name, exc)
     return cond_numbers
 
 

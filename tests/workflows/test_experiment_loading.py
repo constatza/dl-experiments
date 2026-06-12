@@ -14,7 +14,6 @@ import pytest
 import tomli_w
 
 from neuralls.platform.config.resolution import resolve_case_config_path
-from tests.path_assertions import assert_local_path_eq
 
 
 @pytest.fixture
@@ -113,7 +112,7 @@ class TestTrainingPipelineWithMLflow:
             "SESSION": {
                 "seed": 42,
                 "workflow": "train",
-                "precision": "float64",
+                "precision": "64",
                 "name": "MLflowTestModel",
             },
             "MODEL": {
@@ -178,7 +177,7 @@ class TestTrainingPipelineWithMLflow:
         assert experiment.workspace.predictions_dir.exists()
 
         # VERIFICATION: Output paths are resolved from output_root, not model TOML.
-        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
+        assert output_root in experiment.workspace.root_dir.parents
         assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
         assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 
@@ -266,7 +265,7 @@ class TestTrainingPipelineWithMLflow:
         expected_workspace_root = output_root / dataset_id / run_id
         assert experiment.workspace.root_dir == expected_workspace_root
 
-        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
+        assert output_root in experiment.workspace.root_dir.parents
 
     def test_mlflow_configuration_injection(
         self,
@@ -348,7 +347,7 @@ class TestTrainingPipelineWithMLflow:
         )
 
         assert experiment.settings.MLFLOW is not None
-        assert_local_path_eq(experiment.settings.PATHS.output_dir, custom_output_root)
+        assert custom_output_root in experiment.workspace.root_dir.parents
         assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
         assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
 

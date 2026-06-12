@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import tomli_w
 from dlkit.infrastructure.config.core.patching import patch_model
-from dlkit.infrastructure.config.environment import sync_session_root_to_environment
 from dlkit.infrastructure.config.factories import load_settings
 from dlkit.infrastructure.config.workflow_configs import (
     InferenceWorkflowConfig,
@@ -19,7 +18,6 @@ from dlkit.infrastructure.config.workflow_configs import (
 from neuralls.platform.config.loaders import load_raw_toml
 from neuralls.platform.config.model_mlflow import normalize_model_mlflow
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
-from neuralls.platform.config.resolution import resolve_path_context
 from neuralls.platform.config.settings import NeurallsSettings
 
 type ModelWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
@@ -59,6 +57,7 @@ def build_settings(
     base_settings: ModelWorkflowSettings | None = None,
 ) -> ModelWorkflowSettings:
     """Build DLKit training or optimization settings with runtime paths injected."""
+    del data_cfg, output_override
     dlkit_settings = (
         base_settings
         if base_settings is not None
@@ -67,22 +66,11 @@ def build_settings(
     if getattr(dlkit_settings, "MLFLOW", None) is None:
         dlkit_settings = patch_model(dlkit_settings, {"MLFLOW": {}})
 
-    path_context = resolve_path_context(
-        processed_root=settings.processed_dir,
-        output_root=settings.output_dir,
-        data_dir_override=data_cfg.output.data_dir,
-        output_override=output_override,
-    )
     updates: dict[str, Any] = {
         "TRAINING": {
             "trainer": {
                 "default_root_dir": workspace.root_dir,
             }
-        },
-        "PATHS": {
-            "project_root": str(path_context.project_root),
-            "processed_dir": str(path_context.processed_root),
-            "output_dir": str(path_context.output_root),
         },
     }
     if getattr(dlkit_settings, "MLFLOW", None) is not None or force_mlflow_enabled:
@@ -101,7 +89,15 @@ def build_inference_settings(
     force_mlflow_enabled: bool = False,
 ) -> InferenceWorkflowConfig:
     """Build DLKit inference settings with runtime paths injected."""
-    del mlflow_run_name, mlflow_experiment_name, force_mlflow_enabled
+    del (
+        workspace,
+        data_cfg,
+        settings,
+        output_override,
+        mlflow_run_name,
+        mlflow_experiment_name,
+        force_mlflow_enabled,
+    )
 
     inference_excluded = {"TRAINING", "MLFLOW", "OPTUNA"}
     toml_data = _prepare_model_config(model_config_path)
@@ -109,20 +105,4 @@ def build_inference_settings(
     session = dict(inference_data.get("SESSION") or {})
     session["workflow"] = "inference"
     inference_data["SESSION"] = session
-    dlkit_settings = InferenceWorkflowConfig.model_validate(inference_data)
-    sync_session_root_to_environment(cast(Any, dlkit_settings))
-
-    path_context = resolve_path_context(
-        processed_root=settings.processed_dir,
-        output_root=settings.output_dir,
-        data_dir_override=data_cfg.output.data_dir,
-        output_override=output_override,
-    )
-    updates: dict[str, Any] = {
-        "PATHS": {
-            "project_root": str(path_context.project_root),
-            "processed_dir": str(path_context.processed_root),
-            "output_dir": str(path_context.output_root),
-        },
-    }
-    return patch_model(dlkit_settings, updates)
+    return InferenceWorkflowConfig.model_validate(inference_data)

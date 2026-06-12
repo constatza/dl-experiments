@@ -12,13 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.infrastructure.config.core.patching import patch_model
-from dlkit.infrastructure.config.entry_factories import (
+from dlkit.infrastructure.config.data_entries import (
     DataEntry,
-    FeatureType,
-    PathFeature,
-    TargetType,
-    ValueFeature,
-    ValueTarget,
+    DataRole,
+    ValueEntry,
+    ZarrEntry,
 )
 from dlkit.infrastructure.config.transform_settings import TransformSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
@@ -100,14 +98,14 @@ def _load_and_prepare_data(
     settings: TrainingWorkflowSettings,
     workspace: ExperimentWorkspace,
     contract: RuntimeDatasetContract,
-) -> tuple[TrainingArrays, list[FeatureType], list[TargetType]]:
+) -> tuple[TrainingArrays, list[DataEntry], list[DataEntry]]:
     """Load training data and create Feature/Target configurations.
 
     This function:
     1. Resolves file-backed dataset artifacts (paths)
     2. Loads dense numpy arrays from rhs.zarr/ and solutions.zarr/
-    3. Creates DLKit in-memory feature entries (ValueFeature/PathFeature)
-    4. Creates DLKit in-memory target entries (ValueTarget)
+    3. Creates DLKit in-memory feature entries (ValueEntry/ZarrEntry)
+    4. Creates DLKit in-memory target entries (ValueEntry with DataRole.TARGET)
 
     Args:
         settings: DLKit training or optimization workflow settings.
@@ -131,7 +129,7 @@ def _create_feature_configs(
     arrays: TrainingArrays,
     rhs_data: np.ndarray,
     contract: RuntimeDatasetContract,
-) -> list[FeatureType]:
+) -> list[DataEntry]:
     """Create in-memory Feature configs from dataset artifacts.
 
     Args:
@@ -143,15 +141,15 @@ def _create_feature_configs(
         List of feature entries: in-memory rhs + path-dropped matrix.
     """
     return [
-        ValueFeature(name=contract.primary_input_name, value=rhs_data),
-        PathFeature(name=contract.matrix_input_name, path=arrays.matrix_zarr, model_input=False),
+        ValueEntry(name=contract.primary_input_name, value=rhs_data),
+        ZarrEntry(name=contract.matrix_input_name, path=arrays.matrix_zarr, model_input=False),
     ]
 
 
 def _create_target_configs(
     solutions_data: np.ndarray,
     contract: RuntimeDatasetContract,
-) -> list[TargetType]:
+) -> list[DataEntry]:
     """Create in-memory Target configs from dataset artifacts.
 
     Args:
@@ -161,7 +159,7 @@ def _create_target_configs(
     Returns:
         The canonical supervised target entry.
     """
-    return [ValueTarget(name=contract.target_name, value=solutions_data)]
+    return [ValueEntry(name=contract.target_name, value=solutions_data, data_role=DataRole.TARGET)]
 
 
 def _find_duplicate_entry_names(entries: tuple[DataEntry, ...]) -> set[str]:
@@ -285,8 +283,8 @@ def _validate_dataset_section(settings: TrainingWorkflowSettings) -> None:
 
 def _resolve_dataset(
     settings: TrainingWorkflowSettings,
-    features: list[FeatureType],
-    targets: list[TargetType],
+    features: list[DataEntry],
+    targets: list[DataEntry],
     contract: RuntimeDatasetContract,
 ) -> TrainingWorkflowSettings:
     """Resolve and apply dataset configurations to settings.
@@ -408,8 +406,8 @@ def _configure_mlflow(
 def _configure_training_pipeline(
     settings: TrainingWorkflowSettings,
     workspace: ExperimentWorkspace,
-    features: list[FeatureType],
-    targets: list[TargetType],
+    features: list[DataEntry],
+    targets: list[DataEntry],
     contract: RuntimeDatasetContract,
     mlflow_experiment_name: str,
     mlflow_run_name: str,

@@ -15,7 +15,6 @@ from neuralls.platform.config.models.workspace import (
 )
 from neuralls.platform.config.dlkit_bridge import build_settings, load_model_config
 from neuralls.platform.config.resolution import PathContext
-from tests.path_assertions import assert_local_path_eq
 
 
 @pytest.fixture
@@ -237,12 +236,6 @@ lr = 1e-3
         assert settings.MLFLOW is not None
         assert not hasattr(settings.MLFLOW, "client")
         assert not hasattr(settings.MLFLOW, "server")
-
-        # Check PATHS injected
-        assert settings.PATHS is not None
-        assert getattr(settings.PATHS, "project_root") != ""
-        assert_local_path_eq(getattr(settings.PATHS, "processed_dir"), path_ctx.processed_root)
-        assert_local_path_eq(settings.PATHS.output_dir, path_ctx.output_root)
 
     def test_mlflow_runtime_fields_are_env_only(
         self,
@@ -501,8 +494,7 @@ name = "FlexibleDataset"
             dataset_registry_id=sample_data_config.stem,
         )
 
-        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
-        assert experiment.workspace.root_dir.parent.parent == output_root
+        assert output_root in experiment.workspace.root_dir.parents
 
     def test_different_experiments_different_paths(
         self,

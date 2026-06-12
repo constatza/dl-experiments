@@ -268,7 +268,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
         MetricComponentSettings,
     )
     from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
-    from dlkit.infrastructure.config.data_entries import ValueFeature, ValueTarget
+    from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
 
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
@@ -286,8 +286,8 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
         ),
         DATASET=DatasetSettings(
             name="FlexibleDataset",
-            features=(ValueFeature(name="x", value=X),),
-            targets=(ValueTarget(name="y", value=Y),),
+            features=(ValueEntry(name="x", value=X),),
+            targets=(ValueEntry(name="y", value=Y, data_role=DataRole.TARGET),),
         ),
         TRAINING=TrainingSettings(
             trainer=TrainerSettings(

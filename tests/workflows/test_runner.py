@@ -96,7 +96,7 @@ def test_run_experiments_full_flow(
         "SESSION": {
             "seed": 42,
             "workflow": "train",
-            "precision": "float64",
+            "precision": "64",
             "name": "test_model",
         },
         "MODEL": {
@@ -149,10 +149,6 @@ def test_run_experiments_full_flow(
         },
         "MLFLOW": {"enabled": False},
         "OPTUNA": {"enabled": False},
-        "PATHS": {
-            "project_root": str(tmp_path),
-            "results_dir": str(data_dir / "output"),
-        },
     }
     with open(model_config_path, "wb") as f:
         tomli_w.dump(model_config, f)
@@ -258,7 +254,7 @@ def test_run_experiment_matrix_with_mlflow(
         "SESSION": {
             "seed": 42,
             "workflow": "train",
-            "precision": "float64",
+            "precision": "64",
             "name": "mlflow_test_model",
         },
         "MODEL": {
@@ -307,10 +303,6 @@ def test_run_experiment_matrix_with_mlflow(
             "enabled": True,
         },
         "OPTUNA": {"enabled": False},
-        "PATHS": {
-            "project_root": str(tmp_path),
-            "results_dir": str(data_dir / "output"),
-        },
     }
     with open(model_config_path, "wb") as f:
         tomli_w.dump(model_config, f)

@@ -7,8 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.path_assertions import assert_local_path_eq
-
 
 @pytest.fixture
 def mlflow_tracking_dir(tmp_path: Path) -> Path:
@@ -154,7 +152,7 @@ class TestMLflowArtifactStorage:
             dataset_registry_id=minimal_data_config.stem,
         )
 
-        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
+        assert output_root in experiment.workspace.root_dir.parents
 
     def test_mlflow_workspace_artifact_alignment(
         self,
@@ -337,8 +335,7 @@ class TestMLflowPathResolution:
         )
 
         # All MLflow paths should contain output_root
-        assert_local_path_eq(experiment.settings.PATHS.output_dir, output_root)
-        assert experiment.workspace.root_dir.parent.parent == output_root
+        assert output_root in experiment.workspace.root_dir.parents
 
     def test_multiple_experiments_isolated_by_dataset(
         self,

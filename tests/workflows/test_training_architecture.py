@@ -19,7 +19,7 @@ from dlkit.infrastructure.config import (
     SessionSettings,
     TrainingSettings,
 )
-from dlkit.infrastructure.config.data_entries import IPathBased, ValueFeature, ValueTarget
+from dlkit.infrastructure.config.data_entries import DataRole, IPathBased, ValueEntry
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
@@ -70,6 +70,7 @@ def sample_arrays(tmp_path: Path) -> TrainingArrays:
 
     matrix_zarr = tmp_path / "matrix.zarr"
     matrix_zarr.mkdir()
+    (matrix_zarr / "zarr.json").write_text('{"zarr_format": 3, "node_type": "array"}')
     return TrainingArrays(
         rhs=rhs_path,
         solutions=solutions_path,
@@ -128,7 +129,7 @@ def test_create_feature_configs_graph_dataset(
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
     rhs_feature = next(f for f in features if f.name == "x")
-    assert isinstance(rhs_feature, ValueFeature)
+    assert isinstance(rhs_feature, ValueEntry)
     np.testing.assert_array_equal(rhs_feature.value, sample_rhs)
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, IPathBased)
@@ -147,7 +148,7 @@ def test_create_feature_configs_flexible_dataset(
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
     rhs_feature = next(f for f in features if f.name == "x")
-    assert isinstance(rhs_feature, ValueFeature)
+    assert isinstance(rhs_feature, ValueEntry)
     np.testing.assert_array_equal(rhs_feature.value, sample_rhs)
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, IPathBased)
@@ -166,7 +167,7 @@ def test_create_feature_configs_default_to_flexible(
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
     rhs_feature = next(f for f in features if f.name == "x")
-    assert isinstance(rhs_feature, ValueFeature)
+    assert isinstance(rhs_feature, ValueEntry)
     np.testing.assert_array_equal(rhs_feature.value, sample_rhs)
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, IPathBased)
@@ -182,7 +183,8 @@ def test_create_target_configs_returns_canonical_supervised_target(
 
     assert len(targets) == 1
     assert targets[0].name == "y"
-    assert isinstance(targets[0], ValueTarget)
+    assert isinstance(targets[0], ValueEntry)
+    assert targets[0].data_role == DataRole.TARGET
     np.testing.assert_array_equal(targets[0].value, sample_solutions)
 
 
@@ -233,8 +235,12 @@ def test_validate_runtime_dataset_contract_rejects_duplicate_target_names(
     duplicate_targets = DatasetSettings(
         name="FlexibleDataset",
         targets=(
-            ValueTarget(name="y", value=np.zeros((1, 1), dtype=np.float64)),
-            ValueTarget(name="y", value=np.ones((1, 1), dtype=np.float64)),
+            ValueEntry(
+                name="y", value=np.zeros((1, 1), dtype=np.float64), data_role=DataRole.TARGET
+            ),
+            ValueEntry(
+                name="y", value=np.ones((1, 1), dtype=np.float64), data_role=DataRole.TARGET
+            ),
         ),
     )
     duplicate_settings = training_settings.model_copy(update={"DATASET": duplicate_targets})
@@ -251,8 +257,8 @@ def test_validate_runtime_dataset_contract_rejects_duplicate_feature_names(
     duplicate_features = DatasetSettings(
         name="FlexibleDataset",
         features=(
-            ValueFeature(name="x", value=np.zeros((1, 1), dtype=np.float64)),
-            ValueFeature(name="x", value=np.ones((1, 1), dtype=np.float64)),
+            ValueEntry(name="x", value=np.zeros((1, 1), dtype=np.float64)),
+            ValueEntry(name="x", value=np.ones((1, 1), dtype=np.float64)),
         ),
     )
     duplicate_settings = training_settings.model_copy(update={"DATASET": duplicate_features})
@@ -270,7 +276,13 @@ def test_validate_runtime_dataset_contract_rejects_unsupported_target_placeholde
         update={
             "DATASET": DatasetSettings(
                 name="FlexibleDataset",
-                targets=(ValueTarget(name="solutions", value=np.zeros((1, 1), dtype=np.float64)),),
+                targets=(
+                    ValueEntry(
+                        name="solutions",
+                        value=np.zeros((1, 1), dtype=np.float64),
+                        data_role=DataRole.TARGET,
+                    ),
+                ),
             )
         }
     )
@@ -311,7 +323,13 @@ def test_resolve_dataset_rejects_unmatched_target_placeholder(
         update={
             "DATASET": DatasetSettings(
                 name="FlexibleDataset",
-                targets=(ValueTarget(name="z", value=np.zeros((1, 1), dtype=np.float64)),),
+                targets=(
+                    ValueEntry(
+                        name="z",
+                        value=np.zeros((1, 1), dtype=np.float64),
+                        data_role=DataRole.TARGET,
+                    ),
+                ),
             )
         }
     )
@@ -329,7 +347,7 @@ def test_resolve_dataset_rejects_unmatched_feature_placeholder(
         update={
             "DATASET": DatasetSettings(
                 name="FlexibleDataset",
-                features=(ValueFeature(name="rhs", value=np.zeros((1, 1), dtype=np.float64)),),
+                features=(ValueEntry(name="rhs", value=np.zeros((1, 1), dtype=np.float64)),),
             )
         }
     )
@@ -418,8 +436,14 @@ def test_contract_override_drives_injection_and_validation(
         update={
             "DATASET": DatasetSettings(
                 name="FlexibleDataset",
-                features=(ValueFeature(name="lhs", value=np.zeros((1, 1), dtype=np.float64)),),
-                targets=(ValueTarget(name="rhs", value=np.zeros((1, 1), dtype=np.float64)),),
+                features=(ValueEntry(name="lhs", value=np.zeros((1, 1), dtype=np.float64)),),
+                targets=(
+                    ValueEntry(
+                        name="rhs",
+                        value=np.zeros((1, 1), dtype=np.float64),
+                        data_role=DataRole.TARGET,
+                    ),
+                ),
             ),
             "TRAINING": training_settings.TRAINING.model_copy(
                 update={

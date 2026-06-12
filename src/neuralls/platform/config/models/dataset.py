@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 from dlkit.infrastructure.config.core.patching import patch_model
-from dlkit.infrastructure.config.data_entries import ValueFeature, ValueTarget
+from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
 from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 
@@ -23,7 +23,7 @@ def create_features_from_array(
     Returns:
         Tuple containing single Feature created from array.
     """
-    return (ValueFeature(name=name, value=array),)
+    return (ValueEntry(name=name, value=array),)
 
 
 def create_matrix_feature(
@@ -42,7 +42,7 @@ def create_matrix_feature(
     Returns:
         Feature object for matrix data with model_input=False.
     """
-    return ValueFeature(name=name, value=array, model_input=False)
+    return ValueEntry(name=name, value=array, model_input=False)
 
 
 def create_targets_from_array(
@@ -58,7 +58,7 @@ def create_targets_from_array(
     Returns:
         Tuple containing single Target created from array.
     """
-    return (ValueTarget(name=name, value=array),)
+    return (ValueEntry(name=name, value=array, data_role=DataRole.TARGET),)
 
 
 def with_dataset_arrays(

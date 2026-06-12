@@ -21,7 +21,7 @@ MODEL_CONFIG_TEMPLATE = """
 [SESSION]
 seed = 42
 workflow = "train"
-precision = "float64"
+precision = "64"
 
 [MODEL]
 name = "{model_name}"

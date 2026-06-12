@@ -84,13 +84,14 @@ def residual() -> NDArray:
 
 
 class _MinimalPredictor(PredictorPort):
-    """Minimal implementation of base PredictorPort — no extra inputs."""
+    """Minimal implementation of base PredictorPort — ignores extra inputs."""
 
-    def apply(self, residual: NDArray) -> NDArray:
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Return a copy of the residual unchanged.
 
         Args:
             residual: Input residual vector.
+            **extra_inputs: Accepted but ignored.
 
         Returns:
             Copy of the residual.
@@ -109,7 +110,7 @@ class _CapturingPredictor(ExtraInputPredictorPort):
         """Initialize with empty extra inputs record."""
         self.last_extra: dict[str, NDArray] = {}
 
-    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:  # type: ignore[override]
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Record extra inputs and return a copy of the residual.
 
         Args:

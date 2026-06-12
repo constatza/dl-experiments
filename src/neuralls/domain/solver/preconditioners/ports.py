@@ -45,11 +45,14 @@ class PredictorPort(ABC):
     """
 
     @abstractmethod
-    def apply(self, residual: NDArray) -> NDArray:
+    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Apply neural network to residual vector.
 
         Args:
             residual: Residual vector (numpy array, any dtype)
+            **extra_inputs: Optional named arrays forwarded to the model
+                (e.g., matrix=A). Implementations that do not need extra
+                inputs should accept and ignore them.
 
         Returns:
             Predicted correction (float64 numpy array)
@@ -75,13 +78,15 @@ class PredictorPort(ABC):
 
 
 class ExtraInputPredictorPort(PredictorPort):
-    """PredictorPort extension for models that accept named extra inputs.
+    """Marker for predictors that actively use named extra inputs.
 
-    Implement this instead of PredictorPort when the model needs more than
-    the residual — e.g., stiffness matrix, node coordinates, PDE parameters.
+    Inherit from this (instead of PredictorPort directly) when the model
+    needs more than the residual — e.g., stiffness matrix, node coordinates,
+    PDE parameters.  The apply() signature is inherited from PredictorPort
+    (which already accepts **extra_inputs), so no re-declaration is needed.
 
-    The base PredictorPort.apply(residual) contract is preserved for callers
-    that do not know about extra inputs.
+    The marker enables isinstance checks that distinguish capable predictors
+    from minimal ones, without introducing a duplicate abstract method.
 
     Example:
         >>> class MyPredictor(ExtraInputPredictorPort):
@@ -92,20 +97,6 @@ class ExtraInputPredictorPort(PredictorPort):
         ...     def cleanup(self) -> None: ...
     """
 
-    @abstractmethod
-    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
-        """Apply neural network to residual with optional named extra inputs.
-
-        Args:
-            residual: Residual vector
-            **extra_inputs: Named arrays forwarded to the model as keyword tensors
-                (e.g., matrix=A, coordinates=coords).
-
-        Returns:
-            Predicted correction (float64 numpy array)
-        """
-        ...
-
 
 class PredictorAdapter(ABC):
     """Abstract adapter for creating predictors from checkpoints.
@@ -115,7 +106,7 @@ class PredictorAdapter(ABC):
 
     Design:
         - Adapter pattern: Converts framework-specific API to port interface
-        - Factory method: create_predictor() returns PredictorPort
+        - Factory method: create_predictor() returns ExtraInputPredictorPort
         - Dependency inversion: Domain depends on port, not adapter
     """
 
@@ -125,7 +116,7 @@ class PredictorAdapter(ABC):
         checkpoint_path: Path,
         config_path: Path | None = None,
         data_config_path: Path | None = None,
-    ) -> PredictorPort:
+    ) -> ExtraInputPredictorPort:
         """Create predictor from checkpoint.
 
         Args:
@@ -134,7 +125,7 @@ class PredictorAdapter(ABC):
             data_config_path: Optional data config (unused by some adapters)
 
         Returns:
-            PredictorPort instance (use as context manager for cleanup)
+            ExtraInputPredictorPort instance (use as context manager for cleanup)
 
         Raises:
             FileNotFoundError: If checkpoint doesn't exist

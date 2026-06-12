@@ -14,9 +14,6 @@ from neuralls.composition.experiments.assembler import load_experiment
 MINIMAL_FFNN_CONFIG = """
 [SESSION]
 seed = 42
-[PATHS]
-project_root = "{tmp_dir}"
-results_dir = "{tmp_dir}/output"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1
@@ -35,9 +32,6 @@ module_path = "dlkit.nn"
 MINIMAL_LINEAR_CONFIG = """
 [SESSION]
 seed = 42
-[PATHS]
-project_root = "{tmp_dir}"
-results_dir = "{tmp_dir}/output"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1
@@ -54,9 +48,6 @@ module_path = "dlkit.nn"
 MINIMAL_GNN_CONFIG = """
 [SESSION]
 seed = 42
-[PATHS]
-project_root = "{tmp_dir}"
-results_dir = "{tmp_dir}/output"
 [TRAINING]
 [TRAINING.trainer]
 max_epochs = 1

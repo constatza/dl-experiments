@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loguru import logger
 from numpy.typing import NDArray
 
 from ..base import NonLinearPreconditioner, PreconditionerContext
@@ -63,19 +64,12 @@ class NeuralPreconditioner(NonLinearPreconditioner):
         self._extra_input_names: tuple[str, ...] = extra_input_names
         self._extra_inputs: dict[str, NDArray] = {}
 
-        # Load predictor (GPU model)
-        predictor = adapter.create_predictor(
+        # Load predictor (GPU model); adapter contract guarantees ExtraInputPredictorPort
+        self._predictor: ExtraInputPredictorPort = adapter.create_predictor(
             checkpoint_path=checkpoint_path,
             config_path=config_path,
             data_config_path=data_config_path,
         )
-        if not isinstance(predictor, ExtraInputPredictorPort):
-            raise TypeError(
-                f"NeuralPreconditioner requires an ExtraInputPredictorPort, "
-                f"got {type(predictor).__name__}. "
-                "Ensure the adapter returns an extra-input-capable predictor."
-            )
-        self._predictor: ExtraInputPredictorPort = predictor
 
     @property
     def extra_input_names(self) -> tuple[str, ...]:
@@ -85,11 +79,19 @@ class NeuralPreconditioner(NonLinearPreconditioner):
     def bind_inputs(self, **inputs: NDArray) -> None:
         """Store extra named inputs for forwarding on each apply() call.
 
-        Only keys declared in extra_input_names are retained; others are ignored.
+        Only keys declared in extra_input_names are retained; others are ignored
+        with a warning so misconfigured extra_input_names is detectable.
 
         Args:
             **inputs: Named arrays matching extra_input_names entries.
         """
+        unexpected = set(inputs) - set(self._extra_input_names)
+        if unexpected:
+            logger.warning(
+                "bind_inputs: keys {} not in extra_input_names {} — ignored",
+                unexpected,
+                self._extra_input_names,
+            )
         self._extra_inputs = {k: v for k, v in inputs.items() if k in self._extra_input_names}
 
     def apply(self, residual: NDArray, context: PreconditionerContext | None = None) -> NDArray:

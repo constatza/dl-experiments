@@ -100,6 +100,9 @@ from neuralls.domain.solver.models.result import (
 )
 
 
+# Arrays always available from LinearSystem — never need loading from disk.
+_SYSTEM_ARRAYS_ALWAYS_AVAILABLE: frozenset[str] = frozenset({"matrix"})
+
 StoppingCriterion = Literal["tolerance", "fixed_iterations"]
 
 
@@ -666,40 +669,44 @@ def compare_preconditioners(
     service = PreconditionerService()
     preconditioners = service.create_preconditioner_set(system.matrix, preconditioner_configs)
 
-    # Step 5: Compute condition numbers for diagnostics
-    cond_numbers = compute_condition_numbers(
-        system.matrix,
-        cast(dict[str, PreconditionerCallable], preconditioners),
-    )
-
-    # Step 6: Wrap preconditioners with scheduling if configured
+    # Step 5: Wrap preconditioners with scheduling if configured
     scheduled_preconditioners = _create_scheduled_preconditioners(
         preconditioner_configs=preconditioner_configs,
         matrix=system.matrix,
         base_preconditioners=preconditioners,
     )
 
-    # Step 6.5: Bind extra inputs to scheduled preconditioners that declare them.
+    # Step 5.5: Bind extra inputs to scheduled preconditioners that declare them.
     # Binding on the scheduled wrapper ensures ScheduledPreconditioner.bind_inputs()
     # propagates to the inner preconditioner — no hidden ordering invariant.
-    _needed_extra_names = frozenset(
+    needed_extra_names = frozenset(
         name
         for p in scheduled_preconditioners.values()
         if isinstance(p, BindableInputs)
         for name in p.extra_input_names
-        if name != "matrix"
+        if name not in _SYSTEM_ARRAYS_ALWAYS_AVAILABLE
     )
-    _extra_data: dict[str, np.ndarray] = {}
-    if _needed_extra_names and paths.matrix.is_dir():
-        _extra_data = load_system_extras(
+    extra_data: dict[str, np.ndarray] = {}
+    if needed_extra_names and paths.matrix.is_dir():
+        extra_data = load_system_extras(
             paths.matrix,
-            _needed_extra_names,
+            needed_extra_names,
             sample_index=general_params.data.matrix_index,
         )
     _bind_system_inputs(
         scheduled_preconditioners,
-        {"matrix": system.matrix, **_extra_data},
+        {"matrix": system.matrix, **extra_data},
     )
+
+    # Step 6: Compute condition numbers on fully-initialised preconditioners.
+    # Must run after binding so neural preconditioners forward their bound extra
+    # inputs internally when __call__(column) is invoked.
+    # Wrap as single-input callables: Preconditioner.__call__(r) already
+    # dispatches through apply(r) which includes bound _extra_inputs.
+    cond_callables: dict[str, PreconditionerCallable] = {
+        name: p for name, p in scheduled_preconditioners.items()
+    }
+    cond_numbers = compute_condition_numbers(system.matrix, cond_callables)
 
     # Step 7: Run CG comparison with scheduled preconditioners
     results = run_cg_comparison(
