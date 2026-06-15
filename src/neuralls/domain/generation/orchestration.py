@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from loguru import logger
-from scipy.sparse import csc_matrix
-
 from .data_types import NormalizeType
 from neuralls.shared.types import ScaleMetadata
-from neuralls.domain.normalization import ErrorTraceSamples, ResidualTraceSamples
+from neuralls.domain.normalization import ErrorTraceSamples, IScale, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .helpers import serialize_scale_metadata
 from .trace_utils import (
@@ -29,7 +28,9 @@ from .ports import ZarrAccumulatorPort
 from .runner import strategy_supports_matrix_replacement
 from .source_streams import (
     EnumerateBy,
+    MatrixSampleStream,
     SystemBinding,
+    VectorSampleStream,
     bind_sources,
     open_matrix_stream,
     open_vector_stream,
@@ -104,6 +105,7 @@ def generate_mixture(
     archive_solutions: np.ndarray | None = None,
     archive_rhs: np.ndarray | None = None,
     single_rhs: np.ndarray | None = None,
+    single_solution: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, ResidualTraceSamples | None, ErrorTraceSamples | None]:
     """Generate mixed training data from multiple strategies.
 
@@ -122,6 +124,9 @@ def generate_mixture(
         archive_rhs: Pre-computed RHS vectors for archive-based generation
         single_rhs: Optional single RHS vector, shape (n,). If provided to single-RHS strategies
             (trace strategies), all samples will solve the same system A @ x = single_rhs
+        single_solution: Optional single pre-computed solution vector, shape (n,). If provided
+            and no archive_solutions are present, it is used as a single-row archive for
+            archive-based strategies.
 
     Returns:
         Tuple of (features, targets, residual_traces, error_traces):
@@ -191,9 +196,15 @@ def generate_mixture(
         cfg.setdefault("samples", count)
         cfg.setdefault("seed", seed)
 
+        effective_archive_solutions = archive_solutions
+        if single_solution is not None and archive_solutions is None:
+            effective_archive_solutions = single_solution.reshape(1, -1)
+
         archive_data: ArchiveData | None = None
-        if archive_solutions is not None:
-            archive_data = ArchiveData(solutions=archive_solutions, rhs_vectors=archive_rhs)
+        if effective_archive_solutions is not None:
+            archive_data = ArchiveData(
+                solutions=effective_archive_solutions, rhs_vectors=archive_rhs
+            )
 
         cfg["samples"] = count
 
@@ -252,7 +263,6 @@ class _CachedMatrix:
 
     Attributes:
         matrix_norm: Normalized system matrix (as dense array)
-        matrix_for_generation: CSC sparse version of normalized matrix
         scale: IScale object or None (scaling strategy applied)
         matrix_norm_value: Computed matrix norm value
         matrix_value_scale: Scaling factor applied
@@ -260,8 +270,7 @@ class _CachedMatrix:
     """
 
     matrix_norm: np.ndarray
-    matrix_for_generation: Any  # csc_matrix; avoid top-level scipy import
-    scale: Any  # IScale | None
+    scale: IScale | None
     matrix_norm_value: float
     matrix_value_scale: float
     scale_params: ScaleMetadata | None
@@ -272,17 +281,27 @@ def _open_streams(
     rhs_path: str | None,
     sample_id_regex: str | None,
     enumerate_by: EnumerateBy | None,
-) -> tuple[Any, Any, list[Any]]:
-    """Open matrix and optional RHS streams and bind them.
+    parameters_paths: tuple[str, ...] = (),
+    solution_path: str | None = None,
+) -> tuple[
+    MatrixSampleStream,
+    VectorSampleStream | None,
+    VectorSampleStream | None,
+    list[VectorSampleStream],
+    list[SystemBinding],
+]:
+    """Open matrix, optional RHS, optional solution, and optional parameter streams and bind them.
 
     Args:
         matrix_path: Path expression for matrix stream
         rhs_path: Optional path expression for RHS stream
         sample_id_regex: Optional regex for sample ID extraction
         enumerate_by: Optional sequential ID assignment strategy for glob sources
+        parameters_paths: Tuple of path expressions for parameter vector streams
+        solution_path: Optional path expression for pre-computed solution stream
 
     Returns:
-        Tuple of (matrix_stream, rhs_stream, bindings)
+        Tuple of (matrix_stream, rhs_stream, solution_stream, param_streams, bindings)
     """
     matrix_stream = open_matrix_stream(
         matrix_path_expr=matrix_path,
@@ -298,12 +317,26 @@ def _open_streams(
         if rhs_path is not None
         else None
     )
+    solution_stream = (
+        open_vector_stream(
+            solution_path,
+            sample_id_regex=sample_id_regex,
+            enumerate_by=enumerate_by,
+        )
+        if solution_path is not None
+        else None
+    )
+    param_streams = [
+        open_vector_stream(p, sample_id_regex=sample_id_regex, enumerate_by=enumerate_by)
+        for p in parameters_paths
+    ]
     bindings = bind_sources(
         matrix_ids=matrix_stream.sample_ids,
         rhs_ids=rhs_stream.sample_ids if rhs_stream is not None else None,
-        solution_ids=None,
+        solution_ids=solution_stream.sample_ids if solution_stream is not None else None,
+        parameters_ids_list=tuple(s.sample_ids for s in param_streams),
     )
-    return matrix_stream, rhs_stream, bindings
+    return matrix_stream, rhs_stream, solution_stream, param_streams, bindings
 
 
 def _strategy_uses_finite_source(
@@ -460,12 +493,9 @@ class _BindingResult:
 
 
 def _process_binding(
-    binding: Any,
-    matrix_stream: Any,
-    rhs_stream: Any,
-    matrix_cache: dict[int, _CachedMatrix],
-    normalize: NormalizeType,
-    matrix_norm_type: str,
+    binding: SystemBinding,
+    rhs_stream: VectorSampleStream | None,
+    get_matrix: Callable[[int], _CachedMatrix],
     counts: dict[str, int] | None,
     mix: dict[str, float] | None,
     total: int | None,
@@ -473,59 +503,27 @@ def _process_binding(
     shuffle: bool,
     strategy_overrides: dict[str, dict[str, Any]] | None,
     solver_overrides: dict[str, TracingSolverCallable] | None = None,
+    solution_stream: VectorSampleStream | None = None,
 ) -> _BindingResult:
     """Process one matrix-RHS binding and generate samples.
 
     Args:
         binding: Single binding to process
-        matrix_stream: Opened matrix stream
         rhs_stream: Optional opened RHS stream
-        matrix_cache: Cache of computed matrices
-        normalize: Normalization type
-        matrix_norm_type: Norm type for matrix calculation
+        get_matrix: Callable ``(sample_id: int) -> _CachedMatrix``; caches internally
         counts: Sample counts per strategy
         mix: Mixing proportions
         total: Total samples
         seed: Random seed
         shuffle: Whether to shuffle samples
         strategy_overrides: Strategy-specific overrides
+        solver_overrides: Optional per-strategy solver overrides
+        solution_stream: Optional opened solution stream for per-binding pre-computed solutions
 
     Returns:
         BindingResult with generated data blocks
     """
-    from neuralls.domain.linalg import calculate_matrix_norm
-
-    # Get or compute normalized matrix
-    cached = matrix_cache.get(binding.matrix_sample_id)
-    if cached is None:
-        from .helpers import _normalize_matrix_for_generation
-
-        dense_sample = matrix_stream.load_dense_sample(binding.matrix_sample_id)
-        dense_matrix = np.asarray(dense_sample.matrix, dtype=np.float64)
-        if dense_matrix.shape[0] != dense_matrix.shape[1]:
-            raise ValueError(
-                f"Matrix sample {binding.matrix_sample_id} must be square, got {dense_matrix.shape}"
-            )
-        matrix_norm, scale, matrix_value_scale = _normalize_matrix_for_generation(
-            dense_matrix,
-            normalize,
-            spectral_radius_bound=None,
-        )
-        matrix_for_generation = csc_matrix(matrix_norm)
-        matrix_norm_value = calculate_matrix_norm(
-            matrix_norm,
-            norm_type=matrix_norm_type,
-        )
-        scale_params = serialize_scale_metadata(scale)
-        cached = _CachedMatrix(
-            matrix_norm=matrix_norm,
-            matrix_for_generation=matrix_for_generation,
-            scale=scale,
-            matrix_norm_value=matrix_norm_value,
-            matrix_value_scale=matrix_value_scale,
-            scale_params=scale_params,
-        )
-        matrix_cache[binding.matrix_sample_id] = cached
+    cached = get_matrix(binding.matrix_sample_id)
 
     # Load optional RHS
     single_rhs: np.ndarray | None = None
@@ -540,13 +538,19 @@ def _process_binding(
         if cached.scale is not None:
             single_rhs = cached.scale.scale_rhs(single_rhs)
 
+    # Load optional per-binding solution
+    single_solution: np.ndarray | None = None
+    if solution_stream is not None and binding.solution_sample_id is not None:
+        sol_sample = solution_stream.load_sample(binding.solution_sample_id)
+        single_solution = np.asarray(sol_sample.vector, dtype=np.float64)
+
     # Generate mixture
     logger.info(
         f"Generating/loading samples for binding sample_id={binding.sample_id} "
         f"(matrix_id={binding.matrix_sample_id})..."
     )
     X, Y, residual_traces, error_traces = generate_mixture(
-        cached.matrix_for_generation,
+        cached.matrix_norm,
         counts=counts,
         mix=mix,
         total=total,
@@ -555,6 +559,7 @@ def _process_binding(
         strategy_overrides=strategy_overrides,
         solver_overrides=solver_overrides,
         single_rhs=single_rhs,
+        single_solution=single_solution,
     )
 
     # Select final blocks based on available traces
@@ -671,6 +676,8 @@ def build_dataset_payload(
     mix: dict[str, float] | None = None,
     total: int | None = None,
     rhs_path: str | None = None,
+    solution_path: str | None = None,
+    parameters_paths: tuple[str, ...] = (),
     sample_id_regex: str | None = None,
     enumerate_by: EnumerateBy | None = None,
     replacement: bool = False,
@@ -693,6 +700,10 @@ def build_dataset_payload(
         mix: Mixing proportions
         total: Total sample count
         rhs_path: Optional path expression for RHS stream
+        solution_path: Optional path expression for pre-computed solution stream; when
+            provided, each binding loads the corresponding solution vector and passes it
+            into generate_mixture as an archive seed.
+        parameters_paths: Tuple of path expressions for parameter vector streams
         sample_id_regex: Optional regex for sample ID extraction
         enumerate_by: Optional sequential ID assignment strategy for glob sources
         replacement: Whether multi-matrix allocation may reuse matrix bindings for supported
@@ -702,6 +713,8 @@ def build_dataset_payload(
         shuffle: Whether to shuffle samples
         seed: Random seed for reproducibility
         strategy_overrides: Strategy-specific configuration overrides
+        solver_overrides: Optional per-strategy solver overrides
+        accumulator: Zarr accumulator for writing matrix samples
 
     Returns:
         Immutable generated dataset payload ready for persistence.
@@ -710,13 +723,19 @@ def build_dataset_payload(
     logger.info(f"  Matrix: {matrix_path}")
     if rhs_path is not None:
         logger.info(f"  RHS source: {rhs_path}")
+    if solution_path is not None:
+        logger.info(f"  Solution stream: {solution_path}")
+    for i, pp in enumerate(parameters_paths):
+        logger.info(f"  Parameters stream [{i}]: {pp}")
 
     # Open streams and bind sources
-    matrix_stream, rhs_stream, bindings = _open_streams(
+    matrix_stream, rhs_stream, solution_stream, param_streams, bindings = _open_streams(
         matrix_path,
         rhs_path,
         sample_id_regex,
         enumerate_by,
+        parameters_paths,
+        solution_path,
     )
     logger.info(
         f"  Matrix samples: {len(matrix_stream.sample_ids)} | System bindings: {len(bindings)}"
@@ -733,15 +752,40 @@ def build_dataset_payload(
         num_matrix_samples=len(matrix_stream.sample_ids),
     )
 
+    # Define cached matrix loader — computes normalization once per unique matrix_sample_id
+    @cache
+    def _get_matrix(sample_id: int) -> _CachedMatrix:
+        from neuralls.domain.linalg import calculate_matrix_norm
+        from .helpers import _normalize_matrix_for_generation
+
+        dense_sample = matrix_stream.load_dense_sample(sample_id)
+        dense_matrix = np.asarray(dense_sample.matrix, dtype=np.float64)
+        if dense_matrix.shape[0] != dense_matrix.shape[1]:
+            raise ValueError(f"Matrix sample {sample_id} must be square, got {dense_matrix.shape}")
+        matrix_norm, scale, matrix_value_scale = _normalize_matrix_for_generation(
+            dense_matrix,
+            normalize,
+            spectral_radius_bound=None,
+        )
+        matrix_norm_value = calculate_matrix_norm(matrix_norm, norm_type=matrix_norm_type)
+        scale_params = serialize_scale_metadata(scale)
+        return _CachedMatrix(
+            matrix_norm=matrix_norm,
+            scale=scale,
+            matrix_norm_value=matrix_norm_value,
+            matrix_value_scale=matrix_value_scale,
+            scale_params=scale_params,
+        )
+
     # Setup accumulators
     single_matrix_mode = len(matrix_stream.sample_ids) == 1
     single_matrix_written = False
     rhs_blocks: list[np.ndarray] = []
     solution_blocks: list[np.ndarray] = []
+    param_blocks: list[list[np.ndarray]] = [[] for _ in param_streams]
     matrix_norm_values: list[float] = []
     matrix_value_scale_values: list[float] = []
     scale_metadata_values: list[ScaleMetadata | None] = []
-    matrix_cache: dict[int, _CachedMatrix] = {}
     emitted_binding_count = 0
 
     # Process each binding
@@ -751,11 +795,8 @@ def build_dataset_payload(
             continue
         result = _process_binding(
             binding,
-            matrix_stream,
             rhs_stream,
-            matrix_cache,
-            normalize,
-            matrix_norm_type,
+            _get_matrix,
             binding_strategy_counts,
             None,
             None,
@@ -763,10 +804,12 @@ def build_dataset_payload(
             shuffle,
             strategy_overrides,
             solver_overrides=solver_overrides,
+            solution_stream=solution_stream,
         )
 
         # Skip empty results
-        if result.rhs_block.shape[0] == 0:
+        n_samples = result.rhs_block.shape[0]
+        if n_samples == 0:
             continue
 
         # Accumulate blocks and metadata
@@ -774,17 +817,20 @@ def build_dataset_payload(
         solution_blocks.append(result.solution_block)
         emitted_binding_count += 1
 
-        # Cache matrix in appropriate format and accumulate
-        cached = matrix_cache.get(binding.matrix_sample_id)
-        if cached is not None:
-            if single_matrix_mode:
-                if not single_matrix_written:
-                    accumulator.append_dense_matrix(cached.matrix_norm, repeats=1)
-                    single_matrix_written = True
-            else:
-                accumulator.append_dense_matrix(
-                    cached.matrix_norm, repeats=int(result.rhs_block.shape[0])
-                )
+        # Accumulate parameter vectors tiled to match sample count
+        for k, (stream, sample_id) in enumerate(zip(param_streams, binding.parameters_sample_ids)):
+            if sample_id is not None:
+                vec = stream.load_sample(sample_id).vector
+                param_blocks[k].append(np.tile(vec, (n_samples, 1)))
+
+        # Accumulate matrix for Zarr store
+        cached = _get_matrix(binding.matrix_sample_id)
+        if single_matrix_mode:
+            if not single_matrix_written:
+                accumulator.append_dense_matrix(cached.matrix_norm, repeats=1)
+                single_matrix_written = True
+        else:
+            accumulator.append_dense_matrix(cached.matrix_norm, repeats=int(n_samples))
 
         matrix_norm_values.append(result.matrix_norm_value)
         matrix_value_scale_values.append(result.matrix_value_scale)
@@ -792,6 +838,9 @@ def build_dataset_payload(
 
     if not rhs_blocks or not solution_blocks:
         raise ValueError("No samples were generated for dataset persistence.")
+
+    # Stack all parameter arrays
+    parameters_arrays: list[np.ndarray] = [np.vstack(blocks) for blocks in param_blocks if blocks]
 
     # Build dense arrays and finalize the accumulator
     rhs_all = np.vstack(rhs_blocks)
@@ -821,7 +870,8 @@ def build_dataset_payload(
     )
     logger.info(
         "Dataset payload built successfully: "
-        f"samples={rhs_all.shape[0]}, matrix_samples={emitted_binding_count}"
+        f"samples={rhs_all.shape[0]}, matrix_samples={emitted_binding_count}, "
+        f"parameter_streams={len(parameters_arrays)}"
     )
     return payload
 
