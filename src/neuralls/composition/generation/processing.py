@@ -78,6 +78,7 @@ class DataGenerationContext:
     matrix_path: str
     rhs_path: str | None
     solutions_path: str | None
+    solution_path: str | None
     sample_id_regex: str | None
     enumerate_by: EnumerateBy | None
     dataset_dir: Path
@@ -85,6 +86,7 @@ class DataGenerationContext:
     seed: int
     shuffle: bool
     replacement: bool
+    parameters_paths: tuple[str, ...] = ()
     dataset_format: Literal["zarr_dense"] = "zarr_dense"
 
 
@@ -103,6 +105,7 @@ def _build_context(
 
     rhs_path = config.source.rhs_path
     solutions_path = config.source.solutions_path
+    solution_path = config.source.solution_path
     sample_id_regex = config.source.sample_id_regex
     enumerate_by = config.source.enumerate_by
     normalize_value = config.generation.normalize
@@ -120,6 +123,7 @@ def _build_context(
         matrix_path=matrix_path,
         rhs_path=rhs_path,
         solutions_path=solutions_path,
+        solution_path=solution_path,
         sample_id_regex=sample_id_regex,
         enumerate_by=enumerate_by,
         dataset_dir=dataset_dir,
@@ -127,6 +131,7 @@ def _build_context(
         seed=config.generation.seed,
         shuffle=config.generation.shuffle,
         replacement=config.generation.replacement,
+        parameters_paths=config.source.parameters_paths,
         dataset_format=config.output.dataset_format,
     ), plan
 
@@ -316,6 +321,8 @@ def _execute_solution_archive(
         matrix_path=context.matrix_path,
         dataset_dir=str(context.dataset_dir),
         counts={"solution_archive": strategy.samples},
+        solution_path=context.solution_path,
+        parameters_paths=context.parameters_paths,
         sample_id_regex=context.sample_id_regex,
         enumerate_by=context.enumerate_by,
         replacement=context.replacement,
@@ -405,6 +412,8 @@ def _execute_synthetic_generation(
         dataset_dir=str(context.dataset_dir),
         counts=counts,
         rhs_path=rhs_source_path,
+        solution_path=context.solution_path,
+        parameters_paths=context.parameters_paths,
         sample_id_regex=context.sample_id_regex,
         enumerate_by=context.enumerate_by,
         replacement=context.replacement,
@@ -443,6 +452,8 @@ def _execute_rhs_archive_only(
         matrix_path=context.matrix_path,
         dataset_dir=str(context.dataset_dir),
         counts={"rhs_archive": strategy.samples},
+        solution_path=context.solution_path,
+        parameters_paths=context.parameters_paths,
         sample_id_regex=context.sample_id_regex,
         enumerate_by=context.enumerate_by,
         replacement=context.replacement,
