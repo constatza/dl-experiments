@@ -466,3 +466,15 @@ def test_bind_sources_solution_mismatch_raises() -> None:
             matrix_ids=(0, 1, 2),
             solution_ids=(0, 1),  # missing id 2
         )
+
+
+def test_bind_sources_single_matrix_broadcasts_to_many_solution_ids() -> None:
+    """Single matrix broadcasts across solution_ids (mirrors rhs_ids broadcast)."""
+    bindings = bind_sources(
+        matrix_ids=(0,),
+        solution_ids=(0, 1, 2),
+    )
+    assert len(bindings) == 3
+    assert all(b.matrix_sample_id == 0 for b in bindings)
+    assert [b.solution_sample_id for b in bindings] == [0, 1, 2]
+    assert all(b.rhs_sample_id is None for b in bindings)
