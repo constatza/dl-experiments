@@ -114,11 +114,12 @@ class VectorSample:
 
 @dataclass(frozen=True)
 class SystemBinding:
-    """ID-level binding across matrix/rhs/solution sources."""
+    """ID-level binding across matrix/rhs/parameters/solution sources."""
 
     sample_id: int
     matrix_sample_id: int
     rhs_sample_id: int | None = None
+    parameters_sample_ids: tuple[int | None, ...] = ()
     solution_sample_id: int | None = None
 
 
@@ -485,13 +486,25 @@ def bind_sources(
     matrix_ids: tuple[int, ...],
     rhs_ids: tuple[int, ...] | None = None,
     solution_ids: tuple[int, ...] | None = None,
+    parameters_ids_list: tuple[tuple[int, ...], ...] = (),
 ) -> list[SystemBinding]:
-    """Bind matrix/rhs/solution ids with single-matrix broadcast semantics.
+    """Bind matrix/rhs/solution/parameters ids with single-matrix broadcast semantics.
 
     Rules:
     - If only one matrix id exists and vectors have many ids, broadcast matrix id.
     - Otherwise bindings are keyed by matrix ids.
-    - Provided vector ids must match binding ids (except single-matrix broadcast).
+    - Provided rhs ids must match matrix ids (except single-matrix broadcast).
+    - Provided solution ids must match matrix ids (except single-matrix broadcast).
+    - Each entry in parameters_ids_list is a tuple of sample IDs for one parameter stream.
+
+    Args:
+        matrix_ids: Sample IDs from the matrix stream.
+        rhs_ids: Optional sample IDs from the RHS stream.
+        solution_ids: Optional sample IDs from the solution stream.
+        parameters_ids_list: Tuple of ID tuples, one per parameter stream.
+
+    Returns:
+        List of ``SystemBinding`` objects with all sources resolved.
     """
     if not matrix_ids:
         raise ValueError("No matrix samples available to bind.")
@@ -499,12 +512,13 @@ def bind_sources(
     matrix_set = set(matrix_ids)
     rhs_set = set(rhs_ids or ())
     solution_set = set(solution_ids or ())
+    param_sets = [set(ids) for ids in parameters_ids_list]
 
     if len(matrix_set) == 1:
         matrix_sample_id = next(iter(matrix_set))
-        candidate_ids = rhs_set | solution_set
-        if not candidate_ids:
-            candidate_ids = {matrix_sample_id}
+        candidate_ids = (
+            rhs_set if rhs_set else (solution_set if solution_set else {matrix_sample_id})
+        )
         bound_ids = sorted(candidate_ids)
         return [
             SystemBinding(
@@ -512,6 +526,9 @@ def bind_sources(
                 matrix_sample_id=matrix_sample_id,
                 rhs_sample_id=sample_id if sample_id in rhs_set else None,
                 solution_sample_id=sample_id if sample_id in solution_set else None,
+                parameters_sample_ids=tuple(
+                    sample_id if sample_id in ps else None for ps in param_sets
+                ),
             )
             for sample_id in bound_ids
         ]
@@ -527,7 +544,7 @@ def bind_sources(
         missing = sorted(matrix_set - solution_set)
         extra = sorted(solution_set - matrix_set)
         raise ValueError(
-            f"Solution IDs must match matrix IDs for multi-matrix sources. Missing={missing}, extra={extra}"
+            f"solution IDs must match matrix IDs for multi-matrix sources. Missing={missing}, extra={extra}"
         )
     return [
         SystemBinding(
@@ -535,6 +552,9 @@ def bind_sources(
             matrix_sample_id=sample_id,
             rhs_sample_id=sample_id if sample_id in rhs_set else None,
             solution_sample_id=sample_id if sample_id in solution_set else None,
+            parameters_sample_ids=tuple(
+                sample_id if sample_id in ps else None for ps in param_sets
+            ),
         )
         for sample_id in bound_ids
     ]
