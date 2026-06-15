@@ -10,6 +10,7 @@ from typing import Any
 
 import mlflow
 from loguru import logger
+from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
 from neuralls.platform.config.models.comparison import ComparisonConfig
@@ -41,6 +42,7 @@ from neuralls.platform.tracking.comparison_tracking import (
     log_skipped_preconditioners,
     setup_comparison_tracking,
 )
+from neuralls.platform.tracking.extra_features import fetch_extra_input_names_for_model
 from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import log_comparison_artifacts_to_mlflow
 from neuralls.composition.comparison.single_run import compare_preconditioners
@@ -162,15 +164,23 @@ def _existing_experiment_ids(specs: tuple[PreconditionerConfig, ...]) -> set[str
 def neural_specs_from_experiments(
     entries: Sequence[ExperimentEntry],
     claimed_ids: set[str],
+    *,
+    client: MlflowClient,
 ) -> list[NeuralPreconditionerConfig]:
     """Generate NeuralPreconditionerConfig stubs from experiment entries.
+
+    For each entry, fetches the ``neuralls.extra_feature_names`` tag from the
+    training run so that FiLM models receive their condition tensor during
+    comparison.
 
     Args:
         entries: Experiment entries to convert.
         claimed_ids: Experiment ids already covered by explicit preconditioners.
+        client: Configured MLflow client used to look up training run tags.
 
     Returns:
-        List of auto-generated neural preconditioner configs.
+        List of auto-generated neural preconditioner configs with extra_input_names
+        populated from the training run tag where available.
     """
     return [
         NeuralPreconditionerConfig(
@@ -178,6 +188,7 @@ def neural_specs_from_experiments(
             type=PreconditionerType.NEURAL,
             experiment=entry.id,
             model_ref=RegisteredModelRefConfig(latest=True),
+            extra_input_names=fetch_extra_input_names_for_model(entry.id, client),
         )
         for entry in entries
         if entry.id not in claimed_ids
@@ -437,6 +448,9 @@ def run_comparison_batch(
     if not master_cfg.comparisons:
         raise ValueError("Case config must define at least one [[comparisons]] entry.")
 
+    topology = _resolve_comparison_topology(experiments_config_path, settings)
+    mlflow_client = MlflowClient(tracking_uri=topology.model_store_tracking_uri)
+
     outcomes: list[ComparisonOutcome] = []
     for entry in master_cfg.comparisons:
         experiment_entries: list[ExperimentEntry] = (
@@ -446,7 +460,9 @@ def run_comparison_batch(
         )
         cfg = resolve_comparison_config(master_cfg, config_dir, entry, settings)
         claimed_ids = _existing_experiment_ids(cfg.preconditioners)
-        auto_specs = neural_specs_from_experiments(experiment_entries, claimed_ids)
+        auto_specs = neural_specs_from_experiments(
+            experiment_entries, claimed_ids, client=mlflow_client
+        )
         if auto_specs:
             cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))
         outcomes.extend(_run_comparison_from_config(cfg, entry, experiments_config_path, settings))

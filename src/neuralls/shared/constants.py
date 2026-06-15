@@ -167,6 +167,8 @@ DATASET_MANIFEST_FILENAME = "manifest.json"
 MATRIX_ZARR_DIRNAME = "matrix.zarr"
 RHS_ZARR_FILENAME = "rhs.zarr"
 SOLUTIONS_ZARR_FILENAME = "solutions.zarr"
+PARAMETERS_ZARR_PREFIX = "parameters_"
+"""Prefix for per-matrix parameters zarr dirs: ``parameters_0.zarr``, ``parameters_1.zarr``, …"""
 
 # Strategy-specific iteration parameters
 # These are now configured at the strategy level (not generation level):

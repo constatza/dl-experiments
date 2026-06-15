@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 
 from neuralls.platform.storage.datasets import load_dense_training_arrays, resolve_dataset_paths
+from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
 
 
 @dataclass(frozen=True)
@@ -23,16 +24,18 @@ class TrainingArrays:
     """Training data artifact paths from dataset storage.
 
     Attributes:
-        rhs: Path to rhs.npy
-        solutions: Path to solutions.npy
-        matrix_zarr: Path to matrix.zarr directory
-        sample_count: Number of samples in rhs/solutions
+        rhs: Path to rhs.zarr directory.
+        solutions: Path to solutions.zarr directory.
+        matrix_zarr: Path to matrix.zarr directory.
+        sample_count: Number of samples in rhs/solutions.
+        parameters_zarr: Paths to parameters_0.zarr, parameters_1.zarr, … (may be empty).
     """
 
     rhs: Path
     solutions: Path
     matrix_zarr: Path
     sample_count: int
+    parameters_zarr: tuple[Path, ...] = ()
 
 
 def load_training_arrays(data_dir: Path) -> TrainingArrays:
@@ -53,11 +56,13 @@ def load_training_arrays(data_dir: Path) -> TrainingArrays:
         raise ValueError(
             f"RHS and solutions sample counts must match, got {rhs.shape[0]} and {solutions.shape[0]}"
         )
+    parameters_zarr = tuple(sorted(data_dir.glob(f"{PARAMETERS_ZARR_PREFIX}*.zarr")))
     return TrainingArrays(
         rhs=paths.rhs_path,
         solutions=paths.solutions_path,
         matrix_zarr=paths.matrix_zarr_dir,
         sample_count=int(rhs.shape[0]),
+        parameters_zarr=parameters_zarr,
     )
 
 

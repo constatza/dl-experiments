@@ -16,6 +16,7 @@ from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 from neuralls.shared.constants import (
     DATASET_MANIFEST_FILENAME,
     MATRIX_ZARR_DIRNAME,
+    PARAMETERS_ZARR_PREFIX,
     RHS_ZARR_FILENAME,
     SOLUTIONS_ZARR_FILENAME,
 )
@@ -182,6 +183,30 @@ class DenseDatasetWriter:
         n_matrix_samples = int(mat_arr.shape[0])
         broadcast = n_matrix_samples == 1
 
+        # Write per-sample parameters arrays (shape N × param_dim each)
+        params_manifest: list[dict[str, Any]] = []
+        for i, params_arr in enumerate(payload.parameters_arrays):
+            if params_arr.size == 0:
+                continue
+            params_name = f"{PARAMETERS_ZARR_PREFIX}{i}.zarr"
+            params_zarr = zarr.open_array(
+                str(dataset_dir / params_name),
+                mode="w",
+                shape=params_arr.shape,
+                chunks=(1, params_arr.shape[1]) if params_arr.ndim == 2 else params_arr.shape,
+                dtype="float64",
+            )
+            params_zarr[:] = params_arr
+            params_manifest.append(
+                {
+                    "index": i,
+                    "path": params_name,
+                    "format": "zarr_dense",
+                    "dtype": "float64",
+                    "shape": list(params_arr.shape),
+                }
+            )
+
         manifest: dict[str, Any] = {
             "schema": "neuralls.dataset.v2",
             "matrix": {
@@ -210,7 +235,7 @@ class DenseDatasetWriter:
                 "matrix_norm_type": payload.matrix_norm_type,
                 "scale": payload.scale_metadata or {},
             },
-            "params": None,
+            "params": params_manifest if params_manifest else None,
         }
         with paths.manifest_path.open("w", encoding="utf-8") as fh:
             json.dump(manifest, fh, indent=2, sort_keys=True)

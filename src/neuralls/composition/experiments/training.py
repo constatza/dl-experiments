@@ -53,6 +53,11 @@ from neuralls.platform.storage.training_artifacts import (
     load_training_arrays,
     save_training_predictions,
 )
+from neuralls.platform.tracking.extra_features import log_extra_feature_names_tag
+from neuralls.composition.experiments.feature_providers import (
+    registered_extra_names,
+    resolve_extra_feature,
+)
 from neuralls.platform.reporting.training_diagnostics import (
     compute_diagnostics,
     write_diagnostics_figure,
@@ -94,6 +99,30 @@ def _resolve_training_experiment_name(mlflow_experiment_name: str | None) -> str
     return ExperimentNamesConfig().training
 
 
+def _extra_feature_names_from_settings(
+    settings: TrainingWorkflowSettings,
+    contract: RuntimeDatasetContract,
+) -> frozenset[str]:
+    """Extract extra feature names declared in [[DATASET.features]] beyond x and matrix.
+
+    Args:
+        settings: DLKit workflow settings; DATASET.features carries the TOML declarations.
+        contract: Provides the base names (primary_input_name, matrix_input_name) to exclude.
+
+    Returns:
+        Frozenset of extra feature names the model TOML declares beyond the base entries.
+    """
+    dataset = settings.DATASET
+    match dataset:
+        case None:
+            return frozenset()
+        case _:
+            base = {contract.primary_input_name, contract.matrix_input_name}
+            return frozenset(
+                e.name for e in dataset.features if e.name is not None and e.name not in base
+            )
+
+
 def _load_and_prepare_data(
     settings: TrainingWorkflowSettings,
     workspace: ExperimentWorkspace,
@@ -120,7 +149,8 @@ def _load_and_prepare_data(
     """
     arrays = load_training_arrays(workspace.data_dir)
     rhs_data, solutions_data = load_dense_training_arrays(workspace.data_dir)
-    features = _create_feature_configs(arrays, rhs_data, contract)
+    extra_names = _extra_feature_names_from_settings(settings, contract)
+    features = _create_feature_configs(arrays, rhs_data, contract, extra_names)
     targets = _create_target_configs(solutions_data, contract)
     return arrays, features, targets
 
@@ -129,6 +159,7 @@ def _create_feature_configs(
     arrays: TrainingArrays,
     rhs_data: np.ndarray,
     contract: RuntimeDatasetContract,
+    declared_extra_names: frozenset[str],
 ) -> list[DataEntry]:
     """Create in-memory Feature configs from dataset artifacts.
 
@@ -136,14 +167,19 @@ def _create_feature_configs(
         arrays: Training data artifact paths (used for matrix path).
         rhs_data: RHS array loaded from rhs.zarr.
         contract: Runtime dataset entry name contract.
+        declared_extra_names: Extra feature names declared in [[DATASET.features]]
+            beyond the base ``x`` and ``matrix`` entries.
 
     Returns:
-        List of feature entries: in-memory rhs + path-dropped matrix.
+        List of feature entries: base entries (rhs, matrix) plus any extras
+        resolved from the feature provider registry.
     """
-    return [
+    base: list[DataEntry] = [
         ValueEntry(name=contract.primary_input_name, value=rhs_data),
         ZarrEntry(name=contract.matrix_input_name, path=arrays.matrix_zarr, model_input=False),
     ]
+    extras = [resolve_extra_feature(name, arrays) for name in sorted(declared_extra_names)]
+    return [*base, *extras]
 
 
 def _create_target_configs(
@@ -195,16 +231,17 @@ def _validate_runtime_dataset_contract(
         )
 
     feature_names = {entry.name for entry in dataset.features if entry.name is not None}
-    unsupported_feature_names = sorted(
-        name
-        for name in feature_names
-        if name not in {contract.primary_input_name, contract.matrix_input_name}
-    )
+    allowed_names = {
+        contract.primary_input_name,
+        contract.matrix_input_name,
+    } | registered_extra_names()
+    unsupported_feature_names = sorted(name for name in feature_names if name not in allowed_names)
     if unsupported_feature_names:
         raise ValueError(
             "DATASET feature placeholders must use only the resolved runtime "
-            f"feature names '{contract.primary_input_name}' and optional "
-            f"'{contract.matrix_input_name}', got {unsupported_feature_names}."
+            f"feature names '{contract.primary_input_name}', optional "
+            f"'{contract.matrix_input_name}', or registered extras "
+            f"{sorted(registered_extra_names())}, got {unsupported_feature_names}."
         )
 
     duplicate_targets = _find_duplicate_entry_names(dataset.targets)
@@ -938,6 +975,11 @@ def train_model(
                     dataset_registry_id=experiment.spec.dataset_registry_id,
                     model_registry_id=experiment.spec.model_registry_id,
                     model_display_name=experiment.spec.model_display_name or workspace.run_id,
+                )
+                log_extra_feature_names_tag(
+                    tracking_uri,
+                    run_id,
+                    _extra_feature_names_from_settings(workflow_settings, contract),
                 )
                 write_mlflow_sidecar(
                     path=workspace.root_dir / "mlflow_run.json",

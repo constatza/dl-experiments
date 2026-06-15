@@ -41,3 +41,5 @@ class GeneratedDatasetPayload:
     matrix_value_scale: float = 1.0
     scale_metadata: ScaleMetadata | None = None
     num_bindings: int = 0
+    parameters_arrays: tuple[np.ndarray, ...] = ()
+    """One array per entry in ``parameters_paths``; shape ``(N, param_dim)``."""

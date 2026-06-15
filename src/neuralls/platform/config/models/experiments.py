@@ -255,6 +255,14 @@ class ComparisonRegistryEntry(BaseModel):
     method: Path | None = None
     experiments: list[str] = Field(default_factory=list)
     display_name: str | None = None
+    train_run_id: str | None = Field(
+        default=None,
+        description=(
+            "MLflow run ID of the training run whose test-split indices drive this comparison. "
+            "When set, the comparison iterates over every index in the test split rather than "
+            "using the single matrix_index/rhs_index values."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 

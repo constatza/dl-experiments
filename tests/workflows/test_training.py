@@ -407,6 +407,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             model_display_name="Model One",
         ),
     )
+    experiment.settings = SimpleNamespace(DATASET=None)
     training_result = SimpleNamespace(run_id="run-123", metrics={})
 
     with (
@@ -448,6 +449,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
         patch("neuralls.composition.experiments.training._stage_training_artifacts"),
         patch("neuralls.composition.experiments.training._log_training_evaluation"),
         patch("neuralls.composition.experiments.training.log_artifacts_to_mlflow"),
+        patch("neuralls.composition.experiments.training.log_extra_feature_names_tag"),
     ):
         train_model(
             config_path=str(config_path),
@@ -505,7 +507,7 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
     checkpoint_path.write_text("checkpoint")
 
     experiment = SimpleNamespace(
-        settings=object(),
+        settings=SimpleNamespace(DATASET=None),
         workspace=workspace,
         spec=SimpleNamespace(
             experiment_id="legacy-exp",
@@ -555,6 +557,7 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
         patch("neuralls.composition.experiments.training._stage_training_artifacts"),
         patch("neuralls.composition.experiments.training._log_training_evaluation"),
         patch("neuralls.composition.experiments.training.log_artifacts_to_mlflow"),
+        patch("neuralls.composition.experiments.training.log_extra_feature_names_tag"),
     ):
         train_model(
             config_path=config_path,
@@ -668,6 +671,7 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         patch("neuralls.composition.experiments.training._stage_training_artifacts"),
         patch("neuralls.composition.experiments.training._log_training_evaluation"),
         patch("neuralls.composition.experiments.training.log_artifacts_to_mlflow"),
+        patch("neuralls.composition.experiments.training.log_extra_feature_names_tag"),
     ):
         train_model(
             config_path=config_path,

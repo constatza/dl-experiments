@@ -123,7 +123,7 @@ def test_create_feature_configs_graph_dataset(
 ) -> None:
     """_create_feature_configs returns in-memory rhs + path-dropped matrix for GraphDataset."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, sample_rhs, contract)
+    features = _create_feature_configs(sample_arrays, sample_rhs, contract, frozenset())
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -142,7 +142,7 @@ def test_create_feature_configs_flexible_dataset(
 ) -> None:
     """_create_feature_configs returns in-memory rhs + path-dropped matrix for FlexibleDataset."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, sample_rhs, contract)
+    features = _create_feature_configs(sample_arrays, sample_rhs, contract, frozenset())
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -161,7 +161,7 @@ def test_create_feature_configs_default_to_flexible(
 ) -> None:
     """_create_feature_configs defaults to in-memory rhs + path-dropped matrix behavior."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, sample_rhs, contract)
+    features = _create_feature_configs(sample_arrays, sample_rhs, contract, frozenset())
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -354,7 +354,7 @@ def test_resolve_dataset_rejects_unmatched_feature_placeholder(
 
     contract = default_training_dataset_contract()
     with pytest.raises(
-        ValueError, match="resolved runtime feature names 'x' and optional 'matrix'"
+        ValueError, match="DATASET feature placeholders must use only the resolved runtime"
     ):
         _resolve_dataset(placeholder_settings, [], [], contract)
 
@@ -430,7 +430,7 @@ def test_contract_override_drives_injection_and_validation(
         prediction_name="rhs_pred",
         loss_target_key="targets.rhs",
     )
-    features = _create_feature_configs(sample_arrays, sample_rhs, contract)
+    features = _create_feature_configs(sample_arrays, sample_rhs, contract, frozenset())
     targets = _create_target_configs(sample_solutions, contract)
     settings = training_settings.model_copy(
         update={
