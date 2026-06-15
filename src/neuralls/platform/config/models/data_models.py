@@ -50,6 +50,14 @@ class SourceConfig(BaseModel):
         default=None,
         description="Path or glob pattern for solution vectors",
     )
+    solution_path: str | None = Field(
+        default=None,
+        description=(
+            "Path or glob pattern for per-matrix solution vectors used for solution binding. "
+            "Each file is paired with its matrix by the same sample_id_regex/enumerate_by strategy. "
+            "Distinct from solutions_path (which feeds the solution_archive strategy glob)."
+        ),
+    )
     sample_id_regex: str | None = Field(
         default=None,
         description="Regex used to extract sample IDs from glob filenames for source pairing",
@@ -60,6 +68,15 @@ class SourceConfig(BaseModel):
             "Sort glob-matched files by this criterion and assign sequential IDs (0, 1, 2, …). "
             "Use when filenames carry no natural integer ID. "
             "Mutually exclusive with sample_id_regex."
+        ),
+    )
+    parameters_paths: tuple[str, ...] = Field(
+        default=(),
+        max_length=2,
+        description=(
+            "Glob patterns for per-matrix parameters files (max 2). "
+            "Each path is paired with its matrix by the same sample_id_regex/enumerate_by strategy. "
+            "Written to the dataset as parameters_0.zarr, parameters_1.zarr, …"
         ),
     )
 
@@ -91,7 +108,9 @@ class SourceConfig(BaseModel):
             return v
         return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
 
-    @field_validator("rhs_path", "solutions_path", "rhs_pattern", "matrix_path", mode="before")
+    @field_validator(
+        "rhs_path", "solutions_path", "rhs_pattern", "matrix_path", "solution_path", mode="before"
+    )
     @classmethod
     def _expand_glob_paths(cls, v: str | None, info: ValidationInfo) -> str | None:
         """Expand glob path placeholders, preserving wildcard characters.
@@ -108,6 +127,24 @@ class SourceConfig(BaseModel):
         if v is None or info.context is None:
             return v
         return expand_config_glob(v, ConfigContext.from_pydantic_context(info.context))
+
+    @field_validator("parameters_paths", mode="before")
+    @classmethod
+    def _expand_parameters_paths(cls, v: object, info: ValidationInfo) -> tuple[str, ...]:
+        """Expand glob placeholders in each parameters path, preserving wildcards.
+
+        Args:
+            v: Raw sequence of path strings from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Tuple of resolved glob expressions.
+        """
+        items: tuple[str, ...] = tuple(str(p) for p in v) if isinstance(v, (list, tuple)) else ()
+        if not items or info.context is None:
+            return items
+        ctx = ConfigContext.from_pydantic_context(info.context)
+        return tuple(expand_config_glob(p, ctx) for p in items)
 
 
 class StrategyConfig(BaseModel):
