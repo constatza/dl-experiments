@@ -77,6 +77,22 @@ class ScaledSolutionsStrategy:
             ValueError: If solutions_glob not provided or insufficient files.
             FileNotFoundError: If no files match pattern.
         """
+        # When archive is provided (per-binding pre-loaded solution), skip glob loading
+        if archive is not None and archive.solutions is not None:
+            solutions = archive.solutions
+            logger.info(f"Using pre-loaded solution archive ({len(solutions)} vector(s))")
+            rhs = ComputeRhsTransform(matrix).transform(solutions)
+            scale = cfg.get("scale", 5.0)
+            scaled_rhs = float(scale) * rhs
+            scaled_solutions = float(scale) * solutions
+            return GeneratedSamples(
+                matrix=matrix,
+                rhs=scaled_rhs,
+                solutions=scaled_solutions,
+                residual_traces=None,
+                error_traces=None,
+            )
+
         config = ScaledSolutionsConfig(**cfg)
 
         logger.info(f"Loading solution vectors from: {config.solutions_glob}")
