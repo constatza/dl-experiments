@@ -64,7 +64,6 @@ def test_bind_sources_broadcasts_single_matrix_to_many_rhs() -> None:
     bindings = bind_sources(
         matrix_ids=(0,),
         rhs_ids=(0, 1, 2),
-        solution_ids=None,
     )
     assert [item.matrix_sample_id for item in bindings] == [0, 0, 0]
     assert [item.rhs_sample_id for item in bindings] == [0, 1, 2]
@@ -448,3 +447,22 @@ def test_source_config_accepts_enumerate_by_without_regex() -> None:
 
     config = SourceConfig(enumerate_by=EnumerateBy.NAME)
     assert config.enumerate_by == EnumerateBy.NAME
+
+
+def test_bind_sources_pairs_solution_ids_per_matrix() -> None:
+    """solution_ids are bound per-matrix, mirroring the rhs_ids pattern."""
+    bindings = bind_sources(
+        matrix_ids=(0, 1, 2),
+        solution_ids=(0, 1, 2),
+    )
+    assert [b.matrix_sample_id for b in bindings] == [0, 1, 2]
+    assert [b.solution_sample_id for b in bindings] == [0, 1, 2]
+
+
+def test_bind_sources_solution_mismatch_raises() -> None:
+    """Mismatched solution_ids vs matrix_ids raises ValueError for multi-matrix case."""
+    with pytest.raises(ValueError, match="solution IDs must match matrix IDs"):
+        bind_sources(
+            matrix_ids=(0, 1, 2),
+            solution_ids=(0, 1),  # missing id 2
+        )
