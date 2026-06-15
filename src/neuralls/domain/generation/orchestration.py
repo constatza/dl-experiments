@@ -37,6 +37,26 @@ from .source_streams import (
 )
 
 
+@dataclass(frozen=True)
+class _StrategyProperties:
+    """Compile-time properties for a known generation strategy."""
+
+    uses_finite_source: bool
+    supports_replacement: bool
+
+
+_STRATEGY_PROPERTIES: dict[str, _StrategyProperties] = {
+    "solution_archive": _StrategyProperties(uses_finite_source=True, supports_replacement=False),
+    "rhs_archive": _StrategyProperties(uses_finite_source=True, supports_replacement=False),
+    "scaled_solutions": _StrategyProperties(uses_finite_source=True, supports_replacement=False),
+    "validated_archive": _StrategyProperties(uses_finite_source=True, supports_replacement=False),
+    "residual_traces": _StrategyProperties(uses_finite_source=True, supports_replacement=True),
+    "residuals": _StrategyProperties(uses_finite_source=True, supports_replacement=True),
+    "gaussian_residuals": _StrategyProperties(uses_finite_source=True, supports_replacement=True),
+    "search_directions": _StrategyProperties(uses_finite_source=True, supports_replacement=True),
+}
+
+
 def _shuffle_samples(
     X: np.ndarray,
     Y: np.ndarray,
@@ -345,20 +365,12 @@ def _strategy_uses_finite_source(
     has_rhs_source: bool,
 ) -> bool:
     """Return whether a strategy is configured to use a finite external source."""
-    if strategy_name in {
-        "solution_archive",
-        "rhs_archive",
-        "scaled_solutions",
-        "validated_archive",
-    }:
-        return True
-
+    props = _STRATEGY_PROPERTIES.get(strategy_name)
+    if props is not None:
+        return props.uses_finite_source
+    # Fallback heuristic for unknown/future strategies
     overrides = strategy_overrides.get(strategy_name, {}) if strategy_overrides is not None else {}
-    if strategy_name in {"residual_traces", "residuals", "gaussian_residuals"}:
-        return has_rhs_source or isinstance(overrides.get("solutions_glob"), str)
-    if strategy_name == "search_directions":
-        return has_rhs_source
-    return False
+    return has_rhs_source or isinstance(overrides.get("solutions_glob"), str)
 
 
 def _validate_replacement_support(
@@ -376,7 +388,13 @@ def _validate_replacement_support(
     for strategy_name, count in strategy_counts.items():
         if count == 0:
             continue
-        if not strategy_supports_matrix_replacement(strategy_name):
+        props = _STRATEGY_PROPERTIES.get(strategy_name)
+        supports_replacement = (
+            props.supports_replacement
+            if props is not None
+            else strategy_supports_matrix_replacement(strategy_name)
+        )
+        if not supports_replacement:
             raise ValueError(
                 f"Strategy '{strategy_name}' does not support matrix replacement allocation."
             )
