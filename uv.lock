@@ -577,7 +577,7 @@ wheels = [
 [[package]]
 name = "dlkit"
 version = "0.1.0a0"
-source = { git = "https://github.com/constatza/dlkit.git?branch=main#1734ae9067e52bb02c8f530577abc553f7f61a66" }
+source = { git = "https://github.com/constatza/dlkit.git?branch=main#30fa7804eb7dcfbd505c59cb0001c039685604f8" }
 dependencies = [
     { name = "lightning" },
     { name = "loguru" },

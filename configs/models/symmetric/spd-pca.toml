@@ -14,7 +14,7 @@ dropout = 0.0
 
 [TRAINING.lr_tuner]
 min_lr = 1e-5
-max_lr = 1e-1
+max_lr = 1e-2
 num_training = 100
 mode = "linear"
 
@@ -79,7 +79,6 @@ transforms = [{name = "PCA", n_components = 50}]
 name = "InMemoryModule"
 
 [DATAMODULE.dataloader]
-num_workers = 0
 batch_size = 256
 pin_memory = true
 shuffle = true

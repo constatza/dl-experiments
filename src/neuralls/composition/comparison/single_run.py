@@ -77,7 +77,10 @@ from neuralls.domain.analysis.spectra import (
 )
 from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.storage.filesystem import ensure_dir
-from neuralls.platform.storage.comparison import load_system_arrays, load_system_extras
+import zarr
+
+from neuralls.platform.storage.comparison import load_system_arrays
+from neuralls.platform.storage.training_artifacts import load_training_arrays
 from neuralls.domain.solver.preconditioners.base import BindableInputs, Preconditioner
 from neuralls.domain.linalg import compute_condition_number
 from neuralls.domain.normalization import IScale, create_scale_from_config
@@ -688,11 +691,18 @@ def compare_preconditioners(
     )
     extra_data: dict[str, np.ndarray] = {}
     if needed_extra_names and paths.matrix.is_dir():
-        extra_data = load_system_extras(
-            paths.matrix,
-            needed_extra_names,
-            sample_index=general_params.data.matrix_index,
-        )
+        _arrays = load_training_arrays(paths.matrix)
+        _extra_name_list = sorted(needed_extra_names)
+        extra_data = {
+            name: np.asarray(
+                zarr.open_array(str(_arrays.parameters_zarr[i]), mode="r")[
+                    general_params.data.matrix_index
+                ],
+                dtype=np.float64,
+            )
+            for i, name in enumerate(_extra_name_list)
+            if i < len(_arrays.parameters_zarr)
+        }
     _bind_system_inputs(
         scheduled_preconditioners,
         {"matrix": system.matrix, **extra_data},

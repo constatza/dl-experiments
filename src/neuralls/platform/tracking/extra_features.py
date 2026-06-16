@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from mlflow.tracking import MlflowClient
 
 EXTRA_FEATURE_NAMES_TAG: str = "neuralls.extra_feature_names"
@@ -28,7 +30,7 @@ def fetch_extra_feature_names(run_id: str, *, client: MlflowClient) -> tuple[str
 def log_extra_feature_names_tag(
     tracking_uri: str,
     run_id: str,
-    extra_names: frozenset[str],
+    extra_names: Iterable[str],
 ) -> None:
     """Log extra feature names as a run tag on an existing MLflow run.
 

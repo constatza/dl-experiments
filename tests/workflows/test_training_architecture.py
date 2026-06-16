@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from dlkit.common.geometry import FieldRole, GeometryKind
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config import (
     DataModuleSettings,
@@ -19,7 +20,7 @@ from dlkit.infrastructure.config import (
     SessionSettings,
     TrainingSettings,
 )
-from dlkit.infrastructure.config.data_entries import DataRole, IPathBased, ValueEntry
+from dlkit.infrastructure.config.data_entries import DataRole, IPathBased, ValueEntry, ZarrEntry
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
@@ -36,6 +37,7 @@ from neuralls.composition.experiments.training import (
     _configure_mlflow,
     _configure_output_paths,
     _create_feature_configs,
+    _merge_entry_metadata,
     _normalize_training_numpy_payload,
     _create_target_configs,
     _extract_evaluation_arrays,
@@ -339,24 +341,26 @@ def test_resolve_dataset_rejects_unmatched_target_placeholder(
         _resolve_dataset(placeholder_settings, [], [], contract)
 
 
-def test_resolve_dataset_rejects_unmatched_feature_placeholder(
+def test_resolve_dataset_accepts_arbitrary_extra_feature_name(
     training_settings: GeneralSettings,
 ) -> None:
-    """Placeholder feature entries must match injected runtime names exactly."""
+    """Extra feature names beyond x/matrix are open — any name is accepted at config time.
+
+    Validation that declared extras don't exceed available parameters_*.zarr files
+    is deferred to _create_feature_configs at runtime.
+    """
     placeholder_settings = training_settings.model_copy(
         update={
             "DATASET": DatasetSettings(
                 name="FlexibleDataset",
-                features=(ValueEntry(name="rhs", value=np.zeros((1, 1), dtype=np.float64)),),
+                features=(ValueEntry(name="condition"),),
             )
         }
     )
 
     contract = default_training_dataset_contract()
-    with pytest.raises(
-        ValueError, match="DATASET feature placeholders must use only the resolved runtime"
-    ):
-        _resolve_dataset(placeholder_settings, [], [], contract)
+    # Should not raise — open contract, any extra name is valid at validation time
+    _resolve_dataset(placeholder_settings, [], [], contract)
 
 
 def test_configure_output_paths_returns_new_settings(
@@ -589,3 +593,75 @@ def test_resolve_mlflow_logging_config_handles_missing_env(
     tracking_uri, artifacts_destination = resolve_runtime_tracking_config()
     assert tracking_uri is None
     assert artifacts_destination == ""
+
+
+@pytest.fixture
+def dummy_zarr_store(tmp_path: Path) -> Path:
+    """Minimal valid zarr v3 store directory."""
+    store = tmp_path / "dummy.zarr"
+    store.mkdir()
+    (store / "zarr.json").write_text('{"zarr_format": 3, "node_type": "array"}')
+    return store
+
+
+def test_merge_entry_metadata_propagates_target_coordinates_field_role(
+    dummy_zarr_store: Path,
+) -> None:
+    """Regression: _merge_entry_metadata propagates field_role=TARGET_COORDINATES from TOML placeholder.
+
+    Before the fix, _merge_entry_transforms only merged transforms. The DeepONet query entry
+    retained field_role=FEATURE, so dlkit's contract_resolver produced TabulaRSpec
+    instead of the required BranchTrunkSpec, raising WorkflowError at training time.
+    """
+    file_backed = ZarrEntry(
+        name="query",
+        path=dummy_zarr_store,
+        model_input=True,
+        field_role=FieldRole.FEATURE,
+        geometry_kind=GeometryKind.TABULAR,
+    )
+    placeholder = ValueEntry(name="query", field_role=FieldRole.TARGET_COORDINATES)
+
+    result = _merge_entry_metadata([file_backed], (placeholder,))
+
+    assert len(result) == 1
+    assert result[0].name == "query"
+    assert result[0].field_role == FieldRole.TARGET_COORDINATES
+
+
+def test_resolve_dataset_propagates_deeponet_query_field_role(
+    training_settings: GeneralSettings,
+    dummy_zarr_store: Path,
+) -> None:
+    """Regression: full pipeline forwards field_role=TARGET_COORDINATES for DeepONet query.
+
+    Simulates the DeepONet training scenario: a query placeholder with
+    field_role="target_coordinates" declared in [[DATASET.features]] must survive
+    through _resolve_dataset into the injected feature entries. Without propagation,
+    dlkit resolves TabulaRSpec instead of BranchTrunkSpec and raises WorkflowError.
+    """
+    query_feature = ZarrEntry(
+        name="query",
+        path=dummy_zarr_store,
+        model_input=True,
+        field_role=FieldRole.FEATURE,
+    )
+    deeponet_settings = training_settings.model_copy(
+        update={
+            "DATASET": DatasetSettings(
+                name="FlexibleDataset",
+                features=(
+                    ValueEntry(name="x"),
+                    ValueEntry(name="query", field_role=FieldRole.TARGET_COORDINATES),
+                ),
+            )
+        }
+    )
+    contract = default_training_dataset_contract()
+
+    updated = _resolve_dataset(deeponet_settings, [query_feature], [], contract)
+
+    assert updated.DATASET is not None
+    injected = {e.name: e for e in updated.DATASET.features}
+    assert "query" in injected
+    assert injected["query"].field_role == FieldRole.TARGET_COORDINATES

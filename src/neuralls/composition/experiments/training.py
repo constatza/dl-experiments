@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dlkit.common.geometry import FieldRole, GeometryKind
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
@@ -18,7 +19,6 @@ from dlkit.infrastructure.config.data_entries import (
     ValueEntry,
     ZarrEntry,
 )
-from dlkit.infrastructure.config.transform_settings import TransformSettings
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
@@ -53,11 +53,8 @@ from neuralls.platform.storage.training_artifacts import (
     load_training_arrays,
     save_training_predictions,
 )
+
 from neuralls.platform.tracking.extra_features import log_extra_feature_names_tag
-from neuralls.composition.experiments.feature_providers import (
-    registered_extra_names,
-    resolve_extra_feature,
-)
 from neuralls.platform.reporting.training_diagnostics import (
     compute_diagnostics,
     write_diagnostics_figure,
@@ -102,25 +99,25 @@ def _resolve_training_experiment_name(mlflow_experiment_name: str | None) -> str
 def _extra_feature_names_from_settings(
     settings: TrainingWorkflowSettings,
     contract: RuntimeDatasetContract,
-) -> frozenset[str]:
+) -> list[str]:
     """Extract extra feature names declared in [[DATASET.features]] beyond x and matrix.
+
+    Preserves TOML declaration order — the i-th returned name maps to parameters_i.zarr.
 
     Args:
         settings: DLKit workflow settings; DATASET.features carries the TOML declarations.
         contract: Provides the base names (primary_input_name, matrix_input_name) to exclude.
 
     Returns:
-        Frozenset of extra feature names the model TOML declares beyond the base entries.
+        Ordered list of extra feature names the model TOML declares beyond the base entries.
     """
     dataset = settings.DATASET
     match dataset:
         case None:
-            return frozenset()
+            return []
         case _:
             base = {contract.primary_input_name, contract.matrix_input_name}
-            return frozenset(
-                e.name for e in dataset.features if e.name is not None and e.name not in base
-            )
+            return [e.name for e in dataset.features if e.name is not None and e.name not in base]
 
 
 def _load_and_prepare_data(
@@ -165,26 +162,45 @@ def _create_feature_configs(
     arrays: TrainingArrays,
     rhs_data: np.ndarray,
     contract: RuntimeDatasetContract,
-    declared_extra_names: frozenset[str],
+    declared_extra_names: list[str],
 ) -> list[DataEntry]:
     """Create in-memory Feature configs from dataset artifacts.
 
+    The i-th declared extra name maps to parameters_i.zarr by position.
+
     Args:
-        arrays: Training data artifact paths (used for matrix path).
+        arrays: Training data artifact paths (used for matrix and parameters paths).
         rhs_data: RHS array loaded from rhs.zarr.
         contract: Runtime dataset entry name contract.
-        declared_extra_names: Extra feature names declared in [[DATASET.features]]
-            beyond the base ``x`` and ``matrix`` entries.
+        declared_extra_names: Ordered extra feature names declared in [[DATASET.features]]
+            beyond the base ``x`` and ``matrix`` entries (TOML declaration order preserved).
 
     Returns:
         List of feature entries: base entries (rhs, matrix) plus any extras
-        resolved from the feature provider registry.
+        mapped by index to parameters_i.zarr.
+
+    Raises:
+        ValueError: If more extras are declared than parameters_*.zarr files available.
     """
+    if len(declared_extra_names) > len(arrays.parameters_zarr):
+        raise ValueError(
+            f"Model declares {len(declared_extra_names)} extra features but dataset has "
+            f"{len(arrays.parameters_zarr)} parameters_*.zarr files."
+        )
     base: list[DataEntry] = [
         ValueEntry(name=contract.primary_input_name, value=rhs_data),
         ZarrEntry(name=contract.matrix_input_name, path=arrays.matrix_zarr, model_input=False),
     ]
-    extras = [resolve_extra_feature(name, arrays) for name in sorted(declared_extra_names)]
+    extras: list[DataEntry] = [
+        ZarrEntry(
+            name=name,
+            path=arrays.parameters_zarr[i],
+            model_input=True,
+            field_role=FieldRole.FEATURE,
+            geometry_kind=GeometryKind.TABULAR,
+        )
+        for i, name in enumerate(declared_extra_names)
+    ]
     return [*base, *extras]
 
 
@@ -236,20 +252,6 @@ def _validate_runtime_dataset_contract(
             f"Duplicate DATASET feature entry names are not allowed: {sorted(duplicate_features)}"
         )
 
-    feature_names = {entry.name for entry in dataset.features if entry.name is not None}
-    allowed_names = {
-        contract.primary_input_name,
-        contract.matrix_input_name,
-    } | registered_extra_names()
-    unsupported_feature_names = sorted(name for name in feature_names if name not in allowed_names)
-    if unsupported_feature_names:
-        raise ValueError(
-            "DATASET feature placeholders must use only the resolved runtime "
-            f"feature names '{contract.primary_input_name}', optional "
-            f"'{contract.matrix_input_name}', or registered extras "
-            f"{sorted(registered_extra_names())}, got {unsupported_feature_names}."
-        )
-
     duplicate_targets = _find_duplicate_entry_names(dataset.targets)
     if duplicate_targets:
         raise ValueError(
@@ -274,35 +276,50 @@ def _validate_runtime_dataset_contract(
         )
 
 
-def _merge_entry_transforms[T: DataEntry](
+def _merge_entry_metadata[T: DataEntry](
     entries: list[T],
     config_entries: tuple[DataEntry, ...],
 ) -> list[T]:
-    """Inject transforms from model-config placeholder entries into file-backed entries.
+    """Inject transforms, field_role, and geometry_kind from TOML placeholders into file-backed entries.
+
+    Propagates transforms and any non-default field_role / geometry_kind declared in
+    [[DATASET.features]] or [[DATASET.targets]] into the corresponding file-backed entries.
+    This makes the TOML the declarative source of truth for field geometry semantics
+    (e.g. ``field_role = "target_coordinates"`` for DeepONet query inputs).
 
     Args:
         entries: File-backed Feature/Target objects built from disk artifacts.
         config_entries: Placeholder entries parsed from [[DATASET.features]] or
-            [[DATASET.targets]] in the model TOML (name + transforms, no path).
+            [[DATASET.targets]] in the model TOML (name + metadata, no path).
 
     Returns:
         New list where each entry whose name matches a config placeholder has
-        that placeholder's transforms applied via patch_model; all others unchanged.
+        the placeholder's metadata applied via patch_model; all others unchanged.
     """
-    transforms_by_name: dict[str, list[TransformSettings]] = {
-        e.name: list(e.transforms) for e in config_entries if e.name is not None and e.transforms
-    }
-    if not transforms_by_name:
+    patches_by_name: dict[str, dict] = {}
+    for e in config_entries:
+        if e.name is None:
+            continue
+        patch: dict = {}
+        if e.transforms:
+            patch["transforms"] = list(e.transforms)
+        if e.field_role != FieldRole.FEATURE:
+            patch["field_role"] = e.field_role
+        if e.geometry_kind != GeometryKind.TABULAR:
+            patch["geometry_kind"] = e.geometry_kind
+        if patch:
+            patches_by_name[e.name] = patch
+    if not patches_by_name:
         return entries
     result: list[T] = []
     consumed: set[str] = set()
     for entry in entries:
         name = entry.name
-        if name is not None and name in transforms_by_name:
-            entry = patch_model(entry, {"transforms": transforms_by_name[name]}, revalidate=False)
+        if name is not None and name in patches_by_name:
+            entry = patch_model(entry, patches_by_name[name], revalidate=False)
             consumed.add(name)
         result.append(entry)
-    unmatched = transforms_by_name.keys() - consumed
+    unmatched = patches_by_name.keys() - consumed
     if unmatched:
         raise ValueError(
             "DATASET placeholder entries must match injected runtime entry names. "
@@ -350,8 +367,8 @@ def _resolve_dataset(
     """
     _validate_runtime_dataset_contract(settings, contract)
     base_dataset = settings.DATASET or DatasetSettings()
-    features = _merge_entry_transforms(features, base_dataset.features)
-    targets = _merge_entry_transforms(targets, base_dataset.targets)
+    features = _merge_entry_metadata(features, base_dataset.features)
+    targets = _merge_entry_metadata(targets, base_dataset.targets)
     return patch_model(
         settings,
         {

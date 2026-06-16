@@ -1,4 +1,4 @@
-"""Tests for the feature provider registry and its concrete implementations."""
+"""Tests for index-based extra feature mapping in _create_feature_configs."""
 
 from __future__ import annotations
 
@@ -9,12 +9,6 @@ import pytest
 import zarr
 from dlkit.infrastructure.config.data_entries import ZarrEntry
 
-from neuralls.composition.experiments.feature_providers import (
-    FiLMConditionProvider,
-    DeepONetQueryProvider,
-    registered_extra_names,
-    resolve_extra_feature,
-)
 from neuralls.composition.experiments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
@@ -84,143 +78,104 @@ def one_param_arrays(tmp_path: Path) -> TrainingArrays:
 
 
 @pytest.fixture
+def two_param_arrays(tmp_path: Path) -> TrainingArrays:
+    """TrainingArrays with parameters_0.zarr and parameters_1.zarr."""
+    n, samples, param_dim = 4, 6, 4
+    rng = np.random.default_rng(2)
+    for name, shape in [("rhs.zarr", (samples, n)), ("solutions.zarr", (samples, n))]:
+        zarr.open_array(str(tmp_path / name), mode="w", shape=shape, dtype="float64")[:] = (
+            rng.standard_normal(shape)
+        )
+    zarr.open_array(str(tmp_path / "matrix.zarr"), mode="w", shape=(1, n, n), dtype="float64")[
+        0
+    ] = np.eye(n)
+    paths = []
+    for i in range(2):
+        p = tmp_path / f"{PARAMETERS_ZARR_PREFIX}{i}.zarr"
+        zarr.open_array(str(p), mode="w", shape=(samples, param_dim), dtype="float64")[:] = (
+            rng.standard_normal((samples, param_dim))
+        )
+        paths.append(p)
+    return TrainingArrays(
+        rhs=tmp_path / "rhs.zarr",
+        solutions=tmp_path / "solutions.zarr",
+        matrix_zarr=tmp_path / "matrix.zarr",
+        sample_count=samples,
+        parameters_zarr=tuple(paths),
+    )
+
+
+@pytest.fixture
 def rhs_data() -> np.ndarray:
     """Small RHS array for feature config tests."""
     return np.zeros((6, 4), dtype=np.float64)
 
 
 # ---------------------------------------------------------------------------
-# FiLMConditionProvider
+# _create_feature_configs — index-based ZarrEntry mapping
 # ---------------------------------------------------------------------------
 
 
-def test_film_condition_path_matches_parameters_0(one_param_arrays: TrainingArrays) -> None:
-    entry = FiLMConditionProvider().provide(one_param_arrays)
-    assert isinstance(entry, ZarrEntry)
-    assert entry.path == one_param_arrays.parameters_zarr[0]
-
-
-def test_film_condition_model_input_is_true(one_param_arrays: TrainingArrays) -> None:
-    entry = FiLMConditionProvider().provide(one_param_arrays)
-    assert entry.model_input is True
-
-
-def test_film_condition_name_is_condition(one_param_arrays: TrainingArrays) -> None:
-    entry = FiLMConditionProvider().provide(one_param_arrays)
-    assert entry.name == "condition"
-
-
-def test_film_condition_raises_without_params(no_params_arrays: TrainingArrays) -> None:
-    with pytest.raises(ValueError, match="parameters_0.zarr"):
-        FiLMConditionProvider().provide(no_params_arrays)
-
-
-# ---------------------------------------------------------------------------
-# DeepONetQueryProvider
-# ---------------------------------------------------------------------------
-
-
-def test_deeponet_query_provider_returns_value_entry(one_param_arrays: TrainingArrays) -> None:
-    """DeepONetQueryProvider returns a ValueEntry with correct name."""
-    from dlkit.infrastructure.config.data_entries import ValueEntry
-
-    result = DeepONetQueryProvider().provide(one_param_arrays)
-    assert isinstance(result, ValueEntry)
-    assert result.name == "query"
-
-
-def test_deeponet_query_provider_reshapes_to_n_1_param_dim(
-    one_param_arrays: TrainingArrays,
-) -> None:
-    """DeepONetQueryProvider reshapes parameters_zarr from (N, param_dim) to (N, 1, param_dim)."""
-    import zarr
-    import numpy as np
-    from dlkit.infrastructure.config.data_entries import ValueEntry
-
-    # Load what's actually in parameters_zarr[0]
-    params = np.asarray(zarr.open_array(str(one_param_arrays.parameters_zarr[0]), mode="r")[:])
-    expected = params[:, np.newaxis, :]  # (N, 1, param_dim)
-
-    result = DeepONetQueryProvider().provide(one_param_arrays)
-    assert isinstance(result, ValueEntry)
-    np.testing.assert_array_equal(result.value, expected)
-
-
-def test_deeponet_query_raises_without_params(no_params_arrays: TrainingArrays) -> None:
-    """DeepONetQueryProvider raises ValueError when no parameters_zarr files exist."""
-    with pytest.raises(ValueError, match="parameters_zarr"):
-        DeepONetQueryProvider().provide(no_params_arrays)
-
-
-# ---------------------------------------------------------------------------
-# resolve_extra_feature
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_condition_returns_zarr_entry(one_param_arrays: TrainingArrays) -> None:
-    entry = resolve_extra_feature("condition", one_param_arrays)
-    assert isinstance(entry, ZarrEntry)
-    assert entry.name == "condition"
-
-
-def test_resolve_unknown_name_raises_with_registry_hint(
-    one_param_arrays: TrainingArrays,
-) -> None:
-    with pytest.raises(ValueError, match="No feature provider registered for 'unknown'"):
-        resolve_extra_feature("unknown", one_param_arrays)
-
-
-# ---------------------------------------------------------------------------
-# registered_extra_names
-# ---------------------------------------------------------------------------
-
-
-def test_registered_extra_names_contains_condition_and_query() -> None:
-    names = registered_extra_names()
-    assert "condition" in names
-    assert "query" in names
-
-
-# ---------------------------------------------------------------------------
-# _create_feature_configs (training.py integration)
-# ---------------------------------------------------------------------------
-
-
-def test_create_feature_configs_no_extras_yields_x_and_matrix(
+def test_no_extras_yields_x_and_matrix(
     no_params_arrays: TrainingArrays,
     rhs_data: np.ndarray,
     contract,
 ) -> None:
-    entries = _create_feature_configs(no_params_arrays, rhs_data, contract, frozenset())
-    names = [e.name for e in entries]
-    assert names == ["x", "matrix"]
+    entries = _create_feature_configs(no_params_arrays, rhs_data, contract, [])
+    assert [e.name for e in entries] == ["x", "matrix"]
 
 
-def test_create_feature_configs_with_condition_yields_three_entries(
+def test_condition_extra_maps_to_parameters_0(
     one_param_arrays: TrainingArrays,
     rhs_data: np.ndarray,
     contract,
 ) -> None:
-    entries = _create_feature_configs(
-        one_param_arrays, rhs_data, contract, frozenset({"condition"})
-    )
-    names = [e.name for e in entries]
-    assert names == ["x", "matrix", "condition"]
+    entries = _create_feature_configs(one_param_arrays, rhs_data, contract, ["condition"])
+    assert [e.name for e in entries] == ["x", "matrix", "condition"]
+    condition_entry = entries[2]
+    assert isinstance(condition_entry, ZarrEntry)
+    assert condition_entry.path == one_param_arrays.parameters_zarr[0]
 
 
-def test_create_feature_configs_standard_ignores_params_zarr(
-    one_param_arrays: TrainingArrays,
+def test_two_extras_map_by_index(
+    two_param_arrays: TrainingArrays,
     rhs_data: np.ndarray,
     contract,
 ) -> None:
-    entries = _create_feature_configs(one_param_arrays, rhs_data, contract, frozenset())
-    names = [e.name for e in entries]
-    assert "condition" not in names
-    assert "parameters_0" not in names
+    entries = _create_feature_configs(two_param_arrays, rhs_data, contract, ["condition", "query"])
+    assert [e.name for e in entries] == ["x", "matrix", "condition", "query"]
+    assert isinstance(entries[2], ZarrEntry)
+    assert isinstance(entries[3], ZarrEntry)
+    assert entries[2].path == two_param_arrays.parameters_zarr[0]
+    assert entries[3].path == two_param_arrays.parameters_zarr[1]
+
+
+def test_too_many_extras_raises(
+    no_params_arrays: TrainingArrays,
+    rhs_data: np.ndarray,
+    contract,
+) -> None:
+    with pytest.raises(ValueError, match="extra features but dataset has"):
+        _create_feature_configs(no_params_arrays, rhs_data, contract, ["condition"])
+
+
+def test_declaration_order_is_preserved(
+    two_param_arrays: TrainingArrays,
+    rhs_data: np.ndarray,
+    contract,
+) -> None:
+    entries_ab = _create_feature_configs(two_param_arrays, rhs_data, contract, ["alpha", "beta"])
+    entries_ba = _create_feature_configs(two_param_arrays, rhs_data, contract, ["beta", "alpha"])
+    assert isinstance(entries_ab[2], ZarrEntry)
+    assert isinstance(entries_ba[2], ZarrEntry)
+    assert entries_ab[2].path == two_param_arrays.parameters_zarr[0]
+    assert entries_ba[2].path == two_param_arrays.parameters_zarr[0]
+    assert entries_ab[2].name == "alpha"
+    assert entries_ba[2].name == "beta"
 
 
 # ---------------------------------------------------------------------------
-# _extra_feature_names_from_settings (training.py integration)
+# _extra_feature_names_from_settings
 # ---------------------------------------------------------------------------
 
 
@@ -248,19 +203,19 @@ def _make_minimal_settings(feature_names: list[str]):
     )
 
 
-def test_extra_names_from_settings_condition_declared(contract) -> None:
+def test_extra_names_returns_ordered_list(contract) -> None:
     try:
-        settings = _make_minimal_settings(["x", "condition"])
+        settings = _make_minimal_settings(["x", "condition", "query"])
         extra = _extra_feature_names_from_settings(settings, contract)
-        assert extra == frozenset({"condition"})
+        assert extra == ["condition", "query"]
     except Exception:
         pytest.skip("Minimal settings construction requires DLKit internals; skip if unavailable")
 
 
-def test_extra_names_from_settings_standard_empty(contract) -> None:
+def test_extra_names_empty_when_only_base(contract) -> None:
     try:
         settings = _make_minimal_settings(["x"])
         extra = _extra_feature_names_from_settings(settings, contract)
-        assert extra == frozenset()
+        assert extra == []
     except Exception:
         pytest.skip("Minimal settings construction requires DLKit internals; skip if unavailable")
