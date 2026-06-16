@@ -47,7 +47,7 @@ def _per_sample_rel_l2(
     y_true: NDArray,
     eps: float = _EPSILON,
 ) -> float:
-    """Compute mean per-sample normalized L2 error matching NormalizedVectorNormError.
+    """Compute mean per-sample normalized L2 error matching RelativeVectorNormError.
 
     Formula: mean_i( ||pred_i - true_i||_2 / max(||true_i||_2, eps) )
 

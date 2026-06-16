@@ -135,7 +135,7 @@ def test_run_experiments_full_flow(
             },
             "metrics": [
                 {
-                    "name": "NormalizedVectorNormError",
+                    "name": "RelativeVectorNormError",
                     "module_path": "dlkit.domain.metrics",
                     "norm_ord": 2,
                     "vector_dim": -1,
@@ -287,7 +287,7 @@ def test_run_experiment_matrix_with_mlflow(
             },
             "metrics": [
                 {
-                    "name": "NormalizedVectorNormError",
+                    "name": "RelativeVectorNormError",
                     "module_path": "dlkit.domain.metrics",
                     "norm_ord": 2,
                     "vector_dim": -1,

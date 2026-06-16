@@ -1,7 +1,7 @@
 [SESSION]
 seed = 42
 workflow = "optimize"
-precision = "float64"
+precision = "64"
 
 [MODEL]
 name = "ScaleEquivariantFourierFeatureNetwork"
@@ -56,19 +56,18 @@ threshold = 1e-4
 min_lr = 1e-6
 
 [TRAINING.loss_function]
-name = "normalized_vector_norm_loss"
+name = "relative_vector_norm_loss"
 module_path = "dlkit.domain.losses"
 target_key = "targets.y"
 
 [[TRAINING.metrics]]
-name = "NormalizedVectorNormError"
+name = "RelativeVectorNormError"
 module_path = "dlkit.domain.metrics"
 norm_ord = 2
 vector_dim = -1
 
 [DATASET]
 name = "FlexibleDataset"
-memmap_cache = true
 
 [DATAMODULE]
 name = "InMemoryModule"

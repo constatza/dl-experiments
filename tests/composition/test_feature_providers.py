@@ -238,7 +238,7 @@ def _make_minimal_settings(feature_names: list[str]):
             "TRAINING": {
                 "trainer": {"max_epochs": 1},
                 "loss_function": {
-                    "name": "normalized_vector_norm_loss",
+                    "name": "relative_vector_norm_loss",
                     "module_path": "dlkit.domain.losses",
                     "target_key": "targets.y",
                 },

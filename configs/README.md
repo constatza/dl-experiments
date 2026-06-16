@@ -6,6 +6,10 @@ dataset generation, training, full execution, and comparison.
 This checkout is pinned to CUDA 13.0. Run `uv sync` once for the project
 environment, then use plain `uv run neuralls ...` commands.
 
+`SESSION.precision` must use Lightning-compatible precision names. Use `64`,
+`32`, `16`, `bf16`, `16-mixed`, or `bf16-mixed`; do not use dtype strings such
+as `float64`.
+
 ## Start With The Right File
 
 Choose the config type that matches the case you want to run:
@@ -31,7 +35,7 @@ archive. Its training datasets also read per-sample E vectors from
 
 Model families (all `ScaleEquivariant*`, `module_path = "dlkit.nn"`):
 - `ffnn/`: `ScaleEquivariantFFNN` — plain skip residual FFNN
-- `film/`: `ScaleEquivariantFiLM{,Embedded}FFNN` — parameter-conditioned FiLM FFNN variants
+- `film/`: `ScaleEquivariantFiLM{,Embedded}FFNN` — parameter-conditioned FiLM FFNN variants using `hidden_size` and `num_layers`
 - `deeponet/`: `FFNNDeepONet`, `EmbeddedDeepONet` — branch/trunk operator models driven by `query`
 - `embedded/`: `ScaleEquivariantEmbedded{Factorized,SPD,SPDFactorized}FFNN` — embedded square-output
 - `symmetric/`: `ScaleEquivariant{SPD,Factorized}FFNN` — non-embedded square-output
@@ -139,6 +143,7 @@ Model configs define:
 
 - DLKit model module and hyperparameters
 - trainer, loss, and optimizer-policy settings
+- the `[DATASET]` dataset class name only; do not add removed legacy keys such as `memmap_cache`
 - either `TRAINING.optimizer.default_optimizer` / `default_scheduler` or
   staged optimization under `TRAINING.optimizer.stages`
 - checkpoint callback naming
@@ -147,6 +152,9 @@ Model configs keep `module_path = "dlkit.nn"` as the user-facing entrypoint.
 `MODEL.name` must match the target class name exactly; kwargs stay flat under
 `[MODEL]` and are forwarded through DLKit's `ModelComponentSettings`
 filtering, so they must match the target constructor signature exactly.
+`TRAINING.loss_function.name` and each `TRAINING.metrics[].name` must match
+the current DLKit export names exactly, for example
+`relative_vector_norm_loss` and `RelativeVectorNormError`.
 For constant-width FFNN variants, "constant width" means the hidden body uses
 the model's built-in width policy. Do not add an explicit `size` or
 `hidden_size` override unless the DLKit constructor for that exact class

@@ -610,17 +610,22 @@ def _resolve_final_scale(
     scale_values: list[float],
     metadata_values: list[ScaleMetadata | None],
 ) -> tuple[float, float, ScaleMetadata | None]:
-    """Resolve final scaling parameters from all bindings.
+    """Resolve manifest-level normalization metadata from all bindings.
 
-    Checks consistency across bindings and logs warnings for inconsistencies.
+    Matrix samples are normalized per binding before they are written. The
+    manifest, however, exposes only one dataset-level normalization block.
+    When bindings disagree on scale details, the manifest omits ambiguous scale
+    metadata instead of inventing a shared reversible scale.
 
     Args:
-        norm_values: Matrix norm values from each binding
-        scale_values: Matrix value scale factors from each binding
-        metadata_values: Scale metadata from each binding
+        norm_values: Matrix norm values from each binding.
+        scale_values: Matrix value scale factors from each binding.
+        metadata_values: Scale metadata from each binding.
 
     Returns:
-        Tuple of (final_matrix_norm, final_matrix_scale, final_scale_metadata)
+        Tuple of ``(final_matrix_norm, final_matrix_scale, final_scale_metadata)``.
+        The returned ``final_scale_metadata`` is ``None`` when a multi-binding
+        dataset does not share one exact scale payload.
     """
     if not norm_values or not scale_values:
         raise ValueError("No norm or scale values to resolve")
@@ -629,16 +634,16 @@ def _resolve_final_scale(
     matrix_norm_value = float(norm_values[0])
     if not all(np.isclose(v, matrix_norm_value, rtol=1e-10, atol=1e-12) for v in norm_values):
         logger.warning(
-            "Multiple normalized matrix norms detected across bindings; "
-            "persisting first value in manifest metadata."
+            "Bindings produced different normalized matrix norms; "
+            "the dataset manifest keeps a representative matrix_norm only."
         )
 
     # Resolve matrix value scale
     matrix_value_scale = float(scale_values[0])
     if not all(np.isclose(v, matrix_value_scale, rtol=1e-10, atol=1e-12) for v in scale_values):
         logger.warning(
-            "Multiple matrix value scales detected across bindings; "
-            "persisting sparse pack with value_scale=1.0."
+            "Bindings produced different matrix value scales; "
+            "the dataset manifest omits a shared reversible matrix scale."
         )
         matrix_value_scale = 1.0
 
@@ -652,8 +657,8 @@ def _resolve_final_scale(
         scale_metadata = metadata_values[0]
     else:
         logger.warning(
-            "Multiple scale metadata payloads detected across bindings; "
-            "persisting empty scale metadata in manifest."
+            "Bindings produced different scale metadata payloads; "
+            "the dataset manifest intentionally stores no shared scale metadata."
         )
         scale_metadata = None
 

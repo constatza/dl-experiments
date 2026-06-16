@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import tomllib
@@ -20,10 +21,9 @@ max_epochs = 1
 [[TRAINING.trainer.callbacks]]
 name = "ModelCheckpoint"
 [[TRAINING.metrics]]
-name = "NormalizedVectorNormError"
+name = "RelativeVectorNormError"
 [DATASET]
 name = "FlexibleDataset"
-memmap_cache = true
 [MODEL]
 name = "ScaleEquivariantFFNN"
 module_path = "dlkit.nn"
@@ -39,7 +39,6 @@ max_epochs = 1
 name = "EarlyStopping"
 [DATASET]
 name = "FlexibleDataset"
-memmap_cache = true
 [MODEL]
 name = "LinearModel"
 module_path = "dlkit.nn"
@@ -112,7 +111,27 @@ def test_training_sections_round_trip(tmp_path: Path, config_content_template: s
     assert actual_metric_names == expected_metric_names
 
     dataset_name = raw_config.get("DATASET", {}).get("name")
-    if dataset_name == "FlexibleDataset":
-        assert settings.DATASET.memmap_cache is True
-    else:
-        assert settings.DATASET.memmap_cache is False
+    assert settings.DATASET.name == dataset_name
+
+
+@pytest.mark.parametrize("config_path", tuple(Path("configs/models").rglob("*.toml")), ids=str)
+def test_model_configs_reference_existing_dlkit_exports(config_path: Path) -> None:
+    """Model configs must only point at DLKit names that exist in the installed package."""
+    with config_path.open("rb") as fh:
+        raw_config = tomllib.load(fh)
+
+    training = raw_config.get("TRAINING", {})
+    loss_function = training.get("loss_function")
+
+    if loss_function is not None:
+        loss_module = importlib.import_module(loss_function["module_path"])
+        assert hasattr(loss_module, loss_function["name"]), (
+            f"{config_path} references missing loss "
+            f"{loss_function['module_path']}.{loss_function['name']}"
+        )
+
+    for metric in training.get("metrics", ()):
+        metric_module = importlib.import_module(metric["module_path"])
+        assert hasattr(metric_module, metric["name"]), (
+            f"{config_path} references missing metric {metric['module_path']}.{metric['name']}"
+        )

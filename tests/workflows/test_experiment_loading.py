@@ -135,7 +135,7 @@ class TestTrainingPipelineWithMLflow:
                 },
                 "metrics": [
                     {
-                        "name": "NormalizedVectorNormError",
+                        "name": "RelativeVectorNormError",
                         "module_path": "dlkit.domain.metrics",
                         "norm_ord": 2,
                         "vector_dim": -1,

@@ -44,7 +44,6 @@ name = "AdamW"
 
 [DATASET]
 name = "FlexibleDataset"
-memmap_cache = true
 
 [DATAMODULE]
 name = "InMemoryModule"

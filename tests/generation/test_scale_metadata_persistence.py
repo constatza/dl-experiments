@@ -5,6 +5,7 @@ import pytest
 from pathlib import Path
 
 from neuralls.composition.generation.dataset_builder import build_dataset
+from neuralls.domain.generation.orchestration import _resolve_final_scale
 from neuralls.platform.storage.datasets import (
     load_dataset_manifest,
     load_dense_training_arrays,
@@ -148,3 +149,19 @@ def test_denormalization_round_trip(temp_matrix_file: Path, tmp_path: Path):
     # since we multiply by composite_scale > 1
     assert scale.composite_scale > 1.0
     assert np.linalg.norm(denormalized_rhs) > np.linalg.norm(normalized_rhs)
+
+
+def test_multi_matrix_resolution_omits_shared_scale_metadata() -> None:
+    """Mixed binding scales drop manifest-level reversible scale metadata."""
+    matrix_norm, matrix_value_scale, scale_metadata = _resolve_final_scale(
+        norm_values=[1.0, 2.0],
+        scale_values=[3.0, 5.0],
+        metadata_values=[
+            {"spectral_radius_bound": 1.5, "dimension_scale": 2.0},
+            {"spectral_radius_bound": 2.5, "dimension_scale": 2.0},
+        ],
+    )
+
+    assert matrix_norm == 1.0
+    assert matrix_value_scale == 1.0
+    assert scale_metadata is None

@@ -137,6 +137,20 @@ The `[output] dataset_format` field in dataset TOML selects the storage format
 `open_sparse_pack()` from dlkit auto-detects the format at load time, so
 existing `npy_coo` datasets continue to work without conversion.
 
+## Normalization Metadata
+
+Generation writes normalized matrix samples, RHS vectors, and solutions as one
+consistent system. The dataset manifest stores one dataset-level normalization
+block only.
+
+For single-matrix datasets, that manifest block may include reversible scale
+metadata such as `spectral_radius_bound` and `dimension_scale`.
+
+For multi-matrix datasets, each matrix is still normalized independently before
+storage. If those bindings do not share one exact scale payload, the manifest
+intentionally leaves `normalization.scale` empty instead of pretending there is
+one dataset-wide reversible scale.
+
 ## Extension Rules
 
 When adding a strategy:
