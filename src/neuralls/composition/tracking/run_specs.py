@@ -156,10 +156,13 @@ def build_training_run_spec(
     paths: MlflowPaths,
     workspace_root: Path,
     timestamp: str | None = None,
+    include_timestamp: bool = True,
 ) -> MlflowRunConfig:
     """Build complete MlflowRunConfig for a training run.
 
-    Run name format: ``{display_name} | {readable_timestamp}``
+    Run name format: ``{display_name} | {readable_timestamp}`` when
+    ``include_timestamp`` is True (standalone runs), or just ``{display_name}``
+    when False (batch runs where the session parent already carries the timestamp).
 
     Args:
         entry: Experiment registry entry.
@@ -167,6 +170,7 @@ def build_training_run_spec(
         paths: Resolved MLflow tracking/artifact URIs.
         workspace_root: Workspace root directory.
         timestamp: Optional fixed timestamp (injectable for tests).
+        include_timestamp: When False, omit the timestamp from the run name.
 
     Returns:
         Complete MlflowRunConfig ready for training.
@@ -179,9 +183,11 @@ def build_training_run_spec(
         model_id=entry.model_id,
         experiment_display_name=entry.effective_display_name,
     )
+    display = entry.effective_display_name
+    run_name = f"{display} | {ts}" if include_timestamp else display
     return MlflowRunConfig(
         experiment_name=experiment_name,
-        run_name=f"{entry.effective_display_name} | {ts}",
+        run_name=run_name,
         tags=tags.as_mlflow_tags(),
         paths=paths,
         workspace_root=workspace_root,

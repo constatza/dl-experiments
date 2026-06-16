@@ -344,6 +344,14 @@ def _train_single(
     run_id = sidecar["run_id"] if sidecar else None
     tracking_uri = sidecar.get("tracking_uri") if sidecar else None
 
+    if run_id and tracking_uri and parent_run_id:
+        try:
+            MlflowClient(tracking_uri=tracking_uri).set_tag(
+                run_id, "mlflow.parentRunId", parent_run_id
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[{}] Could not set parent run tag: {}", label, exc)
+
     metrics: dict[str, float] = {}
     if run_id and tracking_uri:
         try:

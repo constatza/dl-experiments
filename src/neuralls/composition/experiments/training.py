@@ -520,6 +520,7 @@ def _build_training_run_config(
     mlflow_experiment_name: str | None,
     runtime_mlflow_env: Mapping[str, str],
     workspace_root: Path,
+    parent_run_id: str | None = None,
 ) -> MlflowRunConfig:
     """Build the execute()-time MLflow run config for training."""
     _ = dataset_display_name
@@ -537,10 +538,12 @@ def _build_training_run_config(
             experiment_name=experiment_name,
             paths=paths,
             workspace_root=workspace_root,
+            include_timestamp=parent_run_id is None,
         )
+    ts = f" | {format_run_timestamp()}" if parent_run_id is None else ""
     return MlflowRunConfig(
         experiment_name=experiment_name,
-        run_name=f"{experiment_display_name} | {format_run_timestamp()}",
+        run_name=f"{experiment_display_name}{ts}",
         tags={},
         paths=paths,
         workspace_root=workspace_root,
@@ -931,6 +934,7 @@ def train_model(
             mlflow_experiment_name=mlflow_experiment_name,
             runtime_mlflow_env=runtime_mlflow_env,
             workspace_root=workspace.root_dir,
+            parent_run_id=parent_run_id,
         )
 
         # Step 4: Configure DLKit settings (dataset, paths, MLflow names)
