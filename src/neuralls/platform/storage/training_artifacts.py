@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from neuralls.platform.storage.datasets import load_dense_training_arrays, resolve_dataset_paths
+from neuralls.platform.storage.datasets import read_training_sample_count, resolve_dataset_paths
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
 
 
@@ -51,17 +51,13 @@ def load_training_arrays(data_dir: Path) -> TrainingArrays:
         ValueError: If rhs and solutions have mismatched sample counts.
     """
     paths = resolve_dataset_paths(data_dir)
-    rhs, solutions = load_dense_training_arrays(data_dir)
-    if rhs.shape[0] != solutions.shape[0]:
-        raise ValueError(
-            f"RHS and solutions sample counts must match, got {rhs.shape[0]} and {solutions.shape[0]}"
-        )
+    sample_count = read_training_sample_count(paths)
     parameters_zarr = tuple(sorted(data_dir.glob(f"{PARAMETERS_ZARR_PREFIX}*.zarr")))
     return TrainingArrays(
         rhs=paths.rhs_path,
         solutions=paths.solutions_path,
         matrix_zarr=paths.matrix_zarr_dir,
-        sample_count=int(rhs.shape[0]),
+        sample_count=sample_count,
         parameters_zarr=parameters_zarr,
     )
 

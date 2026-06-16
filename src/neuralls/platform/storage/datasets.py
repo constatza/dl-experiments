@@ -376,6 +376,25 @@ def load_dataset_manifest(dataset_dir: str | Path) -> dict[str, Any]:
     return manifest
 
 
+def read_training_sample_count(paths: DatasetPaths) -> int:
+    """Return number of training samples without materializing arrays.
+
+    Args:
+        paths: Resolved dataset artifact paths.
+
+    Returns:
+        Sample count (first dimension of rhs and solutions arrays).
+
+    Raises:
+        ValueError: If rhs and solutions have mismatched sample counts.
+    """
+    rhs_n = zarr.open_array(str(paths.rhs_path), mode="r").shape[0]
+    sol_n = zarr.open_array(str(paths.solutions_path), mode="r").shape[0]
+    if rhs_n != sol_n:
+        raise ValueError(f"RHS and solutions sample counts must match, got {rhs_n} and {sol_n}")
+    return int(rhs_n)
+
+
 def load_dense_training_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
     """Return (rhs, solutions) as float64 arrays from rhs.zarr/ and solutions.zarr/.
 

@@ -148,7 +148,13 @@ def _load_and_prepare_data(
             - targets: List of in-memory target configs for DLKit
     """
     arrays = load_training_arrays(workspace.data_dir)
+    logger.info(
+        "Loading training arrays ({} samples) from {}", arrays.sample_count, workspace.data_dir
+    )
     rhs_data, solutions_data = load_dense_training_arrays(workspace.data_dir)
+    logger.info(
+        "Training arrays loaded — rhs {}, solutions {}", rhs_data.shape, solutions_data.shape
+    )
     extra_names = _extra_feature_names_from_settings(settings, contract)
     features = _create_feature_configs(arrays, rhs_data, contract, extra_names)
     targets = _create_target_configs(solutions_data, contract)
