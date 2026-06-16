@@ -180,6 +180,7 @@ def test_generate_fails_for_case_config_without_datasets(
     mock_load_settings.assert_called_once_with(config, None, profile=None)
     mock_load_case_config.assert_called_once_with(config, settings)
     mock_generate_batch.assert_not_called()
+    assert "Error during batch generation [ValueError]:" in result.stderr
 
 
 @patch("neuralls.cli.generate.generate_batch")
@@ -214,6 +215,7 @@ def test_generate_fails_for_dataset_config_without_single_subcommand(
     mock_load_settings.assert_not_called()
     mock_load_case_config.assert_not_called()
     mock_generate_batch.assert_not_called()
+    assert "Error during batch generation [ValueError]:" in result.stderr
 
 
 def test_generate_single_signature_uses_dataset_argument_and_case_option() -> None:
@@ -269,6 +271,63 @@ def test_generate_single_requires_case_config(
     assert result.exit_code == EXIT_FAILURE
     mock_load_settings.assert_not_called()
     mock_process_data.assert_not_called()
+    assert "Error during data generation [ValueError]:" in result.stderr
+
+
+@patch("neuralls.cli.generate.generate_batch")
+@patch("neuralls.cli.generate.load_validated_case_config")
+@patch("neuralls.cli.generate.load_case_settings")
+def test_generate_preserves_enriched_storage_error_message(
+    mock_load_settings: MagicMock,
+    mock_load_case_config: MagicMock,
+    mock_generate_batch: MagicMock,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "case.toml"
+    config.write_text("", encoding="utf-8")
+    settings = MagicMock()
+    cfg = MagicMock(datasets=[MagicMock()])
+    mock_load_settings.return_value = settings
+    mock_load_case_config.return_value = (cfg, MagicMock())
+    mock_generate_batch.side_effect = OSError(
+        "Updating matrix.zarr store at /tmp/matrix.zarr failed. "
+        "PermissionError: denied, winerror=5, src=a.partial, dst=zarr.json"
+    )
+
+    result = runner.invoke(app, ["generate", str(config)])
+
+    assert result.exit_code == EXIT_FAILURE
+    assert "Error during batch generation [OSError]:" in result.stderr
+    assert "winerror=5" in result.stderr
+    assert "dst=zarr.json" in result.stderr
+
+
+@patch("neuralls.cli.generate_single.process_data_from_config")
+@patch("neuralls.cli.generate_single.load_case_settings")
+def test_generate_single_preserves_enriched_storage_error_message(
+    mock_load_settings: MagicMock,
+    mock_process_data: MagicMock,
+    tmp_path: Path,
+) -> None:
+    dataset_config = tmp_path / "dataset.toml"
+    case_config = tmp_path / "case.toml"
+    dataset_config.write_text("", encoding="utf-8")
+    case_config.write_text("", encoding="utf-8")
+    settings = MagicMock()
+    mock_load_settings.return_value = settings
+    mock_process_data.side_effect = PermissionError(
+        "Writing rhs.zarr at /tmp/rhs.zarr failed. "
+        "PermissionError: denied, winerror=5, src=b.partial, dst=zarr.json"
+    )
+
+    result = runner.invoke(
+        app,
+        ["generate-single", str(dataset_config), "--case-config", str(case_config)],
+    )
+
+    assert result.exit_code == EXIT_FAILURE
+    assert "Error during data generation [PermissionError]:" in result.stderr
+    assert "winerror=5" in result.stderr
 
 
 def test_train_signature_uses_batch_case_argument() -> None:

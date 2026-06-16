@@ -7,6 +7,7 @@ from typing import Any
 
 import typer
 
+from neuralls.cli.error_messages import format_cli_error
 from neuralls.cli.options import EnvFileOption, ProfileOption
 from neuralls.composition.experiments.assembler import load_validated_case_config
 from neuralls.composition.generation.multi_generation import generate_batch
@@ -46,7 +47,7 @@ def generate_case(
             )
         results = generate_batch(cfg=cfg, configs_dir=config.resolve().parent, settings=settings)
     except (FileNotFoundError, OSError, RuntimeError, ValueError) as exc:
-        typer.echo(f"Error during batch generation: {exc}", err=True)
+        typer.echo(format_cli_error("Error during batch generation", exc), err=True)
         raise typer.Exit(code=EXIT_FAILURE) from exc
 
     for result in results:

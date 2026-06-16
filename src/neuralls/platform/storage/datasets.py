@@ -61,6 +61,37 @@ class DenseZarrAccumulator:
         self._n_samples: int = 0
         self._finalized: bool = False
 
+    @staticmethod
+    def _format_os_error(exc: OSError) -> str:
+        details = [f"{type(exc).__name__}: {exc}"]
+        if exc.errno is not None:
+            details.append(f"errno={exc.errno}")
+        winerror = getattr(exc, "winerror", None)
+        if winerror is not None:
+            details.append(f"winerror={winerror}")
+        if exc.filename:
+            details.append(f"src={exc.filename}")
+        if exc.filename2:
+            details.append(f"dst={exc.filename2}")
+        return ", ".join(details)
+
+    @staticmethod
+    def _permission_hint(exc: OSError) -> str:
+        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) == 5:
+            return (
+                " This usually means the filesystem blocked an atomic Zarr metadata rename, "
+                "which is common on network shares or when another process is holding the file."
+            )
+        return ""
+
+    def _raise_storage_error(self, operation: str, path: Path, exc: OSError) -> None:
+        message = (
+            f"{operation} at {path} failed. "
+            f"{self._format_os_error(exc)}"
+            f"{self._permission_hint(exc)}"
+        )
+        raise OSError(message) from exc
+
     def append_sparse_components(
         self,
         *,
@@ -98,15 +129,24 @@ class DenseZarrAccumulator:
         n, m = int(matrix.shape[0]), int(matrix.shape[1])
         if self._arr is None:
             self._size = (n, m)
-            self._arr = zarr.open_array(
-                str(self._zarr_path),
-                mode="w",
-                shape=(0, n, m),
-                chunks=(1, n, m),
-                dtype="float64",
-            )
-        self._arr.resize((self._arr.shape[0] + repeats, n, m))
-        self._arr[-repeats:] = np.broadcast_to(matrix[np.newaxis], (repeats, n, m))
+            try:
+                self._arr = zarr.open_array(
+                    str(self._zarr_path),
+                    mode="w",
+                    shape=(0, n, m),
+                    chunks=(1, n, m),
+                    dtype="float64",
+                )
+            except OSError as exc:
+                self._raise_storage_error("Creating matrix.zarr store", self._zarr_path, exc)
+        arr = self._arr
+        if arr is None:
+            raise RuntimeError("matrix.zarr store was not initialized after successful open.")
+        try:
+            arr.resize((arr.shape[0] + repeats, n, m))
+            arr[-repeats:] = np.broadcast_to(matrix[np.newaxis], (repeats, n, m))
+        except OSError as exc:
+            self._raise_storage_error("Updating matrix.zarr store", self._zarr_path, exc)
         self._n_samples += repeats
 
     def finalize(self) -> Path:
@@ -138,6 +178,37 @@ class DenseDatasetWriter:
     the accumulator and will be moved into place if needed.
     """
 
+    @staticmethod
+    def _format_os_error(exc: OSError) -> str:
+        details = [f"{type(exc).__name__}: {exc}"]
+        if exc.errno is not None:
+            details.append(f"errno={exc.errno}")
+        winerror = getattr(exc, "winerror", None)
+        if winerror is not None:
+            details.append(f"winerror={winerror}")
+        if exc.filename:
+            details.append(f"src={exc.filename}")
+        if exc.filename2:
+            details.append(f"dst={exc.filename2}")
+        return ", ".join(details)
+
+    @staticmethod
+    def _permission_hint(exc: OSError) -> str:
+        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) == 5:
+            return (
+                " This usually means the filesystem blocked an atomic Zarr metadata rename, "
+                "which is common on network shares or when another process is holding the file."
+            )
+        return ""
+
+    def _raise_storage_error(self, operation: str, path: Path, exc: OSError) -> None:
+        message = (
+            f"{operation} at {path} failed. "
+            f"{self._format_os_error(exc)}"
+            f"{self._permission_hint(exc)}"
+        )
+        raise OSError(message) from exc
+
     def write_dataset(
         self,
         dataset_dir: Path,
@@ -154,31 +225,47 @@ class DenseDatasetWriter:
 
         n = int(payload.rhs.shape[1])
 
-        rhs_arr = zarr.open_array(
-            str(paths.rhs_path),
-            mode="w",
-            shape=payload.rhs.shape,
-            chunks=(1, n),
-            dtype="float64",
-        )
-        rhs_arr[:] = payload.rhs
+        try:
+            rhs_arr = zarr.open_array(
+                str(paths.rhs_path),
+                mode="w",
+                shape=payload.rhs.shape,
+                chunks=(1, n),
+                dtype="float64",
+            )
+            rhs_arr[:] = payload.rhs
+        except OSError as exc:
+            self._raise_storage_error("Writing rhs.zarr", paths.rhs_path, exc)
 
-        sol_arr = zarr.open_array(
-            str(paths.solutions_path),
-            mode="w",
-            shape=payload.solutions.shape,
-            chunks=(1, n),
-            dtype="float64",
-        )
-        sol_arr[:] = payload.solutions
+        try:
+            sol_arr = zarr.open_array(
+                str(paths.solutions_path),
+                mode="w",
+                shape=payload.solutions.shape,
+                chunks=(1, n),
+                dtype="float64",
+            )
+            sol_arr[:] = payload.solutions
+        except OSError as exc:
+            self._raise_storage_error("Writing solutions.zarr", paths.solutions_path, exc)
 
         pack_src = Path(payload.matrix_zarr_path)
         if pack_src != paths.matrix_zarr_dir:
-            if paths.matrix_zarr_dir.exists():
-                shutil.rmtree(str(paths.matrix_zarr_dir))
-            shutil.move(str(pack_src), str(paths.matrix_zarr_dir))
+            try:
+                if paths.matrix_zarr_dir.exists():
+                    shutil.rmtree(str(paths.matrix_zarr_dir))
+                shutil.move(str(pack_src), str(paths.matrix_zarr_dir))
+            except OSError as exc:
+                self._raise_storage_error(
+                    "Moving matrix.zarr store into place", paths.matrix_zarr_dir, exc
+                )
 
-        mat_arr = zarr.open_array(str(paths.matrix_zarr_dir), mode="r")
+        try:
+            mat_arr = zarr.open_array(str(paths.matrix_zarr_dir), mode="r")
+        except OSError as exc:
+            self._raise_storage_error(
+                "Reopening matrix.zarr for manifest inspection", paths.matrix_zarr_dir, exc
+            )
         mat_shape = list(mat_arr.shape)
         n_matrix_samples = int(mat_arr.shape[0])
         broadcast = n_matrix_samples == 1
@@ -189,14 +276,18 @@ class DenseDatasetWriter:
             if params_arr.size == 0:
                 continue
             params_name = f"{PARAMETERS_ZARR_PREFIX}{i}.zarr"
-            params_zarr = zarr.open_array(
-                str(dataset_dir / params_name),
-                mode="w",
-                shape=params_arr.shape,
-                chunks=(1, params_arr.shape[1]) if params_arr.ndim == 2 else params_arr.shape,
-                dtype="float64",
-            )
-            params_zarr[:] = params_arr
+            params_path = dataset_dir / params_name
+            try:
+                params_zarr = zarr.open_array(
+                    str(params_path),
+                    mode="w",
+                    shape=params_arr.shape,
+                    chunks=(1, params_arr.shape[1]) if params_arr.ndim == 2 else params_arr.shape,
+                    dtype="float64",
+                )
+                params_zarr[:] = params_arr
+            except OSError as exc:
+                self._raise_storage_error(f"Writing {params_name}", params_path, exc)
             params_manifest.append(
                 {
                     "index": i,

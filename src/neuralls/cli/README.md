@@ -31,3 +31,5 @@ instantiate platform adapters directly or contain workflow business logic.
 CLI owns argument parsing, top-level option semantics, and user-facing error
 messages. It may resolve the active settings/profile context, but it should not
 contain workflow assembly, filesystem policy, or service-integration logic.
+Generation commands therefore render failures at the CLI boundary, while
+lower layers supply the detailed operation/path context needed for diagnosis.

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from neuralls.cli.error_messages import format_cli_error
 from neuralls.cli.options import CaseConfigOption, EnvFileOption, ProfileOption
 from neuralls.composition.generation.process_data import process_data_from_config
 from neuralls.composition.config import load_case_settings, resolve_case_config_path
@@ -45,5 +46,7 @@ def generate_single(
         for file in sorted(output_path.glob("*")):
             typer.echo(f"    - {file.name}")
     except (FileNotFoundError, OSError, RuntimeError, ValueError) as exc:
-        typer.echo(f"\n{SYMBOL_ERROR} Error: {exc}", err=True)
+        typer.echo(
+            f"\n{SYMBOL_ERROR} {format_cli_error('Error during data generation', exc)}", err=True
+        )
         raise typer.Exit(code=EXIT_FAILURE) from exc

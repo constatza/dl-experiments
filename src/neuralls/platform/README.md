@@ -68,6 +68,9 @@ re-normalizing them against the local operating system.
 Storage validation owns concrete dataset-layout checks. Comparison matrix/RHS
 preflight belongs under `platform.storage` because it depends on manifest and
 sparse-pack layout knowledge rather than workflow sequencing.
+The same boundary owns filesystem and Zarr write-failure enrichment for dataset
+artifacts so CLI callers receive operation- and path-specific diagnostics
+without importing storage policy into composition.
 
 Case-driven comparison sample selection stays explicit and deterministic.
 `ComparisonRegistryEntry.matrix_index` and `rhs_index` default to `0`, and the

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -17,6 +18,18 @@ from neuralls.platform.storage.datasets import (
     load_dataset_manifest,
     resolve_dataset_paths,
 )
+
+
+def _permission_denied(
+    src: Path,
+    dst: Path,
+    *,
+    message: str = "Access is denied",
+) -> PermissionError:
+    exc = PermissionError(13, message, str(src))
+    exc.winerror = 5  # type: ignore[attr-defined]
+    exc.filename2 = str(dst)  # type: ignore[attr-defined]
+    return exc
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +226,44 @@ def test_n_samples_property(tmp_path: Path, small_matrix: NDArray[np.float64]) -
     assert acc.n_samples == 5
 
 
+def test_append_dense_matrix_reports_create_failure(tmp_path: Path) -> None:
+    acc = DenseZarrAccumulator(tmp_path / "matrix.zarr")
+
+    with patch("neuralls.platform.storage.datasets.zarr.open_array") as mock_open:
+        mock_open.side_effect = _permission_denied(
+            tmp_path / "matrix.zarr" / "zarr.partial",
+            tmp_path / "matrix.zarr" / "zarr.json",
+        )
+
+        with pytest.raises(OSError, match="Creating matrix.zarr store") as exc_info:
+            acc.append_dense_matrix(np.eye(2, dtype=np.float64), repeats=1)
+
+    assert "winerror=5" in str(exc_info.value)
+    assert "filesystem blocked an atomic Zarr metadata rename" in str(exc_info.value)
+
+
+def test_append_dense_matrix_reports_update_failure(
+    tmp_path: Path, small_matrix: NDArray[np.float64]
+) -> None:
+    acc = DenseZarrAccumulator(tmp_path / "matrix.zarr")
+
+    class FailingArray:
+        shape = (1, 4, 4)
+
+        def resize(self, _shape: tuple[int, int, int]) -> None:
+            raise _permission_denied(
+                tmp_path / "matrix.zarr" / "zarr.partial",
+                tmp_path / "matrix.zarr" / "zarr.json",
+            )
+
+    acc._arr = FailingArray()  # type: ignore[assignment]
+
+    with pytest.raises(OSError, match="Updating matrix.zarr store") as exc_info:
+        acc.append_dense_matrix(small_matrix, repeats=1)
+
+    assert "dst=" in str(exc_info.value)
+
+
 # ---------------------------------------------------------------------------
 # DenseDatasetWriter — integration tests
 # ---------------------------------------------------------------------------
@@ -286,3 +337,71 @@ def test_load_dataset_manifest_roundtrip(
     assert "matrix" in manifest
     assert "rhs" in manifest
     assert "solutions" in manifest
+
+
+def test_writer_reports_rhs_write_failure(tmp_path: Path) -> None:
+    writer = DenseDatasetWriter()
+    payload = GeneratedDatasetPayload(
+        rhs=np.ones((1, 2), dtype=np.float64),
+        solutions=np.zeros((1, 2), dtype=np.float64),
+        matrix_zarr_path=tmp_path / "matrix.zarr",
+        matrix_size=(2, 2),
+        normalization_type="none",
+        matrix_norm=1.0,
+        matrix_norm_type="spectral",
+    )
+
+    with patch("neuralls.platform.storage.datasets.zarr.open_array") as mock_open:
+        mock_open.side_effect = _permission_denied(
+            tmp_path / "rhs.zarr" / "zarr.partial",
+            tmp_path / "rhs.zarr" / "zarr.json",
+        )
+
+        with pytest.raises(OSError, match="Writing rhs.zarr") as exc_info:
+            writer.write_dataset(tmp_path, payload)
+
+    assert "winerror=5" in str(exc_info.value)
+    assert "rhs.zarr" in str(exc_info.value)
+
+
+def test_writer_reports_move_failure(
+    tmp_path: Path, two_by_two_matrix: NDArray[np.float64]
+) -> None:
+    writer = DenseDatasetWriter()
+    source_dir = tmp_path / "staging" / "matrix.zarr"
+    source_dir.mkdir(parents=True)
+    payload = GeneratedDatasetPayload(
+        rhs=np.ones((1, 2), dtype=np.float64),
+        solutions=np.zeros((1, 2), dtype=np.float64),
+        matrix_zarr_path=source_dir,
+        matrix_size=(2, 2),
+        normalization_type="none",
+        matrix_norm=1.0,
+        matrix_norm_type="spectral",
+    )
+
+    def fake_open_array(path: str, mode: str, **kwargs: object):
+        class WritableArray:
+            def __setitem__(self, key: object, value: object) -> None:
+                return None
+
+        class ReadableArray:
+            shape = (1, 2, 2)
+
+        if mode == "r":
+            return ReadableArray()
+        return WritableArray()
+
+    with (
+        patch("neuralls.platform.storage.datasets.zarr.open_array", side_effect=fake_open_array),
+        patch("neuralls.platform.storage.datasets.shutil.move") as mock_move,
+    ):
+        mock_move.side_effect = _permission_denied(
+            source_dir,
+            tmp_path / "matrix.zarr",
+        )
+
+        with pytest.raises(OSError, match="Moving matrix.zarr store into place") as exc_info:
+            writer.write_dataset(tmp_path, payload)
+
+    assert "dst=" in str(exc_info.value)

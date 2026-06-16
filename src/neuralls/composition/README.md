@@ -76,6 +76,9 @@ inspect training/test splits or try to infer leakage-safe held-out samples.
 Comparison input preflight also stays out of composition. Workflow code invokes
 platform-owned validation for matrix/RHS inputs rather than inspecting dataset
 manifests or sparse-pack layout directly.
+Likewise, enriched infrastructure failures from storage and tracking propagate
+through composition unchanged; composition does not reformat low-level I/O
+errors into user-facing strings.
 
 Comparison model resolution treats one resolved MLflow `run_id` as the hard
 boundary for checkpoint discovery. When downloaded run artifacts contain
