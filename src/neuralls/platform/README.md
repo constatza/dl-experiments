@@ -69,6 +69,12 @@ Storage validation owns concrete dataset-layout checks. Comparison matrix/RHS
 preflight belongs under `platform.storage` because it depends on manifest and
 sparse-pack layout knowledge rather than workflow sequencing.
 
+Case-driven comparison sample selection stays explicit and deterministic.
+`ComparisonRegistryEntry.matrix_index` and `rhs_index` default to `0`, and the
+workflow uses those indices directly when selecting one matrix/RHS system from
+the comparison dataset. Platform does not infer held-out semantics from
+training runs or MLflow split artifacts.
+
 Training artifact persistence also stays generic: platform storage writes the
 already-normalized numpy payload it receives from composition without
 reintroducing DLKit prediction-key fallback logic.

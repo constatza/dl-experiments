@@ -369,6 +369,71 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
     assert mock_setup_tracking.call_args.kwargs["experiment_name"] == "CustomComparison"
 
 
+def test_run_comparison_uses_explicit_entry_indices(tmp_path: Path) -> None:
+    """Case-driven comparison forwards the entry's explicit sample indices unchanged."""
+    experiments_config = tmp_path / "experiments.toml"
+    _write_experiments_config(experiments_config)
+    matrix_path, rhs_path = _write_system_inputs(tmp_path)
+    cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ],
+    )
+    cfg.general.data.matrix_index = 4
+    cfg.general.data.rhs_index = 9
+    payload = MagicMock()
+    entry = _make_entry()
+    settings = _make_settings(tmp_path)
+
+    with (
+        patch(_COMPARE_PRECONDITIONERS, return_value=payload) as mock_compare,
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
+        patch(_SETUP_TRACKING),
+        patch(_LOG_COMPARISON_ARTIFACTS),
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        _run_comparison_from_config(cfg, entry, experiments_config, settings)
+
+    assert mock_compare.call_args.kwargs["general_params"].data.matrix_index == 4
+    assert mock_compare.call_args.kwargs["general_params"].data.rhs_index == 9
+
+
+def test_run_comparison_does_not_require_split_artifacts(tmp_path: Path) -> None:
+    """Case-driven comparison should not inspect DLKit split artifacts."""
+    experiments_config = tmp_path / "experiments.toml"
+    _write_experiments_config(experiments_config)
+    matrix_path, rhs_path = _write_system_inputs(tmp_path)
+    cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ],
+    )
+    payload = MagicMock()
+    entry = _make_entry()
+    settings = _make_settings(tmp_path)
+
+    with (
+        patch(_COMPARE_PRECONDITIONERS, return_value=payload),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
+        patch(_SETUP_TRACKING),
+        patch(_LOG_COMPARISON_ARTIFACTS),
+        patch(
+            "neuralls.platform.tracking.splits.download_split_indices",
+            side_effect=AssertionError("split artifacts should not be consulted"),
+        ),
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+
+    assert outcomes[0].success is True
+
+
 def test_sanitize_mlflow_metric_segment_replaces_invalid_characters() -> None:
     assert (
         sanitize_metric_key_segment(

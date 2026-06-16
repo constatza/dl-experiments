@@ -3,6 +3,9 @@ id = "gaussian-cg1-45x15randomE"
 [source]
 matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_subdomain_1_Kaa.txt"
 enumerate_by = "name"
+parameters_paths = [
+  "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_YoungModuli_E1_E2_E3_E4.txt",
+]
 
 [generation]
 normalize = "matrix"

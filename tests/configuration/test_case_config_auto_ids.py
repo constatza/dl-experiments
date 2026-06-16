@@ -165,6 +165,8 @@ def test_comparison_auto_id_when_same_datasets(
     config = CaseConfig.model_validate(raw)
     assert config.comparisons[0].id == "gaussian-cg1-45x15"
     assert config.comparisons[0].display_name == "Gaussian CG-1 45x15"
+    assert config.comparisons[0].matrix_index == 0
+    assert config.comparisons[0].rhs_index == 0
 
 
 def test_comparison_auto_id_when_different_datasets(
@@ -224,6 +226,42 @@ def test_explicit_id_and_display_name_preserved(
 
     assert config.comparisons[0].id == "my-comp"
     assert config.comparisons[0].display_name == "My Comparison"
+
+
+def test_comparison_explicit_indices_are_preserved(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Comparison entries keep explicit matrix/rhs sample indices."""
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "model": "ffnn-standard"}]
+    raw["comparisons"] = [
+        {
+            "matrix_dataset": "gaussian-cg1-45x15",
+            "rhs_dataset": "gaussian-cg1-45x15",
+            "matrix_index": 3,
+            "rhs_index": 7,
+        }
+    ]
+    config = CaseConfig.model_validate(raw)
+    assert config.comparisons[0].matrix_index == 3
+    assert config.comparisons[0].rhs_index == 7
+
+
+def test_comparison_rejects_removed_train_run_id(
+    minimal_case_raw: dict[str, object],
+) -> None:
+    """Case comparisons no longer accept split-driven train_run_id metadata."""
+    raw = dict(minimal_case_raw)
+    raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "model": "ffnn-standard"}]
+    raw["comparisons"] = [
+        {
+            "matrix_dataset": "gaussian-cg1-45x15",
+            "rhs_dataset": "gaussian-cg1-45x15",
+            "train_run_id": "run-123",
+        }
+    ]
+    with pytest.raises(ValidationError, match="train_run_id"):
+        CaseConfig.model_validate(raw)
 
 
 # ============================================================================

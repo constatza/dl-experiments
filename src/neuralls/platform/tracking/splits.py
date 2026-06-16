@@ -1,8 +1,8 @@
 """Utilities for recovering train-test split artifacts from MLflow runs.
 
 dlkit logs split indices as JSON under ``splits/`` in the run's artifact store.
-These utilities download and parse them so the comparison workflow can restrict
-evaluation to the test set that was held out during training.
+These helpers support inspection and debugging of training artifacts without
+implying any comparison-time sample-selection policy.
 """
 
 from __future__ import annotations

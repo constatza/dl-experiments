@@ -19,16 +19,20 @@ Choose the config type that matches the case you want to run:
 Current systems: `45x15`, `45x15randomE`, and `93x31`. Each system has case
 configs named `{model}-{dataset}.toml` with an optional `-pca` suffix for PCA-transform
 variants where that family exists. `evaluate-all.toml` runs all candidate models;
-`ffnn-mixed.toml` runs FFNN on all dataset variants; `solutions-pca.toml`
-remains specific to the plain `45x15` system.
+`ffnn-mixed.toml` runs FFNN on all dataset variants; `conditional.toml` is the
+`45x15randomE` case for parameter-conditioned FiLM and DeepONet models;
+`solutions-pca.toml` remains specific to the plain `45x15` system.
 Gaussian benchmark comparisons now reuse the corresponding `gaussian-cg1`
 training dataset instead of carrying duplicate `gaussian-rhs` TOMLs. The
 `45x15randomE` case family also reuses the existing `45x15`
 `scaled-solutions` benchmark dataset rather than defining a separate solution
-archive.
+archive. Its training datasets also read per-sample E vectors from
+`${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_YoungModuli_E1_E2_E3_E4.txt`.
 
 Model families (all `ScaleEquivariant*`, `module_path = "dlkit.nn"`):
 - `ffnn/`: `ScaleEquivariantFFNN` — plain skip residual FFNN
+- `film/`: `ScaleEquivariantFiLM{,Embedded}FFNN` — parameter-conditioned FiLM FFNN variants
+- `deeponet/`: `FFNNDeepONet`, `EmbeddedDeepONet` — branch/trunk operator models driven by `query`
 - `embedded/`: `ScaleEquivariantEmbedded{Factorized,SPD,SPDFactorized}FFNN` — embedded square-output
 - `symmetric/`: `ScaleEquivariant{SPD,Factorized}FFNN` — non-embedded square-output
 - `spectral/`: `ScaleEquivariant{Siren,FourierFeatureNetwork,ModifiedMLP}` — sine/Fourier networks
@@ -180,6 +184,12 @@ can selectively replace preconditioners or solver tolerances for a single entry.
 Datasets referenced by `[[comparisons]]` must be materialised with
 `neuralls generate-single` before comparison runs if they are not part of the
 training dataset batch.
+
+Case-driven comparison sample selection is explicit. Each `[[comparisons]]`
+entry uses `matrix_index` and `rhs_index` to choose one system from the
+comparison datasets; both default to `0` when omitted. The comparison workflow
+does not infer held-out-only evaluation from training runs or split artifacts.
+If a specific sample matters, set the indices directly in the case config.
 
 ## MLflow And Paths
 

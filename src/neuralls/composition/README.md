@@ -68,6 +68,11 @@ itself: it delegates metric-key sanitization, comparison-run metric logging, and
 nested child-run writes to `platform.tracking`, while only assembling child tag
 payloads and deciding when the logging happens.
 
+Case-driven comparison selection is intentionally simple: one comparison entry
+loads one system, and the chosen matrix/RHS samples come directly from
+`matrix_index` and `rhs_index` on the comparison entry. Composition does not
+inspect training/test splits or try to infer leakage-safe held-out samples.
+
 Comparison input preflight also stays out of composition. Workflow code invokes
 platform-owned validation for matrix/RHS inputs rather than inspecting dataset
 manifests or sparse-pack layout directly.

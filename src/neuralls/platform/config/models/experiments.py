@@ -241,7 +241,9 @@ class ComparisonRegistryEntry(BaseModel):
         matrix_dataset: Dataset id (from ``[[datasets]]``) used as the test matrix.
         rhs_dataset: Dataset id (from ``[[datasets]]``) used as the test RHS.
         matrix_index: Matrix sample index when the dataset stores multiple matrices.
+            Defaults to 0.
         rhs_index: RHS sample index when the dataset stores multiple RHS vectors.
+            Defaults to 0.
         method: Optional path to a comparison TOML that overrides defaults.
         experiments: Optional experiment id filter; empty means all experiments.
         display_name: Optional human-facing label.
@@ -255,14 +257,6 @@ class ComparisonRegistryEntry(BaseModel):
     method: Path | None = None
     experiments: list[str] = Field(default_factory=list)
     display_name: str | None = None
-    train_run_id: str | None = Field(
-        default=None,
-        description=(
-            "MLflow run ID of the training run whose test-split indices drive this comparison. "
-            "When set, the comparison iterates over every index in the test split rather than "
-            "using the single matrix_index/rhs_index values."
-        ),
-    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
