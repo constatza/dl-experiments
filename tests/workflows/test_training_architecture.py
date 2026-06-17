@@ -25,7 +25,7 @@ from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
 from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 
-from neuralls.platform.storage.training_artifacts import TrainingArrays
+from neuralls.platform.storage.training_artifacts import TrainingArrays, ZarrArraySource
 from neuralls.platform.tracking.mlflow import resolve_runtime_tracking_config
 from neuralls.platform.tracking.mlflow_client import parent_run_context
 from neuralls.composition.experiments.runtime_dataset_contract import (
@@ -65,22 +65,17 @@ def sample_solutions() -> np.ndarray:
 
 @pytest.fixture
 def sample_arrays(tmp_path: Path) -> TrainingArrays:
-    """Sample training artifact paths."""
+    """Sample training artifact sources."""
     rng = np.random.default_rng(seed=42)
     rhs = rng.random((10, 5)).astype(np.float64)
     solutions = rng.random((10, 5)).astype(np.float64)
-    rhs_path = tmp_path / "rhs.npy"
-    solutions_path = tmp_path / "solutions.npy"
-    np.save(rhs_path, rhs)
-    np.save(solutions_path, solutions)
-
     matrix_zarr = tmp_path / "matrix.zarr"
     matrix_zarr.mkdir()
     (matrix_zarr / "zarr.json").write_text('{"zarr_format": 3, "node_type": "array"}')
     return TrainingArrays(
-        rhs=rhs_path,
-        solutions=solutions_path,
-        matrix_zarr=matrix_zarr,
+        rhs=rhs,
+        solutions=solutions,
+        matrix_source=ZarrArraySource(path=matrix_zarr),
         sample_count=10,
     )
 
@@ -129,9 +124,13 @@ def test_create_feature_configs_graph_dataset(
 ) -> None:
     """_create_feature_configs returns in-memory rhs + path-dropped matrix for GraphDataset."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(
-        sample_arrays, sample_rhs, contract, frozenset(), contract.primary_input_name
+    sample_arrays = TrainingArrays(
+        rhs=sample_rhs,
+        solutions=sample_arrays.solutions,
+        matrix_source=sample_arrays.matrix_source,
+        sample_count=sample_arrays.sample_count,
     )
+    features = _create_feature_configs(sample_arrays, contract, [], contract.primary_input_name)
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -150,9 +149,13 @@ def test_create_feature_configs_flexible_dataset(
 ) -> None:
     """_create_feature_configs returns in-memory rhs + path-dropped matrix for FlexibleDataset."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(
-        sample_arrays, sample_rhs, contract, frozenset(), contract.primary_input_name
+    sample_arrays = TrainingArrays(
+        rhs=sample_rhs,
+        solutions=sample_arrays.solutions,
+        matrix_source=sample_arrays.matrix_source,
+        sample_count=sample_arrays.sample_count,
     )
+    features = _create_feature_configs(sample_arrays, contract, [], contract.primary_input_name)
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -171,9 +174,13 @@ def test_create_feature_configs_default_to_flexible(
 ) -> None:
     """_create_feature_configs defaults to in-memory rhs + path-dropped matrix behavior."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(
-        sample_arrays, sample_rhs, contract, frozenset(), contract.primary_input_name
+    sample_arrays = TrainingArrays(
+        rhs=sample_rhs,
+        solutions=sample_arrays.solutions,
+        matrix_source=sample_arrays.matrix_source,
+        sample_count=sample_arrays.sample_count,
     )
+    features = _create_feature_configs(sample_arrays, contract, [], contract.primary_input_name)
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -444,9 +451,13 @@ def test_contract_override_drives_injection_and_validation(
         prediction_name="rhs_pred",
         loss_target_key="targets.rhs",
     )
-    features = _create_feature_configs(
-        sample_arrays, sample_rhs, contract, frozenset(), contract.primary_input_name
+    sample_arrays = TrainingArrays(
+        rhs=sample_rhs,
+        solutions=sample_arrays.solutions,
+        matrix_source=sample_arrays.matrix_source,
+        sample_count=sample_arrays.sample_count,
     )
+    features = _create_feature_configs(sample_arrays, contract, [], contract.primary_input_name)
     targets = _create_target_configs(sample_solutions, contract)
     settings = training_settings.model_copy(
         update={

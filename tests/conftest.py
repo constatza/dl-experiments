@@ -307,7 +307,7 @@ def sample_dataset_npz(tmp_path, small_spd_matrix, archive_solutions, archive_rh
         GeneratedDatasetPayload(
             rhs=archive_rhs,
             solutions=archive_solutions,
-            matrix_zarr_path=zarr_path,
+            matrix_artifact_path=zarr_path,
             matrix_size=(int(small_spd_matrix.shape[0]), int(small_spd_matrix.shape[1])),
             normalization_type="matrix",
             matrix_norm=float(np.linalg.norm(small_spd_matrix, ord=2)),
@@ -344,7 +344,7 @@ def sample_dataset_with_raw(tmp_path, small_spd_matrix, archive_solutions, archi
         GeneratedDatasetPayload(
             rhs=archive_rhs,
             solutions=archive_solutions,
-            matrix_zarr_path=zarr_path,
+            matrix_artifact_path=zarr_path,
             matrix_size=(int(small_spd_matrix.shape[0]), int(small_spd_matrix.shape[1])),
             normalization_type="matrix",
             matrix_norm=float(np.linalg.norm(small_spd_matrix, ord=2)),

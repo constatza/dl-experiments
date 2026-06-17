@@ -1,9 +1,4 @@
-"""Training artifact IO utilities.
-
-Pure functions for serializing, flattening, and persisting training
-artifacts (predictions, metrics, numpy arrays) to disk.
-No training orchestration logic — decoupled from DLKit and MLflow.
-"""
+"""Training artifact IO utilities."""
 
 from __future__ import annotations
 
@@ -14,63 +9,105 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import zarr
 
-from neuralls.platform.storage.datasets import read_training_sample_count, resolve_dataset_paths
-from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
+from neuralls.platform.storage.dataset_readers import (
+    load_dense_training_arrays,
+    read_training_sample_count,
+    resolve_dataset_artifacts,
+)
+
+
+@dataclass(frozen=True)
+class InMemoryArraySource:
+    """Array source carried directly in memory."""
+
+    array: np.ndarray
+
+
+@dataclass(frozen=True)
+class ZarrArraySource:
+    """Array source referenced by a zarr path."""
+
+    path: Path
+
+
+type ArraySource = InMemoryArraySource | ZarrArraySource
 
 
 @dataclass(frozen=True)
 class TrainingArrays:
-    """Training data artifact paths from dataset storage.
+    """Format-neutral training dataset artifacts and loaded dense tensors."""
 
-    Attributes:
-        rhs: Path to rhs.zarr directory.
-        solutions: Path to solutions.zarr directory.
-        matrix_zarr: Path to matrix.zarr directory.
-        sample_count: Number of samples in rhs/solutions.
-        parameters_zarr: Paths to parameters_0.zarr, parameters_1.zarr, … (may be empty).
-    """
-
-    rhs: Path
-    solutions: Path
-    matrix_zarr: Path
+    rhs: np.ndarray
+    solutions: np.ndarray
+    matrix_source: ArraySource
     sample_count: int
-    parameters_zarr: tuple[Path, ...] = ()
+    parameter_sources: tuple[ArraySource, ...] = ()
+
+    @property
+    def matrix_zarr(self) -> Path:
+        """Compatibility view for zarr-backed matrix sources."""
+        match self.matrix_source:
+            case ZarrArraySource(path=path):
+                return path
+            case _:
+                raise AttributeError("matrix_zarr is only available for zarr-backed datasets.")
+
+    @property
+    def parameters_zarr(self) -> tuple[Path, ...]:
+        """Compatibility view for zarr-backed parameter sources."""
+        paths: list[Path] = []
+        for source in self.parameter_sources:
+            match source:
+                case ZarrArraySource(path=path):
+                    paths.append(path)
+                case _:
+                    raise AttributeError(
+                        "parameters_zarr is only available for zarr-backed datasets."
+                    )
+        return tuple(paths)
+
+
+def _source_from_artifact(path: Path, format_name: str) -> ArraySource:
+    if format_name == "zarr":
+        return ZarrArraySource(path=path)
+    if format_name == "npy":
+        return InMemoryArraySource(array=np.load(path).astype(np.float64, copy=False))
+    raise ValueError(f"Unsupported training array format {format_name!r} at {path}")
 
 
 def load_training_arrays(data_dir: Path) -> TrainingArrays:
-    """Resolve training artifact paths from dataset directory.
-
-    Args:
-        data_dir: Directory containing training dataset files.
-
-    Returns:
-        ``TrainingArrays`` with resolved artifact paths and sample count.
-
-    Raises:
-        ValueError: If rhs and solutions have mismatched sample counts.
-    """
-    paths = resolve_dataset_paths(data_dir)
-    sample_count = read_training_sample_count(paths)
-    parameters_zarr = tuple(sorted(data_dir.glob(f"{PARAMETERS_ZARR_PREFIX}*.zarr")))
+    """Resolve training dataset arrays from a manifest-driven dataset directory."""
+    artifacts = resolve_dataset_artifacts(data_dir)
+    sample_count = read_training_sample_count(artifacts)
+    rhs, solutions = load_dense_training_arrays(data_dir)
     return TrainingArrays(
-        rhs=paths.rhs_path,
-        solutions=paths.solutions_path,
-        matrix_zarr=paths.matrix_zarr_dir,
+        rhs=rhs,
+        solutions=solutions,
+        matrix_source=_source_from_artifact(artifacts.matrix.path, artifacts.matrix.format),
         sample_count=sample_count,
-        parameters_zarr=parameters_zarr,
+        parameter_sources=tuple(
+            _source_from_artifact(artifact.path, artifact.format) for artifact in artifacts.params
+        ),
     )
 
 
+def load_array_source_sample(source: ArraySource, sample_index: int) -> np.ndarray:
+    """Load one sample from a tagged array source."""
+    match source:
+        case ZarrArraySource(path=path):
+            arr = zarr.open_array(str(path), mode="r")
+            data = arr[sample_index] if arr.ndim > 1 else arr[:]
+            return np.asarray(data, dtype=np.float64)
+        case InMemoryArraySource(array=array):
+            if array.ndim > 1:
+                return np.asarray(array[sample_index], dtype=np.float64)
+            return np.asarray(array, dtype=np.float64)
+
+
 def coerce_jsonable(value: Any) -> Any:
-    """Convert runtime values to JSON-compatible primitives.
-
-    Args:
-        value: Any Python value.
-
-    Returns:
-        JSON-serializable equivalent.
-    """
+    """Convert runtime values to JSON-compatible primitives."""
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, np.generic):
@@ -88,15 +125,7 @@ def flatten_numpy_payload(
     payload: Any,
     prefix: str = "",
 ) -> dict[str, np.ndarray]:
-    """Flatten nested numpy payloads into a stable dict of arrays.
-
-    Args:
-        payload: Nested mapping or array-like.
-        prefix: Key prefix for nested keys (used in recursion).
-
-    Returns:
-        Flat ``{key: ndarray}`` dict.
-    """
+    """Flatten nested numpy payloads into a stable dict of arrays."""
     if isinstance(payload, Mapping):
         flattened: dict[str, np.ndarray] = {}
         for key, value in payload.items():
@@ -117,13 +146,7 @@ def save_training_predictions(
     *,
     numpy_payload: Mapping[str, Any] | None = None,
 ) -> None:
-    """Persist training predictions/targets captured by dlkit.
-
-    Args:
-        training_result: DLKit training result with ``to_numpy()`` method.
-        predictions_dir: Directory to write ``.npy`` files and manifest.
-        numpy_payload: Optional pre-normalized payload to persist.
-    """
+    """Persist training predictions/targets captured by dlkit."""
     if numpy_payload is not None:
         all_numpy = numpy_payload
     else:

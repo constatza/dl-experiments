@@ -7,13 +7,13 @@ from typing import Any
 
 from neuralls.domain.generation.data_types import NormalizeType
 from neuralls.domain.generation.orchestration import build_dataset_payload
-from neuralls.domain.generation.ports import DatasetWriterPort, ZarrAccumulatorPort
+from neuralls.domain.generation.ports import DatasetAccumulatorPort
 from neuralls.domain.generation.source_streams import EnumerateBy
 from neuralls.platform.storage.datasets import (
-    DenseDatasetWriter,
-    DenseZarrAccumulator,
-    resolve_dataset_paths,
+    GenerationDatasetStorage,
+    make_generation_dataset_storage,
 )
+from neuralls.shared.types import DatasetFormat
 
 
 def build_dataset(
@@ -35,14 +35,15 @@ def build_dataset(
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
     solver_overrides: dict[str, Any] | None = None,
-    writer: DatasetWriterPort | None = None,
-    accumulator: ZarrAccumulatorPort | None = None,
+    dataset_format: DatasetFormat = "zarr",
+    storage: GenerationDatasetStorage | None = None,
+    accumulator: DatasetAccumulatorPort | None = None,
 ) -> str:
     """Build a persisted dataset by composing domain payload generation with storage."""
     dataset_path = Path(dataset_dir)
-    paths = resolve_dataset_paths(dataset_path)
-    paths.root.mkdir(parents=True, exist_ok=True)
-    acc: ZarrAccumulatorPort = accumulator or DenseZarrAccumulator(paths.matrix_zarr_dir)
+    dataset_path.mkdir(parents=True, exist_ok=True)
+    dataset_storage = storage or make_generation_dataset_storage(dataset_format)
+    acc: DatasetAccumulatorPort = accumulator or dataset_storage.make_accumulator(dataset_path)
     payload = build_dataset_payload(
         matrix_path=matrix_path,
         counts=counts,
@@ -62,6 +63,5 @@ def build_dataset(
         solver_overrides=solver_overrides,
         accumulator=acc,
     )
-    dataset_writer: DatasetWriterPort = writer or DenseDatasetWriter()
-    dataset_writer.write_dataset(dataset_path, payload)
+    dataset_storage.write_dataset(dataset_path, payload)
     return dataset_dir

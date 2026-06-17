@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import zarr
 
-from neuralls.platform.storage.training_artifacts import load_training_arrays
+from neuralls.platform.storage.training_artifacts import ZarrArraySource, load_training_arrays
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
 
 
@@ -48,7 +48,8 @@ def two_parameters_zarrs(minimal_dataset: Path) -> Path:
 def test_load_training_arrays_detects_parameters_zarr(two_parameters_zarrs: Path) -> None:
     arrays = load_training_arrays(two_parameters_zarrs)
 
-    assert len(arrays.parameters_zarr) == 2
+    assert len(arrays.parameter_sources) == 2
+    assert isinstance(arrays.parameter_sources[0], ZarrArraySource)
     assert arrays.parameters_zarr[0].stem == f"{PARAMETERS_ZARR_PREFIX}0"
     assert arrays.parameters_zarr[1].stem == f"{PARAMETERS_ZARR_PREFIX}1"
 
@@ -57,7 +58,7 @@ def test_load_training_arrays_returns_empty_parameters_when_absent(
     minimal_dataset: Path,
 ) -> None:
     arrays = load_training_arrays(minimal_dataset)
-    assert arrays.parameters_zarr == ()
+    assert arrays.parameter_sources == ()
 
 
 def test_load_training_arrays_parameters_sorted_by_index(two_parameters_zarrs: Path) -> None:

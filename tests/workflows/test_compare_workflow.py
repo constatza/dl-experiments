@@ -24,7 +24,7 @@ def _write_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:
     payload = GeneratedDatasetPayload(
         rhs=rhs,
         solutions=sols,
-        matrix_zarr_path=zarr_path,
+        matrix_artifact_path=zarr_path,
         matrix_size=(int(A.shape[0]), int(A.shape[1])),
         normalization_type="matrix",
         matrix_norm=float(np.linalg.norm(A, ord=2)),

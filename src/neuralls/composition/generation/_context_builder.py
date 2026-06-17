@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from neuralls.domain.generation.data_types import NormalizeType
 from neuralls.domain.generation.plan import (
@@ -15,6 +15,7 @@ from neuralls.domain.generation.plan import (
 )
 from neuralls.domain.generation.source_streams import EnumerateBy
 from neuralls.platform.config.models.data_models import DataConfigFile, GenerationConfig
+from neuralls.shared.types import DatasetFormat
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,7 @@ class DataGenerationContext:
         shuffle: Whether to shuffle samples after generation.
         replacement: Whether to sample with replacement.
         parameters_paths: Tuple of additional parameter file paths.
-        dataset_format: Storage format — currently only ``"zarr_dense"``.
+        dataset_format: Storage format family for persisted dataset artifacts.
     """
 
     matrix_path: str
@@ -49,7 +50,7 @@ class DataGenerationContext:
     shuffle: bool
     replacement: bool
     parameters_paths: tuple[str, ...] = ()
-    dataset_format: Literal["zarr_dense"] = "zarr_dense"
+    dataset_format: DatasetFormat = "zarr"
 
 
 def _plan_from_generation_config(

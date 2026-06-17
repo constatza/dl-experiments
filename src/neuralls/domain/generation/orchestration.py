@@ -24,7 +24,7 @@ from .trace_utils import (
 )
 from .interfaces import ArchiveData, TracingSolverCallable
 from .payloads import GeneratedDatasetPayload
-from .ports import ZarrAccumulatorPort
+from .ports import DatasetAccumulatorPort
 from .runner import strategy_supports_matrix_replacement
 from .source_streams import (
     EnumerateBy,
@@ -668,7 +668,7 @@ def _resolve_final_scale(
 def _build_dataset_payload(
     rhs_all: np.ndarray,
     solutions_all: np.ndarray,
-    matrix_zarr_path: Path,
+    matrix_artifact_path: Path,
     matrix_size: tuple[int, int],
     normalize: NormalizeType,
     matrix_norm_type: str,
@@ -682,7 +682,7 @@ def _build_dataset_payload(
     return GeneratedDatasetPayload(
         rhs=rhs_all,
         solutions=solutions_all,
-        matrix_zarr_path=matrix_zarr_path,
+        matrix_artifact_path=matrix_artifact_path,
         matrix_size=matrix_size,
         normalization_type=str(normalize),
         matrix_norm=matrix_norm,
@@ -766,7 +766,7 @@ def _accumulate_bindings(
     param_streams: list[VectorSampleStream],
     matrix_stream: MatrixSampleStream,
     get_matrix: Callable[[int], _CachedMatrix],
-    accumulator: ZarrAccumulatorPort,
+    accumulator: DatasetAccumulatorPort,
     seed: int,
     shuffle: bool,
     strategy_overrides: dict[str, dict[str, Any]] | None,
@@ -872,7 +872,7 @@ def _finalize_payload(
     matrix_norm_values: list[float],
     matrix_value_scale_values: list[float],
     scale_metadata_values: list[ScaleMetadata | None],
-    accumulator: ZarrAccumulatorPort,
+    accumulator: DatasetAccumulatorPort,
     normalize: NormalizeType,
     matrix_norm_type: str,
     emitted_binding_count: int,
@@ -905,7 +905,7 @@ def _finalize_payload(
     )
     rhs_all = np.vstack(rhs_blocks)
     solutions_all = np.vstack(solution_blocks)
-    matrix_zarr_path = accumulator.finalize()
+    matrix_artifact_path = accumulator.finalize()
     matrix_size = accumulator.matrix_size
 
     if matrix_size is None:
@@ -917,7 +917,7 @@ def _finalize_payload(
     return _build_dataset_payload(
         rhs_all,
         solutions_all,
-        matrix_zarr_path,
+        matrix_artifact_path,
         matrix_size,
         normalize,
         matrix_norm_type,
@@ -947,7 +947,7 @@ def build_dataset_payload(
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
     solver_overrides: dict[str, TracingSolverCallable] | None = None,
-    accumulator: ZarrAccumulatorPort,
+    accumulator: DatasetAccumulatorPort,
 ) -> GeneratedDatasetPayload:
     """Build an in-memory dataset payload from streamed matrix sources.
 
@@ -974,7 +974,7 @@ def build_dataset_payload(
         seed: Random seed for reproducibility
         strategy_overrides: Strategy-specific configuration overrides
         solver_overrides: Optional per-strategy solver overrides
-        accumulator: Zarr accumulator for writing matrix samples
+        accumulator: Dataset accumulator for writing matrix samples
 
     Returns:
         Immutable generated dataset payload ready for persistence.

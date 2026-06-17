@@ -27,8 +27,12 @@ from dlkit.infrastructure.config.workflow_configs import (
 from loguru import logger
 
 from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
-from neuralls.platform.storage.datasets import load_dense_training_arrays
-from neuralls.platform.storage.training_artifacts import TrainingArrays, load_training_arrays
+from neuralls.platform.storage.training_artifacts import (
+    InMemoryArraySource,
+    TrainingArrays,
+    ZarrArraySource,
+    load_training_arrays,
+)
 
 type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
@@ -228,7 +232,6 @@ def _extra_feature_names_from_settings(
 
 def _create_feature_configs(
     arrays: TrainingArrays,
-    rhs_data: np.ndarray,
     contract: RuntimeDatasetContract,
     declared_extra_names: list[str],
     primary_name: str,
@@ -238,8 +241,7 @@ def _create_feature_configs(
     The i-th declared extra name maps to parameters_i.zarr by position.
 
     Args:
-        arrays: Training data artifact paths (used for matrix and parameters paths).
-        rhs_data: RHS array loaded from rhs.zarr.
+        arrays: Training data arrays and path-backed sources.
         contract: Runtime dataset entry name contract.
         declared_extra_names: Ordered extra feature names declared in [[DATASET.features]]
             beyond the base and matrix entries (TOML declaration order preserved).
@@ -254,25 +256,43 @@ def _create_feature_configs(
     Raises:
         ValueError: If more extras are declared than parameters_*.zarr files available.
     """
-    if len(declared_extra_names) > len(arrays.parameters_zarr):
+    if len(declared_extra_names) > len(arrays.parameter_sources):
         raise ValueError(
             f"Model declares {len(declared_extra_names)} extra features but dataset has "
-            f"{len(arrays.parameters_zarr)} parameters_*.zarr files."
+            f"{len(arrays.parameter_sources)} parameters_* files."
         )
-    base: list[DataEntry] = [
-        ValueEntry(name=primary_name, value=rhs_data),
-        ZarrEntry(name=contract.matrix_input_name, path=arrays.matrix_zarr, model_input=False),
-    ]
-    extras: list[DataEntry] = [
-        ZarrEntry(
-            name=name,
-            path=arrays.parameters_zarr[i],
-            model_input=True,
-            field_role=FieldRole.FEATURE,
-            geometry_kind=GeometryKind.TABULAR,
-        )
-        for i, name in enumerate(declared_extra_names)
-    ]
+    base: list[DataEntry] = [ValueEntry(name=primary_name, value=arrays.rhs)]
+
+    match arrays.matrix_source:
+        case ZarrArraySource(path=path):
+            base.append(ZarrEntry(name=contract.matrix_input_name, path=path, model_input=False))
+        case InMemoryArraySource(array=array):
+            base.append(ValueEntry(name=contract.matrix_input_name, value=array, model_input=False))
+
+    extras: list[DataEntry] = []
+    for i, name in enumerate(declared_extra_names):
+        source = arrays.parameter_sources[i]
+        match source:
+            case ZarrArraySource(path=path):
+                extras.append(
+                    ZarrEntry(
+                        name=name,
+                        path=path,
+                        model_input=True,
+                        field_role=FieldRole.FEATURE,
+                        geometry_kind=GeometryKind.TABULAR,
+                    )
+                )
+            case InMemoryArraySource(array=array):
+                extras.append(
+                    ValueEntry(
+                        name=name,
+                        value=array,
+                        model_input=True,
+                        field_role=FieldRole.FEATURE,
+                        geometry_kind=GeometryKind.TABULAR,
+                    )
+                )
     return [*base, *extras]
 
 
@@ -314,12 +334,11 @@ def _load_and_prepare_data(
     logger.info(
         "Loading training arrays ({} samples) from {}", arrays.sample_count, workspace.data_dir
     )
-    rhs_data, solutions_data = load_dense_training_arrays(workspace.data_dir)
     logger.info(
-        "Training arrays loaded — rhs {}, solutions {}", rhs_data.shape, solutions_data.shape
+        "Training arrays loaded — rhs {}, solutions {}", arrays.rhs.shape, arrays.solutions.shape
     )
     primary_name = _primary_feature_name_from_settings(settings, contract)
     extra_names = _extra_feature_names_from_settings(settings, contract)
-    features = _create_feature_configs(arrays, rhs_data, contract, extra_names, primary_name)
-    targets = _create_target_configs(solutions_data, contract)
+    features = _create_feature_configs(arrays, contract, extra_names, primary_name)
+    targets = _create_target_configs(arrays.solutions, contract)
     return arrays, features, targets

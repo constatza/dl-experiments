@@ -6,8 +6,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
-import zarr
-
 from neuralls.composition.comparison._linear_system import (
     _load_linear_system,
     _log_matrix_condition_number,
@@ -31,7 +29,10 @@ from neuralls.platform.config.models.comparison import ComparisonGeneral
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.storage.filesystem import ensure_dir
-from neuralls.platform.storage.training_artifacts import load_training_arrays
+from neuralls.platform.storage.training_artifacts import (
+    load_array_source_sample,
+    load_training_arrays,
+)
 
 
 def _resolve_comparison_paths(
@@ -166,14 +167,11 @@ def compare_preconditioners(
         _arrays = load_training_arrays(paths.matrix)
         _extra_name_list = sorted(needed_extra_names)
         extra_data = {
-            name: np.asarray(
-                zarr.open_array(str(_arrays.parameters_zarr[i]), mode="r")[
-                    general_params.data.matrix_index
-                ],
-                dtype=np.float64,
+            name: load_array_source_sample(
+                _arrays.parameter_sources[i], general_params.data.matrix_index
             )
             for i, name in enumerate(_extra_name_list)
-            if i < len(_arrays.parameters_zarr)
+            if i < len(_arrays.parameter_sources)
         }
     _bind_system_inputs(
         scheduled_preconditioners,

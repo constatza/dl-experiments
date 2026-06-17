@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.platform.storage.datasets import load_dataset_manifest, resolve_dataset_paths
+from neuralls.platform.storage.datasets import load_dataset_manifest, resolve_dataset_artifacts
 from neuralls.shared.constants import (
     DATASET_MANIFEST_FILENAME,
     MATRIX_ZARR_DIRNAME,
@@ -68,8 +68,8 @@ def validate_comparison_matrix_input(path: Path) -> None:
                 "matrix directory containing manifest.json and values.npy."
             ) from None
         return
-    matrix_zarr_dir = resolve_dataset_paths(path).matrix_zarr_dir
-    if not matrix_zarr_dir.exists():
+    matrix_artifact = resolve_dataset_artifacts(path).matrix
+    if not matrix_artifact.path.exists():
         raise ValueError(
             f"Comparison matrix dataset directory is missing {MATRIX_ZARR_DIRNAME}: {path}"
         )
@@ -87,8 +87,8 @@ def validate_comparison_rhs_input(path: Path) -> None:
             )
         return
     load_dataset_manifest(path)
-    rhs_path = resolve_dataset_paths(path).rhs_path
-    if not rhs_path.exists():
+    rhs_artifact = resolve_dataset_artifacts(path).rhs
+    if not rhs_artifact.path.exists():
         raise ValueError(f"Comparison RHS dataset directory is missing {RHS_ZARR_FILENAME}: {path}")
 
 

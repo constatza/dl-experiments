@@ -14,6 +14,7 @@ from pydantic import model_validator
 
 from neuralls.domain.generation.source_streams import EnumerateBy
 from neuralls.platform.config.context import ConfigContext, expand_config_glob, expand_config_path
+from neuralls.shared.types import DatasetFormat
 
 
 class SourceConfig(BaseModel):
@@ -282,9 +283,9 @@ class OutputConfig(BaseModel):
         default=None,
         description="Output directory for generated data",
     )
-    dataset_format: Literal["zarr_dense"] = Field(
-        default="zarr_dense",
-        description="Dataset storage format ('zarr_dense' for dense zarr arrays)",
+    dataset_format: DatasetFormat = Field(
+        default="zarr",
+        description="Dataset storage format ('zarr' or 'npy')",
     )
     matrix_codec: Literal["coo"] = Field(
         default="coo",

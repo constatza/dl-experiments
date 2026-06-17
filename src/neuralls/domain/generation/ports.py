@@ -52,13 +52,8 @@ class SparseAccumulatorPort(Protocol):
     def build_arrays(self) -> tuple[NDArray, NDArray, NDArray, tuple[int, int]]: ...
 
 
-class ZarrAccumulatorPort(Protocol):
-    """Streaming zarr-backed accumulator port.
-
-    Implementations write each matrix sample directly to disk via ZarrPackWriter,
-    preventing in-memory OOM accumulation. Call finalize() once all samples have
-    been appended.
-    """
+class DatasetAccumulatorPort(Protocol):
+    """Streaming matrix accumulator port for dataset generation."""
 
     def append_dense_matrix(self, matrix: NDArray, repeats: int) -> None: ...
 

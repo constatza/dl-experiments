@@ -10,7 +10,10 @@ Moving cross-boundary types here prevents upward dependencies, e.g. io → gener
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TypedDict
+from typing import Literal, TypedDict
+
+DatasetFormat = Literal["zarr", "npy"]
+"""Supported dataset storage families for generated datasets."""
 
 
 class MatrixNormType(StrEnum):

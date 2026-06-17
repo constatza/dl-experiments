@@ -34,10 +34,13 @@ or client policy.
 For DLKit-supervised training, composition is also the only layer allowed to
 translate repository storage names into runtime dataset-entry names. That
 translation is owned by a composition-level runtime dataset contract. The
-current supervised bridge maps `rhs.npy` to feature entry `x`,
-`solutions.npy` to target entry `y`, and sparse matrices to auxiliary feature
-entry `matrix`. Domain terms such as `solutions.npy` remain valid on disk, but
-composition does not expose `solutions` as a runtime target alias.
+current supervised bridge maps dataset `rhs` artifacts to feature entry `x`,
+dataset `solutions` artifacts to target entry `y`, and the dataset `matrix`
+artifact to auxiliary feature entry `matrix`. The storage format (`zarr` or
+`npy`) is resolved in platform storage before composition turns those artifacts
+into `ValueEntry` or `ZarrEntry` objects. Domain terms such as `solutions`
+remain valid on disk, but composition does not expose `solutions` as a runtime
+target alias.
 
 Prediction payload normalization follows the same rule. Composition accepts
 DLKit's raw boundary output once, normalizes it into the canonical prediction

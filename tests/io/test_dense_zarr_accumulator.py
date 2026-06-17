@@ -96,7 +96,7 @@ def simple_payload(
     return GeneratedDatasetPayload(
         rhs=rhs,
         solutions=solutions,
-        matrix_zarr_path=zarr_path,
+        matrix_artifact_path=zarr_path,
         matrix_size=(2, 2),
         normalization_type="none",
         matrix_norm=1.0,
@@ -304,7 +304,7 @@ def test_writer_creates_rhs_and_solutions_zarr(
     payload = GeneratedDatasetPayload(
         rhs=rhs,
         solutions=solutions,
-        matrix_zarr_path=zarr_path,
+        matrix_artifact_path=zarr_path,
         matrix_size=(2, 2),
         normalization_type="matrix",
         matrix_norm=1.0,
@@ -344,7 +344,7 @@ def test_writer_reports_rhs_write_failure(tmp_path: Path) -> None:
     payload = GeneratedDatasetPayload(
         rhs=np.ones((1, 2), dtype=np.float64),
         solutions=np.zeros((1, 2), dtype=np.float64),
-        matrix_zarr_path=tmp_path / "matrix.zarr",
+        matrix_artifact_path=tmp_path / "matrix.zarr",
         matrix_size=(2, 2),
         normalization_type="none",
         matrix_norm=1.0,
@@ -373,7 +373,7 @@ def test_writer_reports_move_failure(
     payload = GeneratedDatasetPayload(
         rhs=np.ones((1, 2), dtype=np.float64),
         solutions=np.zeros((1, 2), dtype=np.float64),
-        matrix_zarr_path=source_dir,
+        matrix_artifact_path=source_dir,
         matrix_size=(2, 2),
         normalization_type="none",
         matrix_norm=1.0,

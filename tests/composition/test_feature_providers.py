@@ -16,7 +16,7 @@ from neuralls.composition.experiments._dataset_assembly import (
     _create_feature_configs,
     _extra_feature_names_from_settings,
 )
-from neuralls.platform.storage.training_artifacts import TrainingArrays
+from neuralls.platform.storage.training_artifacts import TrainingArrays, ZarrArraySource
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
 
 
@@ -44,11 +44,11 @@ def no_params_arrays(tmp_path: Path) -> TrainingArrays:
         0
     ] = np.eye(n)
     return TrainingArrays(
-        rhs=tmp_path / "rhs.zarr",
-        solutions=tmp_path / "solutions.zarr",
-        matrix_zarr=tmp_path / "matrix.zarr",
+        rhs=np.zeros((samples, n), dtype=np.float64),
+        solutions=np.zeros((samples, n), dtype=np.float64),
+        matrix_source=ZarrArraySource(path=tmp_path / "matrix.zarr"),
         sample_count=samples,
-        parameters_zarr=(),
+        parameter_sources=(),
     )
 
 
@@ -69,11 +69,11 @@ def one_param_arrays(tmp_path: Path) -> TrainingArrays:
         rng.standard_normal((samples, param_dim))
     )
     return TrainingArrays(
-        rhs=tmp_path / "rhs.zarr",
-        solutions=tmp_path / "solutions.zarr",
-        matrix_zarr=tmp_path / "matrix.zarr",
+        rhs=np.zeros((samples, n), dtype=np.float64),
+        solutions=np.zeros((samples, n), dtype=np.float64),
+        matrix_source=ZarrArraySource(path=tmp_path / "matrix.zarr"),
         sample_count=samples,
-        parameters_zarr=(params_path,),
+        parameter_sources=(ZarrArraySource(path=params_path),),
     )
 
 
@@ -97,11 +97,11 @@ def two_param_arrays(tmp_path: Path) -> TrainingArrays:
         )
         paths.append(p)
     return TrainingArrays(
-        rhs=tmp_path / "rhs.zarr",
-        solutions=tmp_path / "solutions.zarr",
-        matrix_zarr=tmp_path / "matrix.zarr",
+        rhs=np.zeros((samples, n), dtype=np.float64),
+        solutions=np.zeros((samples, n), dtype=np.float64),
+        matrix_source=ZarrArraySource(path=tmp_path / "matrix.zarr"),
         sample_count=samples,
-        parameters_zarr=tuple(paths),
+        parameter_sources=tuple(ZarrArraySource(path=path) for path in paths),
     )
 
 
@@ -121,9 +121,7 @@ def test_no_extras_yields_x_and_matrix(
     rhs_data: np.ndarray,
     contract,
 ) -> None:
-    entries = _create_feature_configs(
-        no_params_arrays, rhs_data, contract, [], contract.primary_input_name
-    )
+    entries = _create_feature_configs(no_params_arrays, contract, [], contract.primary_input_name)
     assert [e.name for e in entries] == ["x", "matrix"]
 
 
@@ -133,7 +131,7 @@ def test_condition_extra_maps_to_parameters_0(
     contract,
 ) -> None:
     entries = _create_feature_configs(
-        one_param_arrays, rhs_data, contract, ["condition"], contract.primary_input_name
+        one_param_arrays, contract, ["condition"], contract.primary_input_name
     )
     assert [e.name for e in entries] == ["x", "matrix", "condition"]
     condition_entry = entries[2]
@@ -147,7 +145,7 @@ def test_two_extras_map_by_index(
     contract,
 ) -> None:
     entries = _create_feature_configs(
-        two_param_arrays, rhs_data, contract, ["condition", "query"], contract.primary_input_name
+        two_param_arrays, contract, ["condition", "query"], contract.primary_input_name
     )
     assert [e.name for e in entries] == ["x", "matrix", "condition", "query"]
     assert isinstance(entries[2], ZarrEntry)
@@ -163,7 +161,7 @@ def test_too_many_extras_raises(
 ) -> None:
     with pytest.raises(ValueError, match="extra features but dataset has"):
         _create_feature_configs(
-            no_params_arrays, rhs_data, contract, ["condition"], contract.primary_input_name
+            no_params_arrays, contract, ["condition"], contract.primary_input_name
         )
 
 
@@ -173,10 +171,10 @@ def test_declaration_order_is_preserved(
     contract,
 ) -> None:
     entries_ab = _create_feature_configs(
-        two_param_arrays, rhs_data, contract, ["alpha", "beta"], contract.primary_input_name
+        two_param_arrays, contract, ["alpha", "beta"], contract.primary_input_name
     )
     entries_ba = _create_feature_configs(
-        two_param_arrays, rhs_data, contract, ["beta", "alpha"], contract.primary_input_name
+        two_param_arrays, contract, ["beta", "alpha"], contract.primary_input_name
     )
     assert isinstance(entries_ab[2], ZarrEntry)
     assert isinstance(entries_ba[2], ZarrEntry)

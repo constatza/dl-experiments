@@ -11,7 +11,7 @@ from neuralls.platform.storage.datasets import (
     load_dataset_manifest,
     load_dense_training_arrays,
     load_matrix_dense_sample,
-    resolve_dataset_paths,
+    resolve_dataset_artifacts,
 )
 
 
@@ -98,12 +98,15 @@ def list_available_variants(dataset_dir: str | Path) -> list[str]:
         List of available variant names.
     """
     dataset_dir = Path(dataset_dir)
-    paths = resolve_dataset_paths(dataset_dir)
+    try:
+        artifacts = resolve_dataset_artifacts(dataset_dir)
+    except FileNotFoundError, ValueError:
+        return []
     if (
-        paths.manifest_path.exists()
-        and paths.rhs_path.exists()
-        and paths.solutions_path.exists()
-        and paths.matrix_zarr_dir.exists()
+        artifacts.manifest_path.exists()
+        and artifacts.rhs.path.exists()
+        and artifacts.solutions.path.exists()
+        and artifacts.matrix.path.exists()
     ):
         return ["dataset"]
     return []

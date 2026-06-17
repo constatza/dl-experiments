@@ -18,7 +18,9 @@ from neuralls.composition.generation.dataset_builder import build_dataset
 import zarr
 from neuralls.platform.storage.datasets import (
     load_dense_training_arrays,
+    load_dataset_manifest,
     load_matrix_dense_sample,
+    resolve_dataset_artifacts,
     resolve_dataset_paths,
 )
 
@@ -100,6 +102,37 @@ def test_build_dataset_streams_matrix_stack_without_dense_batch(tmp_path: Path) 
     dense1 = load_matrix_dense_sample(out_dir, 1)
     np.testing.assert_allclose(dense0, matrix_stack[0])
     np.testing.assert_allclose(dense1, matrix_stack[1])
+
+
+def test_build_dataset_supports_npy_output_format(tmp_path: Path) -> None:
+    matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
+    matrix_path = tmp_path / "matrix.npy"
+    np.save(matrix_path, matrix)
+
+    out_dir = tmp_path / "dataset_npy"
+    build_dataset(
+        matrix_path=str(matrix_path),
+        dataset_dir=str(out_dir),
+        counts={"neutral_ones": 2},
+        normalize="none",
+        shuffle=False,
+        seed=42,
+        dataset_format="npy",
+    )
+
+    manifest = load_dataset_manifest(out_dir)
+    artifacts = resolve_dataset_artifacts(out_dir)
+    rhs, solutions = load_dense_training_arrays(out_dir)
+
+    assert manifest["matrix"]["format"] == "npy"
+    assert manifest["rhs"]["format"] == "npy"
+    assert manifest["solutions"]["format"] == "npy"
+    assert artifacts.matrix.path.name == "matrix.npy"
+    assert artifacts.rhs.path.name == "rhs.npy"
+    assert artifacts.solutions.path.name == "solutions.npy"
+    assert rhs.shape == (2, 2)
+    assert solutions.shape == (2, 2)
+    np.testing.assert_allclose(load_matrix_dense_sample(out_dir, 0), matrix)
 
 
 def test_open_vector_stream_from_npy_stack(tmp_path: Path) -> None:

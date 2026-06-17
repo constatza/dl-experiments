@@ -251,7 +251,7 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
         GeneratedDatasetPayload(
             rhs=np.ones((1, 2), dtype=np.float64),
             solutions=np.ones((1, 2), dtype=np.float64),
-            matrix_zarr_path=zarr_path,
+            matrix_artifact_path=zarr_path,
             matrix_size=(2, 2),
             normalization_type="matrix",
             matrix_norm=1.0,

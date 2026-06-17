@@ -35,9 +35,9 @@ comparison display names still override the generated label.
 The DLKit dataset bridge stays generic. Platform helpers construct and patch
 DLKit-native dataset entries with the names supplied by composition, but
 platform does not own the canonical runtime naming policy itself. Storage-layer
-artifact names such as `rhs.npy`, `solutions.npy`, and `matrix_coo/` stay in
-platform storage, while the composition dataset contract decides which runtime
-entry names those artifacts map to.
+artifact families such as `rhs.zarr`/`rhs.npy`, `solutions.zarr`/`solutions.npy`,
+and `matrix.zarr`/`matrix.npy` stay in platform storage, while the composition
+dataset contract decides which runtime entry names those artifacts map to.
 
 The `dlkit/` package is the runtime adapter boundary. It hides predictor and
 inference integration details behind local abstractions so solver and
@@ -67,10 +67,15 @@ re-normalizing them against the local operating system.
 
 Storage validation owns concrete dataset-layout checks. Comparison matrix/RHS
 preflight belongs under `platform.storage` because it depends on manifest and
-sparse-pack layout knowledge rather than workflow sequencing.
-The same boundary owns filesystem and Zarr write-failure enrichment for dataset
+artifact-layout knowledge rather than workflow sequencing.
+The same boundary owns filesystem and write-failure enrichment for dataset
 artifacts so CLI callers receive operation- and path-specific diagnostics
 without importing storage policy into composition.
+
+Dataset storage is split by responsibility:
+- `storage/manifest.py`: typed dataset manifest dataclasses and JSON serialization
+- `storage/generation_formats.py`: generation-time `zarr` and `npy` writers/accumulators
+- `storage/dataset_readers.py`: manifest-driven read helpers and explicit resolved dataset contracts
 
 Case-driven comparison sample selection stays explicit and deterministic.
 `ComparisonRegistryEntry.matrix_index` and `rhs_index` default to `0`, and the

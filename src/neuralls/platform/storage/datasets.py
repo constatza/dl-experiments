@@ -1,428 +1,58 @@
-"""Dataset storage helpers for dense zarr arrays."""
+"""Compatibility facade for manifest-driven dataset storage helpers."""
 
 from __future__ import annotations
 
-import json
 import shutil
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
 
-import numpy as np
 import zarr
-from numpy.typing import NDArray
 
-from neuralls.domain.generation.payloads import GeneratedDatasetPayload
-from neuralls.shared.constants import (
-    DATASET_MANIFEST_FILENAME,
-    MATRIX_ZARR_DIRNAME,
-    PARAMETERS_ZARR_PREFIX,
-    RHS_ZARR_FILENAME,
-    SOLUTIONS_ZARR_FILENAME,
+from neuralls.platform.storage.dataset_readers import (
+    DatasetArtifacts,
+    DatasetPaths,
+    load_dense_training_arrays,
+    load_matrix_dense_sample,
+    read_training_sample_count,
+    resolve_dataset_artifacts,
+    resolve_dataset_paths,
+)
+from neuralls.platform.storage.generation_formats import (
+    DenseNpyAccumulator,
+    DenseZarrAccumulator,
+    GenerationDatasetStorage,
+    NpyGenerationStorage,
+    ZarrGenerationStorage,
+    make_generation_dataset_storage,
+)
+from neuralls.platform.storage.manifest import (
+    DatasetArtifact,
+    DatasetManifest,
+    DatasetNormalization,
+    load_dataset_manifest,
+    read_dataset_manifest,
 )
 
+DenseDatasetWriter = ZarrGenerationStorage
 
-@dataclass(frozen=True)
-class DatasetPaths:
-    """Resolved canonical dataset artifact paths.
-
-    Attributes:
-        root: Root directory for the dataset.
-        manifest_path: Path to the manifest.json file.
-        rhs_path: Path to the rhs.zarr/ directory.
-        solutions_path: Path to the solutions.zarr/ directory.
-        matrix_zarr_dir: Path to the matrix.zarr/ directory.
-    """
-
-    root: Path
-    manifest_path: Path
-    rhs_path: Path
-    solutions_path: Path
-    matrix_zarr_dir: Path
-
-
-class DenseZarrAccumulator:
-    """Streams dense matrix slices to matrix.zarr/ during generation.
-
-    Writes each unique matrix directly to disk. In broadcast mode
-    (append_dense_matrix called once with repeats=N), stores shape (1, n, n).
-    In per-sample mode (multiple calls), stores each repeat as its own slice
-    so matrix.zarr[i] corresponds to rhs[i] row-for-row.
-    Satisfies DenseAccumulatorPort protocol.
-
-    Args:
-        zarr_path: Destination path for the zarr array store.
-    """
-
-    def __init__(self, zarr_path: Path) -> None:
-        self._zarr_path = Path(zarr_path)
-        self._arr: zarr.Array | None = None
-        self._size: tuple[int, int] | None = None
-        self._n_samples: int = 0
-        self._finalized: bool = False
-
-    @staticmethod
-    def _format_os_error(exc: OSError) -> str:
-        details = [f"{type(exc).__name__}: {exc}"]
-        if exc.errno is not None:
-            details.append(f"errno={exc.errno}")
-        winerror = getattr(exc, "winerror", None)
-        if winerror is not None:
-            details.append(f"winerror={winerror}")
-        if exc.filename:
-            details.append(f"src={exc.filename}")
-        if exc.filename2:
-            details.append(f"dst={exc.filename2}")
-        return ", ".join(details)
-
-    @staticmethod
-    def _permission_hint(exc: OSError) -> str:
-        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) == 5:
-            return (
-                " This usually means the filesystem blocked an atomic Zarr metadata rename, "
-                "which is common on network shares or when another process is holding the file."
-            )
-        return ""
-
-    def _raise_storage_error(self, operation: str, path: Path, exc: OSError) -> None:
-        message = (
-            f"{operation} at {path} failed. "
-            f"{self._format_os_error(exc)}"
-            f"{self._permission_hint(exc)}"
-        )
-        raise OSError(message) from exc
-
-    def append_sparse_components(
-        self,
-        *,
-        indices: NDArray,
-        values: NDArray,
-        size: tuple[int, int],
-        repeats: int,
-    ) -> None:
-        """Convert sparse COO components to dense and append to the zarr store.
-
-        Args:
-            indices: COO indices array, shape (2, nnz).
-            values: COO values array, shape (nnz,).
-            size: Matrix dimensions (rows, cols).
-            repeats: Number of times this matrix is replicated in the store.
-        """
-        n, m = size
-        dense = np.zeros((n, m), dtype=np.float64)
-        if values.size > 0:
-            dense[indices[0], indices[1]] = values
-        self.append_dense_matrix(dense, repeats)
-
-    def append_dense_matrix(self, matrix: NDArray, repeats: int) -> None:
-        """Append one dense matrix, optionally repeated, to the zarr store.
-
-        Args:
-            matrix: Dense matrix array, shape (n, n).
-            repeats: Number of times this matrix is replicated in the store.
-
-        Raises:
-            ValueError: If repeats < 1.
-        """
-        if repeats < 1:
-            raise ValueError(f"repeats must be >= 1, got {repeats}")
-        n, m = int(matrix.shape[0]), int(matrix.shape[1])
-        if self._arr is None:
-            self._size = (n, m)
-            try:
-                self._arr = zarr.open_array(
-                    str(self._zarr_path),
-                    mode="w",
-                    shape=(0, n, m),
-                    chunks=(1, n, m),
-                    dtype="float64",
-                )
-            except OSError as exc:
-                self._raise_storage_error("Creating matrix.zarr store", self._zarr_path, exc)
-        arr = self._arr
-        if arr is None:
-            raise RuntimeError("matrix.zarr store was not initialized after successful open.")
-        try:
-            arr.resize((arr.shape[0] + repeats, n, m))
-            arr[-repeats:] = np.broadcast_to(matrix[np.newaxis], (repeats, n, m))
-        except OSError as exc:
-            self._raise_storage_error("Updating matrix.zarr store", self._zarr_path, exc)
-        self._n_samples += repeats
-
-    def finalize(self) -> Path:
-        """Close the accumulator and return the zarr store path.
-
-        Safe to call multiple times — subsequent calls are no-ops.
-
-        Returns:
-            Path to the completed zarr array store directory.
-        """
-        self._finalized = True
-        return self._zarr_path
-
-    @property
-    def matrix_size(self) -> tuple[int, int] | None:
-        """Matrix dimensions of the first appended sample, or None if empty."""
-        return self._size
-
-    @property
-    def n_samples(self) -> int:
-        """Total logical samples written (sum of all repeats)."""
-        return self._n_samples
-
-
-class DenseDatasetWriter:
-    """Writes rhs.zarr/, solutions.zarr/, and manifest.json.
-
-    Satisfies DatasetWriterPort. matrix.zarr/ is already on disk from
-    the accumulator and will be moved into place if needed.
-    """
-
-    @staticmethod
-    def _format_os_error(exc: OSError) -> str:
-        details = [f"{type(exc).__name__}: {exc}"]
-        if exc.errno is not None:
-            details.append(f"errno={exc.errno}")
-        winerror = getattr(exc, "winerror", None)
-        if winerror is not None:
-            details.append(f"winerror={winerror}")
-        if exc.filename:
-            details.append(f"src={exc.filename}")
-        if exc.filename2:
-            details.append(f"dst={exc.filename2}")
-        return ", ".join(details)
-
-    @staticmethod
-    def _permission_hint(exc: OSError) -> str:
-        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) == 5:
-            return (
-                " This usually means the filesystem blocked an atomic Zarr metadata rename, "
-                "which is common on network shares or when another process is holding the file."
-            )
-        return ""
-
-    def _raise_storage_error(self, operation: str, path: Path, exc: OSError) -> None:
-        message = (
-            f"{operation} at {path} failed. "
-            f"{self._format_os_error(exc)}"
-            f"{self._permission_hint(exc)}"
-        )
-        raise OSError(message) from exc
-
-    def write_dataset(
-        self,
-        dataset_dir: Path,
-        payload: GeneratedDatasetPayload,
-    ) -> None:
-        """Persist a generated dataset payload in zarr dense format.
-
-        Args:
-            dataset_dir: Destination directory for the dataset.
-            payload: Payload produced by the generation domain.
-        """
-        paths = resolve_dataset_paths(dataset_dir)
-        paths.root.mkdir(parents=True, exist_ok=True)
-
-        n = int(payload.rhs.shape[1])
-
-        try:
-            rhs_arr = zarr.open_array(
-                str(paths.rhs_path),
-                mode="w",
-                shape=payload.rhs.shape,
-                chunks=(1, n),
-                dtype="float64",
-            )
-            rhs_arr[:] = payload.rhs
-        except OSError as exc:
-            self._raise_storage_error("Writing rhs.zarr", paths.rhs_path, exc)
-
-        try:
-            sol_arr = zarr.open_array(
-                str(paths.solutions_path),
-                mode="w",
-                shape=payload.solutions.shape,
-                chunks=(1, n),
-                dtype="float64",
-            )
-            sol_arr[:] = payload.solutions
-        except OSError as exc:
-            self._raise_storage_error("Writing solutions.zarr", paths.solutions_path, exc)
-
-        pack_src = Path(payload.matrix_zarr_path)
-        if pack_src != paths.matrix_zarr_dir:
-            try:
-                if paths.matrix_zarr_dir.exists():
-                    shutil.rmtree(str(paths.matrix_zarr_dir))
-                shutil.move(str(pack_src), str(paths.matrix_zarr_dir))
-            except OSError as exc:
-                self._raise_storage_error(
-                    "Moving matrix.zarr store into place", paths.matrix_zarr_dir, exc
-                )
-
-        try:
-            mat_arr = zarr.open_array(str(paths.matrix_zarr_dir), mode="r")
-        except OSError as exc:
-            self._raise_storage_error(
-                "Reopening matrix.zarr for manifest inspection", paths.matrix_zarr_dir, exc
-            )
-        mat_shape = list(mat_arr.shape)
-        n_matrix_samples = int(mat_arr.shape[0])
-        broadcast = n_matrix_samples == 1
-
-        # Write per-sample parameters arrays (shape N × param_dim each)
-        params_manifest: list[dict[str, Any]] = []
-        for i, params_arr in enumerate(payload.parameters_arrays):
-            if params_arr.size == 0:
-                continue
-            params_name = f"{PARAMETERS_ZARR_PREFIX}{i}.zarr"
-            params_path = dataset_dir / params_name
-            try:
-                params_zarr = zarr.open_array(
-                    str(params_path),
-                    mode="w",
-                    shape=params_arr.shape,
-                    chunks=(1, params_arr.shape[1]) if params_arr.ndim == 2 else params_arr.shape,
-                    dtype="float64",
-                )
-                params_zarr[:] = params_arr
-            except OSError as exc:
-                self._raise_storage_error(f"Writing {params_name}", params_path, exc)
-            params_manifest.append(
-                {
-                    "index": i,
-                    "path": params_name,
-                    "format": "zarr_dense",
-                    "dtype": "float64",
-                    "shape": list(params_arr.shape),
-                }
-            )
-
-        manifest: dict[str, Any] = {
-            "schema": "neuralls.dataset.v2",
-            "matrix": {
-                "path": MATRIX_ZARR_DIRNAME,
-                "format": "zarr_dense",
-                "dtype": "float64",
-                "shape": mat_shape,
-                "n_matrix_samples": n_matrix_samples,
-                "broadcast": broadcast,
-            },
-            "rhs": {
-                "path": RHS_ZARR_FILENAME,
-                "format": "zarr_dense",
-                "dtype": "float64",
-                "shape": list(payload.rhs.shape),
-            },
-            "solutions": {
-                "path": SOLUTIONS_ZARR_FILENAME,
-                "format": "zarr_dense",
-                "dtype": "float64",
-                "shape": list(payload.solutions.shape),
-            },
-            "normalization": {
-                "type": payload.normalization_type,
-                "matrix_norm": float(payload.matrix_norm),
-                "matrix_norm_type": payload.matrix_norm_type,
-                "scale": payload.scale_metadata or {},
-            },
-            "params": params_manifest if params_manifest else None,
-        }
-        with paths.manifest_path.open("w", encoding="utf-8") as fh:
-            json.dump(manifest, fh, indent=2, sort_keys=True)
-
-
-def resolve_dataset_paths(dataset_dir: str | Path) -> DatasetPaths:
-    """Resolve canonical dataset artifact locations.
-
-    Args:
-        dataset_dir: Root directory of the dataset.
-
-    Returns:
-        DatasetPaths with all artifact paths resolved.
-    """
-    root = Path(dataset_dir)
-    return DatasetPaths(
-        root=root,
-        manifest_path=root / DATASET_MANIFEST_FILENAME,
-        rhs_path=root / RHS_ZARR_FILENAME,
-        solutions_path=root / SOLUTIONS_ZARR_FILENAME,
-        matrix_zarr_dir=root / MATRIX_ZARR_DIRNAME,
-    )
-
-
-def load_dataset_manifest(dataset_dir: str | Path) -> dict[str, Any]:
-    """Load dataset manifest and validate schema marker.
-
-    Args:
-        dataset_dir: Root directory of the dataset.
-
-    Returns:
-        Parsed manifest dictionary.
-
-    Raises:
-        FileNotFoundError: If manifest.json does not exist.
-        ValueError: If the manifest schema is not recognised.
-    """
-    paths = resolve_dataset_paths(dataset_dir)
-    if not paths.manifest_path.exists():
-        raise FileNotFoundError(f"Dataset manifest not found: {paths.manifest_path}")
-    with paths.manifest_path.open("r", encoding="utf-8") as fh:
-        manifest = json.load(fh)
-    if not isinstance(manifest, dict) or not str(manifest.get("schema", "")).startswith(
-        "neuralls.dataset"
-    ):
-        raise ValueError(f"Invalid dataset manifest schema in {paths.manifest_path}")
-    return manifest
-
-
-def read_training_sample_count(paths: DatasetPaths) -> int:
-    """Return number of training samples without materializing arrays.
-
-    Args:
-        paths: Resolved dataset artifact paths.
-
-    Returns:
-        Sample count (first dimension of rhs and solutions arrays).
-
-    Raises:
-        ValueError: If rhs and solutions have mismatched sample counts.
-    """
-    rhs_n = zarr.open_array(str(paths.rhs_path), mode="r").shape[0]
-    sol_n = zarr.open_array(str(paths.solutions_path), mode="r").shape[0]
-    if rhs_n != sol_n:
-        raise ValueError(f"RHS and solutions sample counts must match, got {rhs_n} and {sol_n}")
-    return int(rhs_n)
-
-
-def load_dense_training_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
-    """Return (rhs, solutions) as float64 arrays from rhs.zarr/ and solutions.zarr/.
-
-    Args:
-        dataset_dir: Root directory of the dataset.
-
-    Returns:
-        Tuple of (rhs, solutions) arrays, both dtype float64.
-    """
-    paths = resolve_dataset_paths(dataset_dir)
-    rhs = np.asarray(zarr.open_array(str(paths.rhs_path), mode="r"), dtype=np.float64)
-    solutions = np.asarray(zarr.open_array(str(paths.solutions_path), mode="r"), dtype=np.float64)
-    return rhs, solutions
-
-
-def load_matrix_dense_sample(
-    dataset_dir: str | Path,
-    sample_index: int = 0,
-) -> np.ndarray:
-    """Load one matrix sample from matrix.zarr/ as a dense float64 numpy array.
-
-    Args:
-        dataset_dir: Root directory of the dataset.
-        sample_index: Index of the sample to load.
-
-    Returns:
-        Dense float64 array of shape (n, n).
-    """
-    paths = resolve_dataset_paths(dataset_dir)
-    arr = zarr.open_array(str(paths.matrix_zarr_dir), mode="r")
-    return np.asarray(arr[sample_index], dtype=np.float64)
+__all__ = [
+    "DatasetArtifact",
+    "DatasetArtifacts",
+    "DatasetManifest",
+    "DatasetNormalization",
+    "DatasetPaths",
+    "DenseDatasetWriter",
+    "DenseNpyAccumulator",
+    "DenseZarrAccumulator",
+    "GenerationDatasetStorage",
+    "NpyGenerationStorage",
+    "ZarrGenerationStorage",
+    "load_dataset_manifest",
+    "load_dense_training_arrays",
+    "load_matrix_dense_sample",
+    "make_generation_dataset_storage",
+    "read_dataset_manifest",
+    "read_training_sample_count",
+    "resolve_dataset_artifacts",
+    "resolve_dataset_paths",
+    "shutil",
+    "zarr",
+]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 
@@ -21,31 +21,10 @@ from neuralls.composition.generation.default_services import (
     make_residual_solver,
 )
 from neuralls.domain.generation.plan import GenerationPlan, StrategySpec
-from neuralls.domain.generation.ports import DatasetWriterPort
-from neuralls.platform.storage.datasets import DenseDatasetWriter
 from neuralls.shared.constants import DEFAULT_RANDOM_SEED
 
 _DEFAULT_RESIDUAL_SOLVER = make_residual_solver()
 _DEFAULT_DIRECTION_SOLVER = make_direction_solver()
-
-
-def _make_writer(dataset_format: Literal["zarr_dense"]) -> DatasetWriterPort:
-    """Instantiate the correct dataset writer for the configured format.
-
-    Args:
-        dataset_format: Format string from OutputConfig.
-
-    Returns:
-        DatasetWriterPort implementation for the requested format.
-
-    Raises:
-        ValueError: If dataset_format is not recognised.
-    """
-    match dataset_format:
-        case "zarr_dense":
-            return DenseDatasetWriter()
-        case _:
-            raise ValueError(f"Unknown dataset_format: {dataset_format!r}")
 
 
 def _execute_solution_archive(
@@ -96,7 +75,7 @@ def _execute_solution_archive(
                 "seed": seed_value,
             }
         },
-        writer=_make_writer(context.dataset_format),
+        dataset_format=context.dataset_format,
     )
     return Path(dataset_path)
 
@@ -190,7 +169,7 @@ def _execute_synthetic_generation(
             "residual_traces": _DEFAULT_RESIDUAL_SOLVER,
             "search_directions": _DEFAULT_DIRECTION_SOLVER,
         },
-        writer=_make_writer(context.dataset_format),
+        dataset_format=context.dataset_format,
     )
     return Path(dataset_path)
 
@@ -234,7 +213,7 @@ def _execute_rhs_archive_only(
         normalize=context.normalize,
         seed=int(seed_value) if seed_value is not None else DEFAULT_RANDOM_SEED,
         strategy_overrides={"rhs_archive": {"rhs_glob": rhs_glob, **collection_kwargs}},
-        writer=_make_writer(context.dataset_format),
+        dataset_format=context.dataset_format,
     )
     return Path(dataset_path)
 

@@ -18,18 +18,18 @@ def zarr_path(tmp_path: Path) -> Path:
     return p
 
 
-def test_payload_has_zarr_path_not_arrays(zarr_path: Path) -> None:
-    """GeneratedDatasetPayload should carry matrix_zarr_path, not sparse arrays."""
+def test_payload_has_artifact_path_not_arrays(zarr_path: Path) -> None:
+    """GeneratedDatasetPayload should carry matrix_artifact_path, not sparse arrays."""
     payload = GeneratedDatasetPayload(
         rhs=np.zeros((2, 4)),
         solutions=np.zeros((2, 4)),
-        matrix_zarr_path=zarr_path,
+        matrix_artifact_path=zarr_path,
         matrix_size=(4, 4),
         normalization_type="matrix",
         matrix_norm=1.0,
         matrix_norm_type="spectral",
     )
-    assert payload.matrix_zarr_path == zarr_path
+    assert payload.matrix_artifact_path == zarr_path
     assert not hasattr(payload, "indices")
     assert not hasattr(payload, "values")
     assert not hasattr(payload, "nnz_ptr")
