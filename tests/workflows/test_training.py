@@ -353,11 +353,11 @@ def test_resolve_training_checkpoint_downloads_into_scratch_dir(
 
     with (
         patch(
-            "neuralls.composition.experiments.training.get_latest_checkpoint",
+            "neuralls.composition.experiments._training_artifacts.get_latest_checkpoint",
             return_value=None,
         ),
         patch(
-            "neuralls.composition.experiments.training._download_training_checkpoint",
+            "neuralls.composition.experiments._training_artifacts._download_training_checkpoint",
             return_value=downloaded,
         ) as mock_download,
     ):
@@ -426,7 +426,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             "neuralls.composition.experiments.training.execute", return_value=training_result
         ) as mock_execute,
         patch(
-            "neuralls.composition.experiments.training.get_latest_checkpoint",
+            "neuralls.composition.experiments._training_artifacts.get_latest_checkpoint",
             return_value=checkpoint_path,
         ),
         patch(
@@ -534,7 +534,7 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
             return_value=SimpleNamespace(run_id="run-123", metrics={}),
         ) as mock_execute,
         patch(
-            "neuralls.composition.experiments.training.get_latest_checkpoint",
+            "neuralls.composition.experiments._training_artifacts.get_latest_checkpoint",
             return_value=checkpoint_path,
         ),
         patch(
@@ -648,7 +648,7 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
             return_value=SimpleNamespace(run_id="run-123", metrics={}),
         ) as mock_execute,
         patch(
-            "neuralls.composition.experiments.training.get_latest_checkpoint",
+            "neuralls.composition.experiments._training_artifacts.get_latest_checkpoint",
             return_value=checkpoint_path,
         ),
         patch(

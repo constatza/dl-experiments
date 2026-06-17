@@ -21,7 +21,7 @@ from neuralls.composition.experiments.runtime_dataset_contract import (
 from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
 from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
 from neuralls.composition.comparison.models import ComparisonParams
-from neuralls.composition.experiments.training import (
+from neuralls.composition.experiments._training_artifacts import (
     _log_training_evaluation,
     _normalize_training_numpy_payload,
 )

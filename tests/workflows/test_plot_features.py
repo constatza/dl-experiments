@@ -11,7 +11,8 @@ import pytest
 
 matplotlib.use("Agg")
 
-from neuralls.composition.comparison.single_run import ComparisonPaths, _generate_comparison_plots
+from neuralls.composition.comparison._plots import _generate_comparison_plots
+from neuralls.composition.comparison.models import ComparisonPaths
 from neuralls.domain.analysis.spectra import plot_condition_numbers
 from neuralls.domain.solver.models.result import CGComparisonResult, PlotPaths
 from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
@@ -315,12 +316,12 @@ def test_generate_comparison_plots_includes_iterations_barplot(
     )
 
     with (
-        patch("neuralls.composition.comparison.single_run.plot_convergence_comparison"),
+        patch("neuralls.composition.comparison._plots.plot_convergence_comparison"),
         patch(
-            "neuralls.composition.comparison.single_run.plot_condition_numbers",
+            "neuralls.composition.comparison._plots.plot_condition_numbers",
             return_value=figures_dir / "conditions.png",
         ),
-        patch("neuralls.composition.comparison.single_run.plot_metric_comparison"),
+        patch("neuralls.composition.comparison._plots.plot_metric_comparison"),
     ):
         result = _generate_comparison_plots(two_result_entries, simple_cond_numbers, paths)
 

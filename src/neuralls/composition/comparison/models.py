@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
@@ -13,6 +15,8 @@ __all__ = [
     "ComparisonSpec",
     "ComparisonParams",
     "ComparisonOutcome",
+    "ComparisonPaths",
+    "LinearSystem",
 ]
 
 
@@ -48,6 +52,36 @@ class ComparisonSpec:
     rhs_override: Path | None = None
     figures_dir: Path | None = None
     output_dir: Path | None = None
+
+
+@dataclass(frozen=True)
+class ComparisonPaths:
+    """Resolved paths for a single comparison run.
+
+    Attributes:
+        matrix: Path to system matrix file (.txt or .npy).
+        rhs: Path to right-hand side vector file (.txt or .npy).
+        output: Root output directory for comparison results.
+        figures: Directory for diagnostic plots.
+    """
+
+    matrix: Path
+    rhs: Path
+    output: Path
+    figures: Path
+
+
+@dataclass(frozen=True)
+class LinearSystem:
+    """Loaded and validated linear system (A, b) pair.
+
+    Attributes:
+        matrix: System matrix A in Ax=b (shape: n x n).
+        rhs: Right-hand side vector b in Ax=b (shape: n,).
+    """
+
+    matrix: np.ndarray
+    rhs: np.ndarray
 
 
 @dataclass(frozen=True)

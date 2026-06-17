@@ -32,18 +32,22 @@ from neuralls.composition.experiments.runtime_dataset_contract import (
     RuntimeDatasetContract,
     default_training_dataset_contract,
 )
-from neuralls.composition.experiments.training import (
+from neuralls.composition.experiments._dataset_assembly import (
+    _create_feature_configs,
+    _create_target_configs,
+    _merge_entry_metadata,
+    _validate_dataset_section,
+    _validate_runtime_dataset_contract,
+)
+from neuralls.composition.experiments._settings_pipeline import (
     _configure_dataloader_runtime,
     _configure_mlflow,
     _configure_output_paths,
-    _create_feature_configs,
-    _merge_entry_metadata,
-    _normalize_training_numpy_payload,
-    _create_target_configs,
-    _extract_evaluation_arrays,
     _resolve_dataset,
-    _validate_runtime_dataset_contract,
-    _validate_dataset_section,
+)
+from neuralls.composition.experiments._training_artifacts import (
+    _extract_evaluation_arrays,
+    _normalize_training_numpy_payload,
 )
 
 
@@ -125,7 +129,9 @@ def test_create_feature_configs_graph_dataset(
 ) -> None:
     """_create_feature_configs returns in-memory rhs + path-dropped matrix for GraphDataset."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, sample_rhs, contract, frozenset())
+    features = _create_feature_configs(
+        sample_arrays, sample_rhs, contract, frozenset(), contract.primary_input_name
+    )
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -144,7 +150,9 @@ def test_create_feature_configs_flexible_dataset(
 ) -> None:
     """_create_feature_configs returns in-memory rhs + path-dropped matrix for FlexibleDataset."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, sample_rhs, contract, frozenset())
+    features = _create_feature_configs(
+        sample_arrays, sample_rhs, contract, frozenset(), contract.primary_input_name
+    )
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -163,7 +171,9 @@ def test_create_feature_configs_default_to_flexible(
 ) -> None:
     """_create_feature_configs defaults to in-memory rhs + path-dropped matrix behavior."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, sample_rhs, contract, frozenset())
+    features = _create_feature_configs(
+        sample_arrays, sample_rhs, contract, frozenset(), contract.primary_input_name
+    )
 
     assert len(features) == 2
     names = {f.name for f in features}
@@ -434,7 +444,9 @@ def test_contract_override_drives_injection_and_validation(
         prediction_name="rhs_pred",
         loss_target_key="targets.rhs",
     )
-    features = _create_feature_configs(sample_arrays, sample_rhs, contract, frozenset())
+    features = _create_feature_configs(
+        sample_arrays, sample_rhs, contract, frozenset(), contract.primary_input_name
+    )
     targets = _create_target_configs(sample_solutions, contract)
     settings = training_settings.model_copy(
         update={
@@ -465,9 +477,9 @@ def test_contract_override_drives_injection_and_validation(
     assert [target.name for target in updated.DATASET.targets] == ["rhs"]
 
 
-@patch("neuralls.composition.experiments.training.compute_diagnostics")
-@patch("neuralls.composition.experiments.training.write_diagnostics_figure")
-@patch("neuralls.composition.experiments.training.log_diagnostics_to_mlflow")
+@patch("neuralls.composition.experiments._training_artifacts.compute_diagnostics")
+@patch("neuralls.composition.experiments._training_artifacts.write_diagnostics_figure")
+@patch("neuralls.composition.experiments._training_artifacts.log_diagnostics_to_mlflow")
 def test_log_training_evaluation_orchestration(
     mock_mlflow_log: MagicMock,
     mock_write: MagicMock,
@@ -475,7 +487,7 @@ def test_log_training_evaluation_orchestration(
     tmp_path: Path,
 ) -> None:
     """_log_training_evaluation delegates to diagnostics and figure helpers."""
-    from neuralls.composition.experiments.training import _log_training_evaluation
+    from neuralls.composition.experiments._training_artifacts import _log_training_evaluation
 
     contract = default_training_dataset_contract()
     normalized_payload = {
