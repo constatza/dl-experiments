@@ -66,10 +66,10 @@ vector_dim = -1
 name = "FlexibleDataset"
 
 [[DATASET.features]]
-name = "x"
+name = "u"
 
 [[DATASET.features]]
-name = "query"
+name = "y"
 field_role = "target_coordinates"
 transforms = [{name = "Unsqueeze", dim = 1}]
 
