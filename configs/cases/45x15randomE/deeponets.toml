@@ -1,0 +1,123 @@
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training   = "Train-45x15randomE-Conditional-DeepONets"
+comparison = "Compare-45x15randomE-Conditional-DeepONets"
+
+[comparison_defaults]
+rtol               = 1.0e-6
+atol               = 1.0e-14
+max_iterations     = 200
+stopping_criterion = "residual_norm"
+m_max              = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+[[datasets]]
+id           = "gaussian-cg1-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg1.toml"
+display_name = "Gaussian CG-1 45x15randomE"
+
+[[datasets]]
+id           = "gaussian-cg10-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg10.toml"
+display_name = "Gaussian CG-10 45x15randomE"
+
+[[datasets]]
+id           = "gaussian-cg50-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg50.toml"
+display_name = "Gaussian CG-50 45x15randomE"
+
+[[datasets]]
+id           = "gaussian-cg100-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg100.toml"
+display_name = "Gaussian CG-100 45x15randomE"
+
+[[models]]
+id           = "ffnn-deeponet"
+path         = "../../models/deeponet/ffnn-deeponet.toml"
+display_name = "FFNN DeepONet"
+
+[[models]]
+id           = "embedded-deeponet"
+path         = "../../models/deeponet/embedded-deeponet.toml"
+display_name = "Embedded DeepONet"
+
+[[comparisons]]
+id             = "gaussian-cg1"
+matrix_dataset = "gaussian-cg1-45x15randomE"
+rhs_dataset    = "gaussian-cg1-45x15randomE"
+experiments    = [
+  "ffnn-deeponet-gaussian-cg1-45x15randomE",
+  "embedded-deeponet-gaussian-cg1-45x15randomE",
+]
+
+[[comparisons]]
+id             = "gaussian-cg10"
+matrix_dataset = "gaussian-cg10-45x15randomE"
+rhs_dataset    = "gaussian-cg10-45x15randomE"
+experiments    = [
+  "ffnn-deeponet-gaussian-cg10-45x15randomE",
+  "embedded-deeponet-gaussian-cg10-45x15randomE",
+]
+
+[[comparisons]]
+id             = "gaussian-cg50"
+matrix_dataset = "gaussian-cg50-45x15randomE"
+rhs_dataset    = "gaussian-cg50-45x15randomE"
+experiments    = [
+  "ffnn-deeponet-gaussian-cg50-45x15randomE",
+  "embedded-deeponet-gaussian-cg50-45x15randomE",
+]
+
+[[comparisons]]
+id             = "gaussian-cg100"
+matrix_dataset = "gaussian-cg100-45x15randomE"
+rhs_dataset    = "gaussian-cg100-45x15randomE"
+experiments    = [
+  "ffnn-deeponet-gaussian-cg100-45x15randomE",
+  "embedded-deeponet-gaussian-cg100-45x15randomE",
+]
+
+[[experiments]]
+dataset = "gaussian-cg1-45x15randomE"
+model   = "ffnn-deeponet"
+
+[[experiments]]
+dataset = "gaussian-cg1-45x15randomE"
+model   = "embedded-deeponet"
+
+[[experiments]]
+dataset = "gaussian-cg10-45x15randomE"
+model   = "ffnn-deeponet"
+
+[[experiments]]
+dataset = "gaussian-cg10-45x15randomE"
+model   = "embedded-deeponet"
+
+[[experiments]]
+dataset = "gaussian-cg50-45x15randomE"
+model   = "ffnn-deeponet"
+
+[[experiments]]
+dataset = "gaussian-cg50-45x15randomE"
+model   = "embedded-deeponet"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15randomE"
+model   = "ffnn-deeponet"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15randomE"
+model   = "embedded-deeponet"

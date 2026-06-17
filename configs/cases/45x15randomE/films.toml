@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train-45x15randomE-Conditional"
-comparison = "Compare-45x15randomE-Conditional"
+training   = "Train-45x15randomE-Conditional-FiLMs"
+comparison = "Compare-45x15randomE-Conditional-FiLMs"
 
 [comparison_defaults]
 rtol               = 1.0e-6
@@ -54,16 +54,6 @@ id           = "film-ffnn-embedded"
 path         = "../../models/film/film-ffnn-embedded.toml"
 display_name = "FiLM Embedded FFNN"
 
-[[models]]
-id           = "ffnn-deeponet"
-path         = "../../models/deeponet/ffnn-deeponet.toml"
-display_name = "FFNN DeepONet"
-
-[[models]]
-id           = "embedded-deeponet"
-path         = "../../models/deeponet/embedded-deeponet.toml"
-display_name = "Embedded DeepONet"
-
 [[comparisons]]
 id             = "gaussian-cg1"
 matrix_dataset = "gaussian-cg1-45x15randomE"
@@ -71,8 +61,6 @@ rhs_dataset    = "gaussian-cg1-45x15randomE"
 experiments    = [
   "film-ffnn-gaussian-cg1-45x15randomE",
   "film-ffnn-embedded-gaussian-cg1-45x15randomE",
-  "ffnn-deeponet-gaussian-cg1-45x15randomE",
-  "embedded-deeponet-gaussian-cg1-45x15randomE",
 ]
 
 [[comparisons]]
@@ -82,8 +70,6 @@ rhs_dataset    = "gaussian-cg10-45x15randomE"
 experiments    = [
   "film-ffnn-gaussian-cg10-45x15randomE",
   "film-ffnn-embedded-gaussian-cg10-45x15randomE",
-  "ffnn-deeponet-gaussian-cg10-45x15randomE",
-  "embedded-deeponet-gaussian-cg10-45x15randomE",
 ]
 
 [[comparisons]]
@@ -93,8 +79,6 @@ rhs_dataset    = "gaussian-cg50-45x15randomE"
 experiments    = [
   "film-ffnn-gaussian-cg50-45x15randomE",
   "film-ffnn-embedded-gaussian-cg50-45x15randomE",
-  "ffnn-deeponet-gaussian-cg50-45x15randomE",
-  "embedded-deeponet-gaussian-cg50-45x15randomE",
 ]
 
 [[comparisons]]
@@ -104,8 +88,6 @@ rhs_dataset    = "gaussian-cg100-45x15randomE"
 experiments    = [
   "film-ffnn-gaussian-cg100-45x15randomE",
   "film-ffnn-embedded-gaussian-cg100-45x15randomE",
-  "ffnn-deeponet-gaussian-cg100-45x15randomE",
-  "embedded-deeponet-gaussian-cg100-45x15randomE",
 ]
 
 [[experiments]]
@@ -117,28 +99,12 @@ dataset = "gaussian-cg1-45x15randomE"
 model   = "film-ffnn-embedded"
 
 [[experiments]]
-dataset = "gaussian-cg1-45x15randomE"
-model   = "ffnn-deeponet"
-
-[[experiments]]
-dataset = "gaussian-cg1-45x15randomE"
-model   = "embedded-deeponet"
-
-[[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
 model   = "film-ffnn"
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
 model   = "film-ffnn-embedded"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15randomE"
-model   = "ffnn-deeponet"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15randomE"
-model   = "embedded-deeponet"
 
 [[experiments]]
 dataset = "gaussian-cg50-45x15randomE"
@@ -149,25 +115,9 @@ dataset = "gaussian-cg50-45x15randomE"
 model   = "film-ffnn-embedded"
 
 [[experiments]]
-dataset = "gaussian-cg50-45x15randomE"
-model   = "ffnn-deeponet"
-
-[[experiments]]
-dataset = "gaussian-cg50-45x15randomE"
-model   = "embedded-deeponet"
-
-[[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
 model   = "film-ffnn"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
 model   = "film-ffnn-embedded"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15randomE"
-model   = "ffnn-deeponet"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15randomE"
-model   = "embedded-deeponet"

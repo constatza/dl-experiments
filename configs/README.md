@@ -23,9 +23,10 @@ Choose the config type that matches the case you want to run:
 Current systems: `45x15`, `45x15randomE`, and `93x31`. Each system has case
 configs named `{model}-{dataset}.toml` with an optional `-pca` suffix for PCA-transform
 variants where that family exists. `evaluate-all.toml` runs all candidate models;
-`ffnn-mixed.toml` runs FFNN on all dataset variants; `conditional.toml` is the
-`45x15randomE` case for parameter-conditioned FiLM and DeepONet models;
-`solutions-pca.toml` remains specific to the plain `45x15` system.
+`ffnn-mixed.toml` runs FFNN on all dataset variants; `films.toml` and
+`deeponets.toml` split the `45x15randomE` parameter-conditioned cases by FiLM
+and DeepONet family; `solutions-pca.toml` remains specific to the plain
+`45x15` system.
 Gaussian benchmark comparisons now reuse the corresponding `gaussian-cg1`
 training dataset instead of carrying duplicate `gaussian-rhs` TOMLs. The
 `45x15randomE` case family also reuses the existing `45x15`
