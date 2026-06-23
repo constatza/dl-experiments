@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import h5py
 import numpy as np
 import zarr
 
@@ -22,6 +23,7 @@ class ResolvedDatasetArtifact:
     index: int | None = None
     n_matrix_samples: int | None = None
     broadcast: bool | None = None
+    key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,7 @@ def _resolve_artifact(root: Path, artifact: DatasetArtifact) -> ResolvedDatasetA
         index=artifact.index,
         n_matrix_samples=artifact.n_matrix_samples,
         broadcast=artifact.broadcast,
+        key=artifact.key,
     )
 
 
@@ -98,61 +101,31 @@ def resolve_dataset_paths(dataset_dir: str | Path) -> DatasetPaths:
     )
 
 
-def _load_array(path: Path, artifact: DatasetArtifact) -> np.ndarray:
+def _load_resolved(artifact: ResolvedDatasetArtifact) -> np.ndarray:
     match artifact.format:
         case "zarr":
-            return np.asarray(zarr.open_array(str(path), mode="r"), dtype=np.float64)
+            return np.asarray(zarr.open_array(str(artifact.path), mode="r"), dtype=np.float64)
         case "npy":
-            return np.load(path).astype(np.float64, copy=False)
+            return np.load(artifact.path).astype(np.float64, copy=False)
+        case "hdf5":
+            with h5py.File(str(artifact.path), "r") as f:
+                return np.asarray(f[artifact.key or "data"], dtype=np.float64)
         case _:
-            raise ValueError(f"Unsupported dataset artifact format {artifact.format!r} at {path}")
+            raise ValueError(
+                f"Unsupported dataset artifact format {artifact.format!r} at {artifact.path}"
+            )
 
 
 def load_dense_training_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
     """Load dense rhs and solution arrays from a manifest-driven dataset directory."""
     artifacts = resolve_dataset_artifacts(dataset_dir)
-    rhs = _load_array(
-        artifacts.rhs.path,
-        DatasetArtifact(
-            path=artifacts.rhs.path.name,
-            format=artifacts.rhs.format,
-            dtype=artifacts.rhs.dtype,
-            shape=artifacts.rhs.shape,
-            index=artifacts.rhs.index,
-            n_matrix_samples=artifacts.rhs.n_matrix_samples,
-            broadcast=artifacts.rhs.broadcast,
-        ),
-    )
-    solutions = _load_array(
-        artifacts.solutions.path,
-        DatasetArtifact(
-            path=artifacts.solutions.path.name,
-            format=artifacts.solutions.format,
-            dtype=artifacts.solutions.dtype,
-            shape=artifacts.solutions.shape,
-            index=artifacts.solutions.index,
-            n_matrix_samples=artifacts.solutions.n_matrix_samples,
-            broadcast=artifacts.solutions.broadcast,
-        ),
-    )
-    return rhs, solutions
+    return _load_resolved(artifacts.rhs), _load_resolved(artifacts.solutions)
 
 
 def load_matrix_dense_sample(dataset_dir: str | Path, sample_index: int = 0) -> np.ndarray:
     """Load one dense matrix sample from a manifest-driven dataset directory."""
     artifacts = resolve_dataset_artifacts(dataset_dir)
-    matrix = _load_array(
-        artifacts.matrix.path,
-        DatasetArtifact(
-            path=artifacts.matrix.path.name,
-            format=artifacts.matrix.format,
-            dtype=artifacts.matrix.dtype,
-            shape=artifacts.matrix.shape,
-            index=artifacts.matrix.index,
-            n_matrix_samples=artifacts.matrix.n_matrix_samples,
-            broadcast=artifacts.matrix.broadcast,
-        ),
-    )
+    matrix = _load_resolved(artifacts.matrix)
     return np.asarray(matrix[sample_index], dtype=np.float64)
 
 
@@ -172,6 +145,5 @@ def read_training_sample_count(paths: DatasetPaths | DatasetArtifacts) -> int:
 
 def load_parameter_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, ...]:
     """Load all manifest-declared parameter arrays eagerly."""
-    dataset_dir = Path(dataset_dir)
-    manifest = read_dataset_manifest(dataset_dir)
-    return tuple(_load_array(dataset_dir / artifact.path, artifact) for artifact in manifest.params)
+    artifacts = resolve_dataset_artifacts(dataset_dir)
+    return tuple(_load_resolved(a) for a in artifacts.params)

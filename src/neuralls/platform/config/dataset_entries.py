@@ -9,6 +9,7 @@ from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
     DataRole,
+    Hdf5Entry,
     NpyEntry,
     PathBasedEntry,
     ZarrEntry,
@@ -28,13 +29,22 @@ def entry_from_path(
     name: str,
     model_input: bool,
     role: EntryRole,
+    key: str | None = None,
 ) -> DataEntry:
     """Build a dlkit DataEntry from an artifact path.
 
-    Format is derived from path suffix: .npy → NpyEntry, anything else → ZarrEntry.
-    Delegates validation (zarr.json existence, .npy suffix) to dlkit.
+    Format is derived from path suffix: .npy → NpyEntry, .h5/.hdf5 → Hdf5Entry,
+    anything else → ZarrEntry. Delegates validation to dlkit.
     """
     data_role = DataRole.FEATURE if role == "feature" else DataRole.TARGET
+    if path.suffix in {".h5", ".hdf5"}:
+        return Hdf5Entry(
+            name=name,
+            path=path,
+            model_input=model_input,
+            data_role=data_role,
+            key=key or "data",
+        )
     entry_type = _SUFFIX_TO_ENTRY.get(path.suffix, ZarrEntry)
     return entry_type(name=name, path=path, model_input=model_input, data_role=data_role)
 

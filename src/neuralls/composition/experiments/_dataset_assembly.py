@@ -261,9 +261,11 @@ def _feature_entry_from_source(
     model_input: bool,
 ) -> DataEntry:
     """Create a feature DataEntry from one resolved artifact source."""
-    return entry_from_path(source.path, name=name, model_input=model_input, role="feature")
+    return entry_from_path(
+        source.path, name=name, model_input=model_input, role="feature", key=source.key
+    )
 
 
 def _target_entry_from_source(source: ArraySource, *, name: str) -> DataEntry:
     """Create a target DataEntry from one resolved artifact source."""
-    return entry_from_path(source.path, name=name, model_input=True, role="target")
+    return entry_from_path(source.path, name=name, model_input=True, role="target", key=source.key)

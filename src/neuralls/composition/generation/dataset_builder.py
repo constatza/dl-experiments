@@ -54,7 +54,7 @@ def build_dataset(
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
     solver_overrides: dict[str, Any] | None = None,
-    dataset_format: DatasetFormat = "zarr",
+    dataset_format: DatasetFormat = "hdf5",
     storage: GenerationDatasetStorage | None = None,
     accumulator: DatasetAccumulatorPort | None = None,
 ) -> str:

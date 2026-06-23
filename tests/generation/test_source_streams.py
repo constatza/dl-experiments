@@ -90,6 +90,7 @@ def test_build_dataset_streams_matrix_stack_without_dense_batch(tmp_path: Path) 
         normalize="none",
         shuffle=False,
         seed=42,
+        dataset_format="zarr",
     )
 
     rhs, solutions = load_dense_training_arrays(out_dir)
@@ -163,6 +164,7 @@ def test_single_matrix_stored_once_in_zarr(tmp_path: Path) -> None:
         normalize="none",
         shuffle=False,
         seed=7,
+        dataset_format="zarr",
     )
 
     saved_rhs, saved_solutions = load_dense_training_arrays(out_dir)
@@ -194,6 +196,7 @@ def test_build_dataset_persists_residual_trace_pairs(tmp_path: Path) -> None:
         shuffle=False,
         seed=7,
         strategy_overrides={"residual_traces": {"cg_iters": 1}},
+        dataset_format="zarr",
     )
 
     saved_rhs, saved_solutions = load_dense_training_arrays(out_dir)
@@ -269,6 +272,7 @@ def test_glob_matrix_gaussian_uses_global_sample_budget(
         normalize="none",
         shuffle=False,
         seed=0,
+        dataset_format="zarr",
     )
 
     rhs, solutions = load_dense_training_arrays(out_dir)
@@ -306,6 +310,7 @@ def test_glob_matrix_solution_archive_uses_global_sample_budget(
                 "samples": n_solutions,
             }
         },
+        dataset_format="zarr",
     )
 
     rhs, solutions = load_dense_training_arrays(out_dir)
@@ -458,6 +463,7 @@ def test_build_dataset_honors_enumerate_by_for_globbed_matrix_files(
         normalize="none",
         shuffle=False,
         seed=42,
+        dataset_format="zarr",
     )
 
     rhs, solutions = load_dense_training_arrays(out_dir)

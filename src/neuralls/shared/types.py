@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal, TypedDict
 
-DatasetFormat = Literal["zarr", "npy"]
+DatasetFormat = Literal["zarr", "npy", "hdf5"]
 """Supported dataset storage families for generated datasets."""
 
 EntryRole = Literal["feature", "target"]

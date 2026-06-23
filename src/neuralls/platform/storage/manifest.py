@@ -23,6 +23,7 @@ class DatasetArtifact:
     index: int | None = None
     n_matrix_samples: int | None = None
     broadcast: bool | None = None
+    key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,7 @@ def read_dataset_manifest(dataset_dir: str | Path) -> DatasetManifest:
                 else None
             ),
             broadcast=bool(payload["broadcast"]) if payload.get("broadcast") is not None else None,
+            key=str(payload["key"]) if payload.get("key") is not None else None,
         )
 
     params_raw = raw.get("params") or []

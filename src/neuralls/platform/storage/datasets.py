@@ -16,9 +16,11 @@ from neuralls.platform.storage.dataset_readers import (
     resolve_dataset_paths,
 )
 from neuralls.platform.storage.generation_formats import (
+    DenseHdf5Accumulator,
     DenseNpyAccumulator,
     DenseZarrAccumulator,
     GenerationDatasetStorage,
+    Hdf5GenerationStorage,
     NpyGenerationStorage,
     ZarrGenerationStorage,
     make_generation_dataset_storage,
@@ -40,9 +42,11 @@ __all__ = [
     "DatasetNormalization",
     "DatasetPaths",
     "DenseDatasetWriter",
+    "DenseHdf5Accumulator",
     "DenseNpyAccumulator",
     "DenseZarrAccumulator",
     "GenerationDatasetStorage",
+    "Hdf5GenerationStorage",
     "NpyGenerationStorage",
     "ZarrGenerationStorage",
     "load_dataset_manifest",

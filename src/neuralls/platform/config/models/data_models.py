@@ -284,8 +284,8 @@ class OutputConfig(BaseModel):
         description="Output directory for generated data",
     )
     dataset_format: DatasetFormat = Field(
-        default="zarr",
-        description="Dataset storage format ('zarr' or 'npy')",
+        default="hdf5",
+        description="Dataset storage format ('zarr', 'npy', or 'hdf5')",
     )
     matrix_codec: Literal["coo"] = Field(
         default="coo",

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import h5py
 import numpy as np
 import zarr
 
@@ -22,6 +23,7 @@ class ZarrArraySource:
     """Array source referenced by a zarr path."""
 
     path: Path
+    key: str | None = None
 
     def load_sample(self, sample_index: int) -> np.ndarray:
         arr = zarr.open_array(str(self.path), mode="r")
@@ -34,6 +36,7 @@ class NpyArraySource:
     """Array source referenced by a numpy path."""
 
     path: Path
+    key: str | None = None
 
     def load_sample(self, sample_index: int) -> np.ndarray:
         array = np.load(self.path, mmap_mode="r")
@@ -42,7 +45,21 @@ class NpyArraySource:
         return np.asarray(array, dtype=np.float64)
 
 
-type ArraySource = NpyArraySource | ZarrArraySource
+@dataclass(frozen=True)
+class Hdf5ArraySource:
+    """Array source backed by a named dataset inside an HDF5 file."""
+
+    path: Path
+    key: str
+
+    def load_sample(self, sample_index: int) -> np.ndarray:
+        with h5py.File(str(self.path), "r") as f:
+            ds = f[self.key]
+            data = ds[sample_index] if ds.ndim > 1 else ds[:]  # type: ignore[index]
+            return np.asarray(data, dtype=np.float64)
+
+
+type ArraySource = NpyArraySource | ZarrArraySource | Hdf5ArraySource
 
 
 @dataclass(frozen=True)
@@ -73,11 +90,13 @@ class TrainingArrays:
         return tuple(paths)
 
 
-def _source_from_artifact(path: Path, format_name: str) -> ArraySource:
+def _source_from_artifact(path: Path, format_name: str, *, key: str | None = None) -> ArraySource:
     if format_name == "zarr":
         return ZarrArraySource(path=path)
     if format_name == "npy":
         return NpyArraySource(path=path)
+    if format_name == "hdf5":
+        return Hdf5ArraySource(path=path, key=key or "data")
     raise ValueError(f"Unsupported training array format {format_name!r} at {path}")
 
 
@@ -86,14 +105,20 @@ def load_training_arrays(data_dir: Path) -> TrainingArrays:
     artifacts = resolve_dataset_artifacts(data_dir)
     sample_count = read_training_sample_count(artifacts)
     return TrainingArrays(
-        rhs_source=_source_from_artifact(artifacts.rhs.path, artifacts.rhs.format),
-        solutions_source=_source_from_artifact(
-            artifacts.solutions.path, artifacts.solutions.format
+        rhs_source=_source_from_artifact(
+            artifacts.rhs.path, artifacts.rhs.format, key=artifacts.rhs.key
         ),
-        matrix_source=_source_from_artifact(artifacts.matrix.path, artifacts.matrix.format),
+        solutions_source=_source_from_artifact(
+            artifacts.solutions.path,
+            artifacts.solutions.format,
+            key=artifacts.solutions.key,
+        ),
+        matrix_source=_source_from_artifact(
+            artifacts.matrix.path, artifacts.matrix.format, key=artifacts.matrix.key
+        ),
         sample_count=sample_count,
         parameter_sources=tuple(
-            _source_from_artifact(artifact.path, artifact.format) for artifact in artifacts.params
+            _source_from_artifact(a.path, a.format, key=a.key) for a in artifacts.params
         ),
     )
 
@@ -111,6 +136,9 @@ def load_array_source_array(source: ArraySource) -> np.ndarray:
         case ZarrArraySource(path=path):
             arr = zarr.open_array(str(path), mode="r")
             return np.asarray(arr[:], dtype=np.float64)
+        case Hdf5ArraySource(path=path, key=key):
+            with h5py.File(str(path), "r") as f:
+                return np.asarray(f[key][:], dtype=np.float64)
 
 
 def coerce_jsonable(value: Any) -> Any:

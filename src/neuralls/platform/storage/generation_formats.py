@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+import h5py
 import numpy as np
 import zarr
 from numpy.typing import NDArray
@@ -412,6 +413,156 @@ class NpyGenerationStorage(_StorageErrorFormatter):
         )
 
 
+_HDF5_FILENAME = "dataset.h5"
+_HDF5_MATRIX_STAGING_KEY = "matrix"
+
+
+class DenseHdf5Accumulator(_StorageErrorFormatter):
+    """Streams dense matrix slices to a staged HDF5 file during generation."""
+
+    def __init__(self, h5_path: Path) -> None:
+        self._h5_path = Path(h5_path)
+        self._file: h5py.File | None = None
+        self._ds: h5py.Dataset | None = None
+        self._size: tuple[int, int] | None = None
+        self._n_samples = 0
+
+    def append_sparse_components(
+        self,
+        *,
+        indices: NDArray,
+        values: NDArray,
+        size: tuple[int, int],
+        repeats: int,
+    ) -> None:
+        dense = np.zeros(size, dtype=np.float64)
+        if values.size > 0:
+            dense[indices[0], indices[1]] = values
+        self.append_dense_matrix(dense, repeats)
+
+    def append_dense_matrix(self, matrix: NDArray, repeats: int) -> None:
+        if repeats < 1:
+            raise ValueError(f"repeats must be >= 1, got {repeats}")
+        n, m = int(matrix.shape[0]), int(matrix.shape[1])
+        if self._file is None:
+            self._size = (n, m)
+            try:
+                self._file = h5py.File(str(self._h5_path), "w")
+                self._ds = self._file.create_dataset(
+                    _HDF5_MATRIX_STAGING_KEY,
+                    shape=(0, n, m),
+                    maxshape=(None, n, m),
+                    chunks=(1, n, m),
+                    dtype="float64",
+                )
+            except OSError as exc:
+                self._raise_storage_error("Creating matrix staging HDF5", self._h5_path, exc)
+        ds = self._ds
+        if ds is None:
+            raise RuntimeError("HDF5 matrix staging dataset was not initialized.")
+        try:
+            current = ds.shape[0]
+            ds.resize(current + repeats, axis=0)
+            ds[current:] = np.broadcast_to(matrix[np.newaxis], (repeats, n, m))
+        except OSError as exc:
+            self._raise_storage_error("Appending to matrix staging HDF5", self._h5_path, exc)
+        self._n_samples += repeats
+
+    def finalize(self) -> Path:
+        if self._file is not None:
+            self._file.close()
+            self._file = None
+            self._ds = None
+        return self._h5_path
+
+    @property
+    def matrix_size(self) -> tuple[int, int] | None:
+        return self._size
+
+    @property
+    def n_samples(self) -> int:
+        return self._n_samples
+
+
+class Hdf5GenerationStorage(_StorageErrorFormatter):
+    """Write generated datasets into a single HDF5 file (dataset.h5)."""
+
+    format_name = "hdf5"
+
+    def make_accumulator(self, dataset_dir: Path) -> DatasetAccumulatorPort:
+        return DenseHdf5Accumulator(dataset_dir / ".matrix-staging.h5")
+
+    def write_dataset(self, dataset_dir: Path, payload: GeneratedDatasetPayload) -> None:
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        h5_path = dataset_dir / _HDF5_FILENAME
+        staging_path = Path(payload.matrix_artifact_path)
+
+        try:
+            with h5py.File(str(staging_path), "r") as staging, h5py.File(str(h5_path), "w") as out:
+                staging.copy(_HDF5_MATRIX_STAGING_KEY, out, name="matrix")
+                mat_shape = tuple(int(d) for d in out["matrix"].shape)
+
+                out.create_dataset("rhs", data=payload.rhs.astype(np.float64))
+                out.create_dataset("solutions", data=payload.solutions.astype(np.float64))
+
+                params_manifest: list[DatasetArtifact] = []
+                for index, params_arr in enumerate(payload.parameters_arrays):
+                    if params_arr.size == 0:
+                        continue
+                    key = f"{PARAMETERS_ZARR_PREFIX}{index}"
+                    out.create_dataset(key, data=params_arr.astype(np.float64))
+                    params_manifest.append(
+                        DatasetArtifact(
+                            path=_HDF5_FILENAME,
+                            format=self.format_name,
+                            dtype="float64",
+                            shape=tuple(int(d) for d in params_arr.shape),
+                            index=index,
+                            key=key,
+                        )
+                    )
+        except OSError as exc:
+            self._raise_storage_error("Writing dataset HDF5", h5_path, exc)
+
+        staging_path.unlink(missing_ok=True)
+
+        save_dataset_manifest(
+            dataset_dir,
+            make_dataset_manifest(
+                matrix=DatasetArtifact(
+                    path=_HDF5_FILENAME,
+                    format=self.format_name,
+                    dtype="float64",
+                    shape=mat_shape,
+                    n_matrix_samples=int(mat_shape[0]),
+                    broadcast=int(mat_shape[0]) == 1,
+                    key="matrix",
+                ),
+                rhs=DatasetArtifact(
+                    path=_HDF5_FILENAME,
+                    format=self.format_name,
+                    dtype="float64",
+                    shape=tuple(int(d) for d in payload.rhs.shape),
+                    key="rhs",
+                ),
+                solutions=DatasetArtifact(
+                    path=_HDF5_FILENAME,
+                    format=self.format_name,
+                    dtype="float64",
+                    shape=tuple(int(d) for d in payload.solutions.shape),
+                    key="solutions",
+                ),
+                normalization=DatasetNormalization(
+                    type=payload.normalization_type,
+                    matrix_norm=float(payload.matrix_norm),
+                    matrix_norm_type=payload.matrix_norm_type,
+                    scale=dict(payload.scale_metadata or {}),
+                ),
+                params=tuple(params_manifest),
+            ),
+        )
+
+
 def make_generation_dataset_storage(dataset_format: DatasetFormat) -> GenerationDatasetStorage:
     """Construct the configured generation storage implementation."""
     match dataset_format:
@@ -419,5 +570,7 @@ def make_generation_dataset_storage(dataset_format: DatasetFormat) -> Generation
             return ZarrGenerationStorage()
         case "npy":
             return NpyGenerationStorage()
+        case "hdf5":
+            return Hdf5GenerationStorage()
         case _:
             raise ValueError(f"Unknown dataset_format: {dataset_format!r}")
