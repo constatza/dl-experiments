@@ -22,7 +22,7 @@ Choose the config type that matches the case you want to run:
 
 Current systems: `45x15`, `45x15randomE`, and `93x31`. Each system has case
 configs named `{model}-{dataset}.toml` with an optional `-pca` suffix for PCA-transform
-variants where that family exists. `evaluate-all.toml` runs all candidate models;
+variants where that family exists. `evaluate-all.toml` runs the curated candidate models;
 `ffnn-mixed.toml` runs FFNN on all dataset variants; `films.toml` and
 `deeponets.toml` split the `45x15randomE` parameter-conditioned cases by FiLM
 and DeepONet family; `solutions-pca.toml` remains specific to the plain
@@ -38,8 +38,8 @@ Model families (all `ScaleEquivariant*`, `module_path = "dlkit.nn"`):
 - `ffnn/`: `ScaleEquivariantFFNN` — plain skip residual FFNN
 - `film/`: `ScaleEquivariantFiLM{,Embedded}FFNN` — parameter-conditioned FiLM FFNN variants using `hidden_size` and `num_layers`
 - `deeponet/`: `FFNNDeepONet`, `EmbeddedDeepONet` — branch/trunk operator models driven by `query`
-- `embedded/`: `ScaleEquivariantEmbedded{Factorized,SPD,SPDFactorized}FFNN` — embedded square-output
-- `symmetric/`: `ScaleEquivariant{SPD,Factorized}FFNN` — non-embedded square-output
+- `embedded/`: `ScaleEquivariantEmbedded{Factorized,SPD,SPDFactorized}FFNN` — embedded square-output; current factorized case configs use the regular embedded-factorized variant
+- `symmetric/`: `ScaleEquivariant{SPD,Factorized}FFNN` — non-embedded square-output; current factorized case configs do not select the SPD-factorized variants
 - `spectral/`: `ScaleEquivariant{Siren,FourierFeatureNetwork,ModifiedMLP}` — sine/Fourier networks
 
 ## Recommended Progression

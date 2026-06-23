@@ -46,7 +46,7 @@ id           = "gaussian-cg100-45x15randomE"
 path         = "../../datasets/train/45x15randomE/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 45x15randomE"
 
-# ── Models (all scale-equivariant factorized variants) ────────────────────────
+# ── Models (regular factorized variants, including embedded) ──────────────────
 
 [[models]]
 id           = "embedded-factorized"
@@ -58,16 +58,6 @@ id           = "spectral-factorized"
 path         = "../../models/spectral/factorized.toml"
 display_name = "Scale-Equivariant Spectral Factorized FFNN"
 
-[[models]]
-id           = "spd-factorized"
-path         = "../../models/symmetric/spd-factorized.toml"
-display_name = "Scale-Equivariant SPD Factorized FFNN"
-
-[[models]]
-id           = "embedded-spd-factorized"
-path         = "../../models/symmetric/embedded-spd-factorized.toml"
-display_name = "Scale-Equivariant Embedded SPD Factorized FFNN"
-
 # ── Comparisons (one per training dataset, filtered to own experiments) ───────
 
 [[comparisons]]
@@ -77,8 +67,6 @@ rhs_dataset    = "gaussian-cg1-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg1-45x15randomE",
   "spectral-factorized-gaussian-cg1-45x15randomE",
-  "spd-factorized-gaussian-cg1-45x15randomE",
-  "embedded-spd-factorized-gaussian-cg1-45x15randomE",
 ]
 
 [[comparisons]]
@@ -88,8 +76,6 @@ rhs_dataset    = "gaussian-cg10-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg10-45x15randomE",
   "spectral-factorized-gaussian-cg10-45x15randomE",
-  "spd-factorized-gaussian-cg10-45x15randomE",
-  "embedded-spd-factorized-gaussian-cg10-45x15randomE",
 ]
 
 [[comparisons]]
@@ -99,8 +85,6 @@ rhs_dataset    = "gaussian-cg50-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg50-45x15randomE",
   "spectral-factorized-gaussian-cg50-45x15randomE",
-  "spd-factorized-gaussian-cg50-45x15randomE",
-  "embedded-spd-factorized-gaussian-cg50-45x15randomE",
 ]
 
 [[comparisons]]
@@ -110,11 +94,9 @@ rhs_dataset    = "gaussian-cg100-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg100-45x15randomE",
   "spectral-factorized-gaussian-cg100-45x15randomE",
-  "spd-factorized-gaussian-cg100-45x15randomE",
-  "embedded-spd-factorized-gaussian-cg100-45x15randomE",
 ]
 
-# ── Experiments (4 models × 4 datasets) ──────────────────────────────────────
+# ── Experiments (2 models × 4 datasets) ──────────────────────────────────────
 
 [[experiments]]
 dataset = "gaussian-cg1-45x15randomE"
@@ -125,28 +107,12 @@ dataset = "gaussian-cg1-45x15randomE"
 model   = "spectral-factorized"
 
 [[experiments]]
-dataset = "gaussian-cg1-45x15randomE"
-model   = "spd-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg1-45x15randomE"
-model   = "embedded-spd-factorized"
-
-[[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
 model   = "embedded-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
 model   = "spectral-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15randomE"
-model   = "spd-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15randomE"
-model   = "embedded-spd-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg50-45x15randomE"
@@ -157,25 +123,9 @@ dataset = "gaussian-cg50-45x15randomE"
 model   = "spectral-factorized"
 
 [[experiments]]
-dataset = "gaussian-cg50-45x15randomE"
-model   = "spd-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg50-45x15randomE"
-model   = "embedded-spd-factorized"
-
-[[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
 model   = "embedded-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
 model   = "spectral-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15randomE"
-model   = "spd-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15randomE"
-model   = "embedded-spd-factorized"
