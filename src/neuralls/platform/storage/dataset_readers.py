@@ -9,7 +9,6 @@ import numpy as np
 import zarr
 
 from neuralls.platform.storage.manifest import DatasetArtifact, read_dataset_manifest
-from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
 
 
 @dataclass(frozen=True)
@@ -72,49 +71,10 @@ def resolve_dataset_artifacts(dataset_dir: str | Path) -> DatasetArtifacts:
     try:
         manifest = read_dataset_manifest(root)
     except FileNotFoundError:
-        params = tuple(
-            ResolvedDatasetArtifact(
-                path=path,
-                format="zarr",
-                dtype="float64",
-                shape=tuple(int(dim) for dim in zarr.open_array(str(path), mode="r").shape),
-                index=index,
-            )
-            for index, path in enumerate(sorted(root.glob(f"{PARAMETERS_ZARR_PREFIX}*.zarr")))
-        )
-        matrix_path = root / "matrix.zarr"
-        rhs_path = root / "rhs.zarr"
-        solutions_path = root / "solutions.zarr"
-        if not (matrix_path.exists() and rhs_path.exists() and solutions_path.exists()):
-            raise
-        matrix_arr = zarr.open_array(str(matrix_path), mode="r")
-        rhs_arr = zarr.open_array(str(rhs_path), mode="r")
-        sol_arr = zarr.open_array(str(solutions_path), mode="r")
-        return DatasetArtifacts(
-            root=root,
-            manifest_path=root / "manifest.json",
-            matrix=ResolvedDatasetArtifact(
-                path=matrix_path,
-                format="zarr",
-                dtype="float64",
-                shape=tuple(int(dim) for dim in matrix_arr.shape),
-                n_matrix_samples=int(matrix_arr.shape[0]),
-                broadcast=int(matrix_arr.shape[0]) == 1,
-            ),
-            rhs=ResolvedDatasetArtifact(
-                path=rhs_path,
-                format="zarr",
-                dtype="float64",
-                shape=tuple(int(dim) for dim in rhs_arr.shape),
-            ),
-            solutions=ResolvedDatasetArtifact(
-                path=solutions_path,
-                format="zarr",
-                dtype="float64",
-                shape=tuple(int(dim) for dim in sol_arr.shape),
-            ),
-            params=params,
-        )
+        raise FileNotFoundError(
+            f"Dataset manifest not found in '{root}'. "
+            "Re-run the generation pipeline to produce a valid dataset."
+        ) from None
     return DatasetArtifacts(
         root=root,
         manifest_path=root / "manifest.json",

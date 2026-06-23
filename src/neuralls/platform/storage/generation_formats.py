@@ -183,12 +183,26 @@ class DenseNpyAccumulator(_StorageErrorFormatter):
         return self._n_samples
 
 
+_ZARR_GROUP_NAME = "dataset.zarr"
+
+
 def _parameter_paths(dataset_dir: Path, suffix: str, count: int) -> tuple[Path, ...]:
     return tuple(dataset_dir / f"{PARAMETERS_ZARR_PREFIX}{index}{suffix}" for index in range(count))
 
 
+def _zarr_group_member_paths(group_dir: Path, parameter_count: int) -> DatasetArtifactPaths:
+    return DatasetArtifactPaths(
+        matrix_path=group_dir / "matrix",
+        rhs_path=group_dir / "rhs",
+        solutions_path=group_dir / "solutions",
+        parameter_paths=tuple(
+            group_dir / f"{PARAMETERS_ZARR_PREFIX}{i}" for i in range(parameter_count)
+        ),
+    )
+
+
 class ZarrGenerationStorage(_StorageErrorFormatter):
-    """Write generated datasets into zarr-backed artifacts."""
+    """Write generated datasets as a zarr group container (dataset.zarr/)."""
 
     format_name = "zarr"
 
@@ -196,16 +210,14 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
         return DenseZarrAccumulator(dataset_dir / ".matrix-staging.zarr")
 
     def artifact_paths(self, dataset_dir: Path, parameter_count: int) -> DatasetArtifactPaths:
-        return DatasetArtifactPaths(
-            matrix_path=dataset_dir / "matrix.zarr",
-            rhs_path=dataset_dir / "rhs.zarr",
-            solutions_path=dataset_dir / "solutions.zarr",
-            parameter_paths=_parameter_paths(dataset_dir, ".zarr", parameter_count),
-        )
+        return _zarr_group_member_paths(dataset_dir / _ZARR_GROUP_NAME, parameter_count)
 
     def write_dataset(self, dataset_dir: Path, payload: GeneratedDatasetPayload) -> None:
-        paths = self.artifact_paths(dataset_dir, len(payload.parameters_arrays))
+        group_dir = dataset_dir / _ZARR_GROUP_NAME
         dataset_dir.mkdir(parents=True, exist_ok=True)
+        # mode="w" truncates any existing group — same-format overwrite is always clean
+        zarr.open_group(str(group_dir), mode="w")
+        paths = _zarr_group_member_paths(group_dir, len(payload.parameters_arrays))
         n = int(payload.rhs.shape[1])
         try:
             rhs_arr = zarr.open_array(
@@ -217,7 +229,7 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
             )
             rhs_arr[:] = payload.rhs
         except OSError as exc:
-            self._raise_storage_error("Writing rhs.zarr", paths.rhs_path, exc)
+            self._raise_storage_error("Writing rhs into group", paths.rhs_path, exc)
 
         try:
             sol_arr = zarr.open_array(
@@ -229,7 +241,7 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
             )
             sol_arr[:] = payload.solutions
         except OSError as exc:
-            self._raise_storage_error("Writing solutions.zarr", paths.solutions_path, exc)
+            self._raise_storage_error("Writing solutions into group", paths.solutions_path, exc)
 
         pack_src = Path(payload.matrix_artifact_path)
         if pack_src != paths.matrix_path:
@@ -239,14 +251,14 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
                 shutil.move(str(pack_src), str(paths.matrix_path))
             except OSError as exc:
                 self._raise_storage_error(
-                    "Moving matrix.zarr store into place", paths.matrix_path, exc
+                    "Moving matrix staging into group", paths.matrix_path, exc
                 )
 
         try:
             mat_arr = zarr.open_array(str(paths.matrix_path), mode="r")
         except OSError as exc:
             self._raise_storage_error(
-                "Reopening matrix.zarr for manifest inspection", paths.matrix_path, exc
+                "Reopening matrix member for manifest inspection", paths.matrix_path, exc
             )
 
         params_manifest: list[DatasetArtifact] = []
@@ -265,10 +277,13 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
                 )
                 params_zarr[:] = params_arr
             except OSError as exc:
-                self._raise_storage_error(f"Writing {params_path.name}", params_path, exc)
+                self._raise_storage_error(
+                    f"Writing {params_path.name} into group", params_path, exc
+                )
+            # ponytail: path relative to dataset_dir so manifest resolves from root
             params_manifest.append(
                 DatasetArtifact(
-                    path=params_path.name,
+                    path=f"{_ZARR_GROUP_NAME}/{params_path.name}",
                     format=self.format_name,
                     dtype="float64",
                     shape=tuple(int(dim) for dim in params_arr.shape),
@@ -280,7 +295,7 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
             dataset_dir,
             make_dataset_manifest(
                 matrix=DatasetArtifact(
-                    path=paths.matrix_path.name,
+                    path=f"{_ZARR_GROUP_NAME}/matrix",
                     format=self.format_name,
                     dtype="float64",
                     shape=tuple(int(dim) for dim in mat_arr.shape),
@@ -288,13 +303,13 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
                     broadcast=int(mat_arr.shape[0]) == 1,
                 ),
                 rhs=DatasetArtifact(
-                    path=paths.rhs_path.name,
+                    path=f"{_ZARR_GROUP_NAME}/rhs",
                     format=self.format_name,
                     dtype="float64",
                     shape=tuple(int(dim) for dim in payload.rhs.shape),
                 ),
                 solutions=DatasetArtifact(
-                    path=paths.solutions_path.name,
+                    path=f"{_ZARR_GROUP_NAME}/solutions",
                     format=self.format_name,
                     dtype="float64",
                     shape=tuple(int(dim) for dim in payload.solutions.shape),
