@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from dlkit.common.geometry import FieldRole, GeometryKind
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
@@ -98,23 +97,30 @@ def _base_entry_from_spec(spec: ResolvedDatasetEntrySpec) -> DataEntry:
                 model_input=spec.model_input,
                 data_role=data_role,
             )
+        case _:
+            raise ValueError(f"Unsupported dataset format: {spec.format!r}")
 
 
 def _resolve_data_role(role: EntryRole) -> DataRole:
-    if role == "feature":
-        return DataRole.FEATURE
-    return DataRole.TARGET
+    match role:
+        case "feature":
+            return DataRole.FEATURE
+        case "target":
+            return DataRole.TARGET
+        case _:
+            raise ValueError(f"Unknown entry role: {role!r}")
 
 
 def _metadata_patch_from_entry(entry: DataEntry) -> dict[str, Any]:
     patch: dict[str, Any] = {}
-    transforms = getattr(entry, "transforms", None)
-    if transforms:
-        patch["transforms"] = list(transforms)
-    field_role = getattr(entry, "field_role", None)
-    if field_role is not None and field_role != FieldRole.FEATURE:
-        patch["field_role"] = field_role
-    geometry_kind = getattr(entry, "geometry_kind", None)
-    if geometry_kind is not None and geometry_kind != GeometryKind.TABULAR:
-        patch["geometry_kind"] = geometry_kind
+    if entry.transforms:
+        patch["transforms"] = list(entry.transforms)
+    if entry.dtype is not None:
+        patch["dtype"] = entry.dtype
+    if entry.loss_input is not None:
+        patch["loss_input"] = entry.loss_input
+    if entry.write:
+        patch["write"] = True
+    if not entry.model_input:
+        patch["model_input"] = False
     return patch
