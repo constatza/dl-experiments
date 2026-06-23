@@ -174,10 +174,12 @@ For the local supervised workflows, model configs must route the label through
 placeholders are present, use the canonical runtime target name `y`. Keep
 domain/storage names such as `solutions` for dataset files and dataset ids, not
 for runtime DLKit target aliases. Runtime naming comes from the composition
-dataset contract, while storage names stay `rhs.npy`, `solutions.npy`, and
-`matrix_coo/`. Training diagnostics also consume one canonical prediction key,
-`y_pred`, after composition normalizes DLKit's raw prediction payload once at
-the training boundary.
+dataset contract, while on-disk artifact names come from `[output].dataset_format`
+and resolve through the dataset manifest as `rhs.{npy|zarr}`,
+`solutions.{npy|zarr}`, `matrix.{npy|zarr}`, and optional `parameters_*.{npy|zarr}`.
+Training diagnostics also consume one canonical prediction key, `y_pred`, after
+composition normalizes DLKit's raw prediction payload once at the training
+boundary.
 
 ### Comparison entries
 

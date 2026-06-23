@@ -57,7 +57,7 @@ display_name = "Sparse RHS 93x31"
 
 [[models]]
 id           = "ffnn-standard"
-path         = "../../models/ffnn/standard.toml"
+path         = "../../models/ffnn/ffnn.toml"
 display_name = "FFNN Standard"
 
 # ── Comparisons ───────────────────────────────────────────────────────────────

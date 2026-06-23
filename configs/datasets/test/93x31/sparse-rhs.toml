@@ -16,3 +16,4 @@ values = [90.0, 100.0, -100.0]
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"
+dataset_format = "npy"

@@ -57,12 +57,12 @@ display_name = "Sparse RHS 45x15"
 
 [[models]]
 id           = "ffnn-standard"
-path         = "../../models/ffnn/standard.toml"
+path         = "../../models/ffnn/ffnn.toml"
 display_name = "FFNN Standard"
 
 [[models]]
 id           = "embedded-factorized"
-path         = "../../models/embedded/embedded-factorized.toml"
+path         = "../../models/ffnn/embedded-factorized.toml"
 display_name = "Embedded Factorized"
 
 [[models]]
@@ -92,7 +92,7 @@ display_name = "Spectral SIREN"
 
 [[models]]
 id           = "spectral-fourier"
-path         = "../../models/spectral/fourier.toml"
+path         = "../../models/spectral/fourier-feature-network.toml"
 display_name = "Spectral Fourier"
 
 [[models]]
