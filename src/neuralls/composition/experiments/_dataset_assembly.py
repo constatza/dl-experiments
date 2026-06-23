@@ -1,23 +1,16 @@
 """Dataset assembly helpers for the training workflow.
 
-Translates TOML feature declarations and storage artifacts into DLKit DataEntry
-objects, validates the runtime dataset contract, and merges TOML metadata into
-file-backed entries.
+Translates TOML feature declarations and storage artifacts into resolved
+dataset-entry specs, validates the runtime dataset contract, and leaves
+third-party entry construction to platform adapters.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
-
-from dlkit.common.geometry import FieldRole, GeometryKind
-from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.data_entries import (
     DataEntry,
-    DataRole,
-    ValueEntry,
-    ZarrEntry,
 )
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 from dlkit.infrastructure.config.workflow_configs import (
@@ -28,11 +21,12 @@ from loguru import logger
 
 from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
 from neuralls.platform.storage.training_artifacts import (
-    InMemoryArraySource,
+    ArraySource,
     TrainingArrays,
-    ZarrArraySource,
+    load_array_source_array,
     load_training_arrays,
 )
+from neuralls.shared.types import ResolvedDatasetEntrySpec
 
 type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
@@ -121,61 +115,6 @@ def _validate_runtime_dataset_contract(
         )
 
 
-def _merge_entry_metadata[T: DataEntry](
-    entries: list[T],
-    config_entries: tuple[DataEntry, ...],
-) -> list[T]:
-    """Inject transforms, field_role, and geometry_kind from TOML placeholders into file-backed entries.
-
-    Propagates transforms and any non-default field_role / geometry_kind declared in
-    [[DATASET.features]] or [[DATASET.targets]] into the corresponding file-backed entries.
-    This makes the TOML the declarative source of truth for field geometry semantics
-    (e.g. ``field_role = "target_coordinates"`` for DeepONet query inputs).
-
-    Args:
-        entries: File-backed Feature/Target objects built from disk artifacts.
-        config_entries: Placeholder entries parsed from [[DATASET.features]] or
-            [[DATASET.targets]] in the model TOML (name + metadata, no path).
-
-    Returns:
-        New list where each entry whose name matches a config placeholder has
-        the placeholder's metadata applied via patch_model; all others unchanged.
-
-    Raises:
-        ValueError: If any config placeholder name does not match an injected entry.
-    """
-    patches_by_name: dict[str, dict[str, Any]] = {}
-    for e in config_entries:
-        if e.name is None:
-            continue
-        patch: dict[str, Any] = {}
-        if e.transforms:
-            patch["transforms"] = list(e.transforms)
-        if e.field_role != FieldRole.FEATURE:
-            patch["field_role"] = e.field_role
-        if e.geometry_kind != GeometryKind.TABULAR:
-            patch["geometry_kind"] = e.geometry_kind
-        if patch:
-            patches_by_name[e.name] = patch
-    if not patches_by_name:
-        return entries
-    result: list[T] = []
-    consumed: set[str] = set()
-    for entry in entries:
-        name = entry.name
-        if name is not None and name in patches_by_name:
-            entry = patch_model(entry, patches_by_name[name], revalidate=False)
-            consumed.add(name)
-        result.append(entry)
-    unmatched = patches_by_name.keys() - consumed
-    if unmatched:
-        raise ValueError(
-            "DATASET placeholder entries must match injected runtime entry names. "
-            f"Unmatched entries: {sorted(unmatched)}"
-        )
-    return result
-
-
 def _primary_feature_name_from_settings(
     settings: TrainingWorkflowSettings,
     contract: RuntimeDatasetContract,
@@ -235,13 +174,13 @@ def _create_feature_configs(
     contract: RuntimeDatasetContract,
     declared_extra_names: list[str],
     primary_name: str,
-) -> list[DataEntry]:
-    """Create in-memory Feature configs from dataset artifacts.
+) -> list[ResolvedDatasetEntrySpec]:
+    """Create resolved feature specs from dataset artifacts.
 
     The i-th declared extra name maps to parameters_i.zarr by position.
 
     Args:
-        arrays: Training data arrays and path-backed sources.
+        arrays: Training data artifact sources.
         contract: Runtime dataset entry name contract.
         declared_extra_names: Ordered extra feature names declared in [[DATASET.features]]
             beyond the base and matrix entries (TOML declaration order preserved).
@@ -250,8 +189,8 @@ def _create_feature_configs(
             forward() parameter (e.g. ``"u"`` for DeepONet).
 
     Returns:
-        List of feature entries: base entries (rhs, matrix) plus any extras
-        mapped by index to parameters_i.zarr.
+        List of feature specs: base entries (rhs, matrix) plus any extras
+        mapped by index to parameters_i artifacts.
 
     Raises:
         ValueError: If more extras are declared than parameters_*.zarr files available.
@@ -261,63 +200,59 @@ def _create_feature_configs(
             f"Model declares {len(declared_extra_names)} extra features but dataset has "
             f"{len(arrays.parameter_sources)} parameters_* files."
         )
-    base: list[DataEntry] = [ValueEntry(name=primary_name, value=arrays.rhs)]
+    base: list[ResolvedDatasetEntrySpec] = [
+        _feature_entry_from_source(
+            arrays.rhs_source,
+            name=primary_name,
+            model_input=True,
+            eager_if_zarr=True,
+        )
+    ]
+    base.append(
+        _feature_entry_from_source(
+            arrays.matrix_source,
+            name=contract.matrix_input_name,
+            model_input=False,
+        )
+    )
 
-    match arrays.matrix_source:
-        case ZarrArraySource(path=path):
-            base.append(ZarrEntry(name=contract.matrix_input_name, path=path, model_input=False))
-        case InMemoryArraySource(array=array):
-            base.append(ValueEntry(name=contract.matrix_input_name, value=array, model_input=False))
-
-    extras: list[DataEntry] = []
+    extras: list[ResolvedDatasetEntrySpec] = []
     for i, name in enumerate(declared_extra_names):
         source = arrays.parameter_sources[i]
         match source:
-            case ZarrArraySource(path=path):
+            case _:
                 extras.append(
-                    ZarrEntry(
+                    _feature_entry_from_source(
+                        source,
                         name=name,
-                        path=path,
                         model_input=True,
-                        field_role=FieldRole.FEATURE,
-                        geometry_kind=GeometryKind.TABULAR,
-                    )
-                )
-            case InMemoryArraySource(array=array):
-                extras.append(
-                    ValueEntry(
-                        name=name,
-                        value=array,
-                        model_input=True,
-                        field_role=FieldRole.FEATURE,
-                        geometry_kind=GeometryKind.TABULAR,
                     )
                 )
     return [*base, *extras]
 
 
 def _create_target_configs(
-    solutions_data: np.ndarray,
+    source: ArraySource,
     contract: RuntimeDatasetContract,
-) -> list[DataEntry]:
-    """Create in-memory Target configs from dataset artifacts.
+) -> list[ResolvedDatasetEntrySpec]:
+    """Create resolved target specs from dataset artifacts.
 
     Args:
-        solutions_data: Solutions array loaded from solutions.zarr.
+        source: Solutions artifact source.
         contract: Runtime dataset entry name contract.
 
     Returns:
-        The canonical supervised target entry.
+        The canonical supervised target spec.
     """
-    return [ValueEntry(name=contract.target_name, value=solutions_data, data_role=DataRole.TARGET)]
+    return [_target_entry_from_source(source, name=contract.target_name)]
 
 
 def _load_and_prepare_data(
     settings: TrainingWorkflowSettings,
     workspace: Any,
     contract: RuntimeDatasetContract,
-) -> tuple[TrainingArrays, list[DataEntry], list[DataEntry]]:
-    """Load training data and create Feature/Target configurations.
+) -> tuple[TrainingArrays, list[ResolvedDatasetEntrySpec], list[ResolvedDatasetEntrySpec]]:
+    """Load training data and create resolved feature/target specs.
 
     Args:
         settings: DLKit training or optimization workflow settings.
@@ -326,19 +261,52 @@ def _load_and_prepare_data(
 
     Returns:
         Tuple of (arrays, features, targets) where:
-            - arrays: Resolved data artifact paths
-            - features: List of in-memory / path-dropped feature configs for DLKit
-            - targets: List of in-memory target configs for DLKit
+            - arrays: Resolved data artifact sources
+            - features: List of resolved feature specs for platform adapters
+            - targets: List of resolved target specs for platform adapters
     """
     arrays = load_training_arrays(workspace.data_dir)
     logger.info(
-        "Loading training arrays ({} samples) from {}", arrays.sample_count, workspace.data_dir
-    )
-    logger.info(
-        "Training arrays loaded — rhs {}, solutions {}", arrays.rhs.shape, arrays.solutions.shape
+        "Loading training artifact sources ({} samples) from {}",
+        arrays.sample_count,
+        workspace.data_dir,
     )
     primary_name = _primary_feature_name_from_settings(settings, contract)
     extra_names = _extra_feature_names_from_settings(settings, contract)
     features = _create_feature_configs(arrays, contract, extra_names, primary_name)
-    targets = _create_target_configs(arrays.solutions, contract)
+    targets = _create_target_configs(arrays.solutions_source, contract)
     return arrays, features, targets
+
+
+def _feature_entry_from_source(
+    source: ArraySource,
+    *,
+    name: str,
+    model_input: bool,
+    eager_if_zarr: bool = False,
+) -> ResolvedDatasetEntrySpec:
+    """Create a feature spec from one resolved artifact source."""
+    eager_value = (
+        load_array_source_array(source) if source.format == "zarr" and eager_if_zarr else None
+    )
+    return ResolvedDatasetEntrySpec(
+        name=name,
+        path=source.path if eager_value is None else None,
+        format=source.format,
+        role="feature",
+        model_input=model_input,
+        value=eager_value,
+    )
+
+
+def _target_entry_from_source(source: ArraySource, *, name: str) -> ResolvedDatasetEntrySpec:
+    """Create a target spec from one resolved artifact source."""
+    eager_value = load_array_source_array(source) if source.format == "zarr" else None
+    return ResolvedDatasetEntrySpec(
+        name=name,
+        path=source.path if eager_value is None else None,
+        format=source.format,
+        role="target",
+        model_input=True,
+        value=eager_value,
+    )

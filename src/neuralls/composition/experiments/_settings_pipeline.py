@@ -10,26 +10,26 @@ from pathlib import Path
 
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
-from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
     TrainingWorkflowConfig,
 )
 
 from neuralls.composition.experiments._dataset_assembly import (
-    _merge_entry_metadata,
     _validate_runtime_dataset_contract,
 )
 from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
+from neuralls.platform.config.dataset_entries import apply_placeholder_metadata, build_data_entries
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.shared.types import ResolvedDatasetEntrySpec
 
 type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 def _resolve_dataset(
     settings: TrainingWorkflowSettings,
-    features: list[DataEntry],
-    targets: list[DataEntry],
+    features: list[ResolvedDatasetEntrySpec],
+    targets: list[ResolvedDatasetEntrySpec],
     contract: RuntimeDatasetContract,
 ) -> TrainingWorkflowSettings:
     """Resolve and apply dataset configurations to settings.
@@ -41,8 +41,8 @@ def _resolve_dataset(
 
     Args:
         settings: Current DLKit settings.
-        features: Feature configs to inject (from _create_feature_configs).
-        targets: Target configs to inject (from _create_target_configs).
+        features: Resolved feature specs to inject.
+        targets: Resolved target specs to inject.
         contract: Runtime dataset entry name contract.
 
     Returns:
@@ -53,14 +53,16 @@ def _resolve_dataset(
     """
     _validate_runtime_dataset_contract(settings, contract)
     base_dataset = settings.DATASET or DatasetSettings()
-    features = _merge_entry_metadata(features, base_dataset.features)
-    targets = _merge_entry_metadata(targets, base_dataset.targets)
+    resolved_feature_specs = apply_placeholder_metadata(features, base_dataset.features)
+    resolved_target_specs = apply_placeholder_metadata(targets, base_dataset.targets)
+    feature_entries = build_data_entries(resolved_feature_specs)
+    target_entries = build_data_entries(resolved_target_specs)
     return patch_model(
         settings,
         {
             "DATASET": {
-                "features": features,
-                "targets": targets,
+                "features": feature_entries,
+                "targets": target_entries,
                 "name": base_dataset.name or "FlexibleDataset",
             }
         },
@@ -162,8 +164,8 @@ def _configure_mlflow(
 def _configure_training_pipeline(
     settings: TrainingWorkflowSettings,
     workspace: ExperimentWorkspace,
-    features: list[DataEntry],
-    targets: list[DataEntry],
+    features: list[ResolvedDatasetEntrySpec],
+    targets: list[ResolvedDatasetEntrySpec],
     contract: RuntimeDatasetContract,
     mlflow_experiment_name: str,
     mlflow_run_name: str,
@@ -171,7 +173,7 @@ def _configure_training_pipeline(
     """Apply all configuration transformations to settings.
 
     Applies sequential transformations:
-    1. Inject features/targets into DATASET section (in-memory arrays).
+    1. Inject resolved feature/target specs into DATASET section.
     2. Configure dataloader runtime (workers, pin_memory).
     3. Configure output paths (checkpoint dir, default root dir).
     4. Inject concrete MLflow experiment/run names into settings.
@@ -179,8 +181,8 @@ def _configure_training_pipeline(
     Args:
         settings: Base DLKit settings from config file.
         workspace: Experiment workspace with directory paths.
-        features: Feature configs created from dataset artifacts.
-        targets: Target configs created from dataset artifacts.
+        features: Resolved feature specs created from dataset artifacts.
+        targets: Resolved target specs created from dataset artifacts.
         contract: Runtime dataset entry name contract.
         mlflow_experiment_name: Training experiment bucket name.
         mlflow_run_name: Timestamped training run name.

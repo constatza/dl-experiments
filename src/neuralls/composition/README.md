@@ -38,9 +38,22 @@ current supervised bridge maps dataset `rhs` artifacts to feature entry `x`,
 dataset `solutions` artifacts to target entry `y`, and the dataset `matrix`
 artifact to auxiliary feature entry `matrix`. The storage format (`zarr` or
 `npy`) is resolved in platform storage before composition turns those artifacts
-into `ValueEntry` or `ZarrEntry` objects. Domain terms such as `solutions`
-remain valid on disk, but composition does not expose `solutions` as a runtime
-target alias.
+into format-neutral resolved dataset-entry specs. Platform adapters then
+translate those specs into concrete DLKit entries such as `NpyEntry` or
+`ZarrEntry`. Domain terms such as `solutions` remain valid on disk, but
+composition does not expose `solutions` as a runtime target alias.
+
+This bridge is intentionally declarative at the config boundary. Model TOMLs
+remain the source of truth for runtime entry names, transforms, `field_role`,
+and geometry metadata, while composition only patches in the resolved on-disk
+paths and neutral runtime semantics at execution time. DLKit-specific entry
+construction and optional metadata application stay in platform code.
+
+Path-based injection removes eager whole-dataset loading inside `neuralls`, but
+it does not guarantee fully lazy `.npy` training. DLKit's current
+`FlexibleDataset` still materializes non-lazy path entries during dataset
+construction, even though `NpyEntry` can forward format-specific load kwargs
+such as `mmap_mode`.
 
 Prediction payload normalization follows the same rule. Composition accepts
 DLKit's raw boundary output once, normalizes it into the canonical prediction

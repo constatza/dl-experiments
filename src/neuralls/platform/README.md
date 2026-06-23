@@ -38,6 +38,16 @@ platform does not own the canonical runtime naming policy itself. Storage-layer
 artifact families such as `rhs.zarr`/`rhs.npy`, `solutions.zarr`/`solutions.npy`,
 and `matrix.zarr`/`matrix.npy` stay in platform storage, while the composition
 dataset contract decides which runtime entry names those artifacts map to.
+Training artifact resolution preserves those on-disk sources as path-backed
+dataset inputs, and platform adapters translate resolved entry specs into
+concrete `NpyEntry` / `ZarrEntry` objects instead of eagerly converting whole
+datasets into `ValueEntry` payloads.
+
+That change improves separation of concerns and keeps format-specific loading
+policy inside DLKit, including `NpyEntry` support for `mmap_mode`. It does not
+by itself guarantee fully lazy `.npy` training because DLKit's current
+`FlexibleDataset` still materializes non-lazy path entries during dataset
+construction.
 
 The `dlkit/` package is the runtime adapter boundary. It hides predictor and
 inference integration details behind local abstractions so solver and

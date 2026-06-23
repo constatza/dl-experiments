@@ -6,9 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import zarr
-from dlkit.infrastructure.config.data_entries import ZarrEntry
-
 from neuralls.composition.experiments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
@@ -34,18 +31,14 @@ def contract():
 @pytest.fixture
 def no_params_arrays(tmp_path: Path) -> TrainingArrays:
     """TrainingArrays with no parameters_zarr entries."""
-    n, samples = 4, 6
-    rng = np.random.default_rng(0)
-    for name, shape in [("rhs.zarr", (samples, n)), ("solutions.zarr", (samples, n))]:
-        zarr.open_array(str(tmp_path / name), mode="w", shape=shape, dtype="float64")[:] = (
-            rng.standard_normal(shape)
-        )
-    zarr.open_array(str(tmp_path / "matrix.zarr"), mode="w", shape=(1, n, n), dtype="float64")[
-        0
-    ] = np.eye(n)
+    samples = 6
+    for name in ("rhs.zarr", "solutions.zarr", "matrix.zarr"):
+        store = tmp_path / name
+        store.mkdir()
+        (store / "zarr.json").write_text('{"zarr_format": 3, "node_type": "array"}')
     return TrainingArrays(
-        rhs=np.zeros((samples, n), dtype=np.float64),
-        solutions=np.zeros((samples, n), dtype=np.float64),
+        rhs_source=ZarrArraySource(path=tmp_path / "rhs.zarr"),
+        solutions_source=ZarrArraySource(path=tmp_path / "solutions.zarr"),
         matrix_source=ZarrArraySource(path=tmp_path / "matrix.zarr"),
         sample_count=samples,
         parameter_sources=(),
@@ -55,22 +48,17 @@ def no_params_arrays(tmp_path: Path) -> TrainingArrays:
 @pytest.fixture
 def one_param_arrays(tmp_path: Path) -> TrainingArrays:
     """TrainingArrays with one parameters_0.zarr of shape (6, 4)."""
-    n, samples, param_dim = 4, 6, 4
-    rng = np.random.default_rng(1)
-    for name, shape in [("rhs.zarr", (samples, n)), ("solutions.zarr", (samples, n))]:
-        zarr.open_array(str(tmp_path / name), mode="w", shape=shape, dtype="float64")[:] = (
-            rng.standard_normal(shape)
-        )
-    zarr.open_array(str(tmp_path / "matrix.zarr"), mode="w", shape=(1, n, n), dtype="float64")[
-        0
-    ] = np.eye(n)
+    samples = 6
+    for name in ("rhs.zarr", "solutions.zarr", "matrix.zarr"):
+        store = tmp_path / name
+        store.mkdir()
+        (store / "zarr.json").write_text('{"zarr_format": 3, "node_type": "array"}')
     params_path = tmp_path / f"{PARAMETERS_ZARR_PREFIX}0.zarr"
-    zarr.open_array(str(params_path), mode="w", shape=(samples, param_dim), dtype="float64")[:] = (
-        rng.standard_normal((samples, param_dim))
-    )
+    params_path.mkdir()
+    (params_path / "zarr.json").write_text('{"zarr_format": 3, "node_type": "array"}')
     return TrainingArrays(
-        rhs=np.zeros((samples, n), dtype=np.float64),
-        solutions=np.zeros((samples, n), dtype=np.float64),
+        rhs_source=ZarrArraySource(path=tmp_path / "rhs.zarr"),
+        solutions_source=ZarrArraySource(path=tmp_path / "solutions.zarr"),
         matrix_source=ZarrArraySource(path=tmp_path / "matrix.zarr"),
         sample_count=samples,
         parameter_sources=(ZarrArraySource(path=params_path),),
@@ -80,25 +68,20 @@ def one_param_arrays(tmp_path: Path) -> TrainingArrays:
 @pytest.fixture
 def two_param_arrays(tmp_path: Path) -> TrainingArrays:
     """TrainingArrays with parameters_0.zarr and parameters_1.zarr."""
-    n, samples, param_dim = 4, 6, 4
-    rng = np.random.default_rng(2)
-    for name, shape in [("rhs.zarr", (samples, n)), ("solutions.zarr", (samples, n))]:
-        zarr.open_array(str(tmp_path / name), mode="w", shape=shape, dtype="float64")[:] = (
-            rng.standard_normal(shape)
-        )
-    zarr.open_array(str(tmp_path / "matrix.zarr"), mode="w", shape=(1, n, n), dtype="float64")[
-        0
-    ] = np.eye(n)
+    samples = 6
+    for name in ("rhs.zarr", "solutions.zarr", "matrix.zarr"):
+        store = tmp_path / name
+        store.mkdir()
+        (store / "zarr.json").write_text('{"zarr_format": 3, "node_type": "array"}')
     paths = []
     for i in range(2):
         p = tmp_path / f"{PARAMETERS_ZARR_PREFIX}{i}.zarr"
-        zarr.open_array(str(p), mode="w", shape=(samples, param_dim), dtype="float64")[:] = (
-            rng.standard_normal((samples, param_dim))
-        )
+        p.mkdir()
+        (p / "zarr.json").write_text('{"zarr_format": 3, "node_type": "array"}')
         paths.append(p)
     return TrainingArrays(
-        rhs=np.zeros((samples, n), dtype=np.float64),
-        solutions=np.zeros((samples, n), dtype=np.float64),
+        rhs_source=ZarrArraySource(path=tmp_path / "rhs.zarr"),
+        solutions_source=ZarrArraySource(path=tmp_path / "solutions.zarr"),
         matrix_source=ZarrArraySource(path=tmp_path / "matrix.zarr"),
         sample_count=samples,
         parameter_sources=tuple(ZarrArraySource(path=path) for path in paths),
@@ -135,7 +118,7 @@ def test_condition_extra_maps_to_parameters_0(
     )
     assert [e.name for e in entries] == ["x", "matrix", "condition"]
     condition_entry = entries[2]
-    assert isinstance(condition_entry, ZarrEntry)
+    assert condition_entry.format == "zarr"
     assert condition_entry.path == one_param_arrays.parameters_zarr[0]
 
 
@@ -148,8 +131,8 @@ def test_two_extras_map_by_index(
         two_param_arrays, contract, ["condition", "query"], contract.primary_input_name
     )
     assert [e.name for e in entries] == ["x", "matrix", "condition", "query"]
-    assert isinstance(entries[2], ZarrEntry)
-    assert isinstance(entries[3], ZarrEntry)
+    assert entries[2].format == "zarr"
+    assert entries[3].format == "zarr"
     assert entries[2].path == two_param_arrays.parameters_zarr[0]
     assert entries[3].path == two_param_arrays.parameters_zarr[1]
 
@@ -176,8 +159,8 @@ def test_declaration_order_is_preserved(
     entries_ba = _create_feature_configs(
         two_param_arrays, contract, ["beta", "alpha"], contract.primary_input_name
     )
-    assert isinstance(entries_ab[2], ZarrEntry)
-    assert isinstance(entries_ba[2], ZarrEntry)
+    assert entries_ab[2].format == "zarr"
+    assert entries_ba[2].format == "zarr"
     assert entries_ab[2].path == two_param_arrays.parameters_zarr[0]
     assert entries_ba[2].path == two_param_arrays.parameters_zarr[0]
     assert entries_ab[2].name == "alpha"
