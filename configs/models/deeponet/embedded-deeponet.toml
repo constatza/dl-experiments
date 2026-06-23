@@ -70,11 +70,10 @@ name = "u"
 
 [[DATASET.features]]
 name = "y"
-field_role = "target_coordinates"
 transforms = [{name = "Unsqueeze", dim = 1}]
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 
 [DATAMODULE.dataloader]
 batch_size = 256

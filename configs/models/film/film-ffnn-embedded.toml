@@ -75,7 +75,7 @@ name = "condition"
 transforms = [{name = "MinMaxScaler"}]
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 
 [DATAMODULE.dataloader]
 batch_size = 256

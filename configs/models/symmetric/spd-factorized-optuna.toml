@@ -70,7 +70,7 @@ vector_dim = -1
 name = "FlexibleDataset"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 
 [DATAMODULE.dataloader]
 batch_size = 256

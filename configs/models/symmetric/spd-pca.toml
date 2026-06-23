@@ -76,7 +76,7 @@ name = "y"
 transforms = [{name = "PCA", n_components = 50}]
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 
 [DATAMODULE.dataloader]
 batch_size = 256
