@@ -21,7 +21,9 @@ from dlkit.infrastructure.config import (
 )
 from dlkit.infrastructure.config.data_entries import (
     DataRole,
+    NpyEntry,
     ValueEntry,
+    ZarrEntry,
 )
 from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
@@ -39,8 +41,8 @@ from neuralls.composition.experiments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
 from neuralls.composition.experiments._dataset_assembly import (
-    _create_feature_configs,
-    _create_target_configs,
+    _create_feature_entries,
+    _create_target_entries,
     _validate_dataset_section,
     _validate_runtime_dataset_contract,
 )
@@ -50,7 +52,7 @@ from neuralls.composition.experiments._settings_pipeline import (
     _configure_output_paths,
     _resolve_dataset,
 )
-from neuralls.platform.config.dataset_entries import apply_placeholder_metadata, build_data_entries
+from neuralls.platform.config.dataset_entries import apply_placeholder_metadata
 from neuralls.composition.experiments._training_artifacts import (
     _extract_evaluation_arrays,
     _normalize_training_numpy_payload,
@@ -122,16 +124,16 @@ def test_create_feature_configs_returns_rhs_and_matrix(
 ) -> None:
     """_create_feature_configs returns path-backed rhs + matrix entries."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, contract, [], contract.primary_input_name)
+    features = _create_feature_entries(sample_arrays, contract, [], contract.primary_input_name)
 
     assert len(features) == 2
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
     rhs_feature = next(f for f in features if f.name == "x")
-    assert rhs_feature.format == "npy"
+    assert isinstance(rhs_feature, NpyEntry)
     assert rhs_feature.path == sample_arrays.rhs_source.path
     matrix_feature = next(f for f in features if f.name == "matrix")
-    assert matrix_feature.format == "zarr"
+    assert isinstance(matrix_feature, ZarrEntry)
     assert matrix_feature.model_input is False
     assert matrix_feature.path == sample_arrays.matrix_zarr
 
@@ -141,16 +143,16 @@ def test_create_feature_configs_default_to_flexible(
 ) -> None:
     """_create_feature_configs defaults to path-backed rhs + matrix behavior."""
     contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, contract, [], contract.primary_input_name)
+    features = _create_feature_entries(sample_arrays, contract, [], contract.primary_input_name)
 
     assert len(features) == 2
     names = {f.name for f in features}
     assert names == {"x", "matrix"}
     rhs_feature = next(f for f in features if f.name == "x")
-    assert rhs_feature.format == "npy"
+    assert isinstance(rhs_feature, NpyEntry)
     assert rhs_feature.path == sample_arrays.rhs_source.path
     matrix_feature = next(f for f in features if f.name == "matrix")
-    assert matrix_feature.format == "zarr"
+    assert isinstance(matrix_feature, ZarrEntry)
     assert matrix_feature.path == sample_arrays.matrix_zarr
 
 
@@ -159,12 +161,12 @@ def test_create_target_configs_returns_canonical_supervised_target(
 ) -> None:
     """_create_target_configs exposes exactly one path-backed runtime target entry."""
     contract = default_training_dataset_contract()
-    targets = _create_target_configs(sample_arrays.solutions_source, contract)
+    targets = _create_target_entries(sample_arrays.solutions_source, contract)
 
     assert len(targets) == 1
     assert targets[0].name == "y"
-    assert targets[0].format == "npy"
-    assert targets[0].role == "target"
+    assert isinstance(targets[0], NpyEntry)
+    assert targets[0].data_role == DataRole.TARGET
     assert targets[0].path == sample_arrays.solutions_source.path
 
 
@@ -410,8 +412,8 @@ def test_contract_override_drives_injection_and_validation(
         prediction_name="rhs_pred",
         loss_target_key="targets.rhs",
     )
-    features = _create_feature_configs(sample_arrays, contract, [], contract.primary_input_name)
-    targets = _create_target_configs(sample_arrays.solutions_source, contract)
+    features = _create_feature_entries(sample_arrays, contract, [], contract.primary_input_name)
+    targets = _create_target_entries(sample_arrays.solutions_source, contract)
     settings = training_settings.model_copy(
         update={
             "DATASET": DatasetSettings(
@@ -584,10 +586,10 @@ def test_merge_entry_metadata_propagates_loss_routing(
     dummy_zarr_store: Path,
 ) -> None:
     """Adapter metadata merge must preserve placeholder loss-routing metadata."""
-    spec = _create_feature_configs(
+    spec = _create_feature_entries(
         TrainingArrays(
-            rhs_source=NpyArraySource(path=dummy_zarr_store / "unused.npy"),
-            solutions_source=NpyArraySource(path=dummy_zarr_store / "unused.npy"),
+            rhs_source=ZarrArraySource(path=dummy_zarr_store),
+            solutions_source=ZarrArraySource(path=dummy_zarr_store),
             matrix_source=ZarrArraySource(path=dummy_zarr_store),
             sample_count=1,
             parameter_sources=(ZarrArraySource(path=dummy_zarr_store),),
@@ -598,7 +600,7 @@ def test_merge_entry_metadata_propagates_loss_routing(
     )[2]
     placeholder = ValueEntry(name="query", loss_input="query_coords")
 
-    result = build_data_entries(apply_placeholder_metadata([spec], (placeholder,)))
+    result = apply_placeholder_metadata([spec], (placeholder,))
 
     assert len(result) == 1
     assert result[0].name == "query"
@@ -610,10 +612,10 @@ def test_resolve_dataset_propagates_placeholder_loss_routing(
     dummy_zarr_store: Path,
 ) -> None:
     """Full dataset resolution must preserve placeholder loss-routing metadata."""
-    query_feature = _create_feature_configs(
+    query_feature = _create_feature_entries(
         TrainingArrays(
-            rhs_source=NpyArraySource(path=dummy_zarr_store / "unused.npy"),
-            solutions_source=NpyArraySource(path=dummy_zarr_store / "unused.npy"),
+            rhs_source=ZarrArraySource(path=dummy_zarr_store),
+            solutions_source=ZarrArraySource(path=dummy_zarr_store),
             matrix_source=ZarrArraySource(path=dummy_zarr_store),
             sample_count=1,
             parameter_sources=(ZarrArraySource(path=dummy_zarr_store),),

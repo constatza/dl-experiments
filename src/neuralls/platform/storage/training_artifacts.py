@@ -6,7 +6,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 import zarr
@@ -22,7 +22,6 @@ class ZarrArraySource:
     """Array source referenced by a zarr path."""
 
     path: Path
-    format: Literal["zarr"] = "zarr"
 
     def load_sample(self, sample_index: int) -> np.ndarray:
         arr = zarr.open_array(str(self.path), mode="r")
@@ -35,7 +34,6 @@ class NpyArraySource:
     """Array source referenced by a numpy path."""
 
     path: Path
-    format: Literal["npy"] = "npy"
 
     def load_sample(self, sample_index: int) -> np.ndarray:
         array = np.load(self.path, mmap_mode="r")
@@ -60,7 +58,7 @@ class TrainingArrays:
     @property
     def matrix_zarr(self) -> Path:
         """Compatibility view for zarr-backed matrix sources."""
-        if self.matrix_source.format != "zarr":
+        if not isinstance(self.matrix_source, ZarrArraySource):
             raise AttributeError("matrix_zarr is only available for zarr-backed datasets.")
         return self.matrix_source.path
 
@@ -69,7 +67,7 @@ class TrainingArrays:
         """Compatibility view for zarr-backed parameter sources."""
         paths: list[Path] = []
         for source in self.parameter_sources:
-            if source.format != "zarr":
+            if not isinstance(source, ZarrArraySource):
                 raise AttributeError("parameters_zarr is only available for zarr-backed datasets.")
             paths.append(source.path)
         return tuple(paths)

@@ -9,36 +9,14 @@ Moving cross-boundary types here prevents upward dependencies, e.g. io → gener
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
-from typing import Any, Literal, TypedDict
-
-import numpy as np
+from typing import Literal, TypedDict
 
 DatasetFormat = Literal["zarr", "npy"]
 """Supported dataset storage families for generated datasets."""
 
 EntryRole = Literal["feature", "target"]
 """Runtime dataset entry roles understood by neuralls bridge code."""
-
-
-@dataclass(frozen=True)
-class ResolvedDatasetEntrySpec:
-    """Format-neutral dataset entry resolved from storage plus runtime contract.
-
-    This type is intentionally local to neuralls and avoids direct dependence on
-    DLKit entry classes. Composition owns the resolved name and semantics,
-    platform adapters translate it into concrete third-party entry objects.
-    """
-
-    name: str
-    path: Path | None
-    format: DatasetFormat
-    role: EntryRole
-    model_input: bool
-    value: np.ndarray | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class MatrixNormType(StrEnum):

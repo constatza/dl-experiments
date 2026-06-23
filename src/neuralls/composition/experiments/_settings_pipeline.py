@@ -18,18 +18,19 @@ from dlkit.infrastructure.config.workflow_configs import (
 from neuralls.composition.experiments._dataset_assembly import (
     _validate_runtime_dataset_contract,
 )
+from dlkit.infrastructure.config.data_entries import DataEntry
+
 from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
-from neuralls.platform.config.dataset_entries import apply_placeholder_metadata, build_data_entries
+from neuralls.platform.config.dataset_entries import apply_placeholder_metadata
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
-from neuralls.shared.types import ResolvedDatasetEntrySpec
 
 type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
 
 def _resolve_dataset(
     settings: TrainingWorkflowSettings,
-    features: list[ResolvedDatasetEntrySpec],
-    targets: list[ResolvedDatasetEntrySpec],
+    features: list[DataEntry],
+    targets: list[DataEntry],
     contract: RuntimeDatasetContract,
 ) -> TrainingWorkflowSettings:
     """Resolve and apply dataset configurations to settings.
@@ -41,8 +42,8 @@ def _resolve_dataset(
 
     Args:
         settings: Current DLKit settings.
-        features: Resolved feature specs to inject.
-        targets: Resolved target specs to inject.
+        features: Resolved feature entries to inject.
+        targets: Resolved target entries to inject.
         contract: Runtime dataset entry name contract.
 
     Returns:
@@ -53,10 +54,8 @@ def _resolve_dataset(
     """
     _validate_runtime_dataset_contract(settings, contract)
     base_dataset = settings.DATASET or DatasetSettings()
-    resolved_feature_specs = apply_placeholder_metadata(features, base_dataset.features)
-    resolved_target_specs = apply_placeholder_metadata(targets, base_dataset.targets)
-    feature_entries = build_data_entries(resolved_feature_specs)
-    target_entries = build_data_entries(resolved_target_specs)
+    feature_entries = apply_placeholder_metadata(features, base_dataset.features)
+    target_entries = apply_placeholder_metadata(targets, base_dataset.targets)
     return patch_model(
         settings,
         {
@@ -164,8 +163,8 @@ def _configure_mlflow(
 def _configure_training_pipeline(
     settings: TrainingWorkflowSettings,
     workspace: ExperimentWorkspace,
-    features: list[ResolvedDatasetEntrySpec],
-    targets: list[ResolvedDatasetEntrySpec],
+    features: list[DataEntry],
+    targets: list[DataEntry],
     contract: RuntimeDatasetContract,
     mlflow_experiment_name: str,
     mlflow_run_name: str,

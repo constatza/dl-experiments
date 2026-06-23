@@ -357,7 +357,7 @@ def test_writer_reports_rhs_write_failure(tmp_path: Path) -> None:
             tmp_path / "rhs.zarr" / "zarr.json",
         )
 
-        with pytest.raises(OSError, match="Writing rhs.zarr") as exc_info:
+        with pytest.raises(OSError, match="Writing rhs into group") as exc_info:
             writer.write_dataset(tmp_path, payload)
 
     assert "winerror=5" in str(exc_info.value)
@@ -401,7 +401,7 @@ def test_writer_reports_move_failure(
             tmp_path / "matrix.zarr",
         )
 
-        with pytest.raises(OSError, match="Moving matrix.zarr store into place") as exc_info:
+        with pytest.raises(OSError, match="Moving matrix staging into group") as exc_info:
             writer.write_dataset(tmp_path, payload)
 
     assert "dst=" in str(exc_info.value)

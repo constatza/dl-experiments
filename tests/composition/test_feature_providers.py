@@ -9,8 +9,10 @@ import pytest
 from neuralls.composition.experiments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
+from dlkit.infrastructure.config.data_entries import ZarrEntry
+
 from neuralls.composition.experiments._dataset_assembly import (
-    _create_feature_configs,
+    _create_feature_entries,
     _extra_feature_names_from_settings,
 )
 from neuralls.platform.storage.training_artifacts import TrainingArrays, ZarrArraySource
@@ -104,7 +106,7 @@ def test_no_extras_yields_x_and_matrix(
     rhs_data: np.ndarray,
     contract,
 ) -> None:
-    entries = _create_feature_configs(no_params_arrays, contract, [], contract.primary_input_name)
+    entries = _create_feature_entries(no_params_arrays, contract, [], contract.primary_input_name)
     assert [e.name for e in entries] == ["x", "matrix"]
 
 
@@ -113,12 +115,12 @@ def test_condition_extra_maps_to_parameters_0(
     rhs_data: np.ndarray,
     contract,
 ) -> None:
-    entries = _create_feature_configs(
+    entries = _create_feature_entries(
         one_param_arrays, contract, ["condition"], contract.primary_input_name
     )
     assert [e.name for e in entries] == ["x", "matrix", "condition"]
     condition_entry = entries[2]
-    assert condition_entry.format == "zarr"
+    assert isinstance(condition_entry, ZarrEntry)
     assert condition_entry.path == one_param_arrays.parameters_zarr[0]
 
 
@@ -127,12 +129,12 @@ def test_two_extras_map_by_index(
     rhs_data: np.ndarray,
     contract,
 ) -> None:
-    entries = _create_feature_configs(
+    entries = _create_feature_entries(
         two_param_arrays, contract, ["condition", "query"], contract.primary_input_name
     )
     assert [e.name for e in entries] == ["x", "matrix", "condition", "query"]
-    assert entries[2].format == "zarr"
-    assert entries[3].format == "zarr"
+    assert isinstance(entries[2], ZarrEntry)
+    assert isinstance(entries[3], ZarrEntry)
     assert entries[2].path == two_param_arrays.parameters_zarr[0]
     assert entries[3].path == two_param_arrays.parameters_zarr[1]
 
@@ -143,7 +145,7 @@ def test_too_many_extras_raises(
     contract,
 ) -> None:
     with pytest.raises(ValueError, match="extra features but dataset has"):
-        _create_feature_configs(
+        _create_feature_entries(
             no_params_arrays, contract, ["condition"], contract.primary_input_name
         )
 
@@ -153,14 +155,14 @@ def test_declaration_order_is_preserved(
     rhs_data: np.ndarray,
     contract,
 ) -> None:
-    entries_ab = _create_feature_configs(
+    entries_ab = _create_feature_entries(
         two_param_arrays, contract, ["alpha", "beta"], contract.primary_input_name
     )
-    entries_ba = _create_feature_configs(
+    entries_ba = _create_feature_entries(
         two_param_arrays, contract, ["beta", "alpha"], contract.primary_input_name
     )
-    assert entries_ab[2].format == "zarr"
-    assert entries_ba[2].format == "zarr"
+    assert isinstance(entries_ab[2], ZarrEntry)
+    assert isinstance(entries_ba[2], ZarrEntry)
     assert entries_ab[2].path == two_param_arrays.parameters_zarr[0]
     assert entries_ba[2].path == two_param_arrays.parameters_zarr[0]
     assert entries_ab[2].name == "alpha"

@@ -1,17 +1,13 @@
 """Dataset assembly helpers for the training workflow.
 
 Translates TOML feature declarations and storage artifacts into resolved
-dataset-entry specs, validates the runtime dataset contract, and leaves
+dlkit DataEntry objects, validates the runtime dataset contract, and leaves
 third-party entry construction to platform adapters.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from dlkit.infrastructure.config.data_entries import (
-    DataEntry,
-)
+from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
 from dlkit.infrastructure.config.workflow_configs import (
     OptimizationWorkflowConfig,
@@ -20,12 +16,13 @@ from dlkit.infrastructure.config.workflow_configs import (
 from loguru import logger
 
 from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
+from neuralls.platform.config.dataset_entries import entry_from_path
+from neuralls.platform.config.models.workspace import ExperimentWorkspace
 from neuralls.platform.storage.training_artifacts import (
     ArraySource,
     TrainingArrays,
     load_training_arrays,
 )
-from neuralls.shared.types import ResolvedDatasetEntrySpec
 
 type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
 
@@ -123,10 +120,7 @@ def _primary_feature_name_from_settings(
     """Resolve the dispatch name for the primary (RHS/branch) input feature.
 
     The first declared [[DATASET.features]] entry that is not the matrix input
-    determines the name used when forwarding the RHS tensor to the model. This
-    allows DeepONet-style models that expect ``forward(u, y)`` to declare ``u``
-    as their primary feature without the composition layer needing model-family
-    knowledge.
+    determines the name used when forwarding the RHS tensor to the model.
 
     Args:
         settings: DLKit workflow settings carrying the TOML feature declarations.
@@ -154,9 +148,7 @@ def _extra_feature_names_from_settings(
 ) -> list[str]:
     """Extract extra feature names declared in [[DATASET.features]] beyond the base entries.
 
-    Preserves TOML declaration order — the i-th returned name maps to parameters_i.zarr.
-    The primary (RHS/branch) feature and the matrix entry are excluded; everything else
-    is an extra sourced from parameters_*.zarr.
+    Preserves TOML declaration order — the i-th returned name maps to parameters_i.
 
     Args:
         settings: DLKit workflow settings; DATASET.features carries the TOML declarations.
@@ -173,87 +165,68 @@ def _extra_feature_names_from_settings(
     return [e.name for e in dataset.features if e.name is not None and e.name not in base]
 
 
-def _create_feature_configs(
+def _create_feature_entries(
     arrays: TrainingArrays,
     contract: RuntimeDatasetContract,
     declared_extra_names: list[str],
     primary_name: str,
-) -> list[ResolvedDatasetEntrySpec]:
-    """Create resolved feature specs from dataset artifacts.
+) -> list[DataEntry]:
+    """Create resolved feature entries from dataset artifacts.
 
-    The i-th declared extra name maps to parameters_i.zarr by position.
+    The i-th declared extra name maps to parameters_i by position.
 
     Args:
         arrays: Training data artifact sources.
         contract: Runtime dataset entry name contract.
-        declared_extra_names: Ordered extra feature names declared in [[DATASET.features]]
-            beyond the base and matrix entries (TOML declaration order preserved).
+        declared_extra_names: Ordered extra feature names declared in [[DATASET.features]].
         primary_name: TOML-declared name for the primary (RHS/branch) input feature.
-            Used as the DataEntry name so DLKit dispatches it to the correct
-            forward() parameter (e.g. ``"u"`` for DeepONet).
 
     Returns:
-        List of feature specs: base entries (rhs, matrix) plus any extras
-        mapped by index to parameters_i artifacts.
+        List of feature entries: base entries (rhs, matrix) plus any extras.
 
     Raises:
-        ValueError: If more extras are declared than parameters_*.zarr files available.
+        ValueError: If more extras are declared than parameter sources available.
     """
     if len(declared_extra_names) > len(arrays.parameter_sources):
         raise ValueError(
             f"Model declares {len(declared_extra_names)} extra features but dataset has "
             f"{len(arrays.parameter_sources)} parameters_* files."
         )
-    base: list[ResolvedDatasetEntrySpec] = [
+    base: list[DataEntry] = [
+        _feature_entry_from_source(arrays.rhs_source, name=primary_name, model_input=True),
         _feature_entry_from_source(
-            arrays.rhs_source,
-            name=primary_name,
-            model_input=True,
-        )
+            arrays.matrix_source, name=contract.matrix_input_name, model_input=False
+        ),
     ]
-    base.append(
-        _feature_entry_from_source(
-            arrays.matrix_source,
-            name=contract.matrix_input_name,
-            model_input=False,
-        )
-    )
-
-    extras: list[ResolvedDatasetEntrySpec] = []
-    for i, name in enumerate(declared_extra_names):
-        source = arrays.parameter_sources[i]
-        extras.append(
-            _feature_entry_from_source(
-                source,
-                name=name,
-                model_input=True,
-            )
-        )
+    extras: list[DataEntry] = [
+        _feature_entry_from_source(arrays.parameter_sources[i], name=name, model_input=True)
+        for i, name in enumerate(declared_extra_names)
+    ]
     return [*base, *extras]
 
 
-def _create_target_configs(
+def _create_target_entries(
     source: ArraySource,
     contract: RuntimeDatasetContract,
-) -> list[ResolvedDatasetEntrySpec]:
-    """Create resolved target specs from dataset artifacts.
+) -> list[DataEntry]:
+    """Create resolved target entries from dataset artifacts.
 
     Args:
         source: Solutions artifact source.
         contract: Runtime dataset entry name contract.
 
     Returns:
-        The canonical supervised target spec.
+        The canonical supervised target entry.
     """
     return [_target_entry_from_source(source, name=contract.target_name)]
 
 
 def _load_and_prepare_data(
     settings: TrainingWorkflowSettings,
-    workspace: Any,
+    workspace: ExperimentWorkspace,
     contract: RuntimeDatasetContract,
-) -> tuple[TrainingArrays, list[ResolvedDatasetEntrySpec], list[ResolvedDatasetEntrySpec]]:
-    """Load training data and create resolved feature/target specs.
+) -> tuple[TrainingArrays, list[DataEntry], list[DataEntry]]:
+    """Resolve training data artifacts and build dlkit entries.
 
     Args:
         settings: DLKit training or optimization workflow settings.
@@ -263,19 +236,21 @@ def _load_and_prepare_data(
     Returns:
         Tuple of (arrays, features, targets) where:
             - arrays: Resolved data artifact sources
-            - features: List of resolved feature specs for platform adapters
-            - targets: List of resolved target specs for platform adapters
+            - features: List of DataEntry objects for platform adapters
+            - targets: List of DataEntry objects for platform adapters
     """
     arrays = load_training_arrays(workspace.data_dir)
+    fmt = arrays.rhs_source.path.suffix.lstrip(".") or "zarr"
     logger.info(
-        "Loading training artifact sources ({} samples) from {}",
+        "Resolved training artifact sources ({} samples, format={}) from {}",
         arrays.sample_count,
+        fmt,
         workspace.data_dir,
     )
     primary_name = _primary_feature_name_from_settings(settings, contract)
     extra_names = _extra_feature_names_from_settings(settings, contract)
-    features = _create_feature_configs(arrays, contract, extra_names, primary_name)
-    targets = _create_target_configs(arrays.solutions_source, contract)
+    features = _create_feature_entries(arrays, contract, extra_names, primary_name)
+    targets = _create_target_entries(arrays.solutions_source, contract)
     return arrays, features, targets
 
 
@@ -284,23 +259,11 @@ def _feature_entry_from_source(
     *,
     name: str,
     model_input: bool,
-) -> ResolvedDatasetEntrySpec:
-    """Create a feature spec from one resolved artifact source."""
-    return ResolvedDatasetEntrySpec(
-        name=name,
-        path=source.path,
-        format=source.format,
-        role="feature",
-        model_input=model_input,
-    )
+) -> DataEntry:
+    """Create a feature DataEntry from one resolved artifact source."""
+    return entry_from_path(source.path, name=name, model_input=model_input, role="feature")
 
 
-def _target_entry_from_source(source: ArraySource, *, name: str) -> ResolvedDatasetEntrySpec:
-    """Create a target spec from one resolved artifact source."""
-    return ResolvedDatasetEntrySpec(
-        name=name,
-        path=source.path,
-        format=source.format,
-        role="target",
-        model_input=True,
-    )
+def _target_entry_from_source(source: ArraySource, *, name: str) -> DataEntry:
+    """Create a target DataEntry from one resolved artifact source."""
+    return entry_from_path(source.path, name=name, model_input=True, role="target")

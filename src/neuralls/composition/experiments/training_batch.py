@@ -30,14 +30,8 @@ from neuralls.platform.caching import compute_directory_hash
 from neuralls.composition.generation.processing import process_config
 from neuralls.platform.storage.filesystem import extract_model_name
 from neuralls.composition.experiments.training import train_model
-from neuralls.platform.storage.validation import validate_data_exists
+from neuralls.platform.storage.dataset_readers import resolve_dataset_artifacts
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
-from neuralls.shared.constants import (
-    DATASET_MANIFEST_FILENAME,
-    MATRIX_ZARR_DIRNAME,
-    RHS_ZARR_FILENAME,
-    SOLUTIONS_ZARR_FILENAME,
-)
 
 
 def run_experiment(
@@ -110,15 +104,16 @@ def run_experiment(
             raise ValueError("Missing 'source.matrix_path' in data config")
         matrix = load_matrix(Path(matrix_path))
         data_dir = process_config(data_cfg, matrix)
-        validate_data_exists(
-            data_dir,
-            [
-                DATASET_MANIFEST_FILENAME,
-                RHS_ZARR_FILENAME,
-                SOLUTIONS_ZARR_FILENAME,
-                MATRIX_ZARR_DIRNAME,
-            ],
-        )
+        artifacts = resolve_dataset_artifacts(data_dir)
+        missing = [
+            str(p)
+            for p in (artifacts.rhs.path, artifacts.solutions.path, artifacts.matrix.path)
+            if not p.exists()
+        ]
+        if missing:
+            raise FileNotFoundError(
+                f"Required data files not found in {data_dir}:\n  - " + "\n  - ".join(missing)
+            )
 
         # Step 2: Check for existing checkpoint to avoid redundant training
         # Workspace structure: output_root/{dataset_id}/{model_name}/checkpoints/
