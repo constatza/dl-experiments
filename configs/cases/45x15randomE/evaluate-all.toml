@@ -56,26 +56,6 @@ path         = "../../models/ffnn/embedded-factorized.toml"
 display_name = "Embedded Factorized"
 
 [[models]]
-id           = "symmetric-embedded-spd"
-path         = "../../models/symmetric/embedded-spd.toml"
-display_name = "Symmetric Embedded SPD"
-
-[[models]]
-id           = "symmetric-embedded-spd-factorized"
-path         = "../../models/symmetric/embedded-spd-factorized.toml"
-display_name = "Symmetric Embedded SPD-Factorized"
-
-[[models]]
-id           = "symmetric-spd"
-path         = "../../models/symmetric/spd.toml"
-display_name = "Symmetric SPD"
-
-[[models]]
-id           = "symmetric-spd-factorized"
-path         = "../../models/symmetric/spd-factorized.toml"
-display_name = "Symmetric SPD-Factorized"
-
-[[models]]
 id           = "spectral-siren"
 path         = "../../models/spectral/siren.toml"
 display_name = "Spectral SIREN"
@@ -107,7 +87,7 @@ id             = "scaled"
 matrix_dataset = "scaled-solutions-45x15"
 rhs_dataset    = "scaled-solutions-45x15"
 
-# ── Experiments (10 models × 1 training dataset = 10) ────────────────────────
+# ── Experiments (6 models × 1 training dataset = 6) ──────────────────────────
 
 [[experiments]]
 dataset      = "gaussian-cg100-45x15randomE"
@@ -116,22 +96,6 @@ model        = "ffnn-standard"
 [[experiments]]
 dataset      = "gaussian-cg100-45x15randomE"
 model        = "embedded-factorized"
-
-[[experiments]]
-dataset      = "gaussian-cg100-45x15randomE"
-model        = "symmetric-embedded-spd"
-
-[[experiments]]
-dataset      = "gaussian-cg100-45x15randomE"
-model        = "symmetric-embedded-spd-factorized"
-
-[[experiments]]
-dataset      = "gaussian-cg100-45x15randomE"
-model        = "symmetric-spd"
-
-[[experiments]]
-dataset      = "gaussian-cg100-45x15randomE"
-model        = "symmetric-spd-factorized"
 
 [[experiments]]
 dataset      = "gaussian-cg100-45x15randomE"
