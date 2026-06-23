@@ -46,7 +46,7 @@ name = "AdamW"
 name = "FlexibleDataset"
 
 [DATAMODULE]
-name = "InMemoryModule"
+name = "ArrayDataModule"
 
 [OPTUNA]
 enabled = false

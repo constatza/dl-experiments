@@ -28,7 +28,7 @@ def test_load_experiment_injects_mlflow_from_case_config(
             "trainer": {"max_epochs": 1, "accelerator": "cpu"},
         },
         "DATASET": {"name": "FlexibleDataset"},
-        "DATAMODULE": {"name": "InMemoryModule"},
+        "DATAMODULE": {"name": "ArrayDataModule"},
     }
     with open(model_path, "wb") as fh:
         tomli_w.dump(model_config, fh)

@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from dlkit.common.geometry import FieldRole
 from dlkit.infrastructure.config import GeneralSettings
 from dlkit.infrastructure.config import (
     DataModuleSettings,
@@ -118,26 +117,7 @@ def test_validate_dataset_section_passes_if_present() -> None:
     _validate_dataset_section(mock_settings)  # Should not raise
 
 
-def test_create_feature_configs_graph_dataset(
-    sample_arrays: TrainingArrays,
-) -> None:
-    """_create_feature_configs returns path-backed rhs + matrix entries."""
-    contract = default_training_dataset_contract()
-    features = _create_feature_configs(sample_arrays, contract, [], contract.primary_input_name)
-
-    assert len(features) == 2
-    names = {f.name for f in features}
-    assert names == {"x", "matrix"}
-    rhs_feature = next(f for f in features if f.name == "x")
-    assert rhs_feature.format == "npy"
-    assert rhs_feature.path == sample_arrays.rhs_source.path
-    matrix_feature = next(f for f in features if f.name == "matrix")
-    assert matrix_feature.format == "zarr"
-    assert matrix_feature.model_input is False
-    assert matrix_feature.path == sample_arrays.matrix_zarr
-
-
-def test_create_feature_configs_flexible_dataset(
+def test_create_feature_configs_returns_rhs_and_matrix(
     sample_arrays: TrainingArrays,
 ) -> None:
     """_create_feature_configs returns path-backed rhs + matrix entries."""
@@ -600,15 +580,10 @@ def dummy_zarr_store(tmp_path: Path) -> Path:
     return store
 
 
-def test_merge_entry_metadata_propagates_target_coordinates_field_role(
+def test_merge_entry_metadata_propagates_loss_routing(
     dummy_zarr_store: Path,
 ) -> None:
-    """Regression: adapter metadata merge propagates target-coordinate semantics.
-
-    Before the fix, only transforms were merged. The DeepONet query entry
-    retained field_role=FEATURE, so dlkit's contract_resolver produced TabulaRSpec
-    instead of the required BranchTrunkSpec, raising WorkflowError at training time.
-    """
+    """Adapter metadata merge must preserve placeholder loss-routing metadata."""
     spec = _create_feature_configs(
         TrainingArrays(
             rhs_source=NpyArraySource(path=dummy_zarr_store / "unused.npy"),
@@ -621,26 +596,20 @@ def test_merge_entry_metadata_propagates_target_coordinates_field_role(
         ["query"],
         "x",
     )[2]
-    placeholder = ValueEntry(name="query", field_role=FieldRole.TARGET_COORDINATES)
+    placeholder = ValueEntry(name="query", loss_input="query_coords")
 
     result = build_data_entries(apply_placeholder_metadata([spec], (placeholder,)))
 
     assert len(result) == 1
     assert result[0].name == "query"
-    assert result[0].field_role == FieldRole.TARGET_COORDINATES
+    assert result[0].loss_input == "query_coords"
 
 
-def test_resolve_dataset_propagates_deeponet_query_field_role(
+def test_resolve_dataset_propagates_placeholder_loss_routing(
     training_settings: GeneralSettings,
     dummy_zarr_store: Path,
 ) -> None:
-    """Regression: full pipeline forwards field_role=TARGET_COORDINATES for DeepONet query.
-
-    Simulates the DeepONet training scenario: a query placeholder with
-    field_role="target_coordinates" declared in [[DATASET.features]] must survive
-    through _resolve_dataset into the injected feature entries. Without propagation,
-    dlkit resolves TabulaRSpec instead of BranchTrunkSpec and raises WorkflowError.
-    """
+    """Full dataset resolution must preserve placeholder loss-routing metadata."""
     query_feature = _create_feature_configs(
         TrainingArrays(
             rhs_source=NpyArraySource(path=dummy_zarr_store / "unused.npy"),
@@ -659,7 +628,7 @@ def test_resolve_dataset_propagates_deeponet_query_field_role(
                 name="FlexibleDataset",
                 features=(
                     ValueEntry(name="x"),
-                    ValueEntry(name="query", field_role=FieldRole.TARGET_COORDINATES),
+                    ValueEntry(name="query", loss_input="query_coords"),
                 ),
             )
         }
@@ -671,4 +640,4 @@ def test_resolve_dataset_propagates_deeponet_query_field_role(
     assert updated.DATASET is not None
     injected = {e.name: e for e in updated.DATASET.features}
     assert "query" in injected
-    assert injected["query"].field_role == FieldRole.TARGET_COORDINATES
+    assert injected["query"].loss_input == "query_coords"

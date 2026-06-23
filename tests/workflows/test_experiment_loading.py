@@ -144,7 +144,7 @@ class TestTrainingPipelineWithMLflow:
             },
             "DATASET": {"name": "FlexibleDataset"},
             "DATAMODULE": {
-                "name": "InMemoryModule",
+                "name": "ArrayDataModule",
                 "dataloader": {
                     "num_workers": 0,
                     "batch_size": 2,
@@ -241,7 +241,7 @@ class TestTrainingPipelineWithMLflow:
                 },
             },
             "DATASET": {"name": "FlexibleDataset"},
-            "DATAMODULE": {"name": "InMemoryModule"},
+            "DATAMODULE": {"name": "ArrayDataModule"},
             "MLFLOW": {"enabled": True},
             "OPTUNA": {"enabled": False},
         }
@@ -309,7 +309,7 @@ class TestTrainingPipelineWithMLflow:
             },
             "TRAINING": {"trainer": {"max_epochs": 1, "accelerator": "cpu"}},
             "DATASET": {"name": "FlexibleDataset"},
-            "DATAMODULE": {"name": "InMemoryModule"},
+            "DATAMODULE": {"name": "ArrayDataModule"},
             "OPTUNA": {"enabled": False},
         }
         with open(model_config_path, "wb") as f:

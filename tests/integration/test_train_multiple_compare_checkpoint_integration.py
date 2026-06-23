@@ -156,7 +156,7 @@ def model_config_path(config_root: Path) -> Path:
             "name": "FlexibleDataset",
         },
         "DATAMODULE": {
-            "name": "InMemoryModule",
+            "name": "ArrayDataModule",
             "dataloader": {
                 "num_workers": 0,
                 "batch_size": 2,

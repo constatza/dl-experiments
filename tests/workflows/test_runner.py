@@ -144,7 +144,7 @@ def test_run_experiments_full_flow(
         },
         "DATASET": {"name": "FlexibleDataset"},
         "DATAMODULE": {
-            "name": "InMemoryModule",
+            "name": "ArrayDataModule",
             "dataloader": {"num_workers": 0, "batch_size": 2, "pin_memory": False, "shuffle": True},
         },
         "MLFLOW": {"enabled": False},
@@ -296,7 +296,7 @@ def test_run_experiment_matrix_with_mlflow(
         },
         "DATASET": {"name": "FlexibleDataset"},
         "DATAMODULE": {
-            "name": "InMemoryModule",
+            "name": "ArrayDataModule",
             "dataloader": {"num_workers": 0, "batch_size": 2, "pin_memory": False, "shuffle": True},
         },
         "MLFLOW": {
