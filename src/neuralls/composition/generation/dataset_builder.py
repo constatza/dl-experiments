@@ -13,7 +13,26 @@ from neuralls.platform.storage.datasets import (
     GenerationDatasetStorage,
     make_generation_dataset_storage,
 )
+from neuralls.platform.storage.manifest import read_dataset_manifest
+from neuralls.shared.constants import DATASET_MANIFEST_FILENAME
 from neuralls.shared.types import DatasetFormat
+
+
+def _guard_format_conflict(dataset_dir: Path, intended: DatasetFormat) -> None:
+    manifest_path = dataset_dir / DATASET_MANIFEST_FILENAME
+    if not manifest_path.exists():
+        return
+    try:
+        manifest = read_dataset_manifest(dataset_dir)
+    except Exception:
+        return
+    existing = manifest.matrix.format
+    if existing != intended:
+        raise ValueError(
+            f"Dataset at '{dataset_dir}' was generated as format '{existing}'. "
+            f"Cannot overwrite with format '{intended}'. "
+            f"Delete the existing dataset directory first."
+        )
 
 
 def build_dataset(
@@ -42,6 +61,7 @@ def build_dataset(
     """Build a persisted dataset by composing domain payload generation with storage."""
     dataset_path = Path(dataset_dir)
     dataset_path.mkdir(parents=True, exist_ok=True)
+    _guard_format_conflict(dataset_path, dataset_format)
     dataset_storage = storage or make_generation_dataset_storage(dataset_format)
     acc: DatasetAccumulatorPort = accumulator or dataset_storage.make_accumulator(dataset_path)
     payload = build_dataset_payload(
