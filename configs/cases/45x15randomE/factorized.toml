@@ -1,0 +1,181 @@
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training   = "Train-45x15randomE-Factorized"
+comparison = "Compare-45x15randomE-Factorized"
+
+[comparison_defaults]
+rtol               = 1.0e-6
+atol               = 1.0e-14
+max_iterations     = 200
+stopping_criterion = "residual_norm"
+m_max              = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+# ── Training datasets ─────────────────────────────────────────────────────────
+
+[[datasets]]
+id           = "gaussian-cg1-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg1.toml"
+display_name = "Gaussian CG-1 45x15randomE"
+
+[[datasets]]
+id           = "gaussian-cg10-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg10.toml"
+display_name = "Gaussian CG-10 45x15randomE"
+
+[[datasets]]
+id           = "gaussian-cg50-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg50.toml"
+display_name = "Gaussian CG-50 45x15randomE"
+
+[[datasets]]
+id           = "gaussian-cg100-45x15randomE"
+path         = "../../datasets/train/45x15randomE/gaussian-cg100.toml"
+display_name = "Gaussian CG-100 45x15randomE"
+
+# ── Models (all scale-equivariant factorized variants) ────────────────────────
+
+[[models]]
+id           = "embedded-factorized"
+path         = "../../models/ffnn/embedded-factorized.toml"
+display_name = "Scale-Equivariant Embedded Factorized FFNN"
+
+[[models]]
+id           = "spectral-factorized"
+path         = "../../models/spectral/factorized.toml"
+display_name = "Scale-Equivariant Spectral Factorized FFNN"
+
+[[models]]
+id           = "spd-factorized"
+path         = "../../models/symmetric/spd-factorized.toml"
+display_name = "Scale-Equivariant SPD Factorized FFNN"
+
+[[models]]
+id           = "embedded-spd-factorized"
+path         = "../../models/symmetric/embedded-spd-factorized.toml"
+display_name = "Scale-Equivariant Embedded SPD Factorized FFNN"
+
+# ── Comparisons (one per training dataset, filtered to own experiments) ───────
+
+[[comparisons]]
+id             = "gaussian-cg1"
+matrix_dataset = "gaussian-cg1-45x15randomE"
+rhs_dataset    = "gaussian-cg1-45x15randomE"
+experiments    = [
+  "embedded-factorized-gaussian-cg1-45x15randomE",
+  "spectral-factorized-gaussian-cg1-45x15randomE",
+  "spd-factorized-gaussian-cg1-45x15randomE",
+  "embedded-spd-factorized-gaussian-cg1-45x15randomE",
+]
+
+[[comparisons]]
+id             = "gaussian-cg10"
+matrix_dataset = "gaussian-cg10-45x15randomE"
+rhs_dataset    = "gaussian-cg10-45x15randomE"
+experiments    = [
+  "embedded-factorized-gaussian-cg10-45x15randomE",
+  "spectral-factorized-gaussian-cg10-45x15randomE",
+  "spd-factorized-gaussian-cg10-45x15randomE",
+  "embedded-spd-factorized-gaussian-cg10-45x15randomE",
+]
+
+[[comparisons]]
+id             = "gaussian-cg50"
+matrix_dataset = "gaussian-cg50-45x15randomE"
+rhs_dataset    = "gaussian-cg50-45x15randomE"
+experiments    = [
+  "embedded-factorized-gaussian-cg50-45x15randomE",
+  "spectral-factorized-gaussian-cg50-45x15randomE",
+  "spd-factorized-gaussian-cg50-45x15randomE",
+  "embedded-spd-factorized-gaussian-cg50-45x15randomE",
+]
+
+[[comparisons]]
+id             = "gaussian-cg100"
+matrix_dataset = "gaussian-cg100-45x15randomE"
+rhs_dataset    = "gaussian-cg100-45x15randomE"
+experiments    = [
+  "embedded-factorized-gaussian-cg100-45x15randomE",
+  "spectral-factorized-gaussian-cg100-45x15randomE",
+  "spd-factorized-gaussian-cg100-45x15randomE",
+  "embedded-spd-factorized-gaussian-cg100-45x15randomE",
+]
+
+# ── Experiments (4 models × 4 datasets) ──────────────────────────────────────
+
+[[experiments]]
+dataset = "gaussian-cg1-45x15randomE"
+model   = "embedded-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg1-45x15randomE"
+model   = "spectral-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg1-45x15randomE"
+model   = "spd-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg1-45x15randomE"
+model   = "embedded-spd-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg10-45x15randomE"
+model   = "embedded-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg10-45x15randomE"
+model   = "spectral-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg10-45x15randomE"
+model   = "spd-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg10-45x15randomE"
+model   = "embedded-spd-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg50-45x15randomE"
+model   = "embedded-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg50-45x15randomE"
+model   = "spectral-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg50-45x15randomE"
+model   = "spd-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg50-45x15randomE"
+model   = "embedded-spd-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15randomE"
+model   = "embedded-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15randomE"
+model   = "spectral-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15randomE"
+model   = "spd-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15randomE"
+model   = "embedded-spd-factorized"

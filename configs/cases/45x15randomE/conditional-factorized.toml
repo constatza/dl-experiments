@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train-45x15randomE-Conditional-FiLMs"
-comparison = "Compare-45x15randomE-Conditional-FiLMs"
+training   = "Train-45x15randomE-Conditional-Factorized"
+comparison = "Compare-45x15randomE-Conditional-Factorized"
 
 [comparison_defaults]
 rtol               = 1.0e-6
@@ -23,6 +23,8 @@ type = "jacobi"
 [[comparison_defaults.preconditioners]]
 name = "ic0"
 type = "ic0"
+
+# ── Training datasets ─────────────────────────────────────────────────────────
 
 [[datasets]]
 id           = "gaussian-cg1-45x15randomE"
@@ -44,15 +46,22 @@ id           = "gaussian-cg100-45x15randomE"
 path         = "../../datasets/train/45x15randomE/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 45x15randomE"
 
+# ── Models (scale-equivariant FiLM variants — condition on E parameters) ──────
+# Note: no FiLM+factorized architecture exists in dlkit yet.
+# These models condition on E via feature-wise linear modulation (FiLM)
+# and apply scale-equivariant feature embeddings.
+
 [[models]]
 id           = "film-ffnn"
 path         = "../../models/film/film-ffnn.toml"
-display_name = "FiLM FFNN"
+display_name = "Scale-Equivariant FiLM FFNN"
 
 [[models]]
 id           = "film-ffnn-embedded"
 path         = "../../models/film/film-ffnn-embedded.toml"
-display_name = "FiLM Embedded FFNN"
+display_name = "Scale-Equivariant FiLM Embedded FFNN"
+
+# ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
 id             = "gaussian-cg1"
@@ -89,6 +98,8 @@ experiments    = [
   "film-ffnn-gaussian-cg100-45x15randomE",
   "film-ffnn-embedded-gaussian-cg100-45x15randomE",
 ]
+
+# ── Experiments (2 models × 4 datasets) ──────────────────────────────────────
 
 [[experiments]]
 dataset = "gaussian-cg1-45x15randomE"

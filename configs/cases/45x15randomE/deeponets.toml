@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training   = "Train-45x15randomE-Conditional-DeepONets"
-comparison = "Compare-45x15randomE-Conditional-DeepONets"
+training   = "Train-45x15randomE-DeepONets"
+comparison = "Compare-45x15randomE-DeepONets"
 
 [comparison_defaults]
 rtol               = 1.0e-6
@@ -23,6 +23,8 @@ type = "jacobi"
 [[comparison_defaults.preconditioners]]
 name = "ic0"
 type = "ic0"
+
+# ── Training datasets ─────────────────────────────────────────────────────────
 
 [[datasets]]
 id           = "gaussian-cg1-45x15randomE"
@@ -44,6 +46,8 @@ id           = "gaussian-cg100-45x15randomE"
 path         = "../../datasets/train/45x15randomE/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 45x15randomE"
 
+# ── Models ────────────────────────────────────────────────────────────────────
+
 [[models]]
 id           = "ffnn-deeponet"
 path         = "../../models/deeponet/ffnn-deeponet.toml"
@@ -53,6 +57,8 @@ display_name = "FFNN DeepONet"
 id           = "embedded-deeponet"
 path         = "../../models/deeponet/embedded-deeponet.toml"
 display_name = "Embedded DeepONet"
+
+# ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
 id             = "gaussian-cg1"
@@ -89,6 +95,8 @@ experiments    = [
   "ffnn-deeponet-gaussian-cg100-45x15randomE",
   "embedded-deeponet-gaussian-cg100-45x15randomE",
 ]
+
+# ── Experiments (2 models × 4 datasets) ──────────────────────────────────────
 
 [[experiments]]
 dataset = "gaussian-cg1-45x15randomE"
