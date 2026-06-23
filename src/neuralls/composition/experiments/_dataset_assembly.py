@@ -23,7 +23,6 @@ from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDat
 from neuralls.platform.storage.training_artifacts import (
     ArraySource,
     TrainingArrays,
-    load_array_source_array,
     load_training_arrays,
 )
 from neuralls.shared.types import ResolvedDatasetEntrySpec
@@ -108,7 +107,9 @@ def _validate_runtime_dataset_contract(
     training_cfg = settings.TRAINING
     loss_function = getattr(training_cfg, "loss_function", None) if training_cfg else None
     target_key = getattr(loss_function, "target_key", None)
-    if target_key is not None and target_key != contract.loss_target_key:
+    if target_key is None:
+        return
+    if target_key != contract.loss_target_key:
         raise ValueError(
             "TRAINING.loss_function.target_key must resolve to the runtime "
             f"supervised target '{contract.loss_target_key}', got '{target_key}'."
@@ -139,8 +140,11 @@ def _primary_feature_name_from_settings(
     if dataset is None:
         return contract.primary_input_name
     for entry in dataset.features:
-        if entry.name is not None and entry.name != contract.matrix_input_name:
-            return entry.name
+        if entry.name is None:
+            continue
+        if entry.name == contract.matrix_input_name:
+            continue
+        return entry.name
     return contract.primary_input_name
 
 
@@ -205,7 +209,6 @@ def _create_feature_configs(
             arrays.rhs_source,
             name=primary_name,
             model_input=True,
-            eager_if_zarr=True,
         )
     ]
     base.append(
@@ -219,15 +222,13 @@ def _create_feature_configs(
     extras: list[ResolvedDatasetEntrySpec] = []
     for i, name in enumerate(declared_extra_names):
         source = arrays.parameter_sources[i]
-        match source:
-            case _:
-                extras.append(
-                    _feature_entry_from_source(
-                        source,
-                        name=name,
-                        model_input=True,
-                    )
-                )
+        extras.append(
+            _feature_entry_from_source(
+                source,
+                name=name,
+                model_input=True,
+            )
+        )
     return [*base, *extras]
 
 
@@ -283,30 +284,23 @@ def _feature_entry_from_source(
     *,
     name: str,
     model_input: bool,
-    eager_if_zarr: bool = False,
 ) -> ResolvedDatasetEntrySpec:
     """Create a feature spec from one resolved artifact source."""
-    eager_value = (
-        load_array_source_array(source) if source.format == "zarr" and eager_if_zarr else None
-    )
     return ResolvedDatasetEntrySpec(
         name=name,
-        path=source.path if eager_value is None else None,
+        path=source.path,
         format=source.format,
         role="feature",
         model_input=model_input,
-        value=eager_value,
     )
 
 
 def _target_entry_from_source(source: ArraySource, *, name: str) -> ResolvedDatasetEntrySpec:
     """Create a target spec from one resolved artifact source."""
-    eager_value = load_array_source_array(source) if source.format == "zarr" else None
     return ResolvedDatasetEntrySpec(
         name=name,
-        path=source.path if eager_value is None else None,
+        path=source.path,
         format=source.format,
         role="target",
         model_input=True,
-        value=eager_value,
     )
