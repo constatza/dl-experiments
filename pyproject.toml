@@ -117,7 +117,7 @@ markers = [
 package = true
 
 [tool.uv.sources]
-dlkit = { git = "https://github.com/constatza/dlkit.git", branch = "main" }
+dlkit = { git = "https://github.com/constatza/dlkit.git", branch = "develop" }
 torch = { index = "pytorch-cu130" }
 
 [[tool.uv.index]]
