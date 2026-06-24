@@ -27,19 +27,9 @@ type = "ic0"
 # ── Training datasets ─────────────────────────────────────────────────────────
 
 [[datasets]]
-id           = "gaussian-cg1-45x15randomE"
-path         = "../../datasets/train/45x15randomE/gaussian-cg1.toml"
-display_name = "Gaussian CG-1 45x15randomE"
-
-[[datasets]]
 id           = "gaussian-cg10-45x15randomE"
 path         = "../../datasets/train/45x15randomE/gaussian-cg10.toml"
 display_name = "Gaussian CG-10 45x15randomE"
-
-[[datasets]]
-id           = "gaussian-cg50-45x15randomE"
-path         = "../../datasets/train/45x15randomE/gaussian-cg50.toml"
-display_name = "Gaussian CG-50 45x15randomE"
 
 [[datasets]]
 id           = "gaussian-cg100-45x15randomE"
@@ -61,30 +51,12 @@ display_name = "Embedded DeepONet"
 # ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
-id             = "gaussian-cg1"
-matrix_dataset = "gaussian-cg1-45x15randomE"
-rhs_dataset    = "gaussian-cg1-45x15randomE"
-experiments    = [
-  "ffnn-deeponet-gaussian-cg1-45x15randomE",
-  "embedded-deeponet-gaussian-cg1-45x15randomE",
-]
-
-[[comparisons]]
 id             = "gaussian-cg10"
 matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_dataset    = "gaussian-cg10-45x15randomE"
 experiments    = [
   "ffnn-deeponet-gaussian-cg10-45x15randomE",
   "embedded-deeponet-gaussian-cg10-45x15randomE",
-]
-
-[[comparisons]]
-id             = "gaussian-cg50"
-matrix_dataset = "gaussian-cg50-45x15randomE"
-rhs_dataset    = "gaussian-cg50-45x15randomE"
-experiments    = [
-  "ffnn-deeponet-gaussian-cg50-45x15randomE",
-  "embedded-deeponet-gaussian-cg50-45x15randomE",
 ]
 
 [[comparisons]]
@@ -96,15 +68,7 @@ experiments    = [
   "embedded-deeponet-gaussian-cg100-45x15randomE",
 ]
 
-# ── Experiments (2 models × 4 datasets) ──────────────────────────────────────
-
-[[experiments]]
-dataset = "gaussian-cg1-45x15randomE"
-model   = "ffnn-deeponet"
-
-[[experiments]]
-dataset = "gaussian-cg1-45x15randomE"
-model   = "embedded-deeponet"
+# ── Experiments (2 models × 2 datasets) ──────────────────────────────────────
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
@@ -112,14 +76,6 @@ model   = "ffnn-deeponet"
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
-model   = "embedded-deeponet"
-
-[[experiments]]
-dataset = "gaussian-cg50-45x15randomE"
-model   = "ffnn-deeponet"
-
-[[experiments]]
-dataset = "gaussian-cg50-45x15randomE"
 model   = "embedded-deeponet"
 
 [[experiments]]

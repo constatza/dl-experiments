@@ -27,19 +27,9 @@ type = "ic0"
 # ── Training datasets (solutions/spectral, LHS=solutions → residuals) ─────────
 
 [[datasets]]
-id           = "solutions-cg1-45x15"
-path         = "../../datasets/train/45x15/solutions-cg1.toml"
-display_name = "Solutions CG-1 45x15"
-
-[[datasets]]
 id           = "solutions-cg10-45x15"
 path         = "../../datasets/train/45x15/solutions-cg10.toml"
 display_name = "Solutions CG-10 45x15"
-
-[[datasets]]
-id           = "solutions-cg50-45x15"
-path         = "../../datasets/train/45x15/solutions-cg50.toml"
-display_name = "Solutions CG-50 45x15"
 
 [[datasets]]
 id           = "solutions-cg100-45x15"
@@ -47,9 +37,9 @@ path         = "../../datasets/train/45x15/solutions-cg100.toml"
 display_name = "Solutions CG-100 45x15"
 
 [[datasets]]
-id           = "gaussian-cg1-45x15"
-path         = "../../datasets/train/45x15/gaussian-cg1.toml"
-display_name = "Gaussian CG-1 45x15"
+id           = "gaussian-cg10-45x15"
+path         = "../../datasets/train/45x15/gaussian-cg10.toml"
+display_name = "Gaussian CG-10 45x15"
 
 # ── Test / compare datasets ───────────────────────────────────────────────────
 
@@ -70,17 +60,12 @@ id           = "ffnn-pca"
 path         = "../../models/ffnn/ffnn-pca.toml"
 display_name = "FFNN PCA"
 
-[[models]]
-id           = "spd-pca"
-path         = "../../models/symmetric/spd-pca.toml"
-display_name = "SPD PCA"
-
 # ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
 id             = "gaussian"
-matrix_dataset = "gaussian-cg1-45x15"
-rhs_dataset    = "gaussian-cg1-45x15"
+matrix_dataset = "gaussian-cg10-45x15"
+rhs_dataset    = "gaussian-cg10-45x15"
 
 [[comparisons]]
 id             = "scaled"
@@ -92,36 +77,12 @@ id             = "sparse"
 matrix_dataset = "sparse-rhs-45x15"
 rhs_dataset    = "sparse-rhs-45x15"
 
-# ── Experiments (4 solutions datasets × 2 PCA models = 8) ────────────────────
-
-[[experiments]]
-dataset      = "solutions-cg1-45x15"
-model        = "ffnn-pca"
+# ── Experiments (2 solutions datasets × 1 PCA model = 2) ─────────────────────
 
 [[experiments]]
 dataset      = "solutions-cg10-45x15"
 model        = "ffnn-pca"
 
 [[experiments]]
-dataset      = "solutions-cg50-45x15"
-model        = "ffnn-pca"
-
-[[experiments]]
 dataset      = "solutions-cg100-45x15"
 model        = "ffnn-pca"
-
-[[experiments]]
-dataset      = "solutions-cg1-45x15"
-model        = "spd-pca"
-
-[[experiments]]
-dataset      = "solutions-cg10-45x15"
-model        = "spd-pca"
-
-[[experiments]]
-dataset      = "solutions-cg50-45x15"
-model        = "spd-pca"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "spd-pca"

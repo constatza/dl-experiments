@@ -17,4 +17,3 @@ solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectors
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"
-dataset_format = "npy"

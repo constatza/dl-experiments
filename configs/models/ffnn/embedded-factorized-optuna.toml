@@ -80,4 +80,5 @@ n_trials = 40
 
 [OPTUNA.model]
 num_layers = {choices = [1, 2, 4]}
-dropout = {low = 0.0, high = 0.3, step = 0.05}
+dropout = {low = 0.0, high = 0.5, step = 0.05}
+norm = {choices = ["l2", "none"]}

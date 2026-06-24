@@ -27,19 +27,9 @@ type = "ic0"
 # ── Training datasets ─────────────────────────────────────────────────────────
 
 [[datasets]]
-id           = "gaussian-cg1-45x15randomE"
-path         = "../../datasets/train/45x15randomE/gaussian-cg1.toml"
-display_name = "Gaussian CG-1 45x15randomE"
-
-[[datasets]]
 id           = "gaussian-cg10-45x15randomE"
 path         = "../../datasets/train/45x15randomE/gaussian-cg10.toml"
 display_name = "Gaussian CG-10 45x15randomE"
-
-[[datasets]]
-id           = "gaussian-cg50-45x15randomE"
-path         = "../../datasets/train/45x15randomE/gaussian-cg50.toml"
-display_name = "Gaussian CG-50 45x15randomE"
 
 [[datasets]]
 id           = "gaussian-cg100-45x15randomE"
@@ -64,30 +54,12 @@ display_name = "Scale-Equivariant FiLM Embedded FFNN"
 # ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
-id             = "gaussian-cg1"
-matrix_dataset = "gaussian-cg1-45x15randomE"
-rhs_dataset    = "gaussian-cg1-45x15randomE"
-experiments    = [
-  "film-ffnn-gaussian-cg1-45x15randomE",
-  "film-ffnn-embedded-gaussian-cg1-45x15randomE",
-]
-
-[[comparisons]]
 id             = "gaussian-cg10"
 matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_dataset    = "gaussian-cg10-45x15randomE"
 experiments    = [
   "film-ffnn-gaussian-cg10-45x15randomE",
   "film-ffnn-embedded-gaussian-cg10-45x15randomE",
-]
-
-[[comparisons]]
-id             = "gaussian-cg50"
-matrix_dataset = "gaussian-cg50-45x15randomE"
-rhs_dataset    = "gaussian-cg50-45x15randomE"
-experiments    = [
-  "film-ffnn-gaussian-cg50-45x15randomE",
-  "film-ffnn-embedded-gaussian-cg50-45x15randomE",
 ]
 
 [[comparisons]]
@@ -99,15 +71,7 @@ experiments    = [
   "film-ffnn-embedded-gaussian-cg100-45x15randomE",
 ]
 
-# ── Experiments (2 models × 4 datasets) ──────────────────────────────────────
-
-[[experiments]]
-dataset = "gaussian-cg1-45x15randomE"
-model   = "film-ffnn"
-
-[[experiments]]
-dataset = "gaussian-cg1-45x15randomE"
-model   = "film-ffnn-embedded"
+# ── Experiments (2 models × 2 datasets) ──────────────────────────────────────
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
@@ -115,14 +79,6 @@ model   = "film-ffnn"
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
-model   = "film-ffnn-embedded"
-
-[[experiments]]
-dataset = "gaussian-cg50-45x15randomE"
-model   = "film-ffnn"
-
-[[experiments]]
-dataset = "gaussian-cg50-45x15randomE"
 model   = "film-ffnn-embedded"
 
 [[experiments]]

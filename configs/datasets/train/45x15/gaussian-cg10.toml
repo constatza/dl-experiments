@@ -15,4 +15,3 @@ cg_iters = 10
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"
-dataset_format = "npy"

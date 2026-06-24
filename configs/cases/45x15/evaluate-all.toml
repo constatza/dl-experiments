@@ -27,9 +27,9 @@ type = "ic0"
 # ── Training datasets (max CG-iter only) ─────────────────────────────────────
 
 [[datasets]]
-id           = "gaussian-cg1-45x15"
-path         = "../../datasets/train/45x15/gaussian-cg1.toml"
-display_name = "Gaussian CG-1 45x15"
+id           = "gaussian-cg10-45x15"
+path         = "../../datasets/train/45x15/gaussian-cg10.toml"
+display_name = "Gaussian CG-10 45x15"
 
 [[datasets]]
 id           = "gaussian-cg100-45x15"
@@ -66,16 +66,6 @@ path         = "../../models/ffnn/embedded-factorized.toml"
 display_name = "Embedded Factorized"
 
 [[models]]
-id           = "symmetric-embedded-spd"
-path         = "../../models/symmetric/embedded-spd.toml"
-display_name = "Symmetric Embedded SPD"
-
-[[models]]
-id           = "symmetric-spd"
-path         = "../../models/symmetric/spd.toml"
-display_name = "Symmetric SPD"
-
-[[models]]
 id           = "spectral-siren"
 path         = "../../models/spectral/siren.toml"
 display_name = "Spectral SIREN"
@@ -99,8 +89,8 @@ display_name = "Spectral Factorized"
 
 [[comparisons]]
 id             = "gaussian"
-matrix_dataset = "gaussian-cg1-45x15"
-rhs_dataset    = "gaussian-cg1-45x15"
+matrix_dataset = "gaussian-cg10-45x15"
+rhs_dataset    = "gaussian-cg10-45x15"
 
 [[comparisons]]
 id             = "scaled"
@@ -112,7 +102,7 @@ id             = "sparse"
 matrix_dataset = "sparse-rhs-45x15"
 rhs_dataset    = "sparse-rhs-45x15"
 
-# ── Experiments (8 models × 2 training datasets = 16) ────────────────────────
+# ── Experiments (6 models × 2 training datasets = 12) ────────────────────────
 
 [[experiments]]
 dataset      = "gaussian-cg100-45x15"
@@ -121,14 +111,6 @@ model        = "ffnn-standard"
 [[experiments]]
 dataset      = "gaussian-cg100-45x15"
 model        = "embedded-factorized"
-
-[[experiments]]
-dataset      = "gaussian-cg100-45x15"
-model        = "symmetric-embedded-spd"
-
-[[experiments]]
-dataset      = "gaussian-cg100-45x15"
-model        = "symmetric-spd"
 
 [[experiments]]
 dataset      = "gaussian-cg100-45x15"
@@ -153,14 +135,6 @@ model        = "ffnn-standard"
 [[experiments]]
 dataset      = "solutions-cg100-45x15"
 model        = "embedded-factorized"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "symmetric-embedded-spd"
-
-[[experiments]]
-dataset      = "solutions-cg100-45x15"
-model        = "symmetric-spd"
 
 [[experiments]]
 dataset      = "solutions-cg100-45x15"
