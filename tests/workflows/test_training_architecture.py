@@ -33,6 +33,7 @@ from neuralls.platform.storage.training_artifacts import (
     NpyArraySource,
     TrainingArrays,
     ZarrArraySource,
+    matrix_zarr_path,
 )
 from neuralls.platform.tracking.mlflow import resolve_runtime_tracking_config
 from neuralls.platform.tracking.mlflow_client import parent_run_context
@@ -135,7 +136,7 @@ def test_create_feature_configs_returns_rhs_and_matrix(
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, ZarrEntry)
     assert matrix_feature.model_input is False
-    assert matrix_feature.path == sample_arrays.matrix_zarr
+    assert matrix_feature.path == matrix_zarr_path(sample_arrays)
 
 
 def test_create_feature_configs_default_to_flexible(
@@ -153,7 +154,7 @@ def test_create_feature_configs_default_to_flexible(
     assert rhs_feature.path == sample_arrays.rhs_source.path
     matrix_feature = next(f for f in features if f.name == "matrix")
     assert isinstance(matrix_feature, ZarrEntry)
-    assert matrix_feature.path == sample_arrays.matrix_zarr
+    assert matrix_feature.path == matrix_zarr_path(sample_arrays)
 
 
 def test_create_target_configs_returns_canonical_supervised_target(

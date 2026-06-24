@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from neuralls.shared.types import ScaleMetadata
+from neuralls.shared.types import LayoutType, ScaleMetadata
 
 
 @dataclass(frozen=True)
@@ -43,3 +43,5 @@ class GeneratedDatasetPayload:
     num_bindings: int = 0
     parameters_arrays: tuple[np.ndarray, ...] = ()
     """One array per entry in ``parameters_paths``; shape ``(N, param_dim)``."""
+    layout: LayoutType = LayoutType.MANY_MATRICES
+    """Physical matrix layout: one row per sample or one shared row for all samples."""

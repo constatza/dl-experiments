@@ -13,7 +13,7 @@ from neuralls.platform.storage.datasets import (
     GenerationDatasetStorage,
     make_generation_dataset_storage,
 )
-from neuralls.platform.storage.manifest import read_dataset_manifest
+from neuralls.platform.storage.manifest_io import read_dataset_manifest
 from neuralls.shared.constants import DATASET_MANIFEST_FILENAME
 from neuralls.shared.types import DatasetFormat
 

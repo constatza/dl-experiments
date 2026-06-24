@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Never, Protocol
 
 import h5py
 import numpy as np
@@ -14,14 +14,12 @@ from numpy.typing import NDArray
 
 from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 from neuralls.domain.generation.ports import DatasetAccumulatorPort
-from neuralls.platform.storage.manifest import (
-    DatasetArtifact,
-    DatasetNormalization,
-    make_dataset_manifest,
-    save_dataset_manifest,
-)
+from neuralls.platform.storage.manifest import DatasetArtifact, DatasetNormalization
+from neuralls.platform.storage.manifest_io import make_dataset_manifest, save_dataset_manifest
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
-from neuralls.shared.types import DatasetFormat
+from neuralls.shared.types import DatasetFormat, LayoutType
+
+_HDF5_DEFAULT_CHUNK_ROWS: int = 64
 
 
 @dataclass(frozen=True)
@@ -42,40 +40,38 @@ class GenerationDatasetStorage(Protocol):
     def write_dataset(self, dataset_dir: Path, payload: GeneratedDatasetPayload) -> None: ...
 
 
-class _StorageErrorFormatter:
-    @staticmethod
-    def _format_os_error(exc: OSError) -> str:
-        details = [f"{type(exc).__name__}: {exc}"]
-        if exc.errno is not None:
-            details.append(f"errno={exc.errno}")
-        winerror = getattr(exc, "winerror", None)
-        if winerror is not None:
-            details.append(f"winerror={winerror}")
-        if exc.filename:
-            details.append(f"src={exc.filename}")
-        if exc.filename2:
-            details.append(f"dst={exc.filename2}")
-        return ", ".join(details)
+def _raise_storage_error(operation: str, path: Path, exc: OSError) -> Never:
+    """Format and raise a descriptive OSError for a storage operation failure.
 
-    @staticmethod
-    def _permission_hint(exc: OSError) -> str:
-        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) == 5:
-            return (
-                " This usually means the filesystem blocked an atomic Zarr metadata rename, "
-                "which is common on network shares or when another process is holding the file."
-            )
-        return ""
+    Args:
+        operation: Human-readable description of the failed operation.
+        path: Path involved in the operation.
+        exc: The original OSError raised.
 
-    def _raise_storage_error(self, operation: str, path: Path, exc: OSError) -> None:
-        message = (
-            f"{operation} at {path} failed. "
-            f"{self._format_os_error(exc)}"
-            f"{self._permission_hint(exc)}"
+    Raises:
+        OSError: Always raised with a descriptive message.
+    """
+    details = [f"{type(exc).__name__}: {exc}"]
+    if exc.errno is not None:
+        details.append(f"errno={exc.errno}")
+    winerror = getattr(exc, "winerror", None)
+    if winerror is not None:
+        details.append(f"winerror={winerror}")
+    if exc.filename:
+        details.append(f"src={exc.filename}")
+    if exc.filename2:
+        details.append(f"dst={exc.filename2}")
+    permission_hint = ""
+    if isinstance(exc, PermissionError) or winerror == 5:
+        permission_hint = (
+            " This usually means the filesystem blocked an atomic Zarr metadata rename, "
+            "which is common on network shares or when another process is holding the file."
         )
-        raise OSError(message) from exc
+    message = f"{operation} at {path} failed. {', '.join(details)}{permission_hint}"
+    raise OSError(message) from exc
 
 
-class DenseZarrAccumulator(_StorageErrorFormatter):
+class DenseZarrAccumulator:
     """Streams dense matrix slices to a staged zarr array during generation."""
 
     def __init__(self, zarr_path: Path) -> None:
@@ -112,7 +108,7 @@ class DenseZarrAccumulator(_StorageErrorFormatter):
                     dtype="float64",
                 )
             except OSError as exc:
-                self._raise_storage_error("Creating matrix.zarr store", self._zarr_path, exc)
+                _raise_storage_error("Creating matrix.zarr store", self._zarr_path, exc)
         arr = self._arr
         if arr is None:
             raise RuntimeError("matrix zarr store was not initialized after successful open.")
@@ -120,7 +116,7 @@ class DenseZarrAccumulator(_StorageErrorFormatter):
             arr.resize((arr.shape[0] + repeats, n, m))
             arr[-repeats:] = np.broadcast_to(matrix[np.newaxis], (repeats, n, m))
         except OSError as exc:
-            self._raise_storage_error("Updating matrix.zarr store", self._zarr_path, exc)
+            _raise_storage_error("Updating matrix.zarr store", self._zarr_path, exc)
         self._n_samples += repeats
 
     def finalize(self) -> Path:
@@ -135,12 +131,17 @@ class DenseZarrAccumulator(_StorageErrorFormatter):
         return self._n_samples
 
 
-class DenseNpyAccumulator(_StorageErrorFormatter):
-    """Accumulates dense matrix samples and stages them as a numpy array."""
+class DenseNpyAccumulator:
+    """Accumulates dense matrix samples and stages them as a numpy array.
+
+    Stores (matrix, repeats) pairs instead of expanding repeats into the list.
+    Peak accumulation RAM is O(K*n*m) where K = unique matrices, not O(N*n*m).
+    Expansion happens once at finalize via np.repeat + np.concatenate.
+    """
 
     def __init__(self, npy_path: Path) -> None:
         self._npy_path = Path(npy_path)
-        self._matrices: list[np.ndarray] = []
+        self._entries: list[tuple[np.ndarray, int]] = []
         self._size: tuple[int, int] | None = None
         self._n_samples = 0
 
@@ -160,19 +161,21 @@ class DenseNpyAccumulator(_StorageErrorFormatter):
     def append_dense_matrix(self, matrix: NDArray, repeats: int) -> None:
         if repeats < 1:
             raise ValueError(f"repeats must be >= 1, got {repeats}")
-        n, m = int(matrix.shape[0]), int(matrix.shape[1])
+        mat = np.asarray(matrix, dtype=np.float64)
+        n, m = int(mat.shape[0]), int(mat.shape[1])
         if self._size is None:
             self._size = (n, m)
-        self._matrices.extend(np.array(matrix, copy=True, dtype=np.float64) for _ in range(repeats))
+        self._entries.append((mat, repeats))
         self._n_samples += repeats
 
     def finalize(self) -> Path:
-        if not self._matrices:
+        if not self._entries:
             return self._npy_path
+        arrays = [np.repeat(mat[np.newaxis], r, axis=0) for mat, r in self._entries]
         try:
-            np.save(self._npy_path, np.stack(self._matrices, axis=0))
+            np.save(self._npy_path, np.concatenate(arrays, axis=0))
         except OSError as exc:
-            self._raise_storage_error("Writing staged matrix numpy array", self._npy_path, exc)
+            _raise_storage_error("Writing staged matrix numpy array", self._npy_path, exc)
         return self._npy_path
 
     @property
@@ -202,7 +205,7 @@ def _zarr_group_member_paths(group_dir: Path, parameter_count: int) -> DatasetAr
     )
 
 
-class ZarrGenerationStorage(_StorageErrorFormatter):
+class ZarrGenerationStorage:
     """Write generated datasets as a zarr group container (dataset.zarr/)."""
 
     format_name = "zarr"
@@ -230,7 +233,7 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
             )
             rhs_arr[:] = payload.rhs
         except OSError as exc:
-            self._raise_storage_error("Writing rhs into group", paths.rhs_path, exc)
+            _raise_storage_error("Writing rhs into group", paths.rhs_path, exc)
 
         try:
             sol_arr = zarr.open_array(
@@ -242,7 +245,7 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
             )
             sol_arr[:] = payload.solutions
         except OSError as exc:
-            self._raise_storage_error("Writing solutions into group", paths.solutions_path, exc)
+            _raise_storage_error("Writing solutions into group", paths.solutions_path, exc)
 
         pack_src = Path(payload.matrix_artifact_path)
         if pack_src != paths.matrix_path:
@@ -251,14 +254,12 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
                     shutil.rmtree(str(paths.matrix_path))
                 shutil.move(str(pack_src), str(paths.matrix_path))
             except OSError as exc:
-                self._raise_storage_error(
-                    "Moving matrix staging into group", paths.matrix_path, exc
-                )
+                _raise_storage_error("Moving matrix staging into group", paths.matrix_path, exc)
 
         try:
             mat_arr = zarr.open_array(str(paths.matrix_path), mode="r")
         except OSError as exc:
-            self._raise_storage_error(
+            _raise_storage_error(
                 "Reopening matrix member for manifest inspection", paths.matrix_path, exc
             )
 
@@ -278,9 +279,7 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
                 )
                 params_zarr[:] = params_arr
             except OSError as exc:
-                self._raise_storage_error(
-                    f"Writing {params_path.name} into group", params_path, exc
-                )
+                _raise_storage_error(f"Writing {params_path.name} into group", params_path, exc)
             # ponytail: path relative to dataset_dir so manifest resolves from root
             params_manifest.append(
                 DatasetArtifact(
@@ -301,7 +300,9 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
                     dtype="float64",
                     shape=tuple(int(dim) for dim in mat_arr.shape),
                     n_matrix_samples=int(mat_arr.shape[0]),
-                    broadcast=int(mat_arr.shape[0]) == 1,
+                    broadcast=payload.layout == LayoutType.BROADCAST_SINGLE,
+                    layout=payload.layout,
+                    logical_sample_count=int(payload.rhs.shape[0]),
                 ),
                 rhs=DatasetArtifact(
                     path=f"{_ZARR_GROUP_NAME}/rhs",
@@ -326,7 +327,7 @@ class ZarrGenerationStorage(_StorageErrorFormatter):
         )
 
 
-class NpyGenerationStorage(_StorageErrorFormatter):
+class NpyGenerationStorage:
     """Write generated datasets into numpy-backed artifacts."""
 
     format_name = "npy"
@@ -349,16 +350,15 @@ class NpyGenerationStorage(_StorageErrorFormatter):
             np.save(paths.rhs_path, payload.rhs)
             np.save(paths.solutions_path, payload.solutions)
         except OSError as exc:
-            self._raise_storage_error("Writing dataset numpy arrays", dataset_dir, exc)
+            _raise_storage_error("Writing dataset numpy arrays", dataset_dir, exc)
 
         pack_src = Path(payload.matrix_artifact_path)
         if pack_src != paths.matrix_path:
             try:
                 shutil.move(str(pack_src), str(paths.matrix_path))
             except OSError as exc:
-                self._raise_storage_error("Moving matrix.npy into place", paths.matrix_path, exc)
+                _raise_storage_error("Moving matrix.npy into place", paths.matrix_path, exc)
 
-        matrix = np.load(paths.matrix_path)
         params_manifest: list[DatasetArtifact] = []
         for index, (params_arr, params_path) in enumerate(
             zip(payload.parameters_arrays, paths.parameter_paths, strict=True)
@@ -368,7 +368,7 @@ class NpyGenerationStorage(_StorageErrorFormatter):
             try:
                 np.save(params_path, params_arr)
             except OSError as exc:
-                self._raise_storage_error(f"Writing {params_path.name}", params_path, exc)
+                _raise_storage_error(f"Writing {params_path.name}", params_path, exc)
             params_manifest.append(
                 DatasetArtifact(
                     path=params_path.name,
@@ -386,9 +386,18 @@ class NpyGenerationStorage(_StorageErrorFormatter):
                     path=paths.matrix_path.name,
                     format=self.format_name,
                     dtype="float64",
-                    shape=tuple(int(dim) for dim in matrix.shape),
-                    n_matrix_samples=int(matrix.shape[0]),
-                    broadcast=int(matrix.shape[0]) == 1,
+                    shape=(
+                        1
+                        if payload.layout == LayoutType.BROADCAST_SINGLE
+                        else int(payload.rhs.shape[0]),
+                        *payload.matrix_size,
+                    ),
+                    n_matrix_samples=1
+                    if payload.layout == LayoutType.BROADCAST_SINGLE
+                    else int(payload.rhs.shape[0]),
+                    broadcast=payload.layout == LayoutType.BROADCAST_SINGLE,
+                    layout=payload.layout,
+                    logical_sample_count=int(payload.rhs.shape[0]),
                 ),
                 rhs=DatasetArtifact(
                     path=paths.rhs_path.name,
@@ -417,7 +426,7 @@ _HDF5_FILENAME = "dataset.h5"
 _HDF5_MATRIX_STAGING_KEY = "matrix"
 
 
-class DenseHdf5Accumulator(_StorageErrorFormatter):
+class DenseHdf5Accumulator:
     """Streams dense matrix slices to a staged HDF5 file during generation."""
 
     def __init__(self, h5_path: Path) -> None:
@@ -456,7 +465,7 @@ class DenseHdf5Accumulator(_StorageErrorFormatter):
                     dtype="float64",
                 )
             except OSError as exc:
-                self._raise_storage_error("Creating matrix staging HDF5", self._h5_path, exc)
+                _raise_storage_error("Creating matrix staging HDF5", self._h5_path, exc)
         ds = self._ds
         if ds is None:
             raise RuntimeError("HDF5 matrix staging dataset was not initialized.")
@@ -465,7 +474,7 @@ class DenseHdf5Accumulator(_StorageErrorFormatter):
             ds.resize(current + repeats, axis=0)
             ds[current:] = np.broadcast_to(matrix[np.newaxis], (repeats, n, m))
         except OSError as exc:
-            self._raise_storage_error("Appending to matrix staging HDF5", self._h5_path, exc)
+            _raise_storage_error("Appending to matrix staging HDF5", self._h5_path, exc)
         self._n_samples += repeats
 
     def finalize(self) -> Path:
@@ -484,7 +493,7 @@ class DenseHdf5Accumulator(_StorageErrorFormatter):
         return self._n_samples
 
 
-class Hdf5GenerationStorage(_StorageErrorFormatter):
+class Hdf5GenerationStorage:
     """Write generated datasets into a single HDF5 file (dataset.h5)."""
 
     format_name = "hdf5"
@@ -497,13 +506,28 @@ class Hdf5GenerationStorage(_StorageErrorFormatter):
         h5_path = dataset_dir / _HDF5_FILENAME
         staging_path = Path(payload.matrix_artifact_path)
 
-        try:
-            with h5py.File(str(staging_path), "r") as staging, h5py.File(str(h5_path), "w") as out:
-                staging.copy(_HDF5_MATRIX_STAGING_KEY, out, name="matrix")
-                mat_shape = tuple(int(d) for d in out["matrix"].shape)
+        # Move staging file to final path — matrix dataset already named "matrix".
+        # Open in append mode to add rhs/solutions without re-reading the matrix.
+        # ponytail: avoids the staging→final copy (was an extra full-matrix disk write)
+        staging_path.rename(h5_path)
 
-                out.create_dataset("rhs", data=payload.rhs.astype(np.float64))
-                out.create_dataset("solutions", data=payload.solutions.astype(np.float64))
+        n_samples = int(payload.rhs.shape[0])
+        vec_dim = int(payload.rhs.shape[1])
+        chunk_rows = min(_HDF5_DEFAULT_CHUNK_ROWS, n_samples)
+
+        try:
+            with h5py.File(str(h5_path), "a") as out:
+                mat_shape = tuple(int(d) for d in out["matrix"].shape)
+                out.create_dataset(
+                    "rhs",
+                    data=payload.rhs.astype(np.float64),
+                    chunks=(chunk_rows, vec_dim),
+                )
+                out.create_dataset(
+                    "solutions",
+                    data=payload.solutions.astype(np.float64),
+                    chunks=(chunk_rows, vec_dim),
+                )
 
                 params_manifest: list[DatasetArtifact] = []
                 for index, params_arr in enumerate(payload.parameters_arrays):
@@ -522,9 +546,7 @@ class Hdf5GenerationStorage(_StorageErrorFormatter):
                         )
                     )
         except OSError as exc:
-            self._raise_storage_error("Writing dataset HDF5", h5_path, exc)
-
-        staging_path.unlink(missing_ok=True)
+            _raise_storage_error("Writing dataset HDF5", h5_path, exc)
 
         save_dataset_manifest(
             dataset_dir,
@@ -535,7 +557,9 @@ class Hdf5GenerationStorage(_StorageErrorFormatter):
                     dtype="float64",
                     shape=mat_shape,
                     n_matrix_samples=int(mat_shape[0]),
-                    broadcast=int(mat_shape[0]) == 1,
+                    broadcast=payload.layout == LayoutType.BROADCAST_SINGLE,
+                    layout=payload.layout,
+                    logical_sample_count=int(payload.rhs.shape[0]),
                     key="matrix",
                 ),
                 rhs=DatasetArtifact(

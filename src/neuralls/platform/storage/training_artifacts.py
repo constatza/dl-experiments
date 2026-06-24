@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +30,10 @@ class ZarrArraySource:
         data = arr[sample_index] if arr.ndim > 1 else arr[:]
         return np.asarray(data, dtype=np.float64)
 
+    def load_batch(self, indices: Sequence[int]) -> np.ndarray:
+        arr = zarr.open_array(str(self.path), mode="r")
+        return np.asarray(arr.oindex[np.asarray(indices)], dtype=np.float64)
+
 
 @dataclass(frozen=True)
 class NpyArraySource:
@@ -43,6 +47,10 @@ class NpyArraySource:
         if array.ndim > 1:
             return np.asarray(array[sample_index], dtype=np.float64)
         return np.asarray(array, dtype=np.float64)
+
+    def load_batch(self, indices: Sequence[int]) -> np.ndarray:
+        arr = np.load(self.path, mmap_mode="r")
+        return np.asarray(arr[np.asarray(indices)], dtype=np.float64)
 
 
 @dataclass(frozen=True)
@@ -58,6 +66,11 @@ class Hdf5ArraySource:
             data = ds[sample_index] if ds.ndim > 1 else ds[:]  # type: ignore[index]
             return np.asarray(data, dtype=np.float64)
 
+    def load_batch(self, indices: Sequence[int]) -> np.ndarray:
+        with h5py.File(str(self.path), "r") as f:
+            ds = f[self.key]
+            return np.asarray(ds[np.asarray(indices)], dtype=np.float64)  # type: ignore[index]
+
 
 type ArraySource = NpyArraySource | ZarrArraySource | Hdf5ArraySource
 
@@ -72,22 +85,46 @@ class TrainingArrays:
     sample_count: int
     parameter_sources: tuple[ArraySource, ...] = ()
 
-    @property
-    def matrix_zarr(self) -> Path:
-        """Compatibility view for zarr-backed matrix sources."""
-        if not isinstance(self.matrix_source, ZarrArraySource):
-            raise AttributeError("matrix_zarr is only available for zarr-backed datasets.")
-        return self.matrix_source.path
 
-    @property
-    def parameters_zarr(self) -> tuple[Path, ...]:
-        """Compatibility view for zarr-backed parameter sources."""
-        paths: list[Path] = []
-        for source in self.parameter_sources:
-            if not isinstance(source, ZarrArraySource):
-                raise AttributeError("parameters_zarr is only available for zarr-backed datasets.")
-            paths.append(source.path)
-        return tuple(paths)
+def matrix_zarr_path(arrays: TrainingArrays) -> Path:
+    """Return the zarr path for a zarr-backed matrix source.
+
+    Args:
+        arrays: Resolved training artifact sources.
+
+    Returns:
+        Path to the zarr matrix store.
+
+    Raises:
+        TypeError: If the matrix source is not a zarr-backed source.
+    """
+    if not isinstance(arrays.matrix_source, ZarrArraySource):
+        raise TypeError(
+            f"matrix_zarr_path requires a ZarrArraySource, got {type(arrays.matrix_source).__name__}"
+        )
+    return arrays.matrix_source.path
+
+
+def parameters_zarr_paths(arrays: TrainingArrays) -> tuple[Path, ...]:
+    """Return zarr paths for all zarr-backed parameter sources.
+
+    Args:
+        arrays: Resolved training artifact sources.
+
+    Returns:
+        Tuple of paths to zarr parameter stores.
+
+    Raises:
+        TypeError: If any parameter source is not zarr-backed.
+    """
+    result: list[Path] = []
+    for i, source in enumerate(arrays.parameter_sources):
+        if not isinstance(source, ZarrArraySource):
+            raise TypeError(
+                f"parameters_zarr_paths: source [{i}] is {type(source).__name__}, expected ZarrArraySource"
+            )
+        result.append(source.path)
+    return tuple(result)
 
 
 def _source_from_artifact(path: Path, format_name: str, *, key: str | None = None) -> ArraySource:
@@ -96,7 +133,9 @@ def _source_from_artifact(path: Path, format_name: str, *, key: str | None = Non
     if format_name == "npy":
         return NpyArraySource(path=path)
     if format_name == "hdf5":
-        return Hdf5ArraySource(path=path, key=key or "data")
+        if key is None:
+            raise ValueError(f"HDF5 artifact at {path} is missing a required key")
+        return Hdf5ArraySource(path=path, key=key)
     raise ValueError(f"Unsupported training array format {format_name!r} at {path}")
 
 

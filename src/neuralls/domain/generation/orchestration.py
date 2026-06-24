@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 from loguru import logger
 from .data_types import NormalizeType
-from neuralls.shared.types import ScaleMetadata
+from neuralls.shared.types import LayoutType, ScaleMetadata
 from neuralls.domain.normalization import ErrorTraceSamples, IScale, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .helpers import serialize_scale_metadata
@@ -24,7 +24,7 @@ from .trace_utils import (
 )
 from .interfaces import ArchiveData, TracingSolverCallable
 from .payloads import GeneratedDatasetPayload
-from .ports import DatasetAccumulatorPort
+from .ports import DenseAccumulatorPort
 from .runner import strategy_supports_matrix_replacement
 from .source_streams import (
     EnumerateBy,
@@ -44,6 +44,12 @@ class _StrategyProperties:
     uses_finite_source: bool
     supports_replacement: bool
 
+
+_ALL_SAMPLES: int = -1
+"""Sentinel used in strategy count allocation: emit all available samples for this binding."""
+
+_NORM_AGREEMENT_RTOL: float = 1e-10
+_NORM_AGREEMENT_ATOL: float = 1e-12
 
 _STRATEGY_PROPERTIES: dict[str, _StrategyProperties] = {
     "solution_archive": _StrategyProperties(uses_finite_source=True, supports_replacement=False),
@@ -412,8 +418,8 @@ def _append_binding_count(
     count: int,
 ) -> None:
     """Accumulate one per-binding strategy count."""
-    if count == -1:
-        counts_by_binding[binding_idx][strategy_name] = -1
+    if count == _ALL_SAMPLES:
+        counts_by_binding[binding_idx][strategy_name] = _ALL_SAMPLES
         return
     if count <= 0:
         return
@@ -433,8 +439,8 @@ def _allocate_strategy_counts_across_bindings(
     num_bindings = len(bindings)
     if num_bindings < 1:
         raise ValueError("At least one binding is required for allocation.")
-    if count == -1:
-        return [-1] * num_bindings
+    if count == _ALL_SAMPLES:
+        return [_ALL_SAMPLES] * num_bindings
     if count <= 0:
         return [0] * num_bindings
 
@@ -632,7 +638,10 @@ def _resolve_final_scale(
 
     # Resolve matrix norm
     matrix_norm_value = float(norm_values[0])
-    if not all(np.isclose(v, matrix_norm_value, rtol=1e-10, atol=1e-12) for v in norm_values):
+    if not all(
+        np.isclose(v, matrix_norm_value, rtol=_NORM_AGREEMENT_RTOL, atol=_NORM_AGREEMENT_ATOL)
+        for v in norm_values
+    ):
         logger.warning(
             "Bindings produced different normalized matrix norms; "
             "the dataset manifest keeps a representative matrix_norm only."
@@ -640,7 +649,10 @@ def _resolve_final_scale(
 
     # Resolve matrix value scale
     matrix_value_scale = float(scale_values[0])
-    if not all(np.isclose(v, matrix_value_scale, rtol=1e-10, atol=1e-12) for v in scale_values):
+    if not all(
+        np.isclose(v, matrix_value_scale, rtol=_NORM_AGREEMENT_RTOL, atol=_NORM_AGREEMENT_ATOL)
+        for v in scale_values
+    ):
         logger.warning(
             "Bindings produced different matrix value scales; "
             "the dataset manifest omits a shared reversible matrix scale."
@@ -677,6 +689,7 @@ def _build_dataset_payload(
     scale_metadata: ScaleMetadata | None,
     num_bindings: int,
     parameters_arrays: tuple[np.ndarray, ...] = (),
+    layout: LayoutType = LayoutType.MANY_MATRICES,
 ) -> GeneratedDatasetPayload:
     """Build the final immutable dataset payload for the composition layer."""
     return GeneratedDatasetPayload(
@@ -691,6 +704,7 @@ def _build_dataset_payload(
         scale_metadata=scale_metadata,
         num_bindings=num_bindings,
         parameters_arrays=parameters_arrays,
+        layout=layout,
     )
 
 
@@ -764,13 +778,13 @@ def _accumulate_bindings(
     rhs_stream: VectorSampleStream | None,
     solution_stream: VectorSampleStream | None,
     param_streams: list[VectorSampleStream],
-    matrix_stream: MatrixSampleStream,
     get_matrix: Callable[[int], _CachedMatrix],
-    accumulator: DatasetAccumulatorPort,
+    accumulator: DenseAccumulatorPort,
     seed: int,
     shuffle: bool,
     strategy_overrides: dict[str, dict[str, Any]] | None,
     solver_overrides: dict[str, TracingSolverCallable] | None,
+    single_matrix_mode: bool,
 ) -> tuple[
     list[np.ndarray],
     list[np.ndarray],
@@ -801,7 +815,6 @@ def _accumulate_bindings(
                   matrix_norm_values, matrix_value_scale_values, scale_metadata_values,
                   emitted_binding_count)
     """
-    single_matrix_mode = len(matrix_stream.sample_ids) == 1
     single_matrix_written = False
     rhs_blocks: list[np.ndarray] = []
     solution_blocks: list[np.ndarray] = []
@@ -872,10 +885,11 @@ def _finalize_payload(
     matrix_norm_values: list[float],
     matrix_value_scale_values: list[float],
     scale_metadata_values: list[ScaleMetadata | None],
-    accumulator: DatasetAccumulatorPort,
+    accumulator: DenseAccumulatorPort,
     normalize: NormalizeType,
     matrix_norm_type: str,
     emitted_binding_count: int,
+    layout: LayoutType = LayoutType.MANY_MATRICES,
 ) -> GeneratedDatasetPayload:
     """Stack arrays, resolve scale, finalize accumulator, and build the payload.
 
@@ -926,6 +940,7 @@ def _finalize_payload(
         scale_metadata,
         emitted_binding_count,
         parameters_arrays,
+        layout,
     )
 
 
@@ -947,7 +962,7 @@ def build_dataset_payload(
     seed: int = 42,
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
     solver_overrides: dict[str, TracingSolverCallable] | None = None,
-    accumulator: DatasetAccumulatorPort,
+    accumulator: DenseAccumulatorPort,
 ) -> GeneratedDatasetPayload:
     """Build an in-memory dataset payload from streamed matrix sources.
 
@@ -1033,21 +1048,29 @@ def build_dataset_payload(
             scale_params=scale_params,
         )
 
-    rhs_blocks, solution_blocks, param_blocks, norm_vals, scale_vals, meta_vals, n_bindings = (
-        _accumulate_bindings(
-            bindings=bindings,
-            binding_counts=binding_counts,
-            rhs_stream=rhs_stream,
-            solution_stream=solution_stream,
-            param_streams=param_streams,
-            matrix_stream=matrix_stream,
-            get_matrix=_get_matrix,
-            accumulator=accumulator,
-            seed=seed,
-            shuffle=shuffle,
-            strategy_overrides=strategy_overrides,
-            solver_overrides=solver_overrides,
-        )
+    single_matrix_mode = len(matrix_stream.sample_ids) == 1
+    layout = LayoutType.BROADCAST_SINGLE if single_matrix_mode else LayoutType.MANY_MATRICES
+    (
+        rhs_blocks,
+        solution_blocks,
+        param_blocks,
+        norm_vals,
+        scale_vals,
+        meta_vals,
+        n_bindings,
+    ) = _accumulate_bindings(
+        bindings=bindings,
+        binding_counts=binding_counts,
+        rhs_stream=rhs_stream,
+        solution_stream=solution_stream,
+        param_streams=param_streams,
+        get_matrix=_get_matrix,
+        accumulator=accumulator,
+        seed=seed,
+        shuffle=shuffle,
+        strategy_overrides=strategy_overrides,
+        solver_overrides=solver_overrides,
+        single_matrix_mode=single_matrix_mode,
     )
     payload = _finalize_payload(
         rhs_blocks=rhs_blocks,
@@ -1060,6 +1083,7 @@ def build_dataset_payload(
         normalize=normalize,
         matrix_norm_type=matrix_norm_type,
         emitted_binding_count=n_bindings,
+        layout=layout,
     )
     logger.info(
         "Dataset payload built successfully: "

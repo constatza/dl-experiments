@@ -29,9 +29,8 @@ from neuralls.platform.storage.manifest import (
     DatasetArtifact,
     DatasetManifest,
     DatasetNormalization,
-    load_dataset_manifest,
-    read_dataset_manifest,
 )
+from neuralls.platform.storage.manifest_io import load_dataset_manifest, read_dataset_manifest
 
 DenseDatasetWriter = ZarrGenerationStorage
 

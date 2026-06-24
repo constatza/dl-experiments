@@ -9,7 +9,10 @@ import h5py
 import numpy as np
 import zarr
 
-from neuralls.platform.storage.manifest import DatasetArtifact, read_dataset_manifest
+from neuralls.platform.storage.manifest import DatasetArtifact
+from neuralls.platform.storage.manifest_io import read_dataset_manifest
+from neuralls.shared.constants import DATASET_MANIFEST_FILENAME
+from neuralls.shared.types import LayoutType
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,8 @@ class ResolvedDatasetArtifact:
     n_matrix_samples: int | None = None
     broadcast: bool | None = None
     key: str | None = None
+    layout: LayoutType | None = None
+    logical_sample_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +70,8 @@ def _resolve_artifact(root: Path, artifact: DatasetArtifact) -> ResolvedDatasetA
         n_matrix_samples=artifact.n_matrix_samples,
         broadcast=artifact.broadcast,
         key=artifact.key,
+        layout=artifact.layout,
+        logical_sample_count=artifact.logical_sample_count,
     )
 
 
@@ -80,7 +87,7 @@ def resolve_dataset_artifacts(dataset_dir: str | Path) -> DatasetArtifacts:
         ) from None
     return DatasetArtifacts(
         root=root,
-        manifest_path=root / "manifest.json",
+        manifest_path=root / DATASET_MANIFEST_FILENAME,
         matrix=_resolve_artifact(root, manifest.matrix),
         rhs=_resolve_artifact(root, manifest.rhs),
         solutions=_resolve_artifact(root, manifest.solutions),
@@ -101,6 +108,26 @@ def resolve_dataset_paths(dataset_dir: str | Path) -> DatasetPaths:
     )
 
 
+def _load_sample(artifact: ResolvedDatasetArtifact, sample_index: int) -> np.ndarray:
+    match artifact.format:
+        case "npy":
+            arr = np.load(artifact.path, mmap_mode="r")
+            return np.asarray(arr[sample_index] if arr.ndim > 1 else arr, dtype=np.float64)
+        case "zarr":
+            arr = zarr.open_array(str(artifact.path), mode="r")
+            data = arr[sample_index] if arr.ndim > 1 else arr[:]
+            return np.asarray(data, dtype=np.float64)
+        case "hdf5":
+            if artifact.key is None:
+                raise ValueError(f"HDF5 artifact at {artifact.path} is missing a required key")
+            with h5py.File(str(artifact.path), "r") as f:
+                ds = f[artifact.key]
+                data = ds[sample_index] if ds.ndim > 1 else ds[:]  # type: ignore[index]
+                return np.asarray(data, dtype=np.float64)
+        case _:
+            raise ValueError(f"Unsupported format {artifact.format!r} at {artifact.path}")
+
+
 def _load_resolved(artifact: ResolvedDatasetArtifact) -> np.ndarray:
     match artifact.format:
         case "zarr":
@@ -108,8 +135,10 @@ def _load_resolved(artifact: ResolvedDatasetArtifact) -> np.ndarray:
         case "npy":
             return np.load(artifact.path).astype(np.float64, copy=False)
         case "hdf5":
+            if artifact.key is None:
+                raise ValueError(f"HDF5 artifact at {artifact.path} is missing a required key")
             with h5py.File(str(artifact.path), "r") as f:
-                return np.asarray(f[artifact.key or "data"], dtype=np.float64)
+                return np.asarray(f[artifact.key], dtype=np.float64)
         case _:
             raise ValueError(
                 f"Unsupported dataset artifact format {artifact.format!r} at {artifact.path}"
@@ -124,9 +153,7 @@ def load_dense_training_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, np.
 
 def load_matrix_dense_sample(dataset_dir: str | Path, sample_index: int = 0) -> np.ndarray:
     """Load one dense matrix sample from a manifest-driven dataset directory."""
-    artifacts = resolve_dataset_artifacts(dataset_dir)
-    matrix = _load_resolved(artifacts.matrix)
-    return np.asarray(matrix[sample_index], dtype=np.float64)
+    return _load_sample(resolve_dataset_artifacts(dataset_dir).matrix, sample_index)
 
 
 def read_training_sample_count(paths: DatasetPaths | DatasetArtifacts) -> int:

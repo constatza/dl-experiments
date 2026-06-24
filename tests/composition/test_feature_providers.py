@@ -15,7 +15,11 @@ from neuralls.composition.experiments._dataset_assembly import (
     _create_feature_entries,
     _extra_feature_names_from_settings,
 )
-from neuralls.platform.storage.training_artifacts import TrainingArrays, ZarrArraySource
+from neuralls.platform.storage.training_artifacts import (
+    TrainingArrays,
+    ZarrArraySource,
+    parameters_zarr_paths,
+)
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
 
 
@@ -121,7 +125,7 @@ def test_condition_extra_maps_to_parameters_0(
     assert [e.name for e in entries] == ["x", "matrix", "condition"]
     condition_entry = entries[2]
     assert isinstance(condition_entry, ZarrEntry)
-    assert condition_entry.path == one_param_arrays.parameters_zarr[0]
+    assert condition_entry.path == parameters_zarr_paths(one_param_arrays)[0]
 
 
 def test_two_extras_map_by_index(
@@ -135,8 +139,8 @@ def test_two_extras_map_by_index(
     assert [e.name for e in entries] == ["x", "matrix", "condition", "query"]
     assert isinstance(entries[2], ZarrEntry)
     assert isinstance(entries[3], ZarrEntry)
-    assert entries[2].path == two_param_arrays.parameters_zarr[0]
-    assert entries[3].path == two_param_arrays.parameters_zarr[1]
+    assert entries[2].path == parameters_zarr_paths(two_param_arrays)[0]
+    assert entries[3].path == parameters_zarr_paths(two_param_arrays)[1]
 
 
 def test_too_many_extras_raises(
@@ -163,8 +167,8 @@ def test_declaration_order_is_preserved(
     )
     assert isinstance(entries_ab[2], ZarrEntry)
     assert isinstance(entries_ba[2], ZarrEntry)
-    assert entries_ab[2].path == two_param_arrays.parameters_zarr[0]
-    assert entries_ba[2].path == two_param_arrays.parameters_zarr[0]
+    assert entries_ab[2].path == parameters_zarr_paths(two_param_arrays)[0]
+    assert entries_ba[2].path == parameters_zarr_paths(two_param_arrays)[0]
     assert entries_ab[2].name == "alpha"
     assert entries_ba[2].name == "beta"
 

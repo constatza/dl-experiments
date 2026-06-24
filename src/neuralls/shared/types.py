@@ -19,6 +19,18 @@ EntryRole = Literal["feature", "target"]
 """Runtime dataset entry roles understood by neuralls bridge code."""
 
 
+class LayoutType(StrEnum):
+    """Physical matrix layout in a generated dataset.
+
+    Attributes:
+        MANY_MATRICES: Each logical sample has its own physical matrix row.
+        BROADCAST_SINGLE: One physical matrix row shared across all logical samples.
+    """
+
+    MANY_MATRICES = "many_matrices"
+    BROADCAST_SINGLE = "broadcast_single"
+
+
 class MatrixNormType(StrEnum):
     """Matrix norm types for dataset metadata.
 

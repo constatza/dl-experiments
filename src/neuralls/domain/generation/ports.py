@@ -52,10 +52,21 @@ class SparseAccumulatorPort(Protocol):
     def build_arrays(self) -> tuple[NDArray, NDArray, NDArray, tuple[int, int]]: ...
 
 
-class DatasetAccumulatorPort(Protocol):
-    """Streaming matrix accumulator port for dataset generation."""
+class DenseAccumulatorPort(Protocol):
+    """Streaming dense-matrix accumulator port."""
 
     def append_dense_matrix(self, matrix: NDArray, repeats: int) -> None: ...
+
+    def finalize(self) -> Path:
+        """Close the writer and return the on-disk pack directory path."""
+        ...
+
+    @property
+    def matrix_size(self) -> tuple[int, int] | None: ...
+
+
+class DatasetAccumulatorPort(DenseAccumulatorPort, Protocol):
+    """Full accumulator port including sparse ingestion."""
 
     def append_sparse_components(
         self,
@@ -65,10 +76,3 @@ class DatasetAccumulatorPort(Protocol):
         size: tuple[int, int],
         repeats: int,
     ) -> None: ...
-
-    def finalize(self) -> Path:
-        """Close the writer and return the on-disk pack directory path."""
-        ...
-
-    @property
-    def matrix_size(self) -> tuple[int, int] | None: ...

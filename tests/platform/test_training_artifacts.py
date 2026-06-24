@@ -11,13 +11,10 @@ from neuralls.platform.storage.training_artifacts import (
     ZarrArraySource,
     load_array_source_sample,
     load_training_arrays,
+    parameters_zarr_paths,
 )
-from neuralls.platform.storage.manifest import (
-    DatasetArtifact,
-    DatasetNormalization,
-    make_dataset_manifest,
-    save_dataset_manifest,
-)
+from neuralls.platform.storage.manifest import DatasetArtifact, DatasetNormalization
+from neuralls.platform.storage.manifest_io import make_dataset_manifest, save_dataset_manifest
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
 
 
@@ -114,8 +111,8 @@ def test_load_training_arrays_detects_parameters_zarr(two_parameters_zarrs: Path
 
     assert len(arrays.parameter_sources) == 2
     assert isinstance(arrays.parameter_sources[0], ZarrArraySource)
-    assert arrays.parameters_zarr[0].stem == f"{PARAMETERS_ZARR_PREFIX}0"
-    assert arrays.parameters_zarr[1].stem == f"{PARAMETERS_ZARR_PREFIX}1"
+    assert parameters_zarr_paths(arrays)[0].stem == f"{PARAMETERS_ZARR_PREFIX}0"
+    assert parameters_zarr_paths(arrays)[1].stem == f"{PARAMETERS_ZARR_PREFIX}1"
 
 
 def test_load_training_arrays_returns_empty_parameters_when_absent(
@@ -128,7 +125,7 @@ def test_load_training_arrays_returns_empty_parameters_when_absent(
 def test_load_training_arrays_parameters_sorted_by_index(two_parameters_zarrs: Path) -> None:
     """parameters_zarr must be ordered by index regardless of filesystem traversal order."""
     arrays = load_training_arrays(two_parameters_zarrs)
-    stems = [p.stem for p in arrays.parameters_zarr]
+    stems = [p.stem for p in parameters_zarr_paths(arrays)]
     assert stems == sorted(stems)
 
 

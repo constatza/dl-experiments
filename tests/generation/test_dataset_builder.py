@@ -7,12 +7,8 @@ from pathlib import Path
 import pytest
 
 from neuralls.composition.generation.dataset_builder import _guard_format_conflict
-from neuralls.platform.storage.manifest import (
-    DatasetArtifact,
-    DatasetNormalization,
-    make_dataset_manifest,
-    save_dataset_manifest,
-)
+from neuralls.platform.storage.manifest import DatasetArtifact, DatasetNormalization
+from neuralls.platform.storage.manifest_io import make_dataset_manifest, save_dataset_manifest
 
 
 def _artifact(fmt: str) -> DatasetArtifact:
