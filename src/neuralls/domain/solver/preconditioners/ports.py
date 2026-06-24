@@ -78,24 +78,41 @@ class PredictorPort(ABC):
 
 
 class ExtraInputPredictorPort(PredictorPort):
-    """Marker for predictors that actively use named extra inputs.
+    """Port for predictors that actively use named extra inputs.
 
     Inherit from this (instead of PredictorPort directly) when the model
     needs more than the residual — e.g., stiffness matrix, node coordinates,
-    PDE parameters.  The apply() signature is inherited from PredictorPort
-    (which already accepts **extra_inputs), so no re-declaration is needed.
+    PDE parameters.
 
-    The marker enables isinstance checks that distinguish capable predictors
-    from minimal ones, without introducing a duplicate abstract method.
+    Implementors must declare ``required_inputs``, which names the extra arrays
+    the model expects. This eliminates the need to re-declare input names in the
+    comparison TOML: the model config is the single source of truth.
 
     Example:
         >>> class MyPredictor(ExtraInputPredictorPort):
+        ...     @property
+        ...     def required_inputs(self) -> tuple[str, ...]:
+        ...         return ("matrix", "positions")
+        ...
         ...     def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
-        ...         matrix = extra_inputs.get("matrix")
-        ...         return self._model(residual, matrix)
+        ...         return self._model(residual, extra_inputs["matrix"])
         ...
         ...     def cleanup(self) -> None: ...
     """
+
+    @property
+    @abstractmethod
+    def required_inputs(self) -> tuple[str, ...]:
+        """Names of extra arrays this model expects beyond the residual.
+
+        Derived from the model config; eliminates need to re-declare in comparison TOML.
+        The composition layer calls ``bind_inputs(**{k: v for k, v in system_data.items()
+        if k in required_inputs})`` before the CG loop.
+
+        Returns:
+            Tuple of string keys expected in ``**extra_inputs`` on ``apply()``.
+        """
+        ...
 
 
 class PredictorAdapter(ABC):

@@ -57,6 +57,15 @@ class MockPredictor(ExtraInputPredictorPort):
         self.cleaned_up = False
         self.apply_count = 0
 
+    @property
+    def required_inputs(self) -> tuple[str, ...]:
+        """Return empty tuple — this mock needs no extra inputs.
+
+        Returns:
+            Empty tuple of required input names.
+        """
+        return ()
+
     def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Mock apply: returns half of input.
 

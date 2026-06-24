@@ -17,6 +17,15 @@ class _RecordingPredictor(ExtraInputPredictorPort):
         """Initialize with empty call record."""
         self.calls: list[dict] = []
 
+    @property
+    def required_inputs(self) -> tuple[str, ...]:
+        """Return empty tuple — this recording predictor accepts any inputs.
+
+        Returns:
+            Empty tuple of required input names.
+        """
+        return ()
+
     def apply(self, residual: np.ndarray, **extra_inputs: np.ndarray) -> np.ndarray:
         """Record call details and return a copy of the residual.
 

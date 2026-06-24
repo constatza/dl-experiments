@@ -8,7 +8,7 @@ The composition package owns wiring and config-driven assembly.
 - `comparison/`: single-run comparison assembly around application/domain logic
 - `generation/`: config-driven dataset orchestration, dataset persistence wiring, and default tracing services
 - `inference/`: inference data-loading composition helpers
-- `preconditioners/`: config-to-preconditioner factory wiring
+- `preconditioners/`: config-to-preconditioner factory wiring (Identity, Jacobi, ILU, IC0, ICholesky, AMG, NeuralAMG, Neural)
 - `tracking/`: tracking tag and run-spec assembly
 
 ## Semantic Difference

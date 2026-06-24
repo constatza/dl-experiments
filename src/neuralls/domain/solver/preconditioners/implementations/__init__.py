@@ -12,11 +12,12 @@ Note: Adapter classes (CallablePreconditioner, LinearOperatorPreconditioner)
 are in the parent module as they wrap external interfaces.
 """
 
-from .identity import Identity
-from .jacobi import JacobiPreconditioner
-from .ilu import ILUPreconditioner
+from .amg import AMGPreconditioner
 from .ic0 import IC0Preconditioner
 from .icholesky import ICholeskyPreconditioner
+from .identity import Identity
+from .ilu import ILUPreconditioner
+from .jacobi import JacobiPreconditioner
 from .scheduled import ScheduledPreconditioner
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "ILUPreconditioner",
     "IC0Preconditioner",
     "ICholeskyPreconditioner",
+    "AMGPreconditioner",
     "ScheduledPreconditioner",
 ]

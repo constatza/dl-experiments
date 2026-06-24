@@ -36,6 +36,15 @@ if TYPE_CHECKING:
 class MockPredictor(ExtraInputPredictorPort):
     """Lightweight mock predictor for testing."""
 
+    @property
+    def required_inputs(self) -> tuple[str, ...]:
+        """Return empty tuple — this mock needs no extra inputs.
+
+        Returns:
+            Empty tuple of required input names.
+        """
+        return ()
+
     def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Mock apply: returns input unchanged.
 

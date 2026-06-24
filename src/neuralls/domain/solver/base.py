@@ -452,11 +452,10 @@ class IterativeSolverBase[S: SolverState](ABC):
         Can handle:
         - Linear preconditioners (M^{-1}r)
         - Non-linear preconditioners (neural networks)
-        - Contextual preconditioners (iteration-dependent strategies)
+        - Iteration-dependent strategies
 
-        Dispatches based on preconditioner type:
-        - ContextualPreconditioner: pass PreconditionerContext
-        - All other Preconditioners: residual only
+        Always passes PreconditionerContext so all preconditioners receive the
+        same uniform call: apply(residual, context).
 
         Args:
             preconditioner: Preconditioner operator (linear or non-linear)
@@ -469,22 +468,14 @@ class IterativeSolverBase[S: SolverState](ABC):
         Raises:
             ValueError: If preconditioner output shape doesn't match input
         """
-        from neuralls.domain.solver.preconditioners import (
-            ContextualPreconditioner,
-            PreconditionerContext,
-        )
+        from neuralls.domain.solver.preconditioners import PreconditionerContext
 
-        # Check if preconditioner needs context
-        if isinstance(preconditioner, ContextualPreconditioner):
-            context = PreconditionerContext(
-                iteration=state.iteration,
-                residual_norm=state.residual_norm,
-                rhs_norm=state.rhs_norm,
-            )
-            z = preconditioner.apply(residual, context)
-        else:
-            # Standard preconditioner (stateless)
-            z = preconditioner.apply(residual)
+        context = PreconditionerContext(
+            iteration=state.iteration,
+            residual_norm=state.residual_norm,
+            rhs_norm=state.rhs_norm,
+        )
+        z = preconditioner.apply(residual, context)
 
         # Validate shape/dtype
         if z.shape != residual.shape:

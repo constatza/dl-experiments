@@ -27,7 +27,7 @@ dependencies = [
 neuralls = "neuralls.cli.main:app"
 
 [build-system]
-requires = ["uv_build>=0.11.16,<0.12.0"]
+requires = ["uv_build>=0.10", "uv_build<0.15"]
 build-backend = "uv_build"
 
 [tool.ruff]
@@ -43,7 +43,7 @@ docstring-code-format = true
 [tool.ruff.lint]
 extend-select = [
     "UP", # pyupgrade
-    "D", # pydocstyle
+    "D",  # pydocstyle
 ]
 ignore = [
     "D100", # undocumented-public-module
@@ -102,12 +102,8 @@ error-on-warning = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = [
-    "tests",
-]
-addopts = [
-    "-m", "not benchmark",
-]
+testpaths = ["tests"]
+addopts = ["-m", "not benchmark"]
 markers = [
     "slow: tests that take >5 seconds (deselect with '-m \"not slow\"')",
     "benchmark: numerical algorithm benchmarks and exactness tests",

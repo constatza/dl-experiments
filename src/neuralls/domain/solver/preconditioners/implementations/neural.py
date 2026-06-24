@@ -73,8 +73,14 @@ class NeuralPreconditioner(NonLinearPreconditioner):
 
     @property
     def extra_input_names(self) -> tuple[str, ...]:
-        """Names of extra inputs this preconditioner expects beyond the residual."""
-        return self._extra_input_names
+        """Names of extra inputs this preconditioner expects beyond the residual.
+
+        When the config field is empty, falls back to the predictor's own declaration
+        so that comparison TOMLs do not need to duplicate what the model config states.
+        """
+        if self._extra_input_names:
+            return self._extra_input_names
+        return self._predictor.required_inputs
 
     def bind_inputs(self, **inputs: NDArray) -> None:
         """Store extra named inputs for forwarding on each apply() call.

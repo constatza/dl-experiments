@@ -21,6 +21,15 @@ class DummyPredictor(ExtraInputPredictorPort):
         """Initialize with cleanup flag."""
         self.cleaned_up = False
 
+    @property
+    def required_inputs(self) -> tuple[str, ...]:
+        """Return empty tuple — this stub needs no extra inputs.
+
+        Returns:
+            Empty tuple of required input names.
+        """
+        return ()
+
     def apply(self, residual: np.ndarray, **extra_inputs: np.ndarray) -> np.ndarray:
         """Scale residual by 0.5 and ignore extra inputs.
 

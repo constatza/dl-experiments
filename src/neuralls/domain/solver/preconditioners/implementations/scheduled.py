@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from numpy.typing import NDArray
 
-from ..base import BindableInputs, ContextualPreconditioner, Preconditioner, PreconditionerContext
+from ..base import BindableInputs, NonLinearPreconditioner, Preconditioner, PreconditionerContext
 
 
-class ScheduledPreconditioner(ContextualPreconditioner, BindableInputs):
+class ScheduledPreconditioner(NonLinearPreconditioner, BindableInputs):
     """Preconditioner that switches to fallback after iteration limit.
 
     Use primary preconditioner for first N iterations, then switch to fallback.

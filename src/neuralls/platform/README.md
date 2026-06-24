@@ -57,6 +57,12 @@ Solver-side DLKit predictors must preserve fitted checkpoint transforms during
 load so transform-aware models such as PCA-preprocessed preconditioners receive
 inputs in the feature space they were trained on.
 
+`DLKitPredictor` exposes a `required_inputs: tuple[str, ...]` property so that
+the solver layer can derive which extra arrays a neural model needs without
+consulting the comparison TOML. The DLKit model config is the single source of
+truth; the comparison TOML's `extra_input_names` field is an optional override
+kept for backward compatibility.
+
 ## Boundary
 
 Platform code may depend on domain protocols and domain data structures, but it

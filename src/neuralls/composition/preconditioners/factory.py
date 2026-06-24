@@ -92,9 +92,73 @@ def create_preconditioner(
         ValueError: If preconditioner type is not supported
     """
     from neuralls.platform.config.models.preconditioner import (
+        AMGPreconditionerConfig,
         IC0PreconditionerConfig,
+        NeuralAMGPreconditionerConfig,
         NeuralPreconditionerConfig,
     )
+
+    # AMG (classical smoothed aggregation)
+    if config.type == PreconditionerType.AMG:
+        if not isinstance(config, AMGPreconditionerConfig):
+            raise TypeError(f"AMG type requires AMGPreconditionerConfig, got {type(config)}")
+        from neuralls.domain.solver.preconditioners.implementations.amg import (
+            AMGPreconditioner,
+            JacobiSmoother,
+            SparseAggregationCoarsening,
+            VCycle,
+        )
+
+        smoother = JacobiSmoother(omega=config.smoother_omega)
+        coarsening = SparseAggregationCoarsening(omega=config.aggregation_omega)
+        cycle = VCycle(
+            smoother=smoother,
+            n_pre=config.pre_smoothing_steps,
+            n_post=config.post_smoothing_steps,
+        )
+        return AMGPreconditioner(
+            matrix, coarsening=coarsening, cycle=cycle, n_levels=config.n_levels, linear=True
+        )
+
+    # Neural AMG (neural prolongation/restriction, stub)
+    if config.type == PreconditionerType.NEURAL_AMG:
+        if not isinstance(config, NeuralAMGPreconditionerConfig):
+            raise TypeError(
+                f"NEURAL_AMG type requires NeuralAMGPreconditionerConfig, got {type(config)}"
+            )
+        if adapter is None:
+            from neuralls.platform.dlkit.predictor_adapter import DLKitAdapter
+
+            adapter = DLKitAdapter()
+        p_cfg = config.prolongation
+        ckpt_p = p_cfg.resolved_checkpoint_path or p_cfg.checkpoint_path
+        if ckpt_p is None:
+            raise ValueError("NeuralAMGPreconditionerConfig.prolongation requires a checkpoint")
+        prolongator = adapter.create_predictor(ckpt_p, p_cfg.config_path, p_cfg.data_config_path)
+        restrictor = None
+        if config.restriction is not None:
+            r_cfg = config.restriction
+            ckpt_r = r_cfg.resolved_checkpoint_path or r_cfg.checkpoint_path
+            if ckpt_r is None:
+                raise ValueError("NeuralAMGPreconditionerConfig.restriction requires a checkpoint")
+            restrictor = adapter.create_predictor(ckpt_r, r_cfg.config_path, r_cfg.data_config_path)
+        from neuralls.domain.solver.preconditioners.implementations.amg import (
+            AMGPreconditioner,
+            JacobiSmoother,
+            NeuralCoarseningStrategy,
+            VCycle,
+        )
+
+        coarsening = NeuralCoarseningStrategy(prolongator=prolongator, restrictor=restrictor)
+        smoother = JacobiSmoother(omega=config.smoother_omega)
+        cycle = VCycle(
+            smoother=smoother,
+            n_pre=config.pre_smoothing_steps,
+            n_post=config.post_smoothing_steps,
+        )
+        return AMGPreconditioner(
+            matrix, coarsening=coarsening, cycle=cycle, n_levels=config.n_levels, linear=False
+        )
 
     # Check if type is NEURAL but config is not NeuralPreconditionerConfig
     if config.type == PreconditionerType.NEURAL:

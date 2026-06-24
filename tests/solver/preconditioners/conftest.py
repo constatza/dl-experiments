@@ -110,6 +110,15 @@ class _CapturingPredictor(ExtraInputPredictorPort):
         """Initialize with empty extra inputs record."""
         self.last_extra: dict[str, NDArray] = {}
 
+    @property
+    def required_inputs(self) -> tuple[str, ...]:
+        """Return empty tuple — capturing predictor accepts any inputs.
+
+        Returns:
+            Empty tuple of required input names.
+        """
+        return ()
+
     def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Record extra inputs and return a copy of the residual.
 

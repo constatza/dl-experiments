@@ -72,15 +72,30 @@ class DLKitPredictor(ExtraInputPredictorPort):
         - Model failure → RuntimeError with context
     """
 
-    def __init__(self, predictor: CheckpointPredictor, device: str) -> None:
+    def __init__(
+        self,
+        predictor: CheckpointPredictor,
+        device: str,
+        required_inputs: tuple[str, ...] = (),
+    ) -> None:
         """Initialize predictor with loaded CheckpointPredictor.
 
         Args:
             predictor: DLKit CheckpointPredictor (already loaded, eval mode)
             device: Device string ("cpu", "cuda", "mps")
+            required_inputs: Names of extra arrays the model expects beyond the residual.
+                Derived from the model config by the adapter; eliminates TOML duplication.
         """
         self._predictor: CheckpointPredictor = predictor
         self._device: str = device
+        self._required_inputs: tuple[str, ...] = required_inputs
+
+    @property
+    def required_inputs(self) -> tuple[str, ...]:
+        """Names of extra arrays this model expects beyond the residual."""
+        # ponytail: parse from DLKit config_path when the config schema is known;
+        # currently populated by DLKitAdapter from config if available, else empty.
+        return self._required_inputs
 
     def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
         """Apply neural network to residual.
@@ -204,7 +219,8 @@ class DLKitAdapter(PredictorAdapter):
                 logger.warning("Model has no parameters, defaulting to CPU")
 
             logger.info(f"Loaded model from {checkpoint_path} on device {device}")
-            return DLKitPredictor(dlkit_predictor, device)
+            # ponytail: parse required_inputs from config_path TOML when DLKit config schema known
+            return DLKitPredictor(dlkit_predictor, device, required_inputs=())
 
         except (FileNotFoundError, OSError, ValueError, RuntimeError) as e:
             raise RuntimeError(

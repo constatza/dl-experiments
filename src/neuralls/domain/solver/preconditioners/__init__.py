@@ -2,7 +2,7 @@
 
 This package provides the algorithm layer for preconditioning:
 - Base abstractions (Preconditioner, LinearPreconditioner, etc.)
-- Concrete implementations (Identity, Jacobi, ILU, Neural, etc.)
+- Concrete implementations (Identity, Jacobi, ILU, AMG, Neural, etc.)
 - Framework adapters for neural preconditioners
 
 This package has no dependency on platform config parsing. The TOML-driven
@@ -13,22 +13,22 @@ Public API:
     Base classes:
         - Preconditioner: Abstract base for all preconditioners
         - LinearPreconditioner: Base for matrix-based preconditioners
-        - NonLinearPreconditioner: Base for non-linear preconditioners
-        - ContextualPreconditioner: Base for iteration-dependent preconditioners
-        - PreconditionerContext: Dataclass with iteration state
+        - NonLinearPreconditioner: Base for non-linear / iteration-varying preconditioners
+        - PreconditionerContext: Dataclass with iteration state (always passed by CG solver)
 
     Implementations:
         - Identity: No preconditioning (z = r)
         - JacobiPreconditioner: Diagonal scaling (z = D^{-1}r)
         - ILUPreconditioner: Incomplete LU factorization
         - ICholeskyPreconditioner: Incomplete Cholesky factorization
+        - AMGPreconditioner: Algebraic Multigrid (smoothed aggregation or neural P/R)
         - CallablePreconditioner: Wrap arbitrary function
         - ScheduledPreconditioner: Switch preconditioners based on iteration
         - LinearOperatorPreconditioner: Wrap SciPy LinearOperator
 
     Adapters (for advanced usage):
         - PredictorPort: Minimal framework-agnostic interface (residual only)
-        - ExtraInputPredictorPort: Extended port for models needing named extra inputs
+        - ExtraInputPredictorPort: Port for models needing named extra inputs
         - PredictorAdapter: Framework adapter protocol
 
 Example:
@@ -43,24 +43,24 @@ Example:
 """
 
 from .base import (
-    Preconditioner,
-    PreconditionerContext,
+    BindableInputs,
     LinearPreconditioner,
     NonLinearPreconditioner,
-    ContextualPreconditioner,
-    BindableInputs,
-)
-from .implementations import (
-    Identity,
-    JacobiPreconditioner,
-    ILUPreconditioner,
-    IC0Preconditioner,
-    ICholeskyPreconditioner,
-    ScheduledPreconditioner,
+    Preconditioner,
+    PreconditionerContext,
 )
 from .callable import CallablePreconditioner
+from .implementations import (
+    IC0Preconditioner,
+    ICholeskyPreconditioner,
+    Identity,
+    ILUPreconditioner,
+    JacobiPreconditioner,
+    ScheduledPreconditioner,
+)
+from .implementations.amg import AMGPreconditioner
 from .linear_operator import LinearOperatorPreconditioner
-from .ports import PredictorPort, ExtraInputPredictorPort, PredictorAdapter
+from .ports import ExtraInputPredictorPort, PredictorAdapter, PredictorPort
 
 __all__ = [
     # Base classes
@@ -68,7 +68,6 @@ __all__ = [
     "PreconditionerContext",
     "LinearPreconditioner",
     "NonLinearPreconditioner",
-    "ContextualPreconditioner",
     "BindableInputs",
     # Implementations
     "Identity",
@@ -76,6 +75,7 @@ __all__ = [
     "ILUPreconditioner",
     "IC0Preconditioner",
     "ICholeskyPreconditioner",
+    "AMGPreconditioner",
     "CallablePreconditioner",
     "ScheduledPreconditioner",
     "LinearOperatorPreconditioner",

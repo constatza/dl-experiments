@@ -46,7 +46,7 @@ history setting.
 
 - `factories.py`: recommended public entry points
 - `conjugate_gradient.py`: unified CG solver classes
-- `preconditioners/`: classical, neural, and scheduled preconditioners
+- `preconditioners/`: classical (Jacobi, ILU, IC0, ICholesky), AMG, neural, and scheduled preconditioners
 - `strategies/`: direction, convergence, norms, orthogonalization
 - `monitoring/`: iteration history, events, callback adapters
 - `models/`: typed config, state, history, and result objects
@@ -85,3 +85,25 @@ re-exported from the aggregate preconditioner package to keep the solver layer
 from depending on platform exports. That adapter speaks directly to the current
 DLKit inference runtime under `dlkit.engine.inference`, so solver code remains
 isolated from DLKit's infrastructure and configuration packages.
+
+## Preconditioner Context
+
+All preconditioners receive a `PreconditionerContext` (iteration, residual norm,
+RHS norm) on every `apply()` call. There is no `isinstance` dispatch — the
+context is always provided. `ContextualPreconditioner` was removed; use
+`NonLinearPreconditioner` for preconditioners that change per iteration.
+
+## AMG Preconditioner
+
+`AMGPreconditioner` lives under
+`neuralls.domain.solver.preconditioners.implementations.amg` and implements
+`Preconditioner` directly (lazy hierarchy build). The extension points are:
+
+- `CoarseningStrategy`: implement to add Ruge-Stüben or neural P/R coarsening
+- `MultigridCycle`: implement to add W or F cycles
+- `MultigridSmoother`: implement to add Gauss-Seidel or other smoothers
+
+`extra_input_names` on `ExtraInputPredictorPort` is the single source of truth
+for which arrays a neural predictor needs. `NeuralPreconditionerConfig` still
+accepts an override in the comparison TOML for backward compatibility, but new
+configs should omit it and let the model config declare its own inputs.

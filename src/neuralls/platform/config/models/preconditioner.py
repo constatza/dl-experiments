@@ -32,6 +32,8 @@ class PreconditionerType(StrEnum):
     IC0 = "ic0"
     ICHOLESKY = "icholesky"
     NEURAL = "neural"
+    AMG = "amg"
+    NEURAL_AMG = "neural_amg"
 
 
 def _normalize_null(data: dict) -> Any:
@@ -246,8 +248,78 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
         return v
 
 
+class AMGPreconditionerConfig(BasePreconditionerConfig):
+    """Classical AMG preconditioner configuration (smoothed aggregation)."""
+
+    type: Literal[PreconditionerType.AMG] = PreconditionerType.AMG
+    n_levels: int = Field(default=2, ge=2, description="Total number of grid levels.")
+    pre_smoothing_steps: int = Field(default=2, ge=0, description="Pre-smoothing iterations.")
+    post_smoothing_steps: int = Field(default=2, ge=0, description="Post-smoothing iterations.")
+    smoother_omega: float = Field(default=0.67, gt=0.0, description="Weighted Jacobi damping.")
+    aggregation_omega: float = Field(
+        default=0.67, gt=0.0, description="Prolongation Jacobi-smoothing damping."
+    )
+
+
+class NeuralTransferConfig(BaseModel):
+    """Config for one neural transfer operator (prolongation or restriction).
+
+    Required inputs (the extra arrays the network expects beyond its vector input)
+    are NOT declared here — they are read at runtime from
+    ``ExtraInputPredictorPort.required_inputs``, which is populated by the adapter
+    from the model config.  This eliminates duplication with the DLKit TOML.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+    checkpoint_path: Path | None = None
+    model_ref: ModelRefConfig | None = None
+    config_path: Path | None = None
+    data_config_path: Path | None = None
+    resolved_checkpoint_path: Path | None = None
+
+    @field_validator("checkpoint_path", "config_path", "data_config_path", mode="before")
+    @classmethod
+    def _expand_paths(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ``${NEURALLS_*}`` placeholders in path fields.
+
+        Args:
+            v: Raw field value.
+            info: Pydantic validation context.
+
+        Returns:
+            Resolved path string, or original value if not a string.
+        """
+        if v is None or info.context is None or not isinstance(v, str):
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
+
+class NeuralAMGPreconditionerConfig(BasePreconditionerConfig):
+    """AMG preconditioner that uses neural networks for prolongation/restriction.
+
+    The ``extra_input_names`` required by each network are NOT declared here —
+    they are read at runtime from ``ExtraInputPredictorPort.required_inputs`` so
+    that the DLKit model config remains the single source of truth.
+    """
+
+    type: Literal[PreconditionerType.NEURAL_AMG] = PreconditionerType.NEURAL_AMG
+    n_levels: int = Field(default=2, ge=2, description="Total number of grid levels.")
+    pre_smoothing_steps: int = Field(default=2, ge=0)
+    post_smoothing_steps: int = Field(default=2, ge=0)
+    smoother_omega: float = Field(default=0.67, gt=0.0)
+    aggregation_omega: float = Field(default=0.67, gt=0.0)
+    prolongation: NeuralTransferConfig
+    restriction: NeuralTransferConfig | None = None
+
+
 ConcretePreconditionerConfig = (
-    StandardPreconditionerConfig | IC0PreconditionerConfig | NeuralPreconditionerConfig
+    StandardPreconditionerConfig
+    | IC0PreconditionerConfig
+    | NeuralPreconditionerConfig
+    | AMGPreconditionerConfig
+    | NeuralAMGPreconditionerConfig
 )
 
 _StrictPreconditionerConfig = Annotated[
