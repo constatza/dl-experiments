@@ -543,3 +543,219 @@ class TestNeuralPreconditionerFallback:
             extra_input_names=(),
         )
         assert precond.extra_input_names == ("matrix", "positions")
+
+
+# ---------------------------------------------------------------------------
+# SmootherBase hierarchy
+# ---------------------------------------------------------------------------
+
+
+class TestSmootherBase:
+    def test_jacobi_smoother_is_smoother_base(self) -> None:
+        """JacobiSmoother must be a SmootherBase instance (nominative hierarchy)."""
+        from neuralls.domain.solver.preconditioners.implementations.amg import (
+            JacobiSmoother,
+            SmootherBase,
+        )
+
+        assert isinstance(JacobiSmoother(), SmootherBase)
+
+    def test_jacobi_smoother_satisfies_multigrid_smoother_protocol(
+        self, small_spd: NDArray
+    ) -> None:
+        """JacobiSmoother must satisfy the MultigridSmoother protocol (structural typing)."""
+        from neuralls.domain.solver.preconditioners.implementations.amg import JacobiSmoother
+
+        smoother = JacobiSmoother()
+        rhs = np.ones(6)
+        x0 = np.zeros(6)
+        result = smoother.smooth(small_spd, rhs, x0, steps=1)
+        assert result.shape == x0.shape
+
+
+# ---------------------------------------------------------------------------
+# WCycle
+# ---------------------------------------------------------------------------
+
+
+class TestWCycle:
+    def test_output_shape(self, poisson_1d: NDArray, poisson_rhs: NDArray) -> None:
+        """W-cycle output must match rhs shape."""
+        from neuralls.domain.solver.preconditioners.implementations.amg import (
+            AMGPreconditioner,
+            JacobiSmoother,
+            SparseAggregationCoarsening,
+            WCycle,
+        )
+
+        precond = AMGPreconditioner(
+            poisson_1d,
+            coarsening=SparseAggregationCoarsening(),
+            cycle=WCycle(smoother=JacobiSmoother()),
+            n_levels=2,
+        )
+        z = precond.apply(poisson_rhs)
+        assert z.shape == poisson_rhs.shape
+
+    def test_output_dtype_float64(self, poisson_1d: NDArray, poisson_rhs: NDArray) -> None:
+        """W-cycle output must be float64."""
+        from neuralls.domain.solver.preconditioners.implementations.amg import (
+            AMGPreconditioner,
+            JacobiSmoother,
+            SparseAggregationCoarsening,
+            WCycle,
+        )
+
+        precond = AMGPreconditioner(
+            poisson_1d,
+            coarsening=SparseAggregationCoarsening(),
+            cycle=WCycle(smoother=JacobiSmoother()),
+            n_levels=2,
+        )
+        z = precond.apply(poisson_rhs)
+        assert z.dtype == np.float64
+
+    def test_wcycle_residual_not_larger_than_vcycle(
+        self, poisson_1d: NDArray, poisson_rhs: NDArray
+    ) -> None:
+        """W-cycle must not produce a larger residual than V-cycle on the same rhs.
+
+        Theory: W-cycle does strictly more coarse-grid work (γ=2 vs γ=1), so its
+        residual after one cycle should be ≤ that of V-cycle for SPD problems
+        (Briggs et al. 2000, §3.3).
+        """
+        from neuralls.domain.solver.preconditioners.implementations.amg import (
+            AMGPreconditioner,
+            JacobiSmoother,
+            SparseAggregationCoarsening,
+            VCycle,
+            WCycle,
+        )
+
+        smoother = JacobiSmoother()
+        coarsening = SparseAggregationCoarsening()
+
+        v_precond = AMGPreconditioner(
+            poisson_1d, coarsening=coarsening, cycle=VCycle(smoother), n_levels=2
+        )
+        w_precond = AMGPreconditioner(
+            poisson_1d, coarsening=coarsening, cycle=WCycle(smoother), n_levels=2
+        )
+
+        e_v = v_precond.apply(poisson_rhs)
+        e_w = w_precond.apply(poisson_rhs)
+
+        res_v = np.linalg.norm(poisson_rhs - poisson_1d @ e_v)
+        res_w = np.linalg.norm(poisson_rhs - poisson_1d @ e_w)
+        assert res_w <= res_v + 1e-10  # W-cycle never worse than V-cycle
+
+
+# ---------------------------------------------------------------------------
+# Preset classes: VCycleAMG and WCycleAMG
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(
+    params=[
+        pytest.param("VCycleAMG", id="VCycleAMG"),
+        pytest.param("WCycleAMG", id="WCycleAMG"),
+    ]
+)
+def amg_preset_class(request: pytest.FixtureRequest):
+    """Parametrize tests over both preset AMG variant classes.
+
+    Args:
+        request: Pytest fixture request carrying the class name.
+
+    Returns:
+        The preset AMG class (VCycleAMG or WCycleAMG).
+    """
+    import neuralls.domain.solver.preconditioners.implementations.amg as amg_pkg
+
+    return getattr(amg_pkg, request.param)
+
+
+class TestAMGPresets:
+    def test_apply_returns_correct_shape(
+        self, amg_preset_class, poisson_1d: NDArray, poisson_rhs: NDArray
+    ) -> None:
+        """apply() output must match residual shape for both preset classes."""
+        precond = amg_preset_class(poisson_1d, n_levels=2)
+        z = precond.apply(poisson_rhs)
+        assert z.shape == poisson_rhs.shape
+
+    def test_apply_returns_float64(
+        self, amg_preset_class, poisson_1d: NDArray, poisson_rhs: NDArray
+    ) -> None:
+        """apply() must return float64 for both preset classes."""
+        precond = amg_preset_class(poisson_1d, n_levels=2)
+        assert precond.apply(poisson_rhs).dtype == np.float64
+
+    def test_fcg_converges(
+        self, amg_preset_class, poisson_1d: NDArray, poisson_rhs: NDArray
+    ) -> None:
+        """FCG preconditioned with either preset must converge on 1D Poisson."""
+        from neuralls.domain.solver.factories import flexible_cg
+
+        precond = amg_preset_class(poisson_1d, n_levels=2)
+        x, info = flexible_cg(poisson_1d, poisson_rhs, preconditioner=precond, rtol=1e-8)
+        assert info.converged, f"{amg_preset_class.__name__}+FCG did not converge: {info}"
+        np.testing.assert_allclose(poisson_1d @ x, poisson_rhs, rtol=1e-6)
+
+    def test_spd_preservation(self, amg_preset_class, poisson_1d: NDArray) -> None:
+        """Preset AMG preconditioner must be SPD when applied to an SPD matrix.
+
+        Theory: V/W-cycle with symmetric Jacobi smoother (equal pre/post steps)
+        and Galerkin coarsening produces an SPD preconditioner M when A is SPD
+        (Vanek, Mandel & Brezina 1996, Theorem 4.1).
+
+        Verification: assemble M by applying the preconditioner to each canonical
+        basis vector, then check symmetry and positive-definiteness via eigenvalues.
+        """
+        n = poisson_1d.shape[0]
+        precond = amg_preset_class(poisson_1d, n_levels=2)
+        M = np.column_stack([precond.apply(np.eye(n)[:, i]) for i in range(n)])
+
+        # Symmetry
+        np.testing.assert_allclose(
+            M, M.T, atol=1e-12, err_msg="Preconditioner matrix is not symmetric"
+        )
+
+        # Positive definiteness
+        eigenvalues = np.linalg.eigvalsh(M)
+        assert np.all(eigenvalues > 0), (
+            f"Non-positive eigenvalue(s): {eigenvalues[eigenvalues <= 0]}"
+        )
+
+    def test_requires_flexible_cg_false(self, amg_preset_class, poisson_1d: NDArray) -> None:
+        """Both presets are linear preconditioners and must not request FCG."""
+        precond = amg_preset_class(poisson_1d, n_levels=2)
+        assert precond.requires_flexible_cg is False
+
+    def test_wcycle_iters_not_worse_than_vcycle(
+        self, poisson_1d: NDArray, poisson_rhs: NDArray
+    ) -> None:
+        """WCycleAMG must need ≤ iterations than VCycleAMG on SPD Poisson.
+
+        Theory: W-cycle's extra coarse-grid correction never increases the
+        iteration count for SPD problems (Briggs et al. 2000, §3.3).
+        """
+        from neuralls.domain.solver.factories import flexible_cg
+        from neuralls.domain.solver.preconditioners.implementations.amg import (
+            VCycleAMG,
+            WCycleAMG,
+        )
+
+        _, info_v = flexible_cg(
+            poisson_1d,
+            poisson_rhs,
+            preconditioner=VCycleAMG(poisson_1d, n_levels=2),
+            rtol=1e-8,
+        )
+        _, info_w = flexible_cg(
+            poisson_1d,
+            poisson_rhs,
+            preconditioner=WCycleAMG(poisson_1d, n_levels=2),
+            rtol=1e-8,
+        )
+        assert info_w.iterations <= info_v.iterations

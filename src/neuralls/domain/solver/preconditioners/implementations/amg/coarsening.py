@@ -69,7 +69,21 @@ def _piecewise_constant_prolongation(aggregate: NDArray) -> csr_matrix:
 
 
 def _smooth_prolongation(A: csr_matrix, P: csr_matrix, omega: float) -> csr_matrix:
-    """Apply one Jacobi smoothing step to P: P ← P − ω D⁻¹ A P."""
+    """Apply one Jacobi smoothing step to the tentative prolongation P₀.
+
+    Computes P = (I − ω D⁻¹ A) P₀ (Vanek et al. 1996, Eq. 3.2). The damping
+    factor ω should equal 4 / (3 · ρ(D⁻¹A)). For isotropic SPD problems
+    ρ(D⁻¹A) ≈ 2, giving ω ≈ 2/3 ≈ 0.67 — the fixed default used here.
+    Anisotropic problems may need ω computed via power iteration on D⁻¹A.
+
+    Args:
+        A: Fine-grid matrix in CSR format.
+        P: Piecewise-constant tentative prolongation P₀ (n_fine × n_coarse).
+        omega: Jacobi damping factor ω. Default 0.67 assumes ρ(D⁻¹A) ≈ 2.
+
+    Returns:
+        Smoothed prolongation matrix P = (I − ω D⁻¹ A) P₀.
+    """
     diag = A.diagonal()
     diag_safe = np.where(np.abs(diag) > 1e-14, diag, 1.0)
     D_inv = diags(1.0 / diag_safe, format="csr")
@@ -77,18 +91,33 @@ def _smooth_prolongation(A: csr_matrix, P: csr_matrix, omega: float) -> csr_matr
 
 
 class SparseAggregationCoarsening:
-    """Smoothed aggregation AMG coarsening using scipy.sparse.
+    """Smoothed aggregation AMG coarsening using scipy.sparse (SA-AMG).
 
-    Algorithm:
-        1. Build strength-of-connection matrix
-        2. Greedy node aggregation
-        3. Piecewise-constant prolongation P₀
-        4. Jacobi-smooth P: P ← P₀ − ω D⁻¹ A P₀
-        5. Galerkin coarse matrix: A_c = P^T A P
+    Implements the five-step coarsening algorithm from Vanek, Mandel & Brezina
+    (1996):
+
+    1. Strength-of-connection: mark strong off-diagonal entries via
+       ``|a_ij| / sqrt(|a_ii| · |a_jj|) ≥ θ`` (Stüben 2001, §2.1).
+    2. Greedy aggregation: partition nodes into non-overlapping aggregates
+       using the strong-connection graph.
+    3. Tentative prolongation P₀: piecewise-constant indicator matrix
+       (aggregate membership).
+    4. Smoothed prolongation: P = (I − ω D⁻¹ A) P₀, ω ≈ 2/3 for isotropic
+       SPD (Vanek et al. 1996, Eq. 3.2).
+    5. Galerkin coarse matrix: Aᶜ = Pᵀ A P.
 
     Args:
-        theta: Strength-of-connection threshold (0 < theta < 1).
-        omega: Jacobi-smoothing damping for P (0 < omega < 1).
+        theta: Strength-of-connection threshold θ ∈ (0, 1). Default 0.25
+            follows Stüben (2001) §2.1.
+        omega: Jacobi-smoothing damping ω ∈ (0, 1) for the prolongation
+            smoother. Default 0.67 ≈ 2/3 assumes ρ(D⁻¹A) ≈ 2 (isotropic SPD).
+
+    References:
+        - Vanek, P., Mandel, J., & Brezina, M. (1996). Algebraic multigrid by
+          smoothed aggregation for second and fourth order elliptic problems.
+          *Computing*, 56(3), 179–196.
+        - Stuben, K. (2001). A review of algebraic multigrid.
+          *J. Comput. Appl. Math.*, 128(1–2), 281–309.
     """
 
     def __init__(self, theta: float = 0.25, omega: float = 0.67) -> None:
