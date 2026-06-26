@@ -43,6 +43,12 @@ translate those specs into concrete DLKit entries such as `NpyEntry` or
 `ZarrEntry`. Domain terms such as `solutions` remain valid on disk, but
 composition does not expose `solutions` as a runtime target alias.
 
+Additional runtime model inputs are opt-in and come from exactly one source:
+extra `[[DATASET.features]]` declarations in the model TOML. Composition
+preserves their declaration order and binds them positionally to persisted
+`parameters_0`, `parameters_1`, ... dataset artifacts. Model hyperparameters in
+`[MODEL]` are never treated as dataset inputs.
+
 This bridge is intentionally declarative at the config boundary. Model TOMLs
 remain the source of truth for runtime entry names, transforms, and supported
 entry-routing metadata, while composition only patches in the resolved on-disk

@@ -53,11 +53,6 @@ id           = "embedded-factorized"
 path         = "../../models/ffnn/embedded-factorized-optuna.toml"
 display_name = "Scale-Equivariant Embedded Factorized FFNN"
 
-[[models]]
-id           = "spectral-factorized"
-path         = "../../models/spectral/factorized-optuna.toml"
-display_name = "Scale-Equivariant Spectral Factorized FFNN"
-
 # ── Comparisons (one per training dataset, filtered to own experiments) ───────
 
 [[comparisons]]
@@ -66,7 +61,6 @@ matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_dataset    = "gaussian-cg10-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg10-45x15randomE",
-  "spectral-factorized-gaussian-cg10-45x15randomE",
 ]
 
 [[comparisons]]
@@ -75,7 +69,6 @@ matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_dataset    = "gaussian-cg100-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg100-45x15randomE",
-  "spectral-factorized-gaussian-cg100-45x15randomE",
 ]
 
 [[comparisons]]
@@ -84,7 +77,6 @@ matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_dataset    = "scaled-solutions-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg100-45x15randomE",
-  "spectral-factorized-gaussian-cg100-45x15randomE",
 ]
 
 [[comparisons]]
@@ -93,7 +85,6 @@ matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_dataset    = "sparse-rhs-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg100-45x15randomE",
-  "spectral-factorized-gaussian-cg100-45x15randomE",
 ]
 
 # ── Experiments (2 models × 2 datasets) ──────────────────────────────────────
@@ -103,13 +94,5 @@ dataset = "gaussian-cg10-45x15randomE"
 model   = "embedded-factorized"
 
 [[experiments]]
-dataset = "gaussian-cg10-45x15randomE"
-model   = "spectral-factorized"
-
-[[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
 model   = "embedded-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15randomE"
-model   = "spectral-factorized"

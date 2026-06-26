@@ -55,26 +55,6 @@ id           = "embedded-factorized"
 path         = "../../models/ffnn/embedded-factorized.toml"
 display_name = "Embedded Factorized"
 
-[[models]]
-id           = "spectral-siren"
-path         = "../../models/spectral/siren.toml"
-display_name = "Spectral SIREN"
-
-[[models]]
-id           = "spectral-fourier"
-path         = "../../models/spectral/fourier-feature-network.toml"
-display_name = "Spectral Fourier"
-
-[[models]]
-id           = "spectral-modified-mlp"
-path         = "../../models/spectral/modified-mlp.toml"
-display_name = "Spectral Modified MLP"
-
-[[models]]
-id           = "spectral-factorized"
-path         = "../../models/spectral/factorized.toml"
-display_name = "Spectral Factorized"
-
 # ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
@@ -87,7 +67,7 @@ id             = "sparse"
 matrix_dataset = "gaussian-cg10-93x31"
 rhs_dataset    = "sparse-rhs-93x31"
 
-# ── Experiments (6 models × gaussian-cg100-93x31) ────────────────────────────
+# ── Experiments (2 models × gaussian-cg100-93x31) ────────────────────────────
 
 [[experiments]]
 dataset      = "gaussian-cg100-93x31"
@@ -96,19 +76,3 @@ model        = "ffnn-standard"
 [[experiments]]
 dataset      = "gaussian-cg100-93x31"
 model        = "embedded-factorized"
-
-[[experiments]]
-dataset      = "gaussian-cg100-93x31"
-model        = "spectral-siren"
-
-[[experiments]]
-dataset      = "gaussian-cg100-93x31"
-model        = "spectral-fourier"
-
-[[experiments]]
-dataset      = "gaussian-cg100-93x31"
-model        = "spectral-modified-mlp"
-
-[[experiments]]
-dataset      = "gaussian-cg100-93x31"
-model        = "spectral-factorized"
