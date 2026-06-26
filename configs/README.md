@@ -14,7 +14,7 @@ as `float64`.
 
 Choose the config type that matches the case you want to run:
 
-- `datasets/train/<system>/*.toml`: training dataset configs (gaussian-cg{N}, solutions-cg{N})
+- `datasets/train/<system>/*.toml`: training dataset configs (gaussian-cg{N}, solutions-cg{N}, and any single-matrix variants)
 - `datasets/test/<system>/*.toml`: comparison/test dataset configs (scaled-solutions, sparse-rhs, and any non-Gaussian benchmarks)
 - `models/<family>/*.toml`: model architecture and trainer setup (shared across systems)
 - `cases/<system>/*.toml`: case configs that tie datasets, models, comparisons,
@@ -26,13 +26,23 @@ variants where that family exists. `evaluate-all.toml` runs the curated candidat
 `ffnn-mixed.toml` runs FFNN on all dataset variants; `films.toml` and
 `deeponets.toml` split the `45x15randomE` parameter-conditioned cases by FiLM
 and DeepONet family; `solutions-pca.toml` remains specific to the plain
-`45x15` system.
+`45x15` system. `factorized-single-matrix.toml` adds a dedicated
+`45x15randomE` case for the one-matrix CG-100 dataset and keeps only the
+scale-equivariant factorized models. Its benchmark datasets also use that same
+fixed `45x15randomE` matrix for `scaled_solutions` and `sparse_rhs` tables.
+The plain `45x15randomE/factorized.toml` case now uses `45x15randomE` benchmark
+datasets too, so every explicit comparison matrix in the non-conditional
+factorized family stays within the `45x15randomE` training matrix family.
 Gaussian benchmark comparisons now reuse the corresponding `gaussian-cg1`
 training dataset instead of carrying duplicate `gaussian-rhs` TOMLs. The
 `45x15randomE` case family also reuses the existing `45x15`
 `scaled-solutions` benchmark dataset rather than defining a separate solution
 archive. Its training datasets also read per-sample E vectors from
 `${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_YoungModuli_E1_E2_E3_E4.txt`.
+When you need a one-matrix `45x15randomE` training dataset, use a dataset TOML
+with a concrete `source.matrix_path` and omit both `enumerate_by` and
+`parameters_paths`; `configs/datasets/train/45x15randomE/gaussian-cg100-single-matrix.toml`
+is the reference example.
 
 Model families (all `ScaleEquivariant*`, `module_path = "dlkit.nn"`):
 - `ffnn/`: `ScaleEquivariantFFNN` — plain skip residual FFNN
@@ -137,6 +147,11 @@ Dataset configs define:
 - generation strategy blocks
 - normalization and output settings
 - optional test-set metadata
+
+Comparison-matrix invariant:
+- For every `cases/<problem>/` family, `[[comparisons]].matrix_dataset` must reference a training dataset from that same case/problem family.
+- Benchmark/test datasets may still be used as `rhs_dataset`, but they must not be the source of the comparison matrix.
+- If a case trains on a single fixed matrix, every comparison in that case must use that same fixed-matrix training dataset as `matrix_dataset`.
 
 ### Model configs
 

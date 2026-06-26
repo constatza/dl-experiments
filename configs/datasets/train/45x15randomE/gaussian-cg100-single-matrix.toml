@@ -1,0 +1,17 @@
+id = "gaussian-cg100-45x15randomE-single-matrix"
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/E1_10554158_E2_20662154_E3_19907116_E4_20715669_subdomain_1_Kaa.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "gaussian_residuals"
+samples = 10000
+cg_iters = 100
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"

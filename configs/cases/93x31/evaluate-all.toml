@@ -84,7 +84,7 @@ rhs_dataset    = "gaussian-cg10-93x31"
 
 [[comparisons]]
 id             = "sparse"
-matrix_dataset = "sparse-rhs-93x31"
+matrix_dataset = "gaussian-cg10-93x31"
 rhs_dataset    = "sparse-rhs-93x31"
 
 # ── Experiments (6 models × gaussian-cg100-93x31) ────────────────────────────

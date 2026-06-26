@@ -69,12 +69,12 @@ rhs_dataset    = "gaussian-cg10-45x15"
 
 [[comparisons]]
 id             = "scaled"
-matrix_dataset = "scaled-solutions-45x15"
+matrix_dataset = "gaussian-cg10-45x15"
 rhs_dataset    = "scaled-solutions-45x15"
 
 [[comparisons]]
 id             = "sparse"
-matrix_dataset = "sparse-rhs-45x15"
+matrix_dataset = "gaussian-cg10-45x15"
 rhs_dataset    = "sparse-rhs-45x15"
 
 # ── Experiments (2 solutions datasets × 1 PCA model = 2) ─────────────────────

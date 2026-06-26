@@ -69,7 +69,7 @@ rhs_dataset    = "gaussian-cg1-93x31"
 
 [[comparisons]]
 id             = "sparse"
-matrix_dataset = "sparse-rhs-93x31"
+matrix_dataset = "gaussian-cg1-93x31"
 rhs_dataset    = "sparse-rhs-93x31"
 
 # ── Experiments (ffnn-standard × 4 training datasets) ────────────────────────

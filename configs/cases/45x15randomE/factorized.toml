@@ -36,6 +36,16 @@ id           = "gaussian-cg100-45x15randomE"
 path         = "../../datasets/train/45x15randomE/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 45x15randomE"
 
+[[datasets]]
+id           = "scaled-solutions-45x15randomE"
+path         = "../../datasets/test/45x15randomE/scaled-solutions.toml"
+display_name = "Scaled Solutions 45x15randomE"
+
+[[datasets]]
+id           = "sparse-rhs-45x15randomE"
+path         = "../../datasets/test/45x15randomE/sparse-rhs.toml"
+display_name = "Sparse RHS 45x15randomE"
+
 # ── Models (regular factorized variants, including embedded) ──────────────────
 
 [[models]]
@@ -63,6 +73,24 @@ experiments    = [
 id             = "gaussian-cg100"
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_dataset    = "gaussian-cg100-45x15randomE"
+experiments    = [
+  "embedded-factorized-gaussian-cg100-45x15randomE",
+  "spectral-factorized-gaussian-cg100-45x15randomE",
+]
+
+[[comparisons]]
+id             = "scaled"
+matrix_dataset = "gaussian-cg100-45x15randomE"
+rhs_dataset    = "scaled-solutions-45x15randomE"
+experiments    = [
+  "embedded-factorized-gaussian-cg100-45x15randomE",
+  "spectral-factorized-gaussian-cg100-45x15randomE",
+]
+
+[[comparisons]]
+id             = "sparse"
+matrix_dataset = "gaussian-cg100-45x15randomE"
+rhs_dataset    = "sparse-rhs-45x15randomE"
 experiments    = [
   "embedded-factorized-gaussian-cg100-45x15randomE",
   "spectral-factorized-gaussian-cg100-45x15randomE",
