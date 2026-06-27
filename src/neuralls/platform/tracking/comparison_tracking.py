@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -83,3 +84,8 @@ def log_comparison_run_params(
     mlflow.log_param("comparison_id", comparison_id)
     mlflow.log_param("comparison_display_name", comparison_display_name)
     mlflow.log_param("comp_run_id", comp_run_id)
+
+
+def log_comparison_input_artifacts(artifact_dir: Path) -> None:
+    """Upload the resolved comparison input system artifacts to MLflow."""
+    mlflow.log_artifacts(str(artifact_dir), artifact_path="comparison_inputs")

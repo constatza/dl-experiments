@@ -30,6 +30,18 @@ def manifest_to_dict(manifest: DatasetManifest) -> dict[str, Any]:
     payload["matrix"]["shape"] = list(manifest.matrix.shape)
     payload["rhs"]["shape"] = list(manifest.rhs.shape)
     payload["solutions"]["shape"] = list(manifest.solutions.shape)
+    if manifest.rhs_kind is not None:
+        payload["rhs_kind"] = {**asdict(manifest.rhs_kind), "shape": list(manifest.rhs_kind.shape)}
+    if manifest.target_kind is not None:
+        payload["target_kind"] = {
+            **asdict(manifest.target_kind),
+            "shape": list(manifest.target_kind.shape),
+        }
+    if manifest.matrix_sample_index is not None:
+        payload["matrix_sample_index"] = {
+            **asdict(manifest.matrix_sample_index),
+            "shape": list(manifest.matrix_sample_index.shape),
+        }
     payload["params"] = [
         {**entry, "shape": list(param.shape)}
         for entry, param in zip(payload["params"], manifest.params, strict=True)
@@ -126,6 +138,13 @@ def read_dataset_manifest(dataset_dir: str | Path) -> DatasetManifest:
             scale=dict(normalization_raw.get("scale") or {}),
         ),
         params=tuple(_artifact(payload) for payload in params_raw),
+        rhs_kind=_artifact(raw["rhs_kind"]) if raw.get("rhs_kind") is not None else None,
+        target_kind=(_artifact(raw["target_kind"]) if raw.get("target_kind") is not None else None),
+        matrix_sample_index=(
+            _artifact(raw["matrix_sample_index"])
+            if raw.get("matrix_sample_index") is not None
+            else None
+        ),
     )
 
 
@@ -136,6 +155,9 @@ def make_dataset_manifest(
     solutions: DatasetArtifact,
     normalization: DatasetNormalization,
     params: tuple[DatasetArtifact, ...] = (),
+    rhs_kind: DatasetArtifact | None = None,
+    target_kind: DatasetArtifact | None = None,
+    matrix_sample_index: DatasetArtifact | None = None,
 ) -> DatasetManifest:
     """Construct a typed dataset manifest with the repo schema marker.
 
@@ -156,4 +178,7 @@ def make_dataset_manifest(
         solutions=solutions,
         normalization=normalization,
         params=params,
+        rhs_kind=rhs_kind,
+        target_kind=target_kind,
+        matrix_sample_index=matrix_sample_index,
     )

@@ -23,6 +23,16 @@ from neuralls.platform.storage.datasets import (
     resolve_dataset_artifacts,
     resolve_dataset_paths,
 )
+from neuralls.platform.storage.dataset_readers import (
+    load_matrix_sample_index,
+    load_rhs_kind_codes,
+    load_target_kind_codes,
+)
+from neuralls.platform.storage.enum_codecs import (
+    decode_rhs_kind_array,
+    decode_target_kind_array,
+)
+from neuralls.shared.types import RhsKind, TargetKind
 
 
 @pytest.fixture
@@ -254,6 +264,65 @@ def test_build_dataset_persists_gaussian_residual_pairs(tmp_path: Path) -> None:
     assert saved_rhs.shape == (4, 2)
     assert saved_solutions.shape == (4, 2)
     np.testing.assert_allclose(saved_solutions @ matrix.T, saved_rhs, atol=1e-10)
+
+
+def test_build_dataset_persists_row_metadata_artifacts(tmp_path: Path) -> None:
+    matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
+    matrix_path = tmp_path / "matrix.npy"
+    np.save(matrix_path, matrix)
+
+    out_dir = tmp_path / "dataset_meta"
+    build_dataset(
+        matrix_path=str(matrix_path),
+        dataset_dir=str(out_dir),
+        counts={"neutral_ones": 3},
+        normalize="none",
+        shuffle=False,
+        seed=42,
+        dataset_format="npy",
+    )
+
+    manifest = load_dataset_manifest(out_dir)
+    assert manifest["rhs_kind"]["path"] == "rhs_kind.npy"
+    assert manifest["target_kind"]["path"] == "target_kind.npy"
+    assert manifest["matrix_sample_index"]["path"] == "matrix_sample_index.npy"
+
+    rhs_kinds = decode_rhs_kind_array(load_rhs_kind_codes(out_dir))
+    target_kinds = decode_target_kind_array(load_target_kind_codes(out_dir))
+    matrix_indices = load_matrix_sample_index(out_dir)
+
+    assert rhs_kinds == (RhsKind.NON_RESIDUAL, RhsKind.NON_RESIDUAL, RhsKind.NON_RESIDUAL)
+    assert target_kinds == (TargetKind.SOLUTION, TargetKind.SOLUTION, TargetKind.SOLUTION)
+    np.testing.assert_array_equal(matrix_indices, np.array([0, 0, 0], dtype=np.int64))
+
+
+def test_build_dataset_marks_residual_rows_unsafe_for_comparison(tmp_path: Path) -> None:
+    matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
+    matrix_path = tmp_path / "matrix.npy"
+    np.save(matrix_path, matrix)
+
+    rhs = np.array([[1.0, 2.0]], dtype=np.float64)
+    rhs_path = tmp_path / "rhs.npy"
+    np.save(rhs_path, rhs)
+
+    out_dir = tmp_path / "dataset_residual_meta"
+    build_dataset(
+        matrix_path=str(matrix_path),
+        dataset_dir=str(out_dir),
+        counts={"residual_traces": 2},
+        rhs_path=str(rhs_path),
+        normalize="none",
+        shuffle=False,
+        seed=7,
+        strategy_overrides={"residual_traces": {"cg_iters": 1}},
+        dataset_format="npy",
+    )
+
+    rhs_kinds = decode_rhs_kind_array(load_rhs_kind_codes(out_dir))
+    target_kinds = decode_target_kind_array(load_target_kind_codes(out_dir))
+
+    assert rhs_kinds == (RhsKind.RESIDUAL, RhsKind.RESIDUAL)
+    assert target_kinds == (TargetKind.ITERATE, TargetKind.ITERATE)
 
 
 def test_glob_matrix_gaussian_uses_global_sample_budget(

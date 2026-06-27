@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+from neuralls.shared.types import ComparisonRhsGenerationKind
 
 
 @dataclass(frozen=True)
@@ -71,18 +72,22 @@ class ComparisonData:
     Args:
         matrix_path: Path to system matrix file.
         rhs_path: Path to right-hand side vector file.
-        rhs_index: Index into rhs array (for multi-column rhs).
-        matrix_index: Index of matrix sample when dataset has multiple matrices.
+        rhs_index: Optional index into rhs array (for multi-row rhs datasets).
+        matrix_index: Optional index of matrix sample when dataset has multiple matrices.
         dataset_alias: Optional dataset label.
         normalize_system: Normalization strategy to apply.
     """
 
     matrix_path: Path
-    rhs_path: Path
-    rhs_index: int = 0
-    matrix_index: int = 0
+    rhs_path: Path | None
+    rhs_index: int | None = 0
+    matrix_index: int | None = 0
     dataset_alias: str | None = None
     normalize_system: NormalizeSystem = "matrix"
+    require_non_residual_rhs: bool = True
+    selection_seed: int | None = None
+    rhs_generation_kind: ComparisonRhsGenerationKind | None = None
+    rhs_generation_params: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

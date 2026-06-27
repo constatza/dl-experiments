@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from typing import Any
 from collections.abc import Mapping, Sequence
 
+from neuralls.shared.types import GenerationStrategyKind
+
 _RHS_ARCHIVE = "rhs_archive"
 _SOLUTION_ARCHIVE = "solution_archive"
 
@@ -42,6 +44,15 @@ def canonicalize_strategy_name(raw_name: str) -> str:
     return normalized
 
 
+def canonicalize_strategy_kind(raw_name: str) -> GenerationStrategyKind:
+    """Normalize a raw strategy identifier into the internal enum."""
+    normalized = canonicalize_strategy_name(raw_name)
+    try:
+        return GenerationStrategyKind(normalized)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported generation strategy '{raw_name}'.") from exc
+
+
 @dataclass(frozen=True)
 class StrategySpec:
     """Immutable specification for a single generation strategy.
@@ -54,7 +65,7 @@ class StrategySpec:
     """
 
     raw_name: str
-    canonical_name: str
+    kind: GenerationStrategyKind
     samples: int
     options: Mapping[str, Any]
 
@@ -80,7 +91,7 @@ class GenerationPlan:
         synthetic: All non-archive strategies
     """
 
-    strategies: Mapping[str, StrategySpec]
+    strategies: Mapping[GenerationStrategyKind, StrategySpec]
 
     def __post_init__(self) -> None:
         """Validate plan has at least one strategy with samples > 0."""
@@ -94,12 +105,12 @@ class GenerationPlan:
     @property
     def rhs_archive(self) -> StrategySpec | None:
         """Get RHS archive strategy if present."""
-        return self.strategies.get(_RHS_ARCHIVE)
+        return self.strategies.get(GenerationStrategyKind.RHS_ARCHIVE)
 
     @property
     def solution_archive(self) -> StrategySpec | None:
         """Get solution archive strategy if present."""
-        return self.strategies.get(_SOLUTION_ARCHIVE)
+        return self.strategies.get(GenerationStrategyKind.SOLUTION_ARCHIVE)
 
     @property
     def synthetic(self) -> Mapping[str, StrategySpec]:
@@ -122,7 +133,7 @@ def _merge_specs(existing: StrategySpec, incoming: StrategySpec) -> StrategySpec
 
     return StrategySpec(
         raw_name=incoming.raw_name,
-        canonical_name=existing.canonical_name,
+        kind=existing.kind,
         samples=merged_samples,
         options={**existing.options, **incoming.options},
     )
@@ -142,10 +153,10 @@ def plan_from_specs(specs: Sequence[StrategySpec]) -> GenerationPlan:
     Raises:
         ValueError: If no active strategies remain after merging.
     """
-    aggregated: dict[str, StrategySpec] = {}
+    aggregated: dict[GenerationStrategyKind, StrategySpec] = {}
     for spec in specs:
-        existing = aggregated.get(spec.canonical_name)
-        aggregated[spec.canonical_name] = _merge_specs(existing, spec) if existing else spec
+        existing = aggregated.get(spec.kind)
+        aggregated[spec.kind] = _merge_specs(existing, spec) if existing else spec
     return GenerationPlan(strategies=aggregated)
 
 
@@ -179,11 +190,9 @@ def _parse_strategy_entry(
             f"Must be -1 (all), 0 (skip), or positive integer."
         )
 
-    canonical = canonicalize_strategy_name(raw_name)
+    kind = canonicalize_strategy_kind(raw_name)
     options = {k: v for k, v in raw_spec.items() if k not in {"name", "samples"}}
-    return StrategySpec(
-        raw_name=raw_name, canonical_name=canonical, samples=samples, options=options
-    )
+    return StrategySpec(raw_name=raw_name, kind=kind, samples=samples, options=options)
 
 
 def _ensure_sequence(value: Any) -> Sequence[Any]:

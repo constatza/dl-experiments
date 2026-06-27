@@ -48,6 +48,58 @@ class MatrixNormType(StrEnum):
     INF = "inf"  # Infinity norm: max row sum
 
 
+class RhsKind(StrEnum):
+    """Semantic category of a persisted RHS row."""
+
+    UNKNOWN = "unknown"
+    NON_RESIDUAL = "non_residual"
+    RESIDUAL = "residual"
+    SEARCH_DIRECTION_PRODUCT = "search_direction_product"
+
+
+class TargetKind(StrEnum):
+    """Semantic category of a persisted target row."""
+
+    UNKNOWN = "unknown"
+    SOLUTION = "solution"
+    ITERATE = "iterate"
+    ERROR = "error"
+    SEARCH_DIRECTION = "search_direction"
+
+
+class ComparisonRhsGenerationKind(StrEnum):
+    """Supported direct RHS generators for comparison workflows."""
+
+    GAUSSIAN = "gaussian"
+    SPARSE = "sparse"
+
+
+class GenerationStrategyKind(StrEnum):
+    """Canonical generation strategy identifiers used after config validation."""
+
+    RANDOM = "random"
+    NORMAL = "normal"
+    KRYLOV = "krylov"
+    RHS_ARCHIVE = "rhs_archive"
+    SOLUTION_ARCHIVE = "solution_archive"
+    VALIDATED_ARCHIVE = "validated_archive"
+    SCALED_SOLUTIONS = "scaled_solutions"
+    SPARSE_RHS = "sparse_rhs"
+    RESIDUAL_TRACES = "residual_traces"
+    RESIDUALS = "residuals"
+    GAUSSIAN_RESIDUALS = "gaussian_residuals"
+    SEARCH_DIRECTIONS = "search_directions"
+    EIGENVECTOR_FORWARD = "eigenvector_forward"
+    EIGENVECTOR_INVERSE = "eigenvector_inverse"
+    GAUSSIAN_FORWARD = "gaussian_forward"
+    GAUSSIAN_INVERSE = "gaussian_inverse"
+    UNIFORM_FORWARD = "uniform_forward"
+    UNIFORM_INVERSE = "uniform_inverse"
+    CONSTANT_FORWARD = "constant_forward"
+    CONSTANT_INVERSE = "constant_inverse"
+    NEUTRAL_ONES = "neutral_ones"
+
+
 class ScaleMetadata(TypedDict, total=False):
     """Type-safe schema for scale metadata dictionary.
 

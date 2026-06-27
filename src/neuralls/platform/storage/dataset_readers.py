@@ -41,6 +41,9 @@ class DatasetArtifacts:
     rhs: ResolvedDatasetArtifact
     solutions: ResolvedDatasetArtifact
     params: tuple[ResolvedDatasetArtifact, ...] = ()
+    rhs_kind: ResolvedDatasetArtifact | None = None
+    target_kind: ResolvedDatasetArtifact | None = None
+    matrix_sample_index: ResolvedDatasetArtifact | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,19 @@ def resolve_dataset_artifacts(dataset_dir: str | Path) -> DatasetArtifacts:
         rhs=_resolve_artifact(root, manifest.rhs),
         solutions=_resolve_artifact(root, manifest.solutions),
         params=tuple(_resolve_artifact(root, artifact) for artifact in manifest.params),
+        rhs_kind=_resolve_artifact(root, manifest.rhs_kind)
+        if manifest.rhs_kind is not None
+        else None,
+        target_kind=(
+            _resolve_artifact(root, manifest.target_kind)
+            if manifest.target_kind is not None
+            else None
+        ),
+        matrix_sample_index=(
+            _resolve_artifact(root, manifest.matrix_sample_index)
+            if manifest.matrix_sample_index is not None
+            else None
+        ),
     )
 
 
@@ -145,6 +161,24 @@ def _load_resolved(artifact: ResolvedDatasetArtifact) -> np.ndarray:
             )
 
 
+def _load_resolved_native(artifact: ResolvedDatasetArtifact) -> np.ndarray:
+    """Load one dataset artifact without coercing the dtype."""
+    match artifact.format:
+        case "zarr":
+            return np.asarray(zarr.open_array(str(artifact.path), mode="r"))
+        case "npy":
+            return np.load(artifact.path)
+        case "hdf5":
+            if artifact.key is None:
+                raise ValueError(f"HDF5 artifact at {artifact.path} is missing a required key")
+            with h5py.File(str(artifact.path), "r") as f:
+                return np.asarray(f[artifact.key])
+        case _:
+            raise ValueError(
+                f"Unsupported dataset artifact format {artifact.format!r} at {artifact.path}"
+            )
+
+
 def load_dense_training_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
     """Load dense rhs and solution arrays from a manifest-driven dataset directory."""
     artifacts = resolve_dataset_artifacts(dataset_dir)
@@ -174,3 +208,65 @@ def load_parameter_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, ...]:
     """Load all manifest-declared parameter arrays eagerly."""
     artifacts = resolve_dataset_artifacts(dataset_dir)
     return tuple(_load_resolved(a) for a in artifacts.params)
+
+
+def load_rhs_kind_codes(dataset_dir: str | Path) -> np.ndarray:
+    """Load persisted compact RHS semantic codes for a dataset."""
+    artifact = resolve_dataset_artifacts(dataset_dir).rhs_kind
+    if artifact is None:
+        raise ValueError(
+            f"Dataset '{dataset_dir}' does not expose rhs_kind metadata. Regenerate it first."
+        )
+    return _load_resolved_native(artifact).astype(np.uint8, copy=False).reshape(-1)
+
+
+def load_optional_rhs_kind_codes(dataset_dir: str | Path) -> np.ndarray | None:
+    """Load RHS semantic codes when present, otherwise return None."""
+    artifact = resolve_dataset_artifacts(dataset_dir).rhs_kind
+    if artifact is None:
+        return None
+    return _load_resolved_native(artifact).astype(np.uint8, copy=False).reshape(-1)
+
+
+def load_target_kind_codes(dataset_dir: str | Path) -> np.ndarray:
+    """Load persisted compact target semantic codes for a dataset."""
+    artifact = resolve_dataset_artifacts(dataset_dir).target_kind
+    if artifact is None:
+        raise ValueError(
+            f"Dataset '{dataset_dir}' does not expose target_kind metadata. Regenerate it first."
+        )
+    return _load_resolved_native(artifact).astype(np.uint8, copy=False).reshape(-1)
+
+
+def load_matrix_sample_index(dataset_dir: str | Path) -> np.ndarray:
+    """Load persisted matrix-sample bindings for a dataset."""
+    artifact = resolve_dataset_artifacts(dataset_dir).matrix_sample_index
+    if artifact is None:
+        raise ValueError(
+            f"Dataset '{dataset_dir}' does not expose matrix_sample_index metadata. Regenerate it first."
+        )
+    return _load_resolved_native(artifact).astype(np.int64, copy=False).reshape(-1)
+
+
+def list_available_matrix_indices(dataset_dir: str | Path) -> tuple[int, ...]:
+    """List valid physical matrix indices for a dataset."""
+    matrix = resolve_dataset_artifacts(dataset_dir).matrix
+    if matrix.n_matrix_samples is not None:
+        return tuple(range(int(matrix.n_matrix_samples)))
+    if matrix.shape:
+        return tuple(range(int(matrix.shape[0])))
+    return ()
+
+
+def list_safe_rhs_indices(
+    dataset_dir: str | Path, require_non_residual_rhs: bool = True
+) -> tuple[int, ...]:
+    """List RHS sample indices allowed by the active safety policy."""
+    from neuralls.shared.enum_codecs import decode_rhs_kind_array
+    from neuralls.shared.types import RhsKind
+
+    codes = load_rhs_kind_codes(dataset_dir)
+    kinds = decode_rhs_kind_array(codes)
+    if not require_non_residual_rhs:
+        return tuple(range(len(kinds)))
+    return tuple(index for index, kind in enumerate(kinds) if kind is RhsKind.NON_RESIDUAL)

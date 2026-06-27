@@ -92,16 +92,31 @@ nested child-run writes to `platform.tracking`, while only assembling child tag
 payloads and deciding when the logging happens.
 
 Case-driven comparison selection is intentionally simple: one comparison entry
-loads one system, and the chosen matrix/RHS samples come directly from
-`matrix_index` and `rhs_index` on the comparison entry. Composition does not
+loads one system. Matrix selection is structural: composition resolves
+`matrix_index` from the configured matrix dataset, or picks one deterministically
+when no explicit index is supplied. RHS selection is semantic: composition
+either resolves a persisted safe RHS row from dataset metadata or generates a
+direct RHS in memory for comparison-only generator modes. Comparison does not
 inspect training/test splits or try to infer leakage-safe held-out samples.
+For dataset-backed comparison inputs, matrix and RHS selection are intentionally
+independent once the RHS row passes the active semantic filter. Persisted
+`matrix_sample_index` metadata remains provenance for artifact staging and
+offline analysis; comparison workflows do not enforce it as a runtime pairing
+constraint.
 
 Comparison input preflight also stays out of composition. Workflow code invokes
 platform-owned validation for matrix/RHS inputs rather than inspecting dataset
-manifests or sparse-pack layout directly.
+manifests directly. Preflight validates only the concrete artifacts required by
+the chosen comparison mode: matrix-only validation for generated-RHS runs, and
+matrix-plus-RHS validation for dataset-backed RHS runs.
 Likewise, enriched infrastructure failures from storage and tracking propagate
 through composition unchanged; composition does not reformat low-level I/O
 errors into user-facing strings.
+
+Resolved comparison inputs are treated as first-class artifacts. Composition
+stages the final `(A, b)` pair plus provenance metadata and delegates MLflow
+logging of those artifacts to platform tracking helpers so future runs can
+reconstruct the exact system that was compared.
 
 Comparison model resolution treats one resolved MLflow `run_id` as the hard
 boundary for checkpoint discovery. When downloaded run artifacts contain

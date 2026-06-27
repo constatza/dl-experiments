@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 from pydantic import model_validator
@@ -60,6 +60,8 @@ class ComparisonDataModel(BaseModel):
     matrix_index: int = 0
     dataset_alias: str | None = None
     normalize_system: NormalizeSystem = "matrix"
+    require_non_residual_rhs: bool = True
+    selection_seed: int | None = None
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     @field_validator("matrix_path", "rhs_path", mode="before")
@@ -77,6 +79,38 @@ class _ComparisonGeneralModel(BaseModel):
     params: _SolverParamsModel | None = None
     data: ComparisonDataModel = Field(default_factory=ComparisonDataModel)
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class GaussianRhsGenerationModel(BaseModel):
+    """Direct Gaussian RHS generation for comparison workflows."""
+
+    kind: Literal["gaussian"] = "gaussian"
+    mean: float = 0.0
+    std: float = Field(default=1.0, gt=0.0)
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class SparseRhsGenerationModel(BaseModel):
+    """Direct sparse RHS generation for comparison workflows."""
+
+    kind: Literal["sparse"] = "sparse"
+    indices: list[int]
+    values: list[float]
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @model_validator(mode="after")
+    def _validate_lengths(self) -> SparseRhsGenerationModel:
+        if len(self.indices) != len(self.values):
+            raise ValueError("Sparse RHS generation requires indices and values of equal length.")
+        return self
+
+
+type ComparisonRhsGenerationModel = Annotated[
+    GaussianRhsGenerationModel | SparseRhsGenerationModel,
+    Field(discriminator="kind"),
+]
 
 
 class _ComparisonConfigModel(BaseModel):

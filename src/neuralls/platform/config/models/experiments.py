@@ -9,6 +9,7 @@ from typing import Literal, cast
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from neuralls.shared.constants import DEFAULT_RTOL, DEFAULT_ATOL, DEFAULT_M_MAX
+from neuralls.platform.config.models.comparison import ComparisonRhsGenerationModel
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.models.id_generation import (
     _build_display_lookup,
@@ -251,10 +252,13 @@ class ComparisonRegistryEntry(BaseModel):
 
     id: str = Field(..., min_length=1)
     matrix_dataset: str
-    rhs_dataset: str
+    rhs_dataset: str | None = None
     matrix_index: int = 0
     rhs_index: int = 0
     method: Path | None = None
+    rhs_generation: ComparisonRhsGenerationModel | None = None
+    require_non_residual_rhs: bool = True
+    seed: int | None = None
     experiments: list[str] = Field(default_factory=list)
     display_name: str | None = None
 
@@ -282,6 +286,20 @@ class ComparisonRegistryEntry(BaseModel):
     def effective_display_name(self) -> str:
         """Return the configured label or fall back to the id."""
         return resolve_display_name(self.id, self.display_name)
+
+    @model_validator(mode="after")
+    def _validate_rhs_source(self) -> ComparisonRegistryEntry:
+        if (self.rhs_dataset is None) == (self.rhs_generation is None):
+            raise ValueError(
+                "Comparison must configure exactly one RHS source: rhs_dataset or rhs_generation."
+            )
+        if self.rhs_dataset is None and "rhs_index" in self.model_fields_set:
+            raise ValueError("rhs_index requires rhs_dataset.")
+        if self.matrix_index < 0:
+            raise ValueError("matrix_index must be non-negative when provided.")
+        if self.rhs_index < 0:
+            raise ValueError("rhs_index must be non-negative when provided.")
+        return self
 
 
 def _dedupe_ids(kind: str, entries: Sequence[RegistryEntry | ComparisonRegistryEntry]) -> None:
@@ -334,6 +352,8 @@ def _validate_comparison_dataset_refs(
                 f"Comparison '{entry.id}' references matrix_dataset "
                 f"'{entry.matrix_dataset}', but [[datasets]] does not define it."
             )
+        if entry.rhs_dataset is None:
+            continue
         if entry.rhs_dataset not in dataset_ids:
             raise ValueError(
                 f"Comparison '{entry.id}' references rhs_dataset "
@@ -440,7 +460,11 @@ class CaseConfig(BaseModel):
                 continue
             comp_dict = cast("dict[str, object]", comp)
             matrix_id = str(comp_dict.get("matrix_dataset") or "")
-            rhs_id = str(comp_dict.get("rhs_dataset") or "")
+            rhs_generation = comp_dict.get("rhs_generation")
+            rhs_generation_kind = (
+                rhs_generation.get("kind") if isinstance(rhs_generation, dict) else None
+            )
+            rhs_id = str(comp_dict.get("rhs_dataset") or rhs_generation_kind or "")
             raw_id = comp_dict.get("id")
             raw_dn = comp_dict.get("display_name")
             user_id = str(raw_id).strip() if isinstance(raw_id, str) else None

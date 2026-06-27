@@ -12,10 +12,16 @@ from typing import Any
 import numpy as np
 from loguru import logger
 from .data_types import NormalizeType
+from .semantics import classify_strategy_rhs_kind, classify_strategy_target_kind
 from neuralls.shared.types import LayoutType, ScaleMetadata
+from neuralls.shared.types import GenerationStrategyKind
 from neuralls.domain.normalization import ErrorTraceSamples, IScale, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .helpers import serialize_scale_metadata
+from neuralls.shared.enum_codecs import (
+    encode_rhs_kind_array,
+    encode_target_kind_array,
+)
 from .trace_utils import (
     _offset_error_traces,
     _offset_residual_traces,
@@ -63,18 +69,25 @@ _STRATEGY_PROPERTIES: dict[str, _StrategyProperties] = {
 }
 
 
+@dataclass(frozen=True)
+class _GeneratedMixtureWithMetadata:
+    """Private metadata-rich generation result used by dataset persistence."""
+
+    rhs: np.ndarray
+    solutions: np.ndarray
+    residual_traces: ResidualTraceSamples | None
+    error_traces: ErrorTraceSamples | None
+    rhs_kind_codes: np.ndarray
+    target_kind_codes: np.ndarray
+
+
 def _shuffle_samples(
     X: np.ndarray,
     Y: np.ndarray,
     residual_traces: ResidualTraceSamples | None,
     error_traces: ErrorTraceSamples | None,
     rng: np.random.Generator,
-) -> tuple[
-    np.ndarray,
-    np.ndarray,
-    ResidualTraceSamples | None,
-    ErrorTraceSamples | None,
-]:
+) -> tuple[np.ndarray, np.ndarray, ResidualTraceSamples | None, ErrorTraceSamples | None]:
     """Shuffle samples while maintaining trace consistency.
 
     Args:
@@ -88,6 +101,17 @@ def _shuffle_samples(
         Tuple of (shuffled_X, shuffled_Y, shuffled_residual_traces, error_traces)
     """
     indices = rng.permutation(len(X))
+    return _shuffle_samples_by_indices(X, Y, residual_traces, error_traces, indices)
+
+
+def _shuffle_samples_by_indices(
+    X: np.ndarray,
+    Y: np.ndarray,
+    residual_traces: ResidualTraceSamples | None,
+    error_traces: ErrorTraceSamples | None,
+    indices: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, ResidualTraceSamples | None, ErrorTraceSamples | None]:
+    """Apply a precomputed permutation while preserving trace references."""
     X_shuffled = X[indices]
     Y_shuffled = Y[indices]
 
@@ -117,7 +141,31 @@ def _shuffle_samples(
     return X_shuffled, Y_shuffled, residual_traces, error_traces
 
 
-def generate_mixture(
+def _shuffle_samples_with_metadata(
+    X: np.ndarray,
+    Y: np.ndarray,
+    residual_traces: ResidualTraceSamples | None,
+    error_traces: ErrorTraceSamples | None,
+    rhs_kind_codes: np.ndarray,
+    target_kind_codes: np.ndarray,
+    rng: np.random.Generator,
+) -> _GeneratedMixtureWithMetadata:
+    """Shuffle samples and aligned metadata while preserving trace references."""
+    indices = rng.permutation(len(X))
+    X_shuffled, Y_shuffled, residual_traces, error_traces = _shuffle_samples_by_indices(
+        X, Y, residual_traces, error_traces, indices
+    )
+    return _GeneratedMixtureWithMetadata(
+        rhs=X_shuffled,
+        solutions=Y_shuffled,
+        residual_traces=residual_traces,
+        error_traces=error_traces,
+        rhs_kind_codes=rhs_kind_codes[indices],
+        target_kind_codes=target_kind_codes[indices],
+    )
+
+
+def _generate_mixture_with_metadata(
     A: np.ndarray,
     counts: Mapping[str, int] | None = None,
     *,
@@ -132,7 +180,7 @@ def generate_mixture(
     archive_rhs: np.ndarray | None = None,
     single_rhs: np.ndarray | None = None,
     single_solution: np.ndarray | None = None,
-) -> tuple[np.ndarray, np.ndarray, ResidualTraceSamples | None, ErrorTraceSamples | None]:
+) -> _GeneratedMixtureWithMetadata:
     """Generate mixed training data from multiple strategies.
 
     Args:
@@ -155,11 +203,7 @@ def generate_mixture(
             archive-based strategies.
 
     Returns:
-        Tuple of (features, targets, residual_traces, error_traces):
-            - features: RHS vectors, shape (N, n)
-            - targets: Solution vectors, shape (N, n)
-            - residual_traces: Optional residual trace samples from CG
-            - error_traces: Optional error trace samples from CG
+        Metadata-rich generation result for dataset persistence internals.
 
     Raises:
         ValueError: If counts/mix arguments invalid or strategies unknown
@@ -212,6 +256,8 @@ def generate_mixture(
     all_targets = []
     residual_blocks: list[ResidualTraceSamples] = []
     error_blocks: list[ErrorTraceSamples] = []
+    rhs_kind_blocks: list[np.ndarray] = []
+    target_kind_blocks: list[np.ndarray] = []
     sample_offset = 0
 
     for strategy_name, count in strategy_counts.items():
@@ -253,13 +299,33 @@ def generate_mixture(
             all_features.append(generated.rhs)
         if generated.solutions is not None:
             all_targets.append(generated.solutions)
-
         if generated.residual_traces is not None:
             residual_blocks.append(
                 _offset_residual_traces(generated.residual_traces, sample_offset)
             )
         if generated.error_traces is not None:
             error_blocks.append(_offset_error_traces(generated.error_traces, sample_offset))
+
+        strategy_kind = GenerationStrategyKind(strategy_name)
+        semantic_size = 0
+        if generated.error_traces is not None:
+            semantic_size = int(generated.error_traces.errors.shape[0])
+        elif generated.residual_traces is not None:
+            semantic_size = int(generated.residual_traces.residuals.shape[0])
+        elif generated.rhs is not None:
+            semantic_size = int(generated.rhs.shape[0])
+
+        if semantic_size > 0:
+            rhs_kind_blocks.append(
+                encode_rhs_kind_array(
+                    [classify_strategy_rhs_kind(strategy_kind) for _ in range(semantic_size)]
+                )
+            )
+            target_kind_blocks.append(
+                encode_target_kind_array(
+                    [classify_strategy_target_kind(strategy_kind) for _ in range(semantic_size)]
+                )
+            )
 
         if generated.rhs is not None:
             sample_offset += generated.rhs.shape[0]
@@ -271,13 +337,67 @@ def generate_mixture(
         Y = np.empty((0, A.shape[0]), dtype=np.float64)
     residual_traces = _merge_residual_traces(residual_blocks) if residual_blocks else None
     error_traces = _merge_error_traces(error_blocks) if error_blocks else None
+    rhs_kind_codes = (
+        np.concatenate(rhs_kind_blocks) if rhs_kind_blocks else np.empty((0,), dtype=np.uint8)
+    )
+    target_kind_codes = (
+        np.concatenate(target_kind_blocks) if target_kind_blocks else np.empty((0,), dtype=np.uint8)
+    )
 
     if shuffle and X.shape[0] > 0:
-        X, Y, residual_traces, error_traces = _shuffle_samples(
-            X, Y, residual_traces, error_traces, rng
+        return _shuffle_samples_with_metadata(
+            X,
+            Y,
+            residual_traces,
+            error_traces,
+            rhs_kind_codes,
+            target_kind_codes,
+            rng,
         )
 
-    return X, Y, residual_traces, error_traces
+    return _GeneratedMixtureWithMetadata(
+        rhs=X,
+        solutions=Y,
+        residual_traces=residual_traces,
+        error_traces=error_traces,
+        rhs_kind_codes=rhs_kind_codes,
+        target_kind_codes=target_kind_codes,
+    )
+
+
+def generate_mixture(
+    A: np.ndarray,
+    counts: Mapping[str, int] | None = None,
+    *,
+    mix: Mapping[str, float] | None = None,
+    total: int | None = None,
+    counts_represent_final_pairs: bool = False,
+    seed: int = 42,
+    shuffle: bool = True,
+    strategy_overrides: Mapping[str, Mapping[str, Any]] | None = None,
+    solver_overrides: dict[str, TracingSolverCallable] | None = None,
+    archive_solutions: np.ndarray | None = None,
+    archive_rhs: np.ndarray | None = None,
+    single_rhs: np.ndarray | None = None,
+    single_solution: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, ResidualTraceSamples | None, ErrorTraceSamples | None]:
+    """Generate mixed training data with the stable public 4-tuple API."""
+    result = _generate_mixture_with_metadata(
+        A,
+        counts=counts,
+        mix=mix,
+        total=total,
+        counts_represent_final_pairs=counts_represent_final_pairs,
+        seed=seed,
+        shuffle=shuffle,
+        strategy_overrides=strategy_overrides,
+        solver_overrides=solver_overrides,
+        archive_solutions=archive_solutions,
+        archive_rhs=archive_rhs,
+        single_rhs=single_rhs,
+        single_solution=single_solution,
+    )
+    return result.rhs, result.solutions, result.residual_traces, result.error_traces
 
 
 @dataclass(frozen=True)
@@ -511,6 +631,9 @@ class _BindingResult:
 
     rhs_block: np.ndarray
     solution_block: np.ndarray
+    rhs_kind_codes: np.ndarray
+    target_kind_codes: np.ndarray
+    matrix_sample_index: np.ndarray
     matrix_norm_value: float
     matrix_value_scale: float
     scale_params: ScaleMetadata | None
@@ -573,7 +696,7 @@ def _process_binding(
         f"Generating/loading samples for binding sample_id={binding.sample_id} "
         f"(matrix_id={binding.matrix_sample_id})..."
     )
-    X, Y, residual_traces, error_traces = generate_mixture(
+    generated = _generate_mixture_with_metadata(
         cached.matrix_norm,
         counts=counts,
         mix=mix,
@@ -585,6 +708,12 @@ def _process_binding(
         single_rhs=single_rhs,
         single_solution=single_solution,
     )
+    X = generated.rhs
+    Y = generated.solutions
+    residual_traces = generated.residual_traces
+    error_traces = generated.error_traces
+    rhs_kind_codes = generated.rhs_kind_codes
+    target_kind_codes = generated.target_kind_codes
 
     # Select final blocks based on available traces
     if error_traces is not None:
@@ -605,6 +734,9 @@ def _process_binding(
     return _BindingResult(
         rhs_block=np.asarray(X_final, dtype=np.float64),
         solution_block=np.asarray(Y_final, dtype=np.float64),
+        rhs_kind_codes=np.asarray(rhs_kind_codes, dtype=np.uint8),
+        target_kind_codes=np.asarray(target_kind_codes, dtype=np.uint8),
+        matrix_sample_index=np.full(X_final.shape[0], binding.matrix_sample_id, dtype=np.int64),
         matrix_norm_value=float(cached.matrix_norm_value),
         matrix_value_scale=float(cached.matrix_value_scale),
         scale_params=cached.scale_params,
@@ -690,6 +822,9 @@ def _build_dataset_payload(
     num_bindings: int,
     parameters_arrays: tuple[np.ndarray, ...] = (),
     layout: LayoutType = LayoutType.MANY_MATRICES,
+    rhs_kind_codes: np.ndarray | None = None,
+    target_kind_codes: np.ndarray | None = None,
+    matrix_sample_index: np.ndarray | None = None,
 ) -> GeneratedDatasetPayload:
     """Build the final immutable dataset payload for the composition layer."""
     return GeneratedDatasetPayload(
@@ -705,6 +840,9 @@ def _build_dataset_payload(
         num_bindings=num_bindings,
         parameters_arrays=parameters_arrays,
         layout=layout,
+        rhs_kind_codes=rhs_kind_codes,
+        target_kind_codes=target_kind_codes,
+        matrix_sample_index=matrix_sample_index,
     )
 
 
@@ -788,6 +926,9 @@ def _accumulate_bindings(
 ) -> tuple[
     list[np.ndarray],
     list[np.ndarray],
+    list[np.ndarray],
+    list[np.ndarray],
+    list[np.ndarray],
     list[list[np.ndarray]],
     list[float],
     list[float],
@@ -818,6 +959,9 @@ def _accumulate_bindings(
     single_matrix_written = False
     rhs_blocks: list[np.ndarray] = []
     solution_blocks: list[np.ndarray] = []
+    rhs_kind_blocks: list[np.ndarray] = []
+    target_kind_blocks: list[np.ndarray] = []
+    matrix_sample_index_blocks: list[np.ndarray] = []
     param_blocks: list[list[np.ndarray]] = [[] for _ in param_streams]
     matrix_norm_values: list[float] = []
     matrix_value_scale_values: list[float] = []
@@ -847,6 +991,9 @@ def _accumulate_bindings(
 
         rhs_blocks.append(result.rhs_block)
         solution_blocks.append(result.solution_block)
+        rhs_kind_blocks.append(result.rhs_kind_codes)
+        target_kind_blocks.append(result.target_kind_codes)
+        matrix_sample_index_blocks.append(result.matrix_sample_index)
         emitted_binding_count += 1
 
         for k, (stream, sample_id) in enumerate(zip(param_streams, binding.parameters_sample_ids)):
@@ -869,6 +1016,9 @@ def _accumulate_bindings(
     return (
         rhs_blocks,
         solution_blocks,
+        rhs_kind_blocks,
+        target_kind_blocks,
+        matrix_sample_index_blocks,
         param_blocks,
         matrix_norm_values,
         matrix_value_scale_values,
@@ -881,6 +1031,9 @@ def _finalize_payload(
     *,
     rhs_blocks: list[np.ndarray],
     solution_blocks: list[np.ndarray],
+    rhs_kind_blocks: list[np.ndarray],
+    target_kind_blocks: list[np.ndarray],
+    matrix_sample_index_blocks: list[np.ndarray],
     param_blocks: list[list[np.ndarray]],
     matrix_norm_values: list[float],
     matrix_value_scale_values: list[float],
@@ -919,6 +1072,23 @@ def _finalize_payload(
     )
     rhs_all = np.vstack(rhs_blocks)
     solutions_all = np.vstack(solution_blocks)
+    rhs_kind_codes = (
+        np.concatenate(rhs_kind_blocks) if rhs_kind_blocks else np.empty((0,), dtype=np.uint8)
+    )
+    target_kind_codes = (
+        np.concatenate(target_kind_blocks) if target_kind_blocks else np.empty((0,), dtype=np.uint8)
+    )
+    matrix_sample_index = (
+        np.concatenate(matrix_sample_index_blocks)
+        if matrix_sample_index_blocks
+        else np.empty((0,), dtype=np.int64)
+    )
+    if rhs_kind_codes.shape[0] != rhs_all.shape[0]:
+        raise ValueError("rhs_kind metadata length must match persisted RHS row count.")
+    if target_kind_codes.shape[0] != rhs_all.shape[0]:
+        raise ValueError("target_kind metadata length must match persisted RHS row count.")
+    if matrix_sample_index.shape[0] != rhs_all.shape[0]:
+        raise ValueError("matrix_sample_index length must match persisted RHS row count.")
     matrix_artifact_path = accumulator.finalize()
     matrix_size = accumulator.matrix_size
 
@@ -941,6 +1111,9 @@ def _finalize_payload(
         emitted_binding_count,
         parameters_arrays,
         layout,
+        rhs_kind_codes,
+        target_kind_codes,
+        matrix_sample_index,
     )
 
 
@@ -1053,6 +1226,9 @@ def build_dataset_payload(
     (
         rhs_blocks,
         solution_blocks,
+        rhs_kind_blocks,
+        target_kind_blocks,
+        matrix_sample_index_blocks,
         param_blocks,
         norm_vals,
         scale_vals,
@@ -1075,6 +1251,9 @@ def build_dataset_payload(
     payload = _finalize_payload(
         rhs_blocks=rhs_blocks,
         solution_blocks=solution_blocks,
+        rhs_kind_blocks=rhs_kind_blocks,
+        target_kind_blocks=target_kind_blocks,
+        matrix_sample_index_blocks=matrix_sample_index_blocks,
         param_blocks=param_blocks,
         matrix_norm_values=norm_vals,
         matrix_value_scale_values=scale_vals,

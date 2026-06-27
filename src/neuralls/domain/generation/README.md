@@ -141,6 +141,18 @@ Platform storage owns the concrete implementations:
 The manifest is the canonical dataset contract. Read paths do not assume fixed
 filenames beyond what the manifest declares.
 
+Generated datasets also persist row-level comparison metadata in the same
+storage family as the dataset itself. The persisted metadata artifacts are:
+
+- `rhs_kind`
+- `target_kind`
+- `matrix_sample_index`
+
+Internal workflow logic uses `StrEnum` semantic types, while storage encodes
+those enums as compact integer arrays through shared pure codecs. Safe
+comparison selection is derived from the persisted `rhs_kind` metadata rather
+than from a separate stored allowlist.
+
 ## Normalization Metadata
 
 Generation writes normalized matrix samples, RHS vectors, and solutions as one
@@ -154,6 +166,10 @@ For multi-matrix datasets, each matrix is still normalized independently before
 storage. If those bindings do not share one exact scale payload, the manifest
 intentionally leaves `normalization.scale` empty instead of pretending there is
 one dataset-wide reversible scale.
+
+Comparison safety semantics apply to RHS rows, not matrices. A single persisted
+matrix may legitimately pair with both safe non-residual RHS rows and unsafe
+residual-derived RHS rows.
 
 ## Extension Rules
 

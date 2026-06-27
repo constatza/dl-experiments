@@ -6,6 +6,7 @@ The shared package holds cross-layer primitives only.
 
 - `constants.py`: package-wide constants and config keys
 - `types.py`: shared numerical metadata types (`ScaleMetadata`, `MatrixNormType`) used by ≥2 layers
+- `enum_codecs.py`: pure semantic enum encoders/decoders shared by domain, composition, and platform
 - `functional.py`: pure functional utilities
 
 ## Semantic Difference

@@ -48,6 +48,9 @@ class DatasetManifest:
     solutions: DatasetArtifact
     normalization: DatasetNormalization
     params: tuple[DatasetArtifact, ...] = ()
+    rhs_kind: DatasetArtifact | None = None
+    target_kind: DatasetArtifact | None = None
+    matrix_sample_index: DatasetArtifact | None = None
 
 
 def manifest_path_for(dataset_dir: str | Path) -> Path:

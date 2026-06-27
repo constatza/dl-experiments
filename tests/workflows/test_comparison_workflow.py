@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 import tomli_w
 
+from neuralls.composition.comparison.config_assembler import resolve_comparison_config
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.composition.experiments.comparison_batch import (
     _resolve_neural_preconditioners,
@@ -26,6 +27,7 @@ from neuralls.domain.solver.models.result import (
     RankedRecommendation,
 )
 from neuralls.platform.config.models.experiments import ComparisonRegistryEntry
+from neuralls.platform.config.models.experiments import CaseConfig
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
@@ -45,6 +47,7 @@ from neuralls.platform.tracking.comparison_tracking import (
     log_comparison_result_metrics,
 )
 from neuralls.platform.tracking.mlflow import sanitize_metric_key_segment
+from neuralls.shared.types import ComparisonRhsGenerationKind
 
 
 def test_resolve_comparison_config_importable_from_composition() -> None:
@@ -264,6 +267,50 @@ def _make_settings(tmp_path: Path) -> NeurallsSettings:
     )
 
 
+def test_resolve_comparison_config_recovers_omitted_index_semantics(tmp_path: Path) -> None:
+    datasets_dir = tmp_path / "datasets"
+    datasets_dir.mkdir()
+    _write_dataset_config(datasets_dir / "matrix.toml", "matrix")
+    _write_dataset_config(datasets_dir / "rhs.toml", "rhs")
+    settings = _make_settings(tmp_path)
+    case_cfg = CaseConfig.model_validate(
+        {
+            "datasets": [
+                {"id": "matrix", "path": "datasets/matrix.toml"},
+                {"id": "rhs", "path": "datasets/rhs.toml"},
+            ],
+            "comparison_defaults": {
+                "rtol": 1.0e-6,
+                "atol": 1.0e-14,
+                "max_iterations": 10,
+                "stopping_criterion": "residual_norm",
+                "m_max": 20,
+                "preconditioners": [{"name": "none", "type": "identity"}],
+            },
+        }
+    )
+    omitted_entry = ComparisonRegistryEntry(
+        id="omitted",
+        matrix_dataset="matrix",
+        rhs_dataset="rhs",
+    )
+    explicit_entry = ComparisonRegistryEntry(
+        id="explicit",
+        matrix_dataset="matrix",
+        rhs_dataset="rhs",
+        matrix_index=0,
+        rhs_index=0,
+    )
+
+    omitted_cfg = resolve_comparison_config(case_cfg, tmp_path, omitted_entry, settings)
+    explicit_cfg = resolve_comparison_config(case_cfg, tmp_path, explicit_entry, settings)
+
+    assert omitted_cfg.general.data.matrix_index is None
+    assert omitted_cfg.general.data.rhs_index is None
+    assert explicit_cfg.general.data.matrix_index == 0
+    assert explicit_cfg.general.data.rhs_index == 0
+
+
 def test_comparison_data_model_tracks_explicit_normalize_in_fields_set() -> None:
     """model_fields_set must distinguish explicit normalize_system from default."""
     from neuralls.platform.config.models.comparison import ComparisonDataModel
@@ -399,6 +446,38 @@ def test_run_comparison_uses_explicit_entry_indices(tmp_path: Path) -> None:
 
     assert mock_compare.call_args.kwargs["general_params"].data.matrix_index == 4
     assert mock_compare.call_args.kwargs["general_params"].data.rhs_index == 9
+
+
+def test_run_comparison_generated_rhs_accepts_matrix_only_input(tmp_path: Path) -> None:
+    """Generated-RHS comparisons should prevalidate only the matrix source."""
+    experiments_config = tmp_path / "experiments.toml"
+    _write_experiments_config(experiments_config)
+    matrix_path, _rhs_path = _write_system_inputs(tmp_path)
+    cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=None,
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ],
+    )
+    cfg.general.data.rhs_generation_kind = ComparisonRhsGenerationKind.GAUSSIAN
+    cfg.general.data.rhs_generation_params = {"mean": 0.0, "std": 1.0}
+    cfg.general.data.selection_seed = 5
+    payload = MagicMock()
+    entry = _make_entry()
+    settings = _make_settings(tmp_path)
+
+    with (
+        patch(_COMPARE_PRECONDITIONERS, return_value=payload),
+        patch(_MLFLOW_MODULE) as mock_mlflow,
+        patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
+        patch(_SETUP_TRACKING),
+        patch(_LOG_COMPARISON_ARTIFACTS),
+    ):
+        _configure_mock_mlflow(mock_mlflow)
+        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+
+    assert outcomes[0].success is True
 
 
 def test_run_comparison_does_not_require_split_artifacts(tmp_path: Path) -> None:

@@ -18,6 +18,7 @@ from neuralls.composition.comparison._preconditioner_setup import (
     _create_scheduled_preconditioners,
 )
 from neuralls.composition.comparison.models import ComparisonPaths
+from neuralls.composition.comparison.models import ResolvedComparisonInput
 from neuralls.domain.analysis.spectra import PreconditionerCallable, compute_condition_numbers
 from neuralls.domain.solver.preconditioners.base import BindableInputs
 from neuralls.domain.solver.comparison import format_results_summary, run_cg_comparison
@@ -55,7 +56,11 @@ def _resolve_comparison_paths(
         ValueError: If matrix_path or rhs_path are missing.
     """
     matrix_file = Path(general_params.data.matrix_path)
-    rhs_file = Path(general_params.data.rhs_path)
+    rhs_file = (
+        Path(general_params.data.rhs_path)
+        if general_params.data.rhs_path is not None
+        else matrix_file
+    )
 
     if output_root is not None:
         output_base = resolve_user_path(output_root)
@@ -93,6 +98,7 @@ def compare_preconditioners(
     output_root: Path | None = None,
     figures_root: Path | None = None,
     display_name: str | None = None,
+    resolved_input: ResolvedComparisonInput | None = None,
 ) -> ComparisonResult:
     """Run CG comparisons and generate diagnostics.
 
@@ -132,11 +138,19 @@ def compare_preconditioners(
     )
     _ensure_comparison_directories(paths)
 
+    resolved_rhs_index = (
+        general_params.data.rhs_index if general_params.data.rhs_index is not None else 0
+    )
+    resolved_matrix_index = (
+        general_params.data.matrix_index if general_params.data.matrix_index is not None else 0
+    )
+
     system = _load_linear_system(
         paths,
-        rhs_index=general_params.data.rhs_index,
-        matrix_index=general_params.data.matrix_index,
+        rhs_index=resolved_rhs_index,
+        matrix_index=resolved_matrix_index,
         normalize_system=general_params.data.normalize_system,
+        resolved_input=resolved_input,
     )
     _log_matrix_condition_number(
         system.matrix,
@@ -167,9 +181,7 @@ def compare_preconditioners(
         _arrays = load_training_arrays(paths.matrix)
         _extra_name_list = sorted(needed_extra_names)
         extra_data = {
-            name: load_array_source_sample(
-                _arrays.parameter_sources[i], general_params.data.matrix_index
-            )
+            name: load_array_source_sample(_arrays.parameter_sources[i], resolved_matrix_index)
             for i, name in enumerate(_extra_name_list)
             if i < len(_arrays.parameter_sources)
         }

@@ -10,7 +10,7 @@ from neuralls.domain.generation.data_types import NormalizeType
 from neuralls.domain.generation.plan import (
     GenerationPlan,
     StrategySpec,
-    canonicalize_strategy_name,
+    canonicalize_strategy_kind,
     plan_from_specs,
 )
 from neuralls.domain.generation.source_streams import EnumerateBy
@@ -81,7 +81,7 @@ def _plan_from_generation_config(
         specs.append(
             StrategySpec(
                 raw_name=sc.name,
-                canonical_name=canonicalize_strategy_name(sc.name),
+                kind=canonicalize_strategy_kind(sc.name),
                 samples=sc.samples,
                 options=options,
             )

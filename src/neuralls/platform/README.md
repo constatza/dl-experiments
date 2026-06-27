@@ -84,6 +84,9 @@ re-normalizing them against the local operating system.
 Storage validation owns concrete dataset-layout checks. Comparison matrix/RHS
 preflight belongs under `platform.storage` because it depends on manifest and
 artifact-layout knowledge rather than workflow sequencing.
+Generated-RHS workflows therefore validate only the matrix artifact they
+actually consume, while dataset-backed RHS workflows validate both matrix and
+RHS artifacts.
 The same boundary owns filesystem and write-failure enrichment for dataset
 artifacts so CLI callers receive operation- and path-specific diagnostics
 without importing storage policy into composition.
@@ -92,6 +95,22 @@ Dataset storage is split by responsibility:
 - `storage/manifest.py`: typed dataset manifest dataclasses and JSON serialization
 - `storage/generation_formats.py`: generation-time `zarr` and `npy` writers/accumulators
 - `storage/dataset_readers.py`: manifest-driven read helpers and explicit resolved dataset contracts
+
+Safe comparison selection relies on manifest-declared metadata artifacts stored
+in the dataset's native format. Mature datasets may expose:
+
+- `rhs_kind`
+- `target_kind`
+- `matrix_sample_index`
+
+Readers derive safe RHS candidates from `rhs_kind`; they do not trust ad hoc
+filenames or stored allowlists. Storage owns persistence and artifact
+resolution, while the compact integer encoding/decoding boundary lives in
+shared pure codecs so domain and composition code do not depend on platform.
+When datasets also expose `matrix_sample_index`, platform persists and reads
+that binding as provenance metadata only. Comparison workflows may still mix
+any selected matrix sample with any semantically allowed RHS row unless a
+higher-level workflow adds a stricter pairing policy.
 
 Case-driven comparison sample selection stays explicit and deterministic.
 `ComparisonRegistryEntry.matrix_index` and `rhs_index` default to `0`, and the

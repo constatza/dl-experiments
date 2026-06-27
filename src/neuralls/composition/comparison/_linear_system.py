@@ -8,7 +8,11 @@ from typing import Literal, cast
 import numpy as np
 from loguru import logger
 
-from neuralls.composition.comparison.models import ComparisonPaths, LinearSystem
+from neuralls.composition.comparison.models import (
+    ComparisonPaths,
+    LinearSystem,
+    ResolvedComparisonInput,
+)
 from neuralls.domain.linalg import compute_condition_number
 from neuralls.domain.normalization import IScale, create_scale_from_config
 from neuralls.domain.solver.utils.validation import validate_matrix, validate_rhs_vector
@@ -73,6 +77,7 @@ def _load_linear_system(
     rhs_index: int,
     matrix_index: int,
     normalize_system: str,
+    resolved_input: ResolvedComparisonInput | None = None,
 ) -> LinearSystem:
     """Load and validate a linear system from disk.
 
@@ -90,9 +95,12 @@ def _load_linear_system(
         ValueError: If validation fails (wrong shape, NaN values, incompatible dimensions).
         FileNotFoundError: If matrix or rhs files don't exist.
     """
-    A, b = load_system_arrays(
-        paths.matrix, paths.rhs, rhs_index=rhs_index, matrix_index=matrix_index
-    )
+    if resolved_input is None:
+        A, b = load_system_arrays(
+            paths.matrix, paths.rhs, rhs_index=rhs_index, matrix_index=matrix_index
+        )
+    else:
+        A, b = resolved_input.matrix, resolved_input.rhs
     A, b = _normalize_linear_system(A, b, normalize_system)
     validate_matrix(A)
     validate_rhs_vector(b, A)
