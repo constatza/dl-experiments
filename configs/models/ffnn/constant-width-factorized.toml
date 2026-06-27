@@ -9,7 +9,7 @@ num_layers = 1
 
 [TRAINING.lr_tuner]
 min_lr = 1e-5
-max_lr = 1e-2
+max_lr = 1e-3
 num_training = 100
 mode = "linear"
 

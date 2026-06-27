@@ -1,0 +1,133 @@
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training = "Train-45x15-Factorized"
+comparison = "Compare-45x15-Factorized"
+
+[comparison_defaults]
+rtol = 1.0e-6
+atol = 1.0e-14
+max_iterations = 200
+stopping_criterion = "residual_norm"
+m_max = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+[[datasets]]
+id = "gaussian-cg100-45x15"
+path = "../../datasets/train/45x15/gaussian-cg100.toml"
+display_name = "Gaussian CG-100 45x15"
+
+[[datasets]]
+id = "scaled-solutions-45x15"
+path = "../../datasets/test/45x15/scaled-solutions.toml"
+display_name = "Scaled Solutions 45x15"
+
+[[datasets]]
+id = "sparse-rhs-45x15"
+path = "../../datasets/test/45x15/sparse-rhs.toml"
+display_name = "Sparse RHS 45x15"
+
+[[models]]
+id = "embedded-factorized"
+path = "../../models/ffnn/embedded-factorized.toml"
+display_name = "Scale-Equivariant Embedded Factorized FFNN"
+
+[[models]]
+id = "factorized"
+path = "../../models/ffnn/factorized.toml"
+display_name = "Scale-Equivariant Factorized FFNN"
+
+[[models]]
+id = "constant-width-factorized"
+path = "../../models/ffnn/constant-width-factorized.toml"
+display_name = "Constant-Width Factorized FFNN"
+
+[[models]]
+id = "constant-width-simple-factorized"
+path = "../../models/ffnn/constant-width-simple-factorized.toml"
+display_name = "Constant-Width Simple Factorized FFNN"
+
+[[models]]
+id = "scale-equivariant-constant-width-factorized"
+path = "../../models/ffnn/scale-equivariant-constant-width-factorized.toml"
+display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
+
+[[models]]
+id = "scale-equivariant-constant-width-simple-factorized"
+path = "../../models/ffnn/scale-equivariant-constant-width-simple-factorized.toml"
+display_name = "Scale-Equivariant Constant-Width Simple Factorized FFNN"
+
+[[comparisons]]
+id = "gaussian"
+matrix_dataset = "gaussian-cg100-45x15"
+rhs_dataset = "gaussian-cg100-45x15"
+experiments = [
+  "embedded-factorized-gaussian-cg100-45x15",
+  "factorized-gaussian-cg100-45x15",
+  "constant-width-factorized-gaussian-cg100-45x15",
+  "constant-width-simple-factorized-gaussian-cg100-45x15",
+  "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15",
+  "scale-equivariant-constant-width-simple-factorized-gaussian-cg100-45x15",
+]
+
+[[comparisons]]
+id = "scaled"
+matrix_dataset = "gaussian-cg100-45x15"
+rhs_dataset = "scaled-solutions-45x15"
+experiments = [
+  "embedded-factorized-gaussian-cg100-45x15",
+  "factorized-gaussian-cg100-45x15",
+  "constant-width-factorized-gaussian-cg100-45x15",
+  "constant-width-simple-factorized-gaussian-cg100-45x15",
+  "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15",
+  "scale-equivariant-constant-width-simple-factorized-gaussian-cg100-45x15",
+]
+
+[[comparisons]]
+id = "sparse"
+matrix_dataset = "gaussian-cg100-45x15"
+rhs_dataset = "sparse-rhs-45x15"
+experiments = [
+  "embedded-factorized-gaussian-cg100-45x15",
+  "factorized-gaussian-cg100-45x15",
+  "constant-width-factorized-gaussian-cg100-45x15",
+  "constant-width-simple-factorized-gaussian-cg100-45x15",
+  "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15",
+  "scale-equivariant-constant-width-simple-factorized-gaussian-cg100-45x15",
+]
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15"
+model = "embedded-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15"
+model = "factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15"
+model = "constant-width-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15"
+model = "constant-width-simple-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15"
+model = "scale-equivariant-constant-width-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15"
+model = "scale-equivariant-constant-width-simple-factorized"

@@ -40,6 +40,16 @@ path = "../../datasets/test/45x15randomE/sparse-rhs-single-matrix.toml"
 display_name = "Sparse RHS 45x15randomE Single Matrix"
 
 [[models]]
+id = "embedded-factorized"
+path = "../../models/ffnn/embedded-factorized.toml"
+display_name = "Scale-Equivariant Embedded Factorized FFNN"
+
+[[models]]
+id = "factorized"
+path = "../../models/ffnn/factorized.toml"
+display_name = "Scale-Equivariant Factorized FFNN"
+
+[[models]]
 id = "constant-width-factorized"
 path = "../../models/ffnn/constant-width-factorized.toml"
 display_name = "Constant-Width Factorized FFNN"
@@ -64,6 +74,8 @@ id = "gaussian-cg100-single-matrix"
 matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 experiments = [
+  "embedded-factorized-gaussian-cg100-45x15randomE-single-matrix",
+  "factorized-gaussian-cg100-45x15randomE-single-matrix",
   "constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
@@ -75,6 +87,8 @@ id = "scaled"
 matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_dataset = "scaled-solutions-45x15randomE-single-matrix"
 experiments = [
+  "embedded-factorized-gaussian-cg100-45x15randomE-single-matrix",
+  "factorized-gaussian-cg100-45x15randomE-single-matrix",
   "constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
@@ -86,11 +100,21 @@ id = "sparse"
 matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_dataset = "sparse-rhs-45x15randomE-single-matrix"
 experiments = [
+  "embedded-factorized-gaussian-cg100-45x15randomE-single-matrix",
+  "factorized-gaussian-cg100-45x15randomE-single-matrix",
   "constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
 ]
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15randomE-single-matrix"
+model = "embedded-factorized"
+
+[[experiments]]
+dataset = "gaussian-cg100-45x15randomE-single-matrix"
+model = "factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE-single-matrix"
