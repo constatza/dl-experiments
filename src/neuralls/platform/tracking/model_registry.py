@@ -32,9 +32,9 @@ def _build_logged_model_uri(*, run_id: str, artifact_path: str) -> str:
     return f"runs:/{run_id}/{normalized_artifact_path}"
 
 
-def build_registered_model_name(model_id: str) -> str:
+def build_registered_model_name(job_id: str) -> str:
     """Build canonical registered model name."""
-    return model_id
+    return job_id
 
 
 def _normalize_aliases(aliases: tuple[str, ...]) -> tuple[str, ...]:
@@ -177,13 +177,13 @@ def assign_dataset_alias_to_registered_model(
     return resolved_version
 
 
-def read_registered_model_name(model_config_path: Path) -> str | None:
-    """Read the registered model name from a model config TOML.
+def read_model_class_name(job_config_path: Path) -> str | None:
+    """Read the model class name from a job config TOML.
 
-    Reads ``[MODEL].name`` which is used for MLflow model registry lookup.
+    Reads ``[model].class`` from the new DLKit JobConfig layout.
 
     Args:
-        model_config_path: Path to the model configuration TOML file.
+        job_config_path: Path to the job configuration TOML file.
 
     Returns:
         Model name string, or ``None`` if missing or unreadable.
@@ -191,14 +191,17 @@ def read_registered_model_name(model_config_path: Path) -> str | None:
     import tomllib
 
     try:
-        with open(model_config_path, "rb") as fh:
+        with open(job_config_path, "rb") as fh:
             raw = tomllib.load(fh)
     except FileNotFoundError, OSError, ValueError:
         return None
-    model_section = raw.get("MODEL")
+    model_section = raw.get("model")
     if not isinstance(model_section, dict):
         return None
-    model_name = model_section.get("name")
+    model_name = model_section.get("class")
     if not isinstance(model_name, str):
         return None
     return model_name.strip() or None
+
+
+read_registered_model_name = read_model_class_name

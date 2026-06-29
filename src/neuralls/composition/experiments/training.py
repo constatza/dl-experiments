@@ -7,11 +7,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from dlkit.config import SearchJobConfig, TrainingJobConfig
 from dlkit.infrastructure.config.core.patching import patch_model
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
 from dlkit.interfaces.api import execute
 from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
 
@@ -46,7 +43,7 @@ from neuralls.platform.tracking.mlflow_client import (
     parent_run_context,
 )
 
-type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
+type TrainingWorkflowSettings = TrainingJobConfig | SearchJobConfig
 
 
 @dataclass(frozen=True)
@@ -82,6 +79,8 @@ def train_model(
     experiment_display_name: str | None = None,
     dataset_registry_id: str | None = None,
     dataset_display_name: str | None = None,
+    job_registry_id: str | None = None,
+    job_display_name: str | None = None,
     model_registry_id: str | None = None,
     model_display_name: str | None = None,
     mlflow_experiment_name: str | None = None,
@@ -132,20 +131,22 @@ def train_model(
         tmp_path = Path(_tmp)
         config_path = Path(config_path)
         resolved_data_config_path = Path(data_config_path)
+        resolved_job_registry_id = job_registry_id or model_registry_id
+        resolved_job_display_name = job_display_name or model_display_name
 
         # Step 1: Load experiment configuration into temp dir
         experiment = load_experiment(
-            config_path,
-            resolved_data_config_path,
-            settings,
+            job_config_path=config_path,
+            data_config_path=resolved_data_config_path,
+            neuralls_settings=settings,
             case_config_path=resolved_case_config_path,
             output_root=tmp_path,
             experiment_id=experiment_id,
             experiment_display_name=experiment_display_name,
             dataset_registry_id=dataset_registry_id,
             dataset_display_name=dataset_display_name,
-            model_registry_id=model_registry_id,
-            model_display_name=model_display_name,
+            job_registry_id=resolved_job_registry_id,
+            job_display_name=resolved_job_display_name,
         )
         workflow_settings = experiment.settings
         workspace = experiment.workspace
@@ -162,7 +163,7 @@ def train_model(
             experiment_id=experiment.spec.experiment_id,
             experiment_display_name=resolved_experiment_display_name,
             dataset_registry_id=experiment.spec.dataset_registry_id,
-            model_registry_id=experiment.spec.model_registry_id,
+            job_registry_id=experiment.spec.job_registry_id,
             dataset_display_name=resolved_dataset_display_name,
             mlflow_experiment_name=mlflow_experiment_name,
             runtime_mlflow_env=runtime_mlflow_env,
@@ -185,7 +186,7 @@ def train_model(
         if max_epochs is not None:
             workflow_settings = patch_model(
                 workflow_settings,
-                {"TRAINING": {"trainer": {"max_epochs": max_epochs}}},
+                {"training": {"trainer": {"max_epochs": max_epochs}}},
             )
         with scoped_mlflow_environment(runtime_mlflow_env):
             with parent_run_context(parent_run_id):
@@ -233,8 +234,8 @@ def train_model(
                     dataset_id=dataset_id,
                     dataset_display_name=resolved_dataset_display_name,
                     dataset_registry_id=experiment.spec.dataset_registry_id,
-                    model_registry_id=experiment.spec.model_registry_id,
-                    model_display_name=experiment.spec.model_display_name or workspace.run_id,
+                    job_registry_id=experiment.spec.job_registry_id,
+                    job_display_name=experiment.spec.job_display_name or workspace.run_id,
                 )
                 log_extra_feature_names_tag(
                     tracking_uri,

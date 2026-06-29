@@ -9,8 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from neuralls.platform.config.models.experiments import ExperimentsConfig
-from neuralls.platform.config.models.experiments import ExperimentNamesConfig
+from neuralls.platform.config.models.experiments import CaseConfig, ExperimentNamesConfig
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 from neuralls.platform.config.loaders import load_experiments_config, load_raw_toml
 from neuralls.composition.experiments.multi_training import (
@@ -57,12 +56,12 @@ def training_run_results(tmp_path: Path) -> list[TrainingRunResult]:
 
 
 @pytest.fixture
-def model_config_file(tmp_path: Path) -> Path:
-    """Create a minimal model config TOML file."""
-    models_dir = tmp_path / "models"
-    models_dir.mkdir()
-    path = models_dir / "ffnn.toml"
-    path.write_text("[MODEL]\nname = 'NormScaledLinearFFNN'\n")
+def job_config_file(tmp_path: Path) -> Path:
+    """Create a minimal job config TOML file."""
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    path = jobs_dir / "ffnn.toml"
+    path.write_text('[run]\ntype = "train"\n[model]\nclass = "NormScaledLinearFFNN"\n')
     return path
 
 
@@ -79,7 +78,7 @@ def dataset_config_file(tmp_path: Path) -> Path:
 @pytest.fixture
 def valid_experiments_toml(
     tmp_path: Path,
-    model_config_file: Path,
+    job_config_file: Path,
     dataset_config_file: Path,
 ) -> Path:
     """Valid experiments TOML with one registry-backed entry."""
@@ -90,9 +89,9 @@ def valid_experiments_toml(
                 "[mlflow]",
                 f'tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")}"',
                 "",
-                "[[models]]",
+                "[[jobs]]",
                 'id = "ffnn"',
-                'path = "models/ffnn.toml"',
+                'path = "jobs/ffnn.toml"',
                 "",
                 "[[datasets]]",
                 'id = "test-solutions"',
@@ -100,7 +99,7 @@ def valid_experiments_toml(
                 "",
                 "[[experiments]]",
                 'id = "ffnn_test"',
-                'model = "ffnn"',
+                'job = "ffnn"',
                 'dataset = "test-solutions"',
                 "",
             ]
@@ -126,26 +125,26 @@ def test_collect_batch_metrics(training_run_results: list[TrainingRunResult]) ->
 
 def test_resolve_config_paths(
     tmp_path: Path,
-    model_config_file: Path,
+    job_config_file: Path,
     dataset_config_file: Path,
     valid_experiments_toml: Path,
     neuralls_settings,
 ) -> None:
     """Registry-backed entries resolve into concrete config files."""
     cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
-    model_path, data_path = _resolve_config_paths(
+    job_path, data_path = _resolve_config_paths(
         cfg.experiments[0],
         tmp_path,
         cfg,
     )
-    assert model_path == model_config_file
+    assert job_path == job_config_file
     assert data_path == dataset_config_file
 
 
 def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_settings) -> None:
     """Single training run returns the training checkpoint and MLflow metadata."""
-    model_cfg = tmp_path / "model.toml"
-    model_cfg.write_text("[MODEL]\nname = 'NormScaledLinearFFNN'\n")
+    job_cfg = tmp_path / "job.toml"
+    job_cfg.write_text('[run]\ntype = "train"\n[model]\nclass = "NormScaledLinearFFNN"\n')
     data_cfg = tmp_path / "dataset.toml"
     data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
     ckpt_dir = tmp_path / "ckpt"
@@ -174,7 +173,7 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_setting
             settings=neuralls_settings,
             experiment_id="exp-1",
             experiment_display_name="exp-1",
-            model_config_path=model_cfg,
+            job_config_path=job_cfg,
             data_config_path=data_cfg,
             label="1",
             output_root=None,
@@ -188,8 +187,8 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_setting
 
 def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) -> None:
     """Single training forwards the optional batch parent run id unchanged."""
-    model_cfg = tmp_path / "model.toml"
-    model_cfg.write_text("[MODEL]\nname = 'NormScaledLinearFFNN'\n")
+    job_cfg = tmp_path / "job.toml"
+    job_cfg.write_text('[run]\ntype = "train"\n[model]\nclass = "NormScaledLinearFFNN"\n')
     data_cfg = tmp_path / "dataset.toml"
     data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
     ckpt_dir = tmp_path / "ckpt"
@@ -215,7 +214,7 @@ def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) 
             settings=neuralls_settings,
             experiment_id="exp-1",
             experiment_display_name="exp-1",
-            model_config_path=model_cfg,
+            job_config_path=job_cfg,
             data_config_path=data_cfg,
             label="1",
             output_root=None,
@@ -227,16 +226,16 @@ def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) 
 
 
 @pytest.fixture
-def model_config_with_model_name(tmp_path: Path) -> Path:
-    """Model config TOML with [MODEL].name set."""
-    path = tmp_path / "model.toml"
-    path.write_text("[MODEL]\nname = 'NormScaledLinearFFNN'\n")
+def job_config_with_model_name(tmp_path: Path) -> Path:
+    """Job config TOML with [model].class set."""
+    path = tmp_path / "job.toml"
+    path.write_text('[run]\ntype = "train"\n[model]\nclass = "NormScaledLinearFFNN"\n')
     return path
 
 
 def test_annotate_mlflow_run_registers_under_experiment_id(
     tmp_path: Path,
-    model_config_with_model_name: Path,
+    job_config_with_model_name: Path,
 ) -> None:
     """After training, model is registered under experiment_id with model_class tag."""
     with (
@@ -250,14 +249,14 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
             run_id="run-abc",
             tracking_uri=build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
             checkpoint_path=tmp_path / "model.ckpt",
-            model_config_path=model_config_with_model_name,
+            job_config_path=job_config_with_model_name,
             experiment_id="spectral-energy",
             experiment_display_name="Spectral Energy",
             dataset_id="solutions",
             dataset_display_name="Solutions",
             dataset_registry_id="solutions",
-            model_registry_id="ffnn",
-            model_display_name="FFNN",
+            job_registry_id="ffnn",
+            job_display_name="FFNN",
         )
 
     mock_register.assert_called_once_with(
@@ -267,7 +266,7 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
         tags={
             "experiment_id": "spectral-energy",
             "dataset_id": "solutions",
-            "model_id": "ffnn",
+            "job_id": "ffnn",
             "experiment_display_name": "Spectral Energy",
             "model_class": "NormScaledLinearFFNN",
         },
@@ -285,7 +284,7 @@ def test_train_batch_raises_for_empty_config(tmp_path: Path, neuralls_settings) 
             ]
         )
     )
-    cfg = ExperimentsConfig.model_validate(load_raw_toml(config))
+    cfg = CaseConfig.model_validate(load_raw_toml(config))
     with pytest.raises(ValueError, match="No .* entries found"):
         train_batch(cfg=cfg, configs_dir=tmp_path, settings=neuralls_settings)
 
@@ -348,9 +347,9 @@ def test_train_batch_forwards_custom_training_experiment_name(
                 'training = "CustomTrain"',
                 'comparison = "CustomComparison"',
                 "",
-                "[[models]]",
+                "[[jobs]]",
                 'id = "ffnn"',
-                'path = "models/ffnn.toml"',
+                'path = "jobs/ffnn.toml"',
                 "",
                 "[[datasets]]",
                 'id = "test-solutions"',
@@ -358,7 +357,7 @@ def test_train_batch_forwards_custom_training_experiment_name(
                 "",
                 "[[experiments]]",
                 'id = "ffnn_test"',
-                'model = "ffnn"',
+                'job = "ffnn"',
                 'dataset = "test-solutions"',
                 "",
             ]
@@ -453,7 +452,7 @@ def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -
     )
 
     with pytest.raises(ValueError, match="comparison_profiles"):
-        ExperimentsConfig.model_validate(load_raw_toml(config))
+        CaseConfig.model_validate(load_raw_toml(config))
 
 
 def test_experiments_config_rejects_legacy_singular_experiment_table(
@@ -464,9 +463,9 @@ def test_experiments_config_rejects_legacy_singular_experiment_table(
     config.write_text(
         "\n".join(
             [
-                "[[models]]",
+                "[[jobs]]",
                 'id = "ffnn"',
-                'path = "models/ffnn.toml"',
+                'path = "jobs/ffnn.toml"',
                 "",
                 "[[datasets]]",
                 'id = "test-solutions"',
@@ -474,7 +473,7 @@ def test_experiments_config_rejects_legacy_singular_experiment_table(
                 "",
                 "[[experiment]]",
                 'id = "ffnn_test"',
-                'model = "ffnn"',
+                'job = "ffnn"',
                 'dataset = "test-solutions"',
             ]
         )
@@ -490,13 +489,13 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
     config.write_text(
         "\n".join(
             [
-                "[[models]]",
+                "[[jobs]]",
                 'id = "ffnn"',
-                'path = "models/ffnn.toml"',
+                'path = "jobs/ffnn.toml"',
                 "",
                 "[[experiments]]",
                 'id = "ffnn_test"',
-                'model = "ffnn"',
+                'job = "ffnn"',
                 'dataset = "missing-dataset"',
             ]
         )
@@ -505,11 +504,11 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
     with pytest.raises(
         ValueError, match="Experiment 'ffnn_test' references dataset id 'missing-dataset'"
     ):
-        ExperimentsConfig.model_validate(load_raw_toml(config))
+        CaseConfig.model_validate(load_raw_toml(config))
 
 
-def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
-    """Experiments must reference model ids declared in [[models]]."""
+def test_experiments_config_rejects_missing_job_id(tmp_path: Path) -> None:
+    """Experiments must reference job ids declared in [[jobs]]."""
     config = tmp_path / "experiments.toml"
     config.write_text(
         "\n".join(
@@ -520,13 +519,11 @@ def test_experiments_config_rejects_missing_model_id(tmp_path: Path) -> None:
                 "",
                 "[[experiments]]",
                 'id = "ffnn_test"',
-                'model = "missing-model"',
+                'job = "missing-job"',
                 'dataset = "test-solutions"',
             ]
         )
     )
 
-    with pytest.raises(
-        ValueError, match="Experiment 'ffnn_test' references model id 'missing-model'"
-    ):
-        ExperimentsConfig.model_validate(load_raw_toml(config))
+    with pytest.raises(ValueError, match="Experiment 'ffnn_test' references job id 'missing-job'"):
+        CaseConfig.model_validate(load_raw_toml(config))

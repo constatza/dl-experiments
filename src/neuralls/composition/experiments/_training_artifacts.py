@@ -50,7 +50,7 @@ def _build_training_run_config(
     experiment_id: str | None,
     experiment_display_name: str,
     dataset_registry_id: str | None,
-    model_registry_id: str | None,
+    job_registry_id: str | None,
     dataset_display_name: str,
     mlflow_experiment_name: str | None,
     runtime_mlflow_env: Mapping[str, str],
@@ -63,7 +63,7 @@ def _build_training_run_config(
         experiment_id: Registry experiment ID, or None for ad-hoc runs.
         experiment_display_name: Human-readable experiment name.
         dataset_registry_id: Registry dataset ID, or None.
-        model_registry_id: Registry model ID, or None.
+        job_registry_id: Registry job ID, or None.
         dataset_display_name: Human-readable dataset name (unused in run name).
         mlflow_experiment_name: Override for the MLflow experiment bucket name.
         runtime_mlflow_env: MLflow environment variable mapping.
@@ -76,11 +76,11 @@ def _build_training_run_config(
     _ = dataset_display_name
     experiment_name = _resolve_training_experiment_name(mlflow_experiment_name)
     paths = runtime_paths_from_env(runtime_mlflow_env)
-    if experiment_id and dataset_registry_id and model_registry_id:
+    if experiment_id and dataset_registry_id and job_registry_id:
         entry = ExperimentEntry(
             id=experiment_id,
             dataset=dataset_registry_id,
-            model=model_registry_id,
+            job=job_registry_id,
             display_name=experiment_display_name,
         )
         return build_training_run_spec(
@@ -160,8 +160,8 @@ def _log_training_context(
     dataset_id: str,
     dataset_display_name: str,
     dataset_registry_id: str | None,
-    model_registry_id: str | None,
-    model_display_name: str,
+    job_registry_id: str | None,
+    job_display_name: str,
 ) -> None:
     """Log stable ids and display names to the training MLflow run.
 
@@ -173,14 +173,14 @@ def _log_training_context(
         dataset_id: Dataset workspace ID.
         dataset_display_name: Human-readable dataset name.
         dataset_registry_id: Registry dataset ID, or None.
-        model_registry_id: Registry model ID, or None.
-        model_display_name: Human-readable model name.
+        job_registry_id: Registry job ID, or None.
+        job_display_name: Human-readable job name.
     """
     client = MlflowClient(tracking_uri=tracking_uri)
     params: dict[str, str] = {
         "dataset_id": dataset_id,
         "dataset_display_name": dataset_display_name,
-        "model_display_name": model_display_name,
+        "job_display_name": job_display_name,
     }
     if experiment_id is not None:
         params["experiment_id"] = experiment_id
@@ -188,8 +188,8 @@ def _log_training_context(
         params["experiment_display_name"] = experiment_display_name
     if dataset_registry_id is not None:
         params["dataset_registry_id"] = dataset_registry_id
-    if model_registry_id is not None:
-        params["model_registry_id"] = model_registry_id
+    if job_registry_id is not None:
+        params["job_registry_id"] = job_registry_id
     for key, value in params.items():
         client.log_param(run_id, key, value)
 

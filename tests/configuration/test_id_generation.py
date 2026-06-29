@@ -26,7 +26,7 @@ def dataset_display() -> dict[str, str]:
 
 @pytest.fixture
 def model_display() -> dict[str, str]:
-    """Display-name lookup for test models."""
+    """Display-name lookup for test jobs."""
     return {
         "ffnn-standard": "FFNN Standard",
         "ffnn-large": "FFNN Large",
@@ -36,13 +36,13 @@ def model_display() -> dict[str, str]:
 @pytest.fixture
 def exp_invalid_id() -> dict[str, object]:
     """Experiment entry with an id that contains invalid characters."""
-    return {"dataset": "gaussian-cg1-45x15", "model": "ffnn-standard", "id": "bad id!"}
+    return {"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard", "id": "bad id!"}
 
 
 @pytest.fixture
 def exp_unknown_registry() -> dict[str, object]:
-    """Experiment entry whose dataset/model are absent from the display lookups."""
-    return {"dataset": "unknown-ds", "model": "unknown-model"}
+    """Experiment entry whose dataset/job are absent from the display lookups."""
+    return {"dataset": "unknown-ds", "job": "unknown-job"}
 
 
 @pytest.fixture
@@ -170,10 +170,10 @@ def test_build_display_lookup_handles_mixed_entries() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_infer_experiment_id_auto_is_model_first() -> None:
+def test_infer_experiment_id_auto_is_job_first() -> None:
     result = _infer_experiment_id(
         dataset_id="gaussian-cg1-45x15",
-        model_id="ffnn-standard",
+        job_id="ffnn-standard",
         user_id=None,
         user_dn=None,
     )
@@ -183,7 +183,7 @@ def test_infer_experiment_id_auto_is_model_first() -> None:
 def test_infer_experiment_id_derives_from_display_name() -> None:
     result = _infer_experiment_id(
         dataset_id="gaussian-cg1-45x15",
-        model_id="ffnn-standard",
+        job_id="ffnn-standard",
         user_id=None,
         user_dn="My Experiment",
     )
@@ -193,7 +193,7 @@ def test_infer_experiment_id_derives_from_display_name() -> None:
 def test_infer_experiment_id_uses_explicit_user_id() -> None:
     result = _infer_experiment_id(
         dataset_id="gaussian-cg1-45x15",
-        model_id="ffnn-standard",
+        job_id="ffnn-standard",
         user_id="my-experiment",
         user_dn=None,
     )
@@ -203,7 +203,7 @@ def test_infer_experiment_id_uses_explicit_user_id() -> None:
 def test_infer_experiment_id_user_id_takes_priority_over_display_name() -> None:
     result = _infer_experiment_id(
         dataset_id="gaussian-cg1-45x15",
-        model_id="ffnn-standard",
+        job_id="ffnn-standard",
         user_id="explicit-id",
         user_dn="Some Display Name",
     )
@@ -216,7 +216,7 @@ def test_infer_experiment_id_raises_on_invalid_chars(
     with pytest.raises(ValueError, match="invalid characters"):
         _infer_experiment_id(
             dataset_id=str(exp_invalid_id["dataset"]),
-            model_id=str(exp_invalid_id["model"]),
+            job_id=str(exp_invalid_id["job"]),
             user_id=str(exp_invalid_id["id"]),
             user_dn=None,
         )
@@ -227,11 +227,11 @@ def test_infer_experiment_id_falls_back_to_raw_id_when_not_in_registry(
 ) -> None:
     result = _infer_experiment_id(
         dataset_id=str(exp_unknown_registry["dataset"]),
-        model_id=str(exp_unknown_registry["model"]),
+        job_id=str(exp_unknown_registry["job"]),
         user_id=None,
         user_dn=None,
     )
-    assert result == "unknown-model-unknown-ds"
+    assert result == "unknown-job-unknown-ds"
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +245,7 @@ def test_infer_experiment_display_name_auto_from_registry(
 ) -> None:
     result = _infer_experiment_display_name(
         dataset_id="gaussian-cg1-45x15",
-        model_id="ffnn-standard",
+        job_id="ffnn-standard",
         user_dn=None,
         dataset_display=dataset_display,
         model_display=model_display,
@@ -259,7 +259,7 @@ def test_infer_experiment_display_name_uses_explicit_user_dn(
 ) -> None:
     result = _infer_experiment_display_name(
         dataset_id="gaussian-cg1-45x15",
-        model_id="ffnn-standard",
+        job_id="ffnn-standard",
         user_dn="My Experiment",
         dataset_display=dataset_display,
         model_display=model_display,
@@ -274,12 +274,12 @@ def test_infer_experiment_display_name_falls_back_to_raw_id_when_not_in_registry
 ) -> None:
     result = _infer_experiment_display_name(
         dataset_id=str(exp_unknown_registry["dataset"]),
-        model_id=str(exp_unknown_registry["model"]),
+        job_id=str(exp_unknown_registry["job"]),
         user_dn=None,
         dataset_display=dataset_display,
         model_display=model_display,
     )
-    assert result == "unknown-model | unknown-ds"
+    assert result == "unknown-job | unknown-ds"
 
 
 def test_infer_experiment_display_name_auto_when_only_id_given(
@@ -288,7 +288,7 @@ def test_infer_experiment_display_name_auto_when_only_id_given(
 ) -> None:
     result = _infer_experiment_display_name(
         dataset_id="gaussian-cg1-45x15",
-        model_id="ffnn-standard",
+        job_id="ffnn-standard",
         user_dn=None,
         dataset_display=dataset_display,
         model_display=model_display,

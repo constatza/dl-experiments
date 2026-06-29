@@ -126,13 +126,13 @@ class ExperimentEntry(BaseModel):
     Attributes:
         id: Stable experiment identifier.
         dataset_id: Dataset registry id.
-        model_id: Model registry id.
+        job_id: Job registry id.
         display_name: Optional human-facing label.
     """
 
     id: str = Field(..., min_length=1)
     dataset_id: str = Field(..., alias="dataset")
-    model_id: str = Field(..., alias="model")
+    job_id: str = Field(..., alias="job")
     checkpoint_path: Path | None = None
     display_name: str | None = None
 
@@ -169,17 +169,17 @@ class RunEntry(BaseModel):
 
     Attributes:
         id: Stable identifier for the legacy direct-path run.
-        model_config_path: Relative path to model config.
+        job_config_path: Relative path to job config.
         data_config_path: Relative path to data config.
     """
 
     id: str
-    model_config_path: str = Field(alias="model_config")
+    job_config_path: str = Field(alias="job_config")
     data_config_path: str = Field(alias="data_config")
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
-    @field_validator("model_config_path", "data_config_path", mode="before")
+    @field_validator("job_config_path", "data_config_path", mode="before")
     @classmethod
     def _expand_config_paths(cls, v: object, info: ValidationInfo) -> object:
         """Expand ${NEURALLS_*} placeholders and resolve config paths.
@@ -365,19 +365,19 @@ def _validate_experiment_registry_refs(
     experiments: list[ExperimentEntry],
     *,
     dataset_ids: set[str],
-    model_ids: set[str],
+    job_ids: set[str],
 ) -> None:
-    """Reject experiments that reference undefined dataset/model registry ids."""
+    """Reject experiments that reference undefined dataset/job registry ids."""
     for entry in experiments:
         if entry.dataset_id not in dataset_ids:
             raise ValueError(
                 f"Experiment '{entry.id}' references dataset id "
                 f"'{entry.dataset_id}', but [[datasets]] does not define it."
             )
-        if entry.model_id not in model_ids:
+        if entry.job_id not in job_ids:
             raise ValueError(
-                f"Experiment '{entry.id}' references model id "
-                f"'{entry.model_id}', but [[models]] does not define it."
+                f"Experiment '{entry.id}' references job id "
+                f"'{entry.job_id}', but [[jobs]] does not define it."
             )
 
 
@@ -386,7 +386,7 @@ class CaseConfig(BaseModel):
 
     Attributes:
         datasets: Dataset registry entries (training data + comparison reference data).
-        models: Model registry entries.
+        jobs: Job registry entries.
         comparisons: Comparison registry entries with data binding.
         experiments: Experiment entries referencing registry ids.
         run: Optional legacy direct-path entries.
@@ -397,7 +397,7 @@ class CaseConfig(BaseModel):
     """
 
     datasets: list[RegistryEntry] = Field(default_factory=list)
-    models: list[RegistryEntry] = Field(default_factory=list)
+    jobs: list[RegistryEntry] = Field(default_factory=list)
     comparisons: list[ComparisonRegistryEntry] = Field(default_factory=list)
     experiments: list[ExperimentEntry] = Field(default_factory=list)
     run: list[RunEntry] = Field(default_factory=list)
@@ -428,19 +428,19 @@ class CaseConfig(BaseModel):
         raw = cast("dict[str, object]", data)
 
         datasets: list[object] = cast("list[object]", raw.get("datasets", []))
-        models: list[object] = cast("list[object]", raw.get("models", []))
+        jobs: list[object] = cast("list[object]", raw.get("jobs", []))
         experiments: list[object] = cast("list[object]", raw.get("experiments", []))
         comparisons: list[object] = cast("list[object]", raw.get("comparisons", []))
 
         dataset_display = _build_display_lookup(datasets)
-        model_display = _build_display_lookup(models)
+        model_display = _build_display_lookup(jobs)
 
         for exp in experiments:
             if not isinstance(exp, dict):
                 continue
             exp_dict = cast("dict[str, object]", exp)
             dataset_id = str(exp_dict.get("dataset") or "")
-            model_id = str(exp_dict.get("model") or "")
+            job_id = str(exp_dict.get("job") or "")
             raw_id = exp_dict.get("id")
             raw_dn = exp_dict.get("display_name")
             user_id = str(raw_id).strip() if isinstance(raw_id, str) else None
@@ -448,11 +448,11 @@ class CaseConfig(BaseModel):
             user_dn = str(raw_dn).strip() if isinstance(raw_dn, str) else None
             user_dn = user_dn or None
 
-            exp_dict["id"] = _infer_experiment_id(dataset_id, model_id, user_id, user_dn)
+            exp_dict["id"] = _infer_experiment_id(dataset_id, job_id, user_id, user_dn)
 
             if not user_dn:
                 exp_dict["display_name"] = _infer_experiment_display_name(
-                    dataset_id, model_id, user_dn, dataset_display, model_display
+                    dataset_id, job_id, user_dn, dataset_display, model_display
                 )
 
         for comp in comparisons:
@@ -495,6 +495,10 @@ class CaseConfig(BaseModel):
             raise ValueError(
                 "Unsupported '[[experiment]]' table. Use '[[experiments]]' entries in case config."
             )
+        if "models" in raw:
+            raise ValueError(
+                "Unsupported '[[models]]' table. Use '[[jobs]]' entries in case config."
+            )
         if "comparison_profiles" in raw:
             raise ValueError(
                 "Unsupported 'comparison_profiles' table. "
@@ -506,14 +510,14 @@ class CaseConfig(BaseModel):
     def validate_unique_ids(self) -> CaseConfig:
         """Reject duplicate ids and validate all cross-registry references."""
         _dedupe_ids("dataset registry", self.datasets)
-        _dedupe_ids("model registry", self.models)
+        _dedupe_ids("job registry", self.jobs)
         _dedupe_ids("comparison registry", self.comparisons)
         _dedupe_experiment_ids(self.experiments)
         dataset_ids = _registry_ids(self.datasets)
         _validate_experiment_registry_refs(
             self.experiments,
             dataset_ids=dataset_ids,
-            model_ids=_registry_ids(self.models),
+            job_ids=_registry_ids(self.jobs),
         )
         _validate_comparison_experiment_filter_refs(
             self.comparisons,

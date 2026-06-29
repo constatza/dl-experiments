@@ -37,14 +37,14 @@ class TrainingRunTags:
         phase: Always "training".
         experiment_id: Stable experiment identifier.
         dataset_id: Dataset registry id.
-        model_id: Model registry id.
+        job_id: Job registry id.
         experiment_display_name: Human-facing experiment label.
     """
 
     phase: Literal["training"]
     experiment_id: str
     dataset_id: str
-    model_id: str
+    job_id: str
     experiment_display_name: str
 
     def as_mlflow_tags(self) -> dict[str, str]:
@@ -125,14 +125,14 @@ class RegistrationTags:
     Attributes:
         experiment_id: Stable experiment identifier.
         dataset_id: Dataset registry id.
-        model_id: Model registry id.
+        job_id: Job registry id.
         experiment_display_name: Human-facing experiment label.
         model_class: Optional model class name from [MODEL].name.
     """
 
     experiment_id: str
     dataset_id: str
-    model_id: str
+    job_id: str
     experiment_display_name: str
     model_class: str | None = None
 
@@ -141,7 +141,7 @@ class RegistrationTags:
         tags: dict[str, str] = {
             "experiment_id": self.experiment_id,
             "dataset_id": self.dataset_id,
-            "model_id": self.model_id,
+            "job_id": self.job_id,
             "experiment_display_name": self.experiment_display_name,
         }
         if self.model_class is not None:
@@ -180,7 +180,7 @@ def build_training_run_spec(
         phase="training",
         experiment_id=entry.id,
         dataset_id=entry.dataset_id,
-        model_id=entry.model_id,
+        job_id=entry.job_id,
         experiment_display_name=entry.effective_display_name,
     )
     display = entry.effective_display_name
@@ -285,7 +285,7 @@ def build_registration_tags(
     return RegistrationTags(
         experiment_id=entry.id,
         dataset_id=entry.dataset_id,
-        model_id=entry.model_id,
+        job_id=entry.job_id,
         experiment_display_name=entry.effective_display_name,
         model_class=model_class,
     )

@@ -22,7 +22,7 @@ def test_training_tags_contains_all_fields() -> None:
         phase="training",
         experiment_id="exp-1",
         dataset_id="dataset-1",
-        model_id="model-1",
+        job_id="job-1",
         experiment_display_name="Experiment One",
     )
 
@@ -30,7 +30,7 @@ def test_training_tags_contains_all_fields() -> None:
         "phase": "training",
         "experiment_id": "exp-1",
         "dataset_id": "dataset-1",
-        "model_id": "model-1",
+        "job_id": "job-1",
         "experiment_display_name": "Experiment One",
     }
 
@@ -40,7 +40,7 @@ def test_training_run_spec_name_has_readable_timestamp() -> None:
     entry = ExperimentEntry(
         id="exp-1",
         dataset="dataset-1",
-        model="model-1",
+        job="job-1",
         display_name="Experiment One",
     )
 
@@ -62,7 +62,7 @@ def test_training_run_spec_name_has_readable_timestamp() -> None:
         "phase": "training",
         "experiment_id": "exp-1",
         "dataset_id": "dataset-1",
-        "model_id": "model-1",
+        "job_id": "job-1",
         "experiment_display_name": "Experiment One",
     }
 
@@ -133,7 +133,7 @@ def test_registration_tags_optional_model_class() -> None:
     entry = ExperimentEntry(
         id="exp-1",
         dataset="dataset-1",
-        model="model-1",
+        job="job-1",
         display_name="Experiment One",
     )
 
@@ -147,7 +147,7 @@ def test_registration_tags_as_dict_excludes_none() -> None:
     entry = ExperimentEntry(
         id="exp-1",
         dataset="dataset-1",
-        model="model-1",
+        job="job-1",
         display_name="Experiment One",
     )
 
@@ -156,6 +156,6 @@ def test_registration_tags_as_dict_excludes_none() -> None:
     assert tags.as_mlflow_tags() == {
         "experiment_id": "exp-1",
         "dataset_id": "dataset-1",
-        "model_id": "model-1",
+        "job_id": "job-1",
         "experiment_display_name": "Experiment One",
     }

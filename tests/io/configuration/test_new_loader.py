@@ -21,7 +21,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
     project_root = tmp_path
     (project_root / "configs").mkdir()
     (project_root / "configs" / "datasets").mkdir()
-    (project_root / "configs" / "models").mkdir()
+    (project_root / "configs" / "jobs").mkdir()
     matrix_path = project_root / "data" / "matrix.txt"
     matrix_path.parent.mkdir()
     matrix_path.write_text("1.0\n")
@@ -36,17 +36,17 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write("[[datasets]]\n")
         f.write('id = "exp2_data"\n')
         f.write('path = "datasets/exp2_data.toml"\n\n')
-        f.write("[[models]]\n")
-        f.write('id = "exp1_model"\n')
-        f.write('path = "models/exp1_model.toml"\n\n')
-        f.write("[[models]]\n")
-        f.write('id = "exp2_model"\n')
-        f.write('path = "models/exp2_model.toml"\n\n')
+        f.write("[[jobs]]\n")
+        f.write('id = "exp1_job"\n')
+        f.write('path = "jobs/exp1_job.toml"\n\n')
+        f.write("[[jobs]]\n")
+        f.write('id = "exp2_job"\n')
+        f.write('path = "jobs/exp2_job.toml"\n\n')
         f.write("# Experiment 1: Full config with explicit checkpoint\n")
         f.write("[[experiments]]\n")
         f.write('id = "exp1"\n')
         f.write('dataset = "exp1_data"\n')
-        f.write('model = "exp1_model"\n')
+        f.write('job = "exp1_job"\n')
         f.write(
             f'checkpoint_path = "{(project_root / "checkpoints" / "exp1.ckpt").as_posix()}"\n\n'
         )
@@ -54,7 +54,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write("[[experiments]]\n")
         f.write('id = "exp2"\n')
         f.write('dataset = "exp2_data"\n')
-        f.write('model = "exp2_model"\n')
+        f.write('job = "exp2_job"\n')
 
     # Dataset configs
     with open(project_root / "configs" / "datasets" / "exp1_data.toml", "w") as f:
@@ -79,25 +79,29 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write("[output]\n")
         f.write(f'data_dir = "{(project_root / "data" / "processed").as_posix()}"\n')
 
-    # Model configs
-    with open(project_root / "configs" / "models" / "exp1_model.toml", "w") as f:
-        f.write("[SESSION]\n")
-        f.write('name = "exp1_model"\n\n')
-        f.write("[MODEL]\n")
-        f.write('name = "TestModel"\n')
+    # Job configs
+    with open(project_root / "configs" / "jobs" / "exp1_job.toml", "w") as f:
+        f.write("[run]\n")
+        f.write('type = "train"\n\n')
+        f.write("[model]\n")
+        f.write('class = "TestModel"\n')
         f.write('module_path = "dlkit.nn"\n\n')
-        f.write("[TRAINING]\n")
-        f.write("[TRAINING.trainer]\n")
+        f.write("[data]\n")
+        f.write('class = "FlexibleDataset"\n\n')
+        f.write("[training]\n")
+        f.write("[training.trainer]\n")
         f.write("max_epochs = 1\n")
 
-    with open(project_root / "configs" / "models" / "exp2_model.toml", "w") as f:
-        f.write("[SESSION]\n")
-        f.write('name = "exp2_model"\n\n')
-        f.write("[MODEL]\n")
-        f.write('name = "TestModel2"\n')
+    with open(project_root / "configs" / "jobs" / "exp2_job.toml", "w") as f:
+        f.write("[run]\n")
+        f.write('type = "train"\n\n')
+        f.write("[model]\n")
+        f.write('class = "TestModel2"\n')
         f.write('module_path = "dlkit.domain.nn.graph"\n\n')
-        f.write("[TRAINING]\n")
-        f.write("[TRAINING.trainer]\n")
+        f.write("[data]\n")
+        f.write('class = "FlexibleDataset"\n\n')
+        f.write("[training]\n")
+        f.write("[training.trainer]\n")
         f.write("max_epochs = 1\n")
 
     return project_root
@@ -123,8 +127,8 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     assert isinstance(exp1.workspace, ExperimentWorkspace)
 
     # Check paths resolve to shared directories
-    assert exp1.spec.model_config_path.name == "exp1_model.toml"
-    assert "models" in str(exp1.spec.model_config_path)
+    assert exp1.spec.job_config_path.name == "exp1_job.toml"
+    assert "jobs" in str(exp1.spec.job_config_path)
     assert exp1.spec.data_config_path.name == "exp1_data.toml"
     assert "datasets" in str(exp1.spec.data_config_path)
 
@@ -136,8 +140,8 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     assert exp2.spec.experiment_id == "exp2"
 
     # Check paths resolve to shared directories
-    assert exp2.spec.model_config_path.name == "exp2_model.toml"
-    assert "models" in str(exp2.spec.model_config_path)
+    assert exp2.spec.job_config_path.name == "exp2_job.toml"
+    assert "jobs" in str(exp2.spec.job_config_path)
     assert exp2.spec.data_config_path.name == "exp2_data.toml"
     assert "datasets" in str(exp2.spec.data_config_path)
 
@@ -153,13 +157,13 @@ def test_load_experiments_missing_registry_id(
 
     # Create experiments.toml with reference to non-existent dataset
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
-        f.write("[[models]]\n")
-        f.write('id = "exp1_model"\n')
-        f.write('path = "models/exp1_model.toml"\n\n')
+        f.write("[[jobs]]\n")
+        f.write('id = "exp1_job"\n')
+        f.write('path = "jobs/exp1_job.toml"\n\n')
         f.write("[[experiments]]\n")
         f.write('id = "exp_missing"\n')
         f.write('dataset = "missing_dataset"\n')
-        f.write('model = "exp1_model"\n')
+        f.write('job = "exp1_job"\n')
 
     with pytest.raises(
         ValueError, match="Experiment 'exp_missing' references dataset id 'missing_dataset'"
@@ -208,6 +212,23 @@ def test_load_experiments_no_experiments(
         f.write("")
 
     with pytest.raises(ValueError, match="No experiments defined"):
+        load_batch(
+            case_config_path=temp_config_structure / "configs" / "experiments.toml",
+        )
+
+
+def test_case_config_rejects_legacy_models_table(
+    temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Case configs must use [[jobs]] instead of the removed [[models]] table."""
+    monkeypatch.chdir(temp_config_structure)
+
+    with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
+        f.write("[[models]]\n")
+        f.write('id = "legacy-model"\n')
+        f.write('path = "models/legacy.toml"\n')
+
+    with pytest.raises(ValueError, match=r"\[\[jobs\]\]"):
         load_batch(
             case_config_path=temp_config_structure / "configs" / "experiments.toml",
         )

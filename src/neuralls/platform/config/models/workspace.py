@@ -19,7 +19,7 @@ class ExperimentSpec(BaseModel):
     Attributes:
         experiment_id: Stable experiment identifier.
         experiment_display_name: Human-facing experiment label.
-        model_config_path: Path to model config TOML.
+        job_config_path: Path to job config TOML.
         data_config_path: Path to data config TOML.
         checkpoint_path: Optional explicit checkpoint path.
     """
@@ -28,9 +28,9 @@ class ExperimentSpec(BaseModel):
     experiment_display_name: str = Field(..., description="Human-facing experiment label")
     dataset_registry_id: str | None = Field(default=None, description="Registry dataset identifier")
     dataset_display_name: str | None = Field(default=None, description="Human-facing dataset label")
-    model_registry_id: str | None = Field(default=None, description="Registry model identifier")
-    model_display_name: str | None = Field(default=None, description="Human-facing model label")
-    model_config_path: Path = Field(..., description="Path to model config")
+    job_registry_id: str | None = Field(default=None, description="Registry job identifier")
+    job_display_name: str | None = Field(default=None, description="Human-facing job label")
+    job_config_path: Path = Field(..., description="Path to job config")
     data_config_path: Path = Field(..., description="Path to data config")
     checkpoint_path: Path | None = Field(
         default=None,

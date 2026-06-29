@@ -8,12 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from dlkit.config import SearchJobConfig, TrainingJobConfig
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
 
 from neuralls.composition.experiments._dataset_assembly import (
     _validate_runtime_dataset_contract,
@@ -24,7 +21,7 @@ from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDat
 from neuralls.platform.config.dataset_entries import apply_placeholder_metadata
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
-type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
+type TrainingWorkflowSettings = TrainingJobConfig | SearchJobConfig
 
 
 def _resolve_dataset(

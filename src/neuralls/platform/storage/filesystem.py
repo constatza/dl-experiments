@@ -13,8 +13,6 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from dlkit.infrastructure.config.workflow_types import WorkflowConfig
-
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
 
@@ -41,31 +39,41 @@ def sanitize_identifier(value: str, default: str = "run") -> str:
     return cleaned or default
 
 
-def extract_model_name(model_config_path: Path | str) -> str:
-    """Extract model name from config SESSION.name or MODEL.name."""
-    model_config_path = Path(model_config_path)
+def extract_model_name(job_config_path: Path | str) -> str:
+    """Extract a stable job/model name from a DLKit job config."""
+    job_config_path = Path(job_config_path)
 
     try:
-        with model_config_path.open("rb") as f:
+        with job_config_path.open("rb") as f:
             config = tomllib.load(f)
     except FileNotFoundError, tomllib.TOMLDecodeError:
-        return model_config_path.stem
+        return job_config_path.stem
+
+    experiment = config.get("experiment") or {}
+    experiment_name = experiment.get("name")
+    if isinstance(experiment_name, str) and experiment_name:
+        return experiment_name
 
     session = config.get("SESSION") or {}
     session_name = session.get("name")
     if isinstance(session_name, str) and session_name:
         return session_name
 
+    model_cfg = config.get("model") or {}
+    model_class = model_cfg.get("class") or model_cfg.get("name")
+    if isinstance(model_class, str) and model_class:
+        return model_class
+
     model_cfg = config.get("MODEL") or {}
-    model_name = model_cfg.get("name")
+    model_name = model_cfg.get("name") or model_cfg.get("class")
     if isinstance(model_name, str) and model_name:
         return model_name
 
-    raise ValueError("Model name missing. Please set [SESSION].name or [MODEL].name.")
+    return job_config_path.stem
 
 
 def derive_model_identifier(
-    settings: WorkflowConfig,
+    settings: Any,
     context: ExperimentWorkspace,
     config_path: str | Path,
 ) -> str:
@@ -74,8 +82,8 @@ def derive_model_identifier(
     Pure function - extracts identifier from settings and context.
 
     Preference order:
-        1. ``MODEL.name`` from the config settings
-        2. ``SESSION.name`` if present and not the DLKit default
+        1. ``model.name`` from the config settings
+        2. ``experiment.name`` if present
         3. Context ``run_id``
         4. Config filename stem
 
@@ -90,15 +98,15 @@ def derive_model_identifier(
     config_path = Path(config_path)
 
     candidates: list[str | None] = []
-    model = getattr(settings, "MODEL", None)
+    model = getattr(settings, "model", None) or getattr(settings, "MODEL", None)
     if model is not None:
         model_name = getattr(model, "name", None)
         if model_name is not None:
             candidates.append(str(model_name))
 
-    session = getattr(settings, "SESSION", None)
-    if session is not None:
-        candidates.append(getattr(session, "name", None))
+    experiment = getattr(settings, "experiment", None) or getattr(settings, "SESSION", None)
+    if experiment is not None:
+        candidates.append(getattr(experiment, "name", None))
 
     candidates.append(getattr(context, "run_id", None))
     candidates.append(config_path.stem)

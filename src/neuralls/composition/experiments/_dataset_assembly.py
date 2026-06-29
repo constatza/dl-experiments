@@ -8,11 +8,8 @@ third-party entry construction to platform adapters.
 from __future__ import annotations
 
 from dlkit.infrastructure.config.data_entries import DataEntry
+from dlkit.config import SearchJobConfig, TrainingJobConfig
 from dlkit.infrastructure.config.dataset_settings import DatasetSettings
-from dlkit.infrastructure.config.workflow_configs import (
-    OptimizationWorkflowConfig,
-    TrainingWorkflowConfig,
-)
 from loguru import logger
 
 from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
@@ -24,7 +21,7 @@ from neuralls.platform.storage.training_artifacts import (
     load_training_arrays,
 )
 
-type TrainingWorkflowSettings = TrainingWorkflowConfig | OptimizationWorkflowConfig
+type TrainingWorkflowSettings = TrainingJobConfig | SearchJobConfig
 
 
 def _validate_dataset_section(settings: TrainingWorkflowSettings) -> None:
@@ -130,7 +127,7 @@ def _primary_feature_name_from_settings(
     Returns:
         The dispatch name for the RHS tensor (e.g. ``"x"``, ``"u"``).
     """
-    dataset = settings.DATASET
+    dataset = getattr(settings, "data", None) or getattr(settings, "DATASET", None)
     if dataset is None:
         return contract.primary_input_name
     for entry in dataset.features:
@@ -157,7 +154,7 @@ def _extra_feature_names_from_settings(
     Returns:
         Ordered list of extra feature names beyond the primary and matrix entries.
     """
-    dataset = settings.DATASET
+    dataset = getattr(settings, "data", None) or getattr(settings, "DATASET", None)
     if dataset is None:
         return []
     primary_name = _primary_feature_name_from_settings(settings, contract)

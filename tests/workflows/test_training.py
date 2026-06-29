@@ -257,17 +257,21 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     Runs a single fast_dev_run training step using DLKit programmatic settings.
     """
     import dlkit.engine.tracking.uri_resolver as uri_resolver
+    from dlkit.config import TrainingJobConfig
     from dlkit.interfaces.api import execute
-    from dlkit.infrastructure.config import SessionSettings
-    from dlkit.infrastructure.config import DataModuleSettings, DatasetSettings, TrainingSettings
-    from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
-    from dlkit.infrastructure.config.mlflow_settings import MLflowSettings
+    from dlkit.infrastructure.config import (
+        DataModuleSelector,
+        DataSettings,
+        ExperimentSettings,
+        ModelSettings,
+        RunSettings,
+        TrackingSettings,
+        TrainingSettings,
+    )
     from dlkit.infrastructure.config.trainer_settings import TrainerSettings
     from dlkit.infrastructure.config.model_components import (
-        ModelComponentSettings,
         MetricComponentSettings,
     )
-    from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
     from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
 
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
@@ -277,19 +281,19 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     X = rng.random((n_samples, n_features))
     Y = rng.random((n_samples, n_targets))
 
-    settings = TrainingWorkflowConfig(
-        SESSION=SessionSettings(name="test_predict_structure", seed=42, workflow="train"),
-        MLFLOW=MLflowSettings(experiment_name="test_predict_structure"),
-        OPTUNA={"enabled": False},
-        DATAMODULE=DataModuleSettings(
-            dataloader=DataloaderSettings(batch_size=4, num_workers=0),
-        ),
-        DATASET=DatasetSettings(
+    settings = TrainingJobConfig(
+        run=RunSettings(type="train", seed=42),
+        experiment=ExperimentSettings(name="test_predict_structure"),
+        tracking=TrackingSettings(backend="none"),
+        data=DataSettings(
             name="FlexibleDataset",
+            batch_size=4,
+            num_workers=0,
+            module=DataModuleSelector(name="InMemoryModule"),
             features=(ValueEntry(name="x", value=X),),
             targets=(ValueEntry(name="y", value=Y, data_role=DataRole.TARGET),),
         ),
-        TRAINING=TrainingSettings(
+        training=TrainingSettings(
             trainer=TrainerSettings(
                 fast_dev_run=True,
                 enable_checkpointing=False,
@@ -303,11 +307,10 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
                 ),
             ),
         ),
-        MODEL=ModelComponentSettings(
+        model=ModelSettings(
             name="FFNN",
             module_path="dlkit.nn",
-            hidden_size=4,
-            num_layers=1,
+            params={"hidden_size": 4, "num_layers": 1},
         ),
     )
 
@@ -403,11 +406,11 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             experiment_display_name="Experiment One",
             dataset_registry_id="dataset-1",
             dataset_display_name="Dataset One",
-            model_registry_id="model-1",
-            model_display_name="Model One",
+            job_registry_id="job-1",
+            job_display_name="Job One",
         ),
     )
-    experiment.settings = SimpleNamespace(DATASET=None)
+    experiment.settings = SimpleNamespace(data=None)
     training_result = SimpleNamespace(run_id="run-123", metrics={})
 
     with (
@@ -459,14 +462,14 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             experiment_display_name="Experiment One",
             dataset_registry_id="dataset-1",
             dataset_display_name="Dataset One",
-            model_registry_id="model-1",
-            model_display_name="Model One",
+            job_registry_id="job-1",
+            job_display_name="Job One",
             mlflow_experiment_name="CustomTrain",
         )
 
-    load_args = mock_load.call_args.args
-    assert load_args[0] == config_path
-    assert load_args[1] == data_config_path
+    load_kwargs = mock_load.call_args.kwargs
+    assert load_kwargs["job_config_path"] == config_path
+    assert load_kwargs["data_config_path"] == data_config_path
 
     execute_kwargs = mock_execute.call_args.kwargs
     overrides = execute_kwargs["overrides"]
@@ -479,7 +482,7 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
         "phase": "training",
         "experiment_id": "exp-1",
         "dataset_id": "dataset-1",
-        "model_id": "model-1",
+        "job_id": "job-1",
         "experiment_display_name": "Experiment One",
     }
 
@@ -507,15 +510,15 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
     checkpoint_path.write_text("checkpoint")
 
     experiment = SimpleNamespace(
-        settings=SimpleNamespace(DATASET=None),
+        settings=SimpleNamespace(data=None),
         workspace=workspace,
         spec=SimpleNamespace(
             experiment_id="legacy-exp",
             experiment_display_name="Legacy Experiment",
             dataset_registry_id="dataset-legacy",
             dataset_display_name="Dataset Display",
-            model_registry_id=None,
-            model_display_name=None,
+            job_registry_id=None,
+            job_display_name=None,
         ),
     )
 
@@ -583,13 +586,16 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
     tmp_path: Path,
 ) -> None:
     """`max_epochs` override patches a fresh settings object before execute()."""
-    from dlkit.infrastructure.config import GeneralSettings
     from dlkit.infrastructure.config import (
-        DatasetSettings,
-        ModelComponentSettings as ModelSettings,
-        SessionSettings,
+        DataModuleSelector,
+        DataSettings,
+        ExperimentSettings,
+        ModelSettings,
+        RunSettings,
+        TrackingSettings,
         TrainingSettings,
     )
+    from dlkit.infrastructure.config.job_config import TrainingJobConfig
     from dlkit.infrastructure.config.trainer_settings import TrainerSettings
     from neuralls.platform.config.models.workspace import ExperimentWorkspace
     from neuralls.composition.experiments.training import train_model
@@ -601,11 +607,16 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
     trainer_root = tmp_path / "trainer-root"
     trainer_root.mkdir()
 
-    base_settings = GeneralSettings(
-        SESSION=SessionSettings(seed=42),
-        MODEL=ModelSettings(name="LinearModel"),
-        DATASET=DatasetSettings(name="FlexibleDataset"),
-        TRAINING=TrainingSettings(
+    base_settings = TrainingJobConfig(
+        run=RunSettings(type="train", seed=42),
+        experiment=ExperimentSettings(name="exp-1"),
+        tracking=TrackingSettings(backend="none"),
+        model=ModelSettings(name="LinearModel"),
+        data=DataSettings(
+            name="FlexibleDataset",
+            module=DataModuleSelector(name="InMemoryModule"),
+        ),
+        training=TrainingSettings(
             trainer=TrainerSettings(max_epochs=1, default_root_dir=trainer_root)
         ),
     )
@@ -628,8 +639,8 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
             experiment_display_name="Experiment One",
             dataset_registry_id="dataset-1",
             dataset_display_name="Dataset One",
-            model_registry_id=None,
-            model_display_name=None,
+            job_registry_id=None,
+            job_display_name=None,
         ),
     )
 
@@ -685,12 +696,12 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         )
 
     execute_settings = mock_execute.call_args.args[0]
-    assert execute_settings.TRAINING is not None
-    assert execute_settings.TRAINING.trainer is not None
-    assert execute_settings.TRAINING.trainer.max_epochs == 9
-    assert base_settings.TRAINING is not None
-    assert base_settings.TRAINING.trainer is not None
-    assert base_settings.TRAINING.trainer.max_epochs == 1
+    assert execute_settings.training is not None
+    assert execute_settings.training.trainer is not None
+    assert execute_settings.training.trainer.max_epochs == 9
+    assert base_settings.training is not None
+    assert base_settings.training.trainer is not None
+    assert base_settings.training.trainer.max_epochs == 1
 
 
 def test_execute_result_unwraps_optimization_result() -> None:

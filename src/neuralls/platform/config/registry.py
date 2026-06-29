@@ -20,13 +20,13 @@ class ResolvedExperimentBinding:
 
     experiment_id: str
     dataset_registry_id: str
-    model_registry_id: str
+    job_registry_id: str
     data_config_path: Path
-    model_config_path: Path
+    job_config_path: Path
     checkpoint_path: Path | None = None
     experiment_display_name: str = ""
     dataset_display_name: str = ""
-    model_display_name: str = ""
+    job_display_name: str = ""
 
 
 def _lookup_registry_entry(
@@ -81,18 +81,18 @@ def resolve_dataset_config_path(
     return resolve_registry_path(config_dir, entry.path)
 
 
-def resolve_model_config_path(
+def resolve_job_config_path(
     cfg: CaseConfig,
     config_dir: Path,
-    model_id: str,
+    job_id: str,
     *,
     experiment_id: str | None = None,
 ) -> Path:
-    """Resolve a model config path from the case registry."""
+    """Resolve a job config path from the case registry."""
     entry = _require_registry_entry(
-        cfg.models,
-        registry_id=model_id,
-        registry_section="models",
+        cfg.jobs,
+        registry_id=job_id,
+        registry_section="jobs",
         owner_kind="Experiment" if experiment_id is not None else None,
         owner_id=experiment_id,
     )
@@ -112,27 +112,27 @@ def resolve_experiment_binding(
         owner_kind="Experiment",
         owner_id=entry.id,
     )
-    model_entry = _require_registry_entry(
-        cfg.models,
-        registry_id=entry.model_id,
-        registry_section="models",
+    job_entry = _require_registry_entry(
+        cfg.jobs,
+        registry_id=entry.job_id,
+        registry_section="jobs",
         owner_kind="Experiment",
         owner_id=entry.id,
     )
     return ResolvedExperimentBinding(
         experiment_id=entry.id,
         dataset_registry_id=entry.dataset_id,
-        model_registry_id=entry.model_id,
+        job_registry_id=entry.job_id,
         data_config_path=resolve_dataset_config_path(
             cfg,
             config_dir,
             entry.dataset_id,
             experiment_id=entry.id,
         ),
-        model_config_path=resolve_model_config_path(
+        job_config_path=resolve_job_config_path(
             cfg,
             config_dir,
-            entry.model_id,
+            entry.job_id,
             experiment_id=entry.id,
         ),
         checkpoint_path=(
@@ -142,7 +142,7 @@ def resolve_experiment_binding(
         ),
         experiment_display_name=entry.effective_display_name,
         dataset_display_name=dataset_entry.effective_display_name,
-        model_display_name=model_entry.effective_display_name,
+        job_display_name=job_entry.effective_display_name,
     )
 
 
@@ -164,3 +164,6 @@ def list_experiment_bindings(
 ) -> list[ResolvedExperimentBinding]:
     """Resolve all experiment entries with concrete config paths."""
     return [resolve_experiment_binding(cfg, config_dir, entry) for entry in cfg.experiments]
+
+
+resolve_model_config_path = resolve_job_config_path

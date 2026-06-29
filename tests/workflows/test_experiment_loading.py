@@ -31,8 +31,8 @@ def training_setup(tmp_path: Path) -> dict:
     # Create config directories
     datasets_dir = configs_dir / "datasets"
     datasets_dir.mkdir()
-    models_dir = configs_dir / "models"
-    models_dir.mkdir()
+    jobs_dir = configs_dir / "jobs"
+    jobs_dir.mkdir()
 
     # Create minimal test data (10x10 SPD matrix)
     matrix_path = raw_dir / "matrix.txt"
@@ -52,10 +52,71 @@ def training_setup(tmp_path: Path) -> dict:
         "raw_dir": raw_dir,
         "configs_dir": configs_dir,
         "datasets_dir": datasets_dir,
-        "models_dir": models_dir,
+        "jobs_dir": jobs_dir,
         "matrix_path": matrix_path,
         "rhs_path": rhs_path,
     }
+
+
+def _write_training_job_config(
+    path: Path,
+    *,
+    experiment_name: str,
+    model_class: str,
+    enable_tracking: bool = False,
+) -> None:
+    """Write a minimal DLKit training job TOML using the lowercase job schema."""
+    job_config = {
+        "run": {
+            "type": "train",
+            "seed": 42,
+            "precision": "64",
+        },
+        "experiment": {
+            "name": experiment_name,
+        },
+        "model": {
+            "class": model_class,
+            "module_path": "dlkit.nn",
+            "params": {
+                "hidden_size": 2,
+                "num_layers": 1,
+            },
+        },
+        "data": {
+            "class": "FlexibleDataset",
+            "module": {"class": "ArrayDataModule"},
+            "batch_size": 2,
+            "num_workers": 0,
+            "pin_memory": False,
+            "shuffle": True,
+        },
+        "training": {
+            "trainer": {
+                "max_epochs": 1,
+                "accelerator": "cpu",
+                "enable_checkpointing": True,
+                "num_sanity_val_steps": 0,
+                "limit_train_batches": 1,
+                "limit_val_batches": 1,
+            },
+            "optimizer": {
+                "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
+            },
+            "metrics": [
+                {
+                    "name": "RelativeVectorNormError",
+                    "module_path": "dlkit.domain.metrics",
+                    "norm_ord": 2,
+                    "vector_dim": -1,
+                }
+            ],
+        },
+    }
+    if enable_tracking:
+        job_config["tracking"] = {"backend": "mlflow"}
+    with open(path, "wb") as f:
+        tomli_w.dump(job_config, f)
 
 
 class TestTrainingPipelineWithMLflow:
@@ -79,7 +140,7 @@ class TestTrainingPipelineWithMLflow:
         training_setup["tmp_path"]
         data_dir = training_setup["data_dir"]
         datasets_dir = training_setup["datasets_dir"]
-        models_dir = training_setup["models_dir"]
+        jobs_dir = training_setup["jobs_dir"]
         matrix_path = training_setup["matrix_path"]
         rhs_path = training_setup["rhs_path"]
 
@@ -104,82 +165,39 @@ class TestTrainingPipelineWithMLflow:
         with open(data_config_path, "wb") as f:
             tomli_w.dump(data_config, f)
 
-        # Create model config with MLflow enabled but no infrastructure fields.
+        # Create job config with tracking enabled but no infrastructure fields.
         output_root = data_dir / "output"
 
-        model_config_path = models_dir / "mlflow_test_model.toml"
-        model_config = {
-            "SESSION": {
-                "seed": 42,
-                "workflow": "train",
-                "precision": "64",
-                "name": "MLflowTestModel",
-            },
-            "MODEL": {
-                "name": "ScaleEquivariantFFNN",
-                "module_path": "dlkit.nn",
-                "hidden_size": 2,
-                "num_layers": 1,
-            },
-            "TRAINING": {
-                "trainer": {
-                    "max_epochs": 1,
-                    "accelerator": "cpu",
-                    "enable_checkpointing": True,
-                    "num_sanity_val_steps": 0,
-                    "limit_train_batches": 1,
-                    "limit_val_batches": 1,
-                },
-                "optimizer": {
-                    "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
-                },
-                "metrics": [
-                    {
-                        "name": "RelativeVectorNormError",
-                        "module_path": "dlkit.domain.metrics",
-                        "norm_ord": 2,
-                        "vector_dim": -1,
-                    }
-                ],
-            },
-            "DATASET": {"name": "FlexibleDataset"},
-            "DATAMODULE": {
-                "name": "ArrayDataModule",
-                "dataloader": {
-                    "num_workers": 0,
-                    "batch_size": 2,
-                    "pin_memory": False,
-                    "shuffle": True,
-                },
-            },
-            "MLFLOW": {
-                "enabled": True,
-            },
-            "OPTUNA": {"enabled": False},
-        }
-        with open(model_config_path, "wb") as f:
-            tomli_w.dump(model_config, f)
+        job_config_path = jobs_dir / "mlflow_test_job.toml"
+        _write_training_job_config(
+            job_config_path,
+            experiment_name="MLflowTestJob",
+            model_class="ScaleEquivariantFFNN",
+            enable_tracking=True,
+        )
 
         # Load experiment
         experiment = load_experiment(
-            model_config_path,
-            data_config_path,
+            job_config_path=job_config_path,
+            data_config_path=data_config_path,
             neuralls_settings=neuralls_settings,
             output_root=output_root,
             dataset_registry_id=data_config_path.stem,
         )
 
         # VERIFICATION: Experiment configuration
-        assert experiment.settings.MLFLOW is not None
+        assert experiment.settings.tracking is not None
+        assert (
+            experiment.settings.training.trainer.default_root_dir == experiment.workspace.root_dir
+        )
         # VERIFICATION: Workspace directories created
         assert experiment.workspace.checkpoint_dir.exists()
         assert experiment.workspace.figures_dir.exists()
         assert experiment.workspace.predictions_dir.exists()
 
-        # VERIFICATION: Output paths are resolved from output_root, not model TOML.
+        # VERIFICATION: Output paths are resolved from output_root, not job TOML.
         assert output_root in experiment.workspace.root_dir.parents
-        assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
-        assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
+        assert experiment.settings.tracking.uri is None
 
     def test_mlflow_nested_structure_ready(
         self,
@@ -197,7 +215,7 @@ class TestTrainingPipelineWithMLflow:
 
         data_dir = training_setup["data_dir"]
         datasets_dir = training_setup["datasets_dir"]
-        models_dir = training_setup["models_dir"]
+        jobs_dir = training_setup["jobs_dir"]
         matrix_path = training_setup["matrix_path"]
         rhs_path = training_setup["rhs_path"]
 
@@ -222,36 +240,21 @@ class TestTrainingPipelineWithMLflow:
         with open(data_config_path, "wb") as f:
             tomli_w.dump(data_config, f)
 
-        # Create model config
+        # Create job config
         output_root = data_dir / "output"
 
-        model_config_path = models_dir / "nested_test_model.toml"
-        model_config = {
-            "SESSION": {"seed": 42, "workflow": "train", "name": "NestedTestSession"},
-            "MODEL": {
-                "name": "TestFFNN",
-                "module_path": "dlkit.nn",
-                "hidden_size": 2,
-                "num_layers": 1,
-            },
-            "TRAINING": {
-                "trainer": {"max_epochs": 1, "accelerator": "cpu"},
-                "optimizer": {
-                    "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
-                },
-            },
-            "DATASET": {"name": "FlexibleDataset"},
-            "DATAMODULE": {"name": "ArrayDataModule"},
-            "MLFLOW": {"enabled": True},
-            "OPTUNA": {"enabled": False},
-        }
-        with open(model_config_path, "wb") as f:
-            tomli_w.dump(model_config, f)
+        job_config_path = jobs_dir / "nested_test_job.toml"
+        _write_training_job_config(
+            job_config_path,
+            experiment_name="NestedTestJob",
+            model_class="TestFFNN",
+            enable_tracking=True,
+        )
 
         # Load experiment
         experiment = load_experiment(
-            model_config_path,
-            data_config_path,
+            job_config_path=job_config_path,
+            data_config_path=data_config_path,
             neuralls_settings=neuralls_settings,
             output_root=output_root,
             dataset_registry_id=data_config_path.stem,
@@ -278,7 +281,7 @@ class TestTrainingPipelineWithMLflow:
         tmp_path = training_setup["tmp_path"]
         data_dir = training_setup["data_dir"]
         datasets_dir = training_setup["datasets_dir"]
-        models_dir = training_setup["models_dir"]
+        jobs_dir = training_setup["jobs_dir"]
         matrix_path = training_setup["matrix_path"]
         rhs_path = training_setup["rhs_path"]
 
@@ -298,22 +301,12 @@ class TestTrainingPipelineWithMLflow:
         with open(data_config_path, "wb") as f:
             tomli_w.dump(data_config, f)
 
-        model_config_path = models_dir / "injection_model.toml"
-        model_config = {
-            "SESSION": {"seed": 42},
-            "MODEL": {
-                "name": "TestModel",
-                "module_path": "dlkit.nn",
-                "hidden_size": 2,
-                "num_layers": 1,
-            },
-            "TRAINING": {"trainer": {"max_epochs": 1, "accelerator": "cpu"}},
-            "DATASET": {"name": "FlexibleDataset"},
-            "DATAMODULE": {"name": "ArrayDataModule"},
-            "OPTUNA": {"enabled": False},
-        }
-        with open(model_config_path, "wb") as f:
-            tomli_w.dump(model_config, f)
+        job_config_path = jobs_dir / "injection_job.toml"
+        _write_training_job_config(
+            job_config_path,
+            experiment_name="InjectionJob",
+            model_class="TestModel",
+        )
 
         experiments_config_path = tmp_path / "experiments.toml"
         custom_output_root = data_dir / "custom_output"
@@ -326,12 +319,12 @@ class TestTrainingPipelineWithMLflow:
                 "comparison": "Comparisons",
             },
             "datasets": [{"id": "injection_test", "path": "datasets/injection_test.toml"}],
-            "models": [{"id": "injection_model", "path": "models/injection_model.toml"}],
+            "jobs": [{"id": "injection_job", "path": "jobs/injection_job.toml"}],
             "experiments": [
                 {
                     "id": "ignored",
                     "dataset": "injection_test",
-                    "model": "injection_model",
+                    "job": "injection_job",
                 }
             ],
         }
@@ -339,17 +332,16 @@ class TestTrainingPipelineWithMLflow:
             tomli_w.dump(experiments_config, f)
 
         experiment = load_experiment(
-            model_config_path,
-            data_config_path,
+            job_config_path=job_config_path,
+            data_config_path=data_config_path,
             neuralls_settings=neuralls_settings,
             case_config_path=experiments_config_path,
             dataset_registry_id=data_config_path.stem,
         )
 
-        assert experiment.settings.MLFLOW is not None
+        assert experiment.settings.tracking is not None
         assert custom_output_root in experiment.workspace.root_dir.parents
-        assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
-        assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
+        assert experiment.settings.tracking.uri is None
 
 
 def test_resolve_case_config_path_expands_tilde_from_env(

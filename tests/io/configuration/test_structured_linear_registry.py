@@ -9,7 +9,7 @@ import pytest
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.platform.config.registry import list_experiment_bindings
 from neuralls.composition.experiments.assembler import load_validated_master_config
-from neuralls.platform.config.dlkit_bridge import load_model_config
+from neuralls.platform.config.dlkit_bridge import load_job_config
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("dlkit") is None,
@@ -17,46 +17,39 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-MODEL_CONFIG_TEMPLATE = """
-[SESSION]
+JOB_CONFIG_TEMPLATE = """
+[run]
+type = "train"
 seed = 42
-workflow = "train"
 precision = "64"
 
-[MODEL]
-name = "{model_name}"
+[model]
+class = "{model_name}"
 module_path = "dlkit.nn"
 
-[TRAINING]
-[TRAINING.trainer]
+[data]
+class = "FlexibleDataset"
+
+[training]
+[training.trainer]
 max_epochs = 1
 accelerator = "cpu"
 enable_checkpointing = true
 
-[[TRAINING.trainer.callbacks]]
+[[training.trainer.callbacks]]
 name = "ModelCheckpoint"
 filename = "{checkpoint_name}"
 monitor = "val_loss"
 
-[TRAINING.optimizer.default_optimizer]
-lr = 1e-3
-name = "AdamW"
-
-[DATASET]
-name = "FlexibleDataset"
-
-[DATAMODULE]
-name = "ArrayDataModule"
-
-[OPTUNA]
-enabled = false
+[training.optimizer]
+default_optimizer = {{ name = "AdamW", lr = 1e-3 }}
 """
 
 
-def _write_model_config(path: Path, model_name: str, checkpoint_name: str) -> Path:
-    """Write one isolated model config."""
+def _write_job_config(path: Path, model_name: str, checkpoint_name: str) -> Path:
+    """Write one isolated job config."""
     path.write_text(
-        MODEL_CONFIG_TEMPLATE.format(
+        JOB_CONFIG_TEMPLATE.format(
             model_name=model_name,
             checkpoint_name=checkpoint_name,
         )
@@ -68,7 +61,7 @@ def _write_master_registry(
     path: Path,
     *,
     datasets: list[tuple[str, str]],
-    models: list[tuple[str, str]],
+    jobs: list[tuple[str, str]],
     experiments: list[tuple[str, str, str]],
 ) -> Path:
     """Write a minimal case config with explicit tables."""
@@ -92,23 +85,23 @@ def _write_master_registry(
             ]
         )
 
-    for model_id, model_path in models:
+    for job_id, job_path in jobs:
         lines.extend(
             [
-                "[[models]]",
-                f'id = "{model_id}"',
-                f'path = "{Path(model_path).as_posix()}"',
+                "[[jobs]]",
+                f'id = "{job_id}"',
+                f'path = "{Path(job_path).as_posix()}"',
                 "",
             ]
         )
 
-    for experiment_id, dataset_id, model_id in experiments:
+    for experiment_id, dataset_id, job_id in experiments:
         lines.extend(
             [
                 "[[experiments]]",
                 f'id = "{experiment_id}"',
                 f'dataset = "{dataset_id}"',
-                f'model = "{model_id}"',
+                f'job = "{job_id}"',
                 "",
             ]
         )
@@ -132,19 +125,19 @@ def test_structured_linear_model_configs_load(
     neuralls_settings,
 ) -> None:
     """Structured linear model configs parse through dlkit."""
-    model_path = _write_model_config(
+    model_path = _write_job_config(
         tmp_path / config_name,
         model_name=model_name,
         checkpoint_name=config_name.removesuffix(".toml"),
     )
 
-    settings = load_model_config(model_path, neuralls_settings)
-    assert settings.MODEL is not None
-    assert settings.MODEL.name == model_name
+    settings = load_job_config(model_path, neuralls_settings)
+    assert settings.model is not None
+    assert settings.model.name == model_name
 
 
-def test_legacy_optimization_section_is_rejected(tmp_path: Path, neuralls_settings) -> None:
-    """Hard-cut loaders reject top-level OPTIMIZATION sections."""
+def test_legacy_model_workflow_toml_is_rejected(tmp_path: Path, neuralls_settings) -> None:
+    """Hard-cut loaders reject the removed standalone model-workflow format."""
     bad_config = tmp_path / "bad.toml"
     bad_config.write_text(
         "\n".join(
@@ -171,8 +164,8 @@ def test_legacy_optimization_section_is_rejected(tmp_path: Path, neuralls_settin
         )
     )
 
-    with pytest.raises(Exception, match="OPTIMIZATION"):
-        load_model_config(bad_config, neuralls_settings)
+    with pytest.raises(Exception, match="run.type|\\[run\\]"):
+        load_job_config(bad_config, neuralls_settings)
 
 
 def test_default_structured_linear_registry_has_expected_models_and_experiments(
@@ -186,7 +179,7 @@ def test_default_structured_linear_registry_has_expected_models_and_experiments(
             ("eig-rhs-smallest", "datasets/eig-rhs-smallest.toml"),
             ("eig-solutions-smallest", "datasets/eig-solutions-smallest.toml"),
         ],
-        models=[
+        jobs=[
             ("symmetric", "models/symmetric.toml"),
             ("spd", "models/spd.toml"),
             ("factorized", "models/factorized.toml"),
@@ -207,7 +200,7 @@ def test_default_structured_linear_registry_has_expected_models_and_experiments(
     cfg, config_dir = load_validated_master_config(config_path)
     bindings = list_experiment_bindings(cfg, config_dir)
 
-    assert [entry.id for entry in cfg.models] == ["symmetric", "spd", "factorized"]
+    assert [entry.id for entry in cfg.jobs] == ["symmetric", "spd", "factorized"]
     assert [entry.id for entry in cfg.datasets] == [
         "residuals-100",
         "eig-rhs-smallest",
@@ -238,7 +231,7 @@ def test_linear_registry_uses_single_normalized_model(tmp_path: Path) -> None:
             ("eig-solutions-largest", "datasets/eig-solutions-largest.toml"),
             ("eig-solutions-smallest", "datasets/eig-solutions-smallest.toml"),
         ],
-        models=[
+        jobs=[
             ("linear", "models/linear.toml"),
         ],
         experiments=[
@@ -254,7 +247,7 @@ def test_linear_registry_uses_single_normalized_model(tmp_path: Path) -> None:
     cfg, config_dir = load_validated_master_config(config_path)
     bindings = list_experiment_bindings(cfg, config_dir)
 
-    assert [entry.id for entry in cfg.models] == ["linear"]
+    assert [entry.id for entry in cfg.jobs] == ["linear"]
     assert [binding.experiment_id for binding in bindings] == [
         "spectral",
         "eig-rhs-largest",
@@ -265,25 +258,25 @@ def test_linear_registry_uses_single_normalized_model(tmp_path: Path) -> None:
     ]
 
 
-def test_load_experiment_supports_structured_linear_model(tmp_path: Path) -> None:
-    """A structured model config loads through the training entry point."""
+def test_load_experiment_supports_structured_linear_job(tmp_path: Path) -> None:
+    """A structured job config loads through the training entry point."""
     output_root = tmp_path / "output"
     output_root.mkdir()
     data_config_path = tmp_path / "data.toml"
     data_config_path.write_text('id = "dummy_dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
-    model_config_path = _write_model_config(
+    job_config_path = _write_job_config(
         tmp_path / "symmetric.toml",
         model_name="NormScaledSymmetricLinear",
         checkpoint_name="symmetric",
     )
 
     experiment = load_experiment(
-        model_config_path=model_config_path,
+        job_config_path=job_config_path,
         data_config_path=data_config_path,
         output_root=output_root,
         dataset_registry_id="dummy-dataset",
     )
 
-    assert experiment.spec.model_config_path.name == "symmetric.toml"
+    assert experiment.spec.job_config_path.name == "symmetric.toml"
     assert experiment.spec.dataset_registry_id == "dummy-dataset"
-    assert experiment.settings.MODEL.name == "NormScaledSymmetricLinear"
+    assert experiment.settings.model.name == "NormScaledSymmetricLinear"

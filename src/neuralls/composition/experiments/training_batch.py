@@ -37,7 +37,7 @@ from neuralls.platform.storage.checkpoints import get_latest_checkpoint
 def run_experiment(
     *,
     settings: NeurallsSettings,
-    model_config_path: Path,
+    job_config_path: Path,
     data_config_path: Path,
     output_root: Path,
     force: bool,
@@ -47,8 +47,8 @@ def run_experiment(
     experiment_display_name: str,
     dataset_registry_id: str | None = None,
     dataset_display_name: str | None = None,
-    model_registry_id: str | None = None,
-    model_display_name: str | None = None,
+    job_registry_id: str | None = None,
+    job_display_name: str | None = None,
 ) -> ExperimentResult:
     """Run data generation and model training for a single experiment.
 
@@ -60,7 +60,7 @@ def run_experiment(
     5. Return success/failure result
 
     Args:
-        model_config_path: Path to a model configuration TOML (e.g., /path/to/model.toml)
+        job_config_path: Path to a job configuration TOML (e.g., /path/to/job.toml)
         data_config_path: Path to a dataset configuration TOML (e.g., /path/to/dataset.toml)
         output_root: Root directory for all experiment outputs
         force: If True, retrain even if checkpoint exists. If False, reuse existing checkpoint.
@@ -75,7 +75,7 @@ def run_experiment(
 
     Example:
         >>> result = run_experiment(
-        ...     model_config_path=Path("/tmp/model.toml"),
+        ...     job_config_path=Path("/tmp/job.toml"),
         ...     data_config_path=Path("/tmp/dataset.toml"),
         ...     output_root=Path("output"),
         ...     force=False,
@@ -85,7 +85,7 @@ def run_experiment(
         'Success'
     """
     # Extract model identifier from the config filename stem.
-    model_name = extract_model_name(model_config_path)
+    model_name = extract_model_name(job_config_path)
     try:
         # Step 1: Load data configuration and generate/cache dataset
         data_cfg = load_data_config(data_config_path, settings)
@@ -123,7 +123,9 @@ def run_experiment(
         # Step 3: Train model if no checkpoint exists or force=True
         if force or checkpoint is None:
             checkpoint = train_model(
-                config_path=model_config_path,
+                config_path=job_config_path,
+                job_registry_id=job_registry_id,
+                job_display_name=job_display_name,
                 settings=settings,
                 data_config_path=data_config_path,
                 output_root=output_root,
@@ -132,8 +134,6 @@ def run_experiment(
                 experiment_display_name=experiment_display_name,
                 dataset_registry_id=dataset_registry_id,
                 dataset_display_name=dataset_display_name,
-                model_registry_id=model_registry_id,
-                model_display_name=model_display_name,
             )
             logger.info(f"Training complete: {checkpoint}")
         else:
@@ -220,14 +220,14 @@ def run_experiment_matrix(
         # Log experiment details for progress tracking
         logger.info(f"\n{'=' * 60}")
         logger.info(f"Experiment: {exp.spec.experiment_display_name}")
-        logger.info(f"  Model: {exp.spec.model_display_name or exp.spec.model_config_path.stem}")
+        logger.info(f"  Job: {exp.spec.job_display_name or exp.spec.job_config_path.stem}")
         logger.info(f"  Dataset: {exp.spec.dataset_display_name or exp.workspace.dataset_id}")
         logger.info(f"{'=' * 60}")
 
         # Run single experiment (catches exceptions internally)
         result = run_experiment(
             settings=settings,
-            model_config_path=exp.spec.model_config_path,
+            job_config_path=exp.spec.job_config_path,
             data_config_path=exp.spec.data_config_path,
             output_root=batch.output_root,
             force=force,
@@ -237,8 +237,8 @@ def run_experiment_matrix(
             experiment_display_name=exp.spec.experiment_display_name,
             dataset_registry_id=exp.spec.dataset_registry_id,
             dataset_display_name=exp.spec.dataset_display_name,
-            model_registry_id=exp.spec.model_registry_id,
-            model_display_name=exp.spec.model_display_name,
+            job_registry_id=exp.spec.job_registry_id,
+            job_display_name=exp.spec.job_display_name,
         )
         results.append(result)
 

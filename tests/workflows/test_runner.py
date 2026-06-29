@@ -13,6 +13,75 @@ from neuralls.composition.experiments.training_batch import run_experiment_matri
 import os
 
 
+def _write_training_job_config(path: Path, *, experiment_name: str) -> None:
+    """Write a minimal training job config in the new DLKit job schema."""
+    job_config = {
+        "run": {
+            "type": "train",
+            "seed": 42,
+            "precision": "64",
+        },
+        "experiment": {
+            "name": experiment_name,
+        },
+        "model": {
+            "class": "ScaleEquivariantFFNN",
+            "module_path": "dlkit.nn",
+            "params": {
+                "hidden_size": 2,
+                "num_layers": 1,
+            },
+        },
+        "data": {
+            "class": "FlexibleDataset",
+            "module": {"class": "ArrayDataModule"},
+            "batch_size": 2,
+            "num_workers": 0,
+            "pin_memory": False,
+            "shuffle": True,
+        },
+        "training": {
+            "trainer": {
+                "max_epochs": 1,
+                "accelerator": "cpu",
+                "enable_checkpointing": True,
+                "num_sanity_val_steps": 0,
+                "limit_train_batches": 1,
+                "limit_val_batches": 1,
+                "callbacks": [
+                    {
+                        "name": "ModelCheckpoint",
+                        "filename": "test_ckpt",
+                        "monitor": "val_loss",
+                        "save_top_k": 1,
+                        "every_n_epochs": 1,
+                        "enable_version_counter": False,
+                    }
+                ],
+            },
+            "optimizer": {
+                "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
+                "default_scheduler": {
+                    "name": "ReduceLROnPlateau",
+                    "factor": 0.5,
+                    "patience": 5,
+                    "min_lr": 1e-6,
+                },
+            },
+            "metrics": [
+                {
+                    "name": "RelativeVectorNormError",
+                    "module_path": "dlkit.domain.metrics",
+                    "norm_ord": 2,
+                    "vector_dim": -1,
+                }
+            ],
+        },
+    }
+    with open(path, "wb") as f:
+        tomli_w.dump(job_config, f)
+
+
 @patch("neuralls.composition.experiments.training_batch.train_model")
 def test_run_experiments_full_flow(
     mock_train: MagicMock,
@@ -36,8 +105,8 @@ def test_run_experiments_full_flow(
     # Create shared config directories (NEW FORMAT)
     datasets_dir = configs_dir / "datasets"
     datasets_dir.mkdir()
-    models_dir = configs_dir / "models"
-    models_dir.mkdir()
+    jobs_dir = configs_dir / "jobs"
+    jobs_dir.mkdir()
     solvers_dir = configs_dir / "solvers"
     solvers_dir.mkdir()
 
@@ -88,70 +157,10 @@ def test_run_experiments_full_flow(
     with open(solver_config_path, "wb") as f:
         tomli_w.dump(solver_config, f)
 
-    # 4. Create Model Config in shared models directory (NEW FORMAT)
+    # 4. Create Job Config in shared jobs directory (NEW FORMAT)
     exp_name = "test_experiment"
-
-    model_config_path = models_dir / f"{exp_name}_model.toml"
-    model_config = {
-        "SESSION": {
-            "seed": 42,
-            "workflow": "train",
-            "precision": "64",
-            "name": "test_model",
-        },
-        "MODEL": {
-            "name": "ScaleEquivariantFFNN",
-            "module_path": "dlkit.nn",
-            "hidden_size": 2,
-            "num_layers": 1,
-        },
-        "TRAINING": {
-            "trainer": {
-                "max_epochs": 1,
-                "accelerator": "cpu",
-                "enable_checkpointing": True,
-                "num_sanity_val_steps": 0,
-                "limit_train_batches": 1,
-                "limit_val_batches": 1,
-                "callbacks": [
-                    {
-                        "name": "ModelCheckpoint",
-                        "filename": "test_ckpt",
-                        "monitor": "val_loss",
-                        "save_top_k": 1,
-                        "every_n_epochs": 1,
-                        "enable_version_counter": False,
-                    }
-                ],
-            },
-            "optimizer": {
-                "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
-                "default_scheduler": {
-                    "name": "ReduceLROnPlateau",
-                    "factor": 0.5,
-                    "patience": 5,
-                    "min_lr": 1e-6,
-                },
-            },
-            "metrics": [
-                {
-                    "name": "RelativeVectorNormError",
-                    "module_path": "dlkit.domain.metrics",
-                    "norm_ord": 2,
-                    "vector_dim": -1,
-                }
-            ],
-        },
-        "DATASET": {"name": "FlexibleDataset"},
-        "DATAMODULE": {
-            "name": "ArrayDataModule",
-            "dataloader": {"num_workers": 0, "batch_size": 2, "pin_memory": False, "shuffle": True},
-        },
-        "MLFLOW": {"enabled": False},
-        "OPTUNA": {"enabled": False},
-    }
-    with open(model_config_path, "wb") as f:
-        tomli_w.dump(model_config, f)
+    job_config_path = jobs_dir / f"{exp_name}_job.toml"
+    _write_training_job_config(job_config_path, experiment_name="test_job")
 
     # 5. Create master config using [[experiments]] registry entries.
     master_config_path = configs_dir / "experiments.toml"
@@ -159,13 +168,13 @@ def test_run_experiments_full_flow(
         f.write("[[datasets]]\n")
         f.write('id = "test_data_gen"\n')
         f.write('path = "datasets/test_data_gen.toml"\n\n')
-        f.write("[[models]]\n")
-        f.write(f'id = "{exp_name}_model"\n')
-        f.write(f'path = "models/{exp_name}_model.toml"\n\n')
+        f.write("[[jobs]]\n")
+        f.write(f'id = "{exp_name}_job"\n')
+        f.write(f'path = "jobs/{exp_name}_job.toml"\n\n')
         f.write("[[experiments]]\n")
         f.write(f'id = "{exp_name}"\n')
         f.write('dataset = "test_data_gen"\n')
-        f.write(f'model = "{exp_name}_model"\n')
+        f.write(f'job = "{exp_name}_job"\n')
 
     # Set NEURALLS_OUTPUT_DIR to ensure no contamination (although we passed project_root)
     os.environ["NEURALLS_OUTPUT_DIR"] = str(data_dir / "output")
@@ -211,8 +220,8 @@ def test_run_experiment_matrix_with_mlflow(
     # Create shared config directories
     datasets_dir = configs_dir / "datasets"
     datasets_dir.mkdir()
-    models_dir = configs_dir / "models"
-    models_dir.mkdir()
+    jobs_dir = configs_dir / "jobs"
+    jobs_dir.mkdir()
 
     # 1. Create Dummy Data
     matrix_path = raw_dir / "matrix.txt"
@@ -247,65 +256,10 @@ def test_run_experiment_matrix_with_mlflow(
     with open(data_config_path, "wb") as f:
         tomli_w.dump(data_config, f)
 
-    # 3. Create Model Config with MLflow ENABLED
+    # 3. Create Job Config with tracking enabled
     exp_name = "mlflow_experiment"
-    model_config_path = models_dir / f"{exp_name}_model.toml"
-    model_config = {
-        "SESSION": {
-            "seed": 42,
-            "workflow": "train",
-            "precision": "64",
-            "name": "mlflow_test_model",
-        },
-        "MODEL": {
-            "name": "ScaleEquivariantFFNN",
-            "module_path": "dlkit.nn",
-            "hidden_size": 2,
-            "num_layers": 1,
-        },
-        "TRAINING": {
-            "trainer": {
-                "max_epochs": 1,
-                "accelerator": "cpu",
-                "enable_checkpointing": True,
-                "num_sanity_val_steps": 0,
-                "limit_train_batches": 1,
-                "limit_val_batches": 1,
-                "callbacks": [
-                    {
-                        "name": "ModelCheckpoint",
-                        "filename": "mlflow_test_ckpt",
-                        "monitor": "val_loss",
-                        "save_top_k": 1,
-                        "every_n_epochs": 1,
-                        "enable_version_counter": False,
-                    }
-                ],
-            },
-            "optimizer": {
-                "default_optimizer": {"lr": 1e-3, "name": "AdamW"},
-            },
-            "metrics": [
-                {
-                    "name": "RelativeVectorNormError",
-                    "module_path": "dlkit.domain.metrics",
-                    "norm_ord": 2,
-                    "vector_dim": -1,
-                }
-            ],
-        },
-        "DATASET": {"name": "FlexibleDataset"},
-        "DATAMODULE": {
-            "name": "ArrayDataModule",
-            "dataloader": {"num_workers": 0, "batch_size": 2, "pin_memory": False, "shuffle": True},
-        },
-        "MLFLOW": {
-            "enabled": True,
-        },
-        "OPTUNA": {"enabled": False},
-    }
-    with open(model_config_path, "wb") as f:
-        tomli_w.dump(model_config, f)
+    job_config_path = jobs_dir / f"{exp_name}_job.toml"
+    _write_training_job_config(job_config_path, experiment_name="mlflow_test_job")
 
     # 4. Create Master Experiment Config
     master_config_path = configs_dir / "experiments.toml"
@@ -313,13 +267,13 @@ def test_run_experiment_matrix_with_mlflow(
         f.write("[[datasets]]\n")
         f.write('id = "mlflow_test_data"\n')
         f.write('path = "datasets/mlflow_test_data.toml"\n\n')
-        f.write("[[models]]\n")
-        f.write(f'id = "{exp_name}_model"\n')
-        f.write(f'path = "models/{exp_name}_model.toml"\n\n')
+        f.write("[[jobs]]\n")
+        f.write(f'id = "{exp_name}_job"\n')
+        f.write(f'path = "jobs/{exp_name}_job.toml"\n\n')
         f.write("[[experiments]]\n")
         f.write(f'id = "{exp_name}"\n')
         f.write('dataset = "mlflow_test_data"\n')
-        f.write(f'model = "{exp_name}_model"\n')
+        f.write(f'job = "{exp_name}_job"\n')
 
     # Set NEURALLS_OUTPUT_DIR
     os.environ["NEURALLS_OUTPUT_DIR"] = str(data_dir / "output")

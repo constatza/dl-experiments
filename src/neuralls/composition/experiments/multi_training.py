@@ -20,7 +20,7 @@ from neuralls.platform.config.models.experiments import (
 )
 from neuralls.platform.config.registry import (
     resolve_dataset_config_path,
-    resolve_model_config_path,
+    resolve_job_config_path,
 )
 from neuralls.platform.config.resolution import (
     derive_output_root_from_tracking_uri,
@@ -36,13 +36,15 @@ from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
 from neuralls.platform.tracking.model_registry import (
     register_logged_model,
-    read_registered_model_name,
+    read_model_class_name,
 )
 from neuralls.composition.tracking.run_specs import (
     build_registration_tags,
     build_training_session_run_spec,
 )
 from neuralls.composition.experiments.training import train_model
+
+read_registered_model_name = read_model_class_name
 
 
 @dataclass(frozen=True)
@@ -66,11 +68,11 @@ class TrainingRunResult:
     metrics: dict[str, float]
     dataset_id: str | None = None
     dataset_display_name: str | None = None
-    model_name: str | None = None
-    model_display_name: str | None = None
+    model_class: str | None = None
+    job_display_name: str | None = None
     dataset_registry_id: str | None = None
-    model_registry_id: str | None = None
-    model_config_path: Path | None = None
+    job_registry_id: str | None = None
+    job_config_path: Path | None = None
     data_config_path: Path | None = None
 
 
@@ -120,7 +122,7 @@ def _resolve_config_paths(
     configs_dir: Path,
     cfg: CaseConfig | None = None,
 ) -> tuple[Path, Path]:
-    """Resolve model and dataset config paths from an experiment or run entry.
+    """Resolve job and dataset config paths from an experiment or run entry.
 
     Supports two formats:
     - registry-backed ``[[experiments]]`` entries resolved through ``cfg``
@@ -131,31 +133,31 @@ def _resolve_config_paths(
         configs_dir: Parent directory of the experiments TOML.
 
     Returns:
-        Tuple of ``(model_config_path, data_config_path)``.
+        Tuple of ``(job_config_path, data_config_path)``.
 
     Raises:
         ValueError: If registry-backed entries are resolved without ``cfg``.
         FileNotFoundError: If either resolved config path does not exist.
     """
     if isinstance(experiment, RunEntry):
-        model_path = configs_dir / experiment.model_config_path
+        model_path = configs_dir / experiment.job_config_path
         dataset_path = configs_dir / experiment.data_config_path
     elif isinstance(experiment, dict):
         if cfg is None:
             raise ValueError(
                 "Registry-backed experiment resolution requires a validated case config."
             )
-        model_path = resolve_model_config_path(cfg, configs_dir, experiment["model"])
+        model_path = resolve_job_config_path(cfg, configs_dir, experiment["job"])
         dataset_path = resolve_dataset_config_path(cfg, configs_dir, experiment["dataset"])
     else:
         if cfg is None:
             raise ValueError(
                 "Registry-backed experiment resolution requires a validated case config."
             )
-        model_path = resolve_model_config_path(
+        model_path = resolve_job_config_path(
             cfg,
             configs_dir,
-            experiment.model_id,
+            experiment.job_id,
             experiment_id=experiment.id,
         )
         dataset_path = resolve_dataset_config_path(
@@ -166,7 +168,7 @@ def _resolve_config_paths(
         )
 
     if not model_path.exists():
-        raise FileNotFoundError(f"Model config not found: {model_path}")
+        raise FileNotFoundError(f"Job config not found: {model_path}")
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset config not found: {dataset_path}")
 
@@ -212,14 +214,14 @@ def _annotate_mlflow_run(
     run_id: str,
     tracking_uri: str,
     checkpoint_path: Path,
-    model_config_path: Path,
+    job_config_path: Path,
     experiment_id: str,
     experiment_display_name: str,
     dataset_id: str,
     dataset_display_name: str,
     dataset_registry_id: str | None,
-    model_registry_id: str | None,
-    model_display_name: str,
+    job_registry_id: str | None,
+    job_display_name: str,
 ) -> None:
     """Log batch params and register model under experiment_id for one completed training run.
 
@@ -228,7 +230,7 @@ def _annotate_mlflow_run(
         run_id: MLflow run UUID from the training sidecar.
         tracking_uri: MLflow tracking server URI.
         checkpoint_path: Permanent checkpoint path to record.
-        model_config_path: Path to model config (provides [MODEL].name as model_class tag).
+        job_config_path: Path to job config (provides [model].class as model_class tag).
         experiment_id: Experiment identifier used as the registered model name.
     """
     try:
@@ -238,20 +240,20 @@ def _annotate_mlflow_run(
         client.log_param(run_id, "experiment_display_name", experiment_display_name)
         client.log_param(run_id, "dataset_id", dataset_id)
         client.log_param(run_id, "dataset_display_name", dataset_display_name)
-        client.log_param(run_id, "model_display_name", model_display_name)
+        client.log_param(run_id, "job_display_name", job_display_name)
         if dataset_registry_id is not None:
             client.log_param(run_id, "dataset_registry_id", dataset_registry_id)
-        if model_registry_id is not None:
-            client.log_param(run_id, "model_registry_id", model_registry_id)
+        if job_registry_id is not None:
+            client.log_param(run_id, "job_registry_id", job_registry_id)
         client.log_param(run_id, "checkpoint_path", str(checkpoint_path))
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"[{label}] Could not log params to MLflow: {exc}")
 
-    model_class = read_registered_model_name(model_config_path)
+    model_class = read_model_class_name(job_config_path)
     entry = ExperimentEntry(
         id=experiment_id,
         dataset=dataset_registry_id or dataset_id,
-        model=model_registry_id or experiment_id,
+        job=job_registry_id or experiment_id,
         display_name=experiment_display_name,
     )
     reg_tags = build_registration_tags(
@@ -286,7 +288,7 @@ def _train_single(
     settings: NeurallsSettings | None,
     experiment_id: str,
     experiment_display_name: str,
-    model_config_path: Path,
+    job_config_path: Path,
     data_config_path: Path,
     label: str,
     output_root: Path | None,
@@ -294,8 +296,8 @@ def _train_single(
     parent_run_id: str | None = None,
     dataset_registry_id: str | None = None,
     dataset_display_name: str | None = None,
-    model_registry_id: str | None = None,
-    model_display_name: str | None = None,
+    job_registry_id: str | None = None,
+    job_display_name: str | None = None,
 ) -> TrainingRunResult:
     """Train one experiment, read sidecar, and fetch MLflow metrics.
 
@@ -303,7 +305,7 @@ def _train_single(
 
     Args:
         experiment_id: The ``id`` field from the TOML entry.
-        model_config_path: Path to model config TOML.
+        job_config_path: Path to job config TOML.
         data_config_path: Path to dataset config TOML.
         label: Short numeric label for this run ("1", "2", …).
         output_root: Optional custom output root directory.
@@ -315,7 +317,7 @@ def _train_single(
     settings = require_settings(settings)
 
     checkpoint_path = train_model(
-        config_path=model_config_path,
+        config_path=job_config_path,
         settings=settings,
         data_config_path=data_config_path,
         output_root=output_root,
@@ -323,8 +325,8 @@ def _train_single(
         experiment_display_name=experiment_display_name,
         dataset_registry_id=dataset_registry_id,
         dataset_display_name=dataset_display_name,
-        model_registry_id=model_registry_id,
-        model_display_name=model_display_name,
+        job_registry_id=job_registry_id,
+        job_display_name=job_display_name,
         mlflow_experiment_name=mlflow_experiment_name,
         parent_run_id=parent_run_id,
     )
@@ -333,11 +335,11 @@ def _train_single(
         data_cfg=data_cfg,
         config_path=data_config_path,
     ).name
-    model_name = read_registered_model_name(model_config_path)
+    model_name = read_model_class_name(job_config_path)
     resolved_dataset_display_name = resolve_display_name(dataset_id, dataset_display_name)
     resolved_model_display_name = resolve_display_name(
-        model_name or model_registry_id or experiment_id,
-        model_display_name,
+        model_name or job_registry_id or experiment_id,
+        job_display_name,
     )
 
     sidecar = read_mlflow_sidecar(checkpoint_path.parent / "mlflow_run.json")
@@ -364,14 +366,14 @@ def _train_single(
             run_id=run_id,
             tracking_uri=tracking_uri,
             checkpoint_path=checkpoint_path,
-            model_config_path=model_config_path,
+            job_config_path=job_config_path,
             experiment_id=experiment_id,
             experiment_display_name=experiment_display_name,
             dataset_id=dataset_id,
             dataset_display_name=resolved_dataset_display_name,
             dataset_registry_id=dataset_registry_id,
-            model_registry_id=model_registry_id,
-            model_display_name=resolved_model_display_name,
+            job_registry_id=job_registry_id,
+            job_display_name=resolved_model_display_name,
         )
 
     logger.info(
@@ -387,11 +389,11 @@ def _train_single(
         metrics=metrics,
         dataset_id=dataset_id,
         dataset_display_name=resolved_dataset_display_name,
-        model_name=model_name,
-        model_display_name=resolved_model_display_name,
+        model_class=model_name,
+        job_display_name=resolved_model_display_name,
         dataset_registry_id=dataset_registry_id,
-        model_registry_id=model_registry_id,
-        model_config_path=model_config_path,
+        job_registry_id=job_registry_id,
+        job_config_path=job_config_path,
         data_config_path=data_config_path,
     )
 
@@ -418,17 +420,17 @@ def _resolve_training_entry_metadata(
         return data_config_path.stem, None, None, None
 
     dataset_entry = _find_registry_entry(cfg.datasets, entry.dataset_id)
-    model_entry = _find_registry_entry(cfg.models, entry.model_id)
+    model_entry = _find_registry_entry(cfg.jobs, entry.job_id)
     dataset_display_name = (
         dataset_entry.effective_display_name if dataset_entry is not None else entry.dataset_id
     )
     model_display_name = (
-        model_entry.effective_display_name if model_entry is not None else entry.model_id
+        model_entry.effective_display_name if model_entry is not None else entry.job_id
     )
     return (
         entry.dataset_id,
         dataset_display_name,
-        entry.model_id,
+        entry.job_id,
         model_display_name,
     )
 
@@ -580,7 +582,7 @@ def train_batch(
                     settings=settings,
                     experiment_id=experiment_id,
                     experiment_display_name=experiment_display_name,
-                    model_config_path=model_config,
+                    job_config_path=model_config,
                     data_config_path=data_config,
                     label=label,
                     output_root=base_output,
@@ -588,8 +590,8 @@ def train_batch(
                     parent_run_id=parent_run_id,
                     dataset_registry_id=dataset_registry_id,
                     dataset_display_name=dataset_display_name,
-                    model_registry_id=model_registry_id,
-                    model_display_name=model_display_name,
+                    job_registry_id=model_registry_id,
+                    job_display_name=model_display_name,
                 )
                 results.append(result)
                 logger.info(f"Completed {i}/{n} experiments")

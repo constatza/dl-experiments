@@ -92,7 +92,7 @@ def _build_display_lookup(entries: list[object]) -> dict[str, str]:
 
 def _infer_experiment_id(
     dataset_id: str,
-    model_id: str,
+    job_id: str,
     user_id: str | None,
     user_dn: str | None,
 ) -> str:
@@ -101,13 +101,13 @@ def _infer_experiment_id(
     Priority:
       1. user_id (stripped, if non-blank)
       2. _slugify(user_dn) if user_dn non-blank
-      3. f"{model_id}-{dataset_id}"  (model first)
+      3. f"{job_id}-{dataset_id}"  (job first)
 
     Validates result with _validate_id_chars before returning.
 
     Args:
         dataset_id: The dataset identifier.
-        model_id: The model identifier.
+        job_id: The job identifier.
         user_id: Explicit user-supplied id (may be None or blank).
         user_dn: Explicit user-supplied display_name (may be None or blank).
 
@@ -122,7 +122,7 @@ def _infer_experiment_id(
     elif user_dn and user_dn.strip():
         final_id = _slugify(user_dn)
     else:
-        final_id = f"{model_id}-{dataset_id}"
+        final_id = f"{job_id}-{dataset_id}"
 
     _validate_id_chars(final_id, "id")
     return final_id
@@ -130,7 +130,7 @@ def _infer_experiment_id(
 
 def _infer_experiment_display_name(
     dataset_id: str,
-    model_id: str,
+    job_id: str,
     user_dn: str | None,
     dataset_display: dict[str, str],
     model_display: dict[str, str],
@@ -144,10 +144,10 @@ def _infer_experiment_display_name(
 
     Args:
         dataset_id: The dataset identifier.
-        model_id: The model identifier.
+        job_id: The job identifier.
         user_dn: Explicit user-supplied display_name (may be None or blank).
         dataset_display: Lookup from dataset id to display label.
-        model_display: Lookup from model id to display label.
+        model_display: Lookup from job id to display label.
 
     Returns:
         The resolved experiment display name string.
@@ -156,7 +156,7 @@ def _infer_experiment_display_name(
         return user_dn.strip()
 
     dataset_label = dataset_display.get(dataset_id, dataset_id)
-    model_label = model_display.get(model_id, model_id)
+    model_label = model_display.get(job_id, job_id)
     return f"{model_label} | {dataset_label}"
 
 

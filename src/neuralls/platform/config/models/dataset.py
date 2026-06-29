@@ -7,7 +7,6 @@ from typing import Any
 import numpy as np
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
-from dlkit.infrastructure.config.workflow_types import WorkflowConfig
 
 
 def create_features_from_array(
@@ -62,7 +61,7 @@ def create_targets_from_array(
 
 
 def with_dataset_arrays(
-    settings: WorkflowConfig,
+    settings: Any,
     rhs: np.ndarray,
     solutions: np.ndarray,
     matrix: np.ndarray | None = None,
