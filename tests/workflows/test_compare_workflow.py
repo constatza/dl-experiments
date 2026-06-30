@@ -87,7 +87,6 @@ def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
             [
                 "[model]",
                 'name = "ScaleEquivariantFFNN"',
-                'module_path = "dlkit.nn"',
                 "",
                 "[data]",
                 'name = "FlexibleDataset"',

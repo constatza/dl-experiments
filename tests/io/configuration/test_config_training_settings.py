@@ -76,7 +76,6 @@ def test_training_sections_round_trip(tmp_path: Path, config_content_template: s
         MINIMAL_FFNN_CONFIG: """
 [model]
 name = "ScaleEquivariantFFNN"
-module_path = "dlkit.nn"
 
 [data]
 name = "FlexibleDataset"
@@ -87,7 +86,6 @@ name = "ArrayDataModule"
         MINIMAL_LINEAR_CONFIG: """
 [model]
 name = "LinearModel"
-module_path = "dlkit.nn"
 
 [data]
 name = "FlexibleDataset"

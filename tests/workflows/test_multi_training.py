@@ -31,7 +31,6 @@ def _write_model_profile(path: Path, model_name: str) -> Path:
         f"""
 [model]
 name = "{model_name}"
-module_path = "dlkit.nn"
 
 [data]
 name = "FlexibleDataset"

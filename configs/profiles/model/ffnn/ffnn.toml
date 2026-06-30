@@ -1,6 +1,6 @@
 [model]
 name = "ScaleEquivariantFFNN"
-module_path = "dlkit.nn"
+activation = "gelu"
 num_layers = 1
 norm = "l2"
 dropout = 0.0

@@ -1,6 +1,6 @@
 [model]
 name = "ScaleEquivariantEmbeddedFactorizedFFNN"
-module_path = "dlkit.nn"
+activation = "gelu"
 num_layers = 1
 bias = true
 norm = "l2"

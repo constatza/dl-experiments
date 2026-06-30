@@ -19,7 +19,6 @@ def _write_model_profile(
         f"""
 [model]
 name = "{model_name}"
-module_path = "dlkit.nn"
 
 [data]
 name = "{dataset_name}"
@@ -216,7 +215,6 @@ class TestRunNamingEdgeCases:
             """
 [model]
 name = ""
-module_path = "dlkit.nn"
 
 [data]
 name = "FlexibleDataset"

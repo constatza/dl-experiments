@@ -32,6 +32,9 @@ policy.
 
 Model profiles are reusable lower-case DLKit model fragments.
 
+`module_path` may be omitted when the model lives under the default `dlkit.nn`
+surface.
+
 They may contain:
 
 - `[model]`
@@ -53,6 +56,21 @@ custom runtime input structure directly in the model profile, for example:
 - DeepONet branch/trunk inputs (`configs/profiles/data/deeponet-branch-trunk.toml`)
 - conditional or FiLM-style models with multiple feature inputs (`configs/profiles/data/film-condition.toml`)
 - PCA-specific runtime transforms used by only one model family
+
+When a model family derives only shape-driven kwargs automatically, keep the
+remaining architecture kwargs explicit in the profile. DeepONet profiles are the
+main example: `branch_in_features`, `trunk_dim`, and `out_features` come from
+data shapes, but `basis_dim` and the branch/trunk hidden widths belong in
+`[model]`.
+
+The DeepONet data profile uses `MinMaxScaler(dim = [0, 1])` before `Unsqueeze`
+for vector-valued entries. That reduces value scale with one shared scalar range
+per entry instead of per-coordinate normalization, so branch and target vectors
+keep their internal relative magnitudes.
+
+The checked-in model profiles pin `activation = "gelu"` wherever the target
+network exposes an activation kwarg. `ScaleEquivariantSiren` is the exception:
+its constructor does not accept a configurable activation.
 
 ### `configs/profiles/data/**/*.toml`
 
@@ -182,7 +200,6 @@ entrypoint, so the inline `[search]` block belongs there.
 ```toml
 [model]
 name = "ScaleEquivariantFactorizedFFNN"
-module_path = "dlkit.nn"
 num_layers = 1
 
 [data]

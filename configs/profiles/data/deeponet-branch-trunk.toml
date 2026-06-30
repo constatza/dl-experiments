@@ -6,16 +6,21 @@ shuffle = true
 
 [[data.features]]
 name = "branch"
+transforms = [
+    { name = "MinMaxScaler", dim = [0, 1] },
+]
 
 [[data.features]]
 name = "trunk"
 transforms = [
+    { name = "MinMaxScaler", dim = [0, 1] },
     { name = "Unsqueeze", dim = 1 },
 ]
 
 [[data.targets]]
 name = "y"
 transforms = [
+    { name = "MinMaxScaler", dim = [0, 1] },
     { name = "Unsqueeze", dim = 1 },
 ]
 

@@ -85,7 +85,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
     with open(project_root / "configs" / "models" / "exp1_model.toml", "w") as f:
         f.write("[model]\n")
         f.write('name = "TestModel"\n')
-        f.write('module_path = "dlkit.nn"\n\n')
+        f.write("\n")
         f.write("[data]\n")
         f.write('name = "FlexibleDataset"\n\n')
         f.write("[data.module]\n")

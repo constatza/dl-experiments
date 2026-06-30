@@ -42,7 +42,6 @@ def minimal_model_config(tmp_path: Path, output_root: Path) -> Path:
         """
 [model]
 name = "MinimalModel"
-module_path = "dlkit.nn"
 
 [data]
 name = "FlexibleDataset"

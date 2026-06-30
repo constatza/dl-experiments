@@ -26,7 +26,6 @@ def _write_model_profile(
         f"""
 [model]
 name = "{model_name}"
-module_path = "dlkit.nn"
 
 [data]
 name = "FlexibleDataset"
@@ -159,7 +158,6 @@ workflow = "train"
 
 [MODEL]
 name = "TestModel"
-module_path = "dlkit.nn"
 
 [TRAINING.trainer]
 max_epochs = 1

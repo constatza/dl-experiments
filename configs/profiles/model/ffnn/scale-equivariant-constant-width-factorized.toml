@@ -1,3 +1,4 @@
 [model]
 name = "ScaleEquivariantConstantWidthFactorizedFFNN"
+activation = "gelu"
 num_layers = 1

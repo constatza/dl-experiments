@@ -24,7 +24,6 @@ def _write_job_config(path: Path, model_name: str, checkpoint_name: str) -> Path
         f"""
 [model]
 name = "{model_name}"
-module_path = "dlkit.nn"
 
 [data]
 name = "FlexibleDataset"
@@ -150,7 +149,6 @@ def test_legacy_model_workflow_toml_is_rejected(tmp_path: Path, neuralls_setting
                 "",
                 "[MODEL]",
                 'name = "NormScaledSymmetricLinear"',
-                'module_path = "dlkit.nn"',
                 "",
                 "[TRAINING]",
                 "[TRAINING.trainer]",

@@ -30,7 +30,6 @@ def temp_config_structure(tmp_path: Path) -> Path:
                 [
                     "[model]",
                     'name = "TestModel"',
-                    'module_path = "dlkit.nn"',
                     "",
                     "[data]",
                     'name = "FlexibleDataset"',

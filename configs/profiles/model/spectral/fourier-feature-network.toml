@@ -1,6 +1,6 @@
 [model]
 name = "ScaleEquivariantFourierFeatureNetwork"
-module_path = "dlkit.nn"
+activation = "gelu"
 hidden_size = 256
 num_layers = 1
 n_frequencies = 64
