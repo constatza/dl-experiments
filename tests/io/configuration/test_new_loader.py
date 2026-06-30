@@ -22,6 +22,8 @@ def temp_config_structure(tmp_path: Path) -> Path:
     (project_root / "configs").mkdir()
     (project_root / "configs" / "datasets").mkdir()
     (project_root / "configs" / "jobs").mkdir()
+    (project_root / "configs" / "models").mkdir()
+    (project_root / "configs" / "profiles").mkdir()
     matrix_path = project_root / "data" / "matrix.txt"
     matrix_path.parent.mkdir()
     matrix_path.write_text("1.0\n")
@@ -80,29 +82,49 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write(f'data_dir = "{(project_root / "data" / "processed").as_posix()}"\n')
 
     # Job configs
-    with open(project_root / "configs" / "jobs" / "exp1_job.toml", "w") as f:
-        f.write("[run]\n")
-        f.write('type = "train"\n\n')
+    with open(project_root / "configs" / "models" / "exp1_model.toml", "w") as f:
         f.write("[model]\n")
-        f.write('class = "TestModel"\n')
+        f.write('name = "TestModel"\n')
         f.write('module_path = "dlkit.nn"\n\n')
         f.write("[data]\n")
-        f.write('class = "FlexibleDataset"\n\n')
-        f.write("[training]\n")
+        f.write('name = "FlexibleDataset"\n\n')
+        f.write("[data.module]\n")
+        f.write('name = "ArrayDataModule"\n')
+
+    with open(project_root / "configs" / "models" / "exp2_model.toml", "w") as f:
+        f.write("[model]\n")
+        f.write('name = "TestModel2"\n')
+        f.write('module_path = "dlkit.domain.nn.graph"\n\n')
+        f.write("[data]\n")
+        f.write('name = "FlexibleDataset"\n\n')
+        f.write("[data.module]\n")
+        f.write('name = "ArrayDataModule"\n')
+
+    with open(project_root / "configs" / "profiles" / "training.toml", "w") as f:
         f.write("[training.trainer]\n")
         f.write("max_epochs = 1\n")
 
+    with open(project_root / "configs" / "jobs" / "exp1_job.toml", "w") as f:
+        f.write("[run]\n")
+        f.write('type = "train"\n')
+        f.write("seed = 42\n")
+        f.write('precision = "64"\n')
+        f.write('model = "../models/exp1_model.toml"\n\n')
+        f.write('data = "../models/exp1_model.toml"\n')
+        f.write('training = "../profiles/training.toml"\n\n')
+        f.write("[experiment]\n")
+        f.write('name = "exp1_job"\n')
+
     with open(project_root / "configs" / "jobs" / "exp2_job.toml", "w") as f:
         f.write("[run]\n")
-        f.write('type = "train"\n\n')
-        f.write("[model]\n")
-        f.write('class = "TestModel2"\n')
-        f.write('module_path = "dlkit.domain.nn.graph"\n\n')
-        f.write("[data]\n")
-        f.write('class = "FlexibleDataset"\n\n')
-        f.write("[training]\n")
-        f.write("[training.trainer]\n")
-        f.write("max_epochs = 1\n")
+        f.write('type = "train"\n')
+        f.write("seed = 42\n")
+        f.write('precision = "64"\n')
+        f.write('model = "../models/exp2_model.toml"\n\n')
+        f.write('data = "../models/exp2_model.toml"\n')
+        f.write('training = "../profiles/training.toml"\n\n')
+        f.write("[experiment]\n")
+        f.write('name = "exp2_job"\n')
 
     return project_root
 

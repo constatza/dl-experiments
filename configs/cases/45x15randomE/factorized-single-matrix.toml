@@ -39,34 +39,34 @@ id = "sparse-rhs-45x15randomE-single-matrix"
 path = "../../datasets/test/45x15randomE/sparse-rhs-single-matrix.toml"
 display_name = "Sparse RHS 45x15randomE Single Matrix"
 
-[[models]]
+[[jobs]]
 id = "embedded-factorized"
-path = "../../models/ffnn/embedded-factorized.toml"
+path = "../../jobs/ffnn/embedded-factorized.toml"
 display_name = "Scale-Equivariant Embedded Factorized FFNN"
 
-[[models]]
+[[jobs]]
 id = "factorized"
-path = "../../models/ffnn/factorized.toml"
+path = "../../jobs/ffnn/factorized.toml"
 display_name = "Scale-Equivariant Factorized FFNN"
 
-[[models]]
+[[jobs]]
 id = "constant-width-factorized"
-path = "../../models/ffnn/constant-width-factorized.toml"
+path = "../../jobs/ffnn/constant-width-factorized.toml"
 display_name = "Constant-Width Factorized FFNN"
 
-[[models]]
+[[jobs]]
 id = "constant-width-simple-factorized"
-path = "../../models/ffnn/constant-width-simple-factorized.toml"
+path = "../../jobs/ffnn/constant-width-simple-factorized.toml"
 display_name = "Constant-Width Simple Factorized FFNN"
 
-[[models]]
+[[jobs]]
 id = "scale-equivariant-constant-width-factorized"
-path = "../../models/ffnn/scale-equivariant-constant-width-factorized.toml"
+path = "../../jobs/ffnn/scale-equivariant-constant-width-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
 
-[[models]]
+[[jobs]]
 id = "scale-equivariant-constant-width-simple-factorized"
-path = "../../models/ffnn/scale-equivariant-constant-width-simple-factorized.toml"
+path = "../../jobs/ffnn/scale-equivariant-constant-width-simple-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Simple Factorized FFNN"
 
 [[comparisons]]
@@ -110,24 +110,24 @@ experiments = [
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE-single-matrix"
-model = "embedded-factorized"
+job = "embedded-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE-single-matrix"
-model = "factorized"
+job = "factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE-single-matrix"
-model = "constant-width-factorized"
+job = "constant-width-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE-single-matrix"
-model = "constant-width-simple-factorized"
+job = "constant-width-simple-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE-single-matrix"
-model = "scale-equivariant-constant-width-factorized"
+job = "scale-equivariant-constant-width-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE-single-matrix"
-model = "scale-equivariant-constant-width-simple-factorized"
+job = "scale-equivariant-constant-width-simple-factorized"

@@ -90,18 +90,18 @@ def with_dataset_arrays(
     features = list(create_features_from_array(rhs, name=primary_input_name))
 
     # Include matrix if provided and dataset is GraphDataset
-    dataset_name = getattr(settings.DATASET, "name", None) if hasattr(settings, "DATASET") else None
+    dataset = getattr(settings, "data", None)
+    dataset_name = getattr(dataset, "name", None)
 
     if matrix is not None and dataset_name == "GraphDataset":
         features.append(create_matrix_feature(matrix, name=matrix_input_name))
 
     targets = create_targets_from_array(solutions, name=target_name)
 
-    # Build DATASET dict
+    # Build data dict
     dataset_dict = {
         "features": tuple(features),
         "targets": targets,
     }
 
-    # Inject via patch_model
-    return patch_model(settings, {"DATASET": dataset_dict})
+    return patch_model(settings, {"data": dataset_dict})

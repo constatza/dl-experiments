@@ -7,7 +7,6 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from dlkit.config import SearchJobConfig, TrainingJobConfig
 from dlkit.infrastructure.config.core.patching import patch_model
 from dlkit.interfaces.api import execute
 from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
@@ -40,10 +39,7 @@ from neuralls.platform.tracking.mlflow import (
 )
 from neuralls.platform.tracking.mlflow_client import (
     log_artifacts_to_mlflow,
-    parent_run_context,
 )
-
-type TrainingWorkflowSettings = TrainingJobConfig | SearchJobConfig
 
 
 @dataclass(frozen=True)
@@ -81,8 +77,6 @@ def train_model(
     dataset_display_name: str | None = None,
     job_registry_id: str | None = None,
     job_display_name: str | None = None,
-    model_registry_id: str | None = None,
-    model_display_name: str | None = None,
     mlflow_experiment_name: str | None = None,
 ) -> Path:
     """Train a DLKit model using resolved data+config context.
@@ -103,7 +97,7 @@ def train_model(
     DLKit handles all MLflow operations including server startup and tracking.
 
     Args:
-        config_path: Path to a model configuration TOML (e.g., /path/to/model.toml)
+        config_path: Path to a job configuration TOML (e.g., /path/to/job.toml)
         data_config_path: Path to a dataset configuration TOML (e.g., /path/to/dataset.toml)
         output_root: Root directory for the permanent checkpoint. Defaults to
             ``DEFAULT_OUTPUT_DIR`` from constants.
@@ -131,9 +125,6 @@ def train_model(
         tmp_path = Path(_tmp)
         config_path = Path(config_path)
         resolved_data_config_path = Path(data_config_path)
-        resolved_job_registry_id = job_registry_id or model_registry_id
-        resolved_job_display_name = job_display_name or model_display_name
-
         # Step 1: Load experiment configuration into temp dir
         experiment = load_experiment(
             job_config_path=config_path,
@@ -145,8 +136,8 @@ def train_model(
             experiment_display_name=experiment_display_name,
             dataset_registry_id=dataset_registry_id,
             dataset_display_name=dataset_display_name,
-            job_registry_id=resolved_job_registry_id,
-            job_display_name=resolved_job_display_name,
+            job_registry_id=job_registry_id,
+            job_display_name=job_display_name,
         )
         workflow_settings = experiment.settings
         workspace = experiment.workspace
@@ -178,8 +169,6 @@ def train_model(
             features,
             targets,
             contract,
-            run_config.experiment_name,
-            run_config.run_name,
         )
 
         # Step 5: Execute training via DLKit
@@ -189,16 +178,15 @@ def train_model(
                 {"training": {"trainer": {"max_epochs": max_epochs}}},
             )
         with scoped_mlflow_environment(runtime_mlflow_env):
-            with parent_run_context(parent_run_id):
-                execution_result = execute(
-                    workflow_settings,
-                    overrides=ExecutionOverrides(
-                        experiment_name=run_config.experiment_name,
-                        run_name=run_config.run_name,
-                        tags=dict(run_config.tags),
-                    ),
-                )
-                training_result = _unwrap_execution_result(execution_result)
+            execution_result = execute(
+                workflow_settings,
+                overrides=ExecutionOverrides(
+                    experiment_name=run_config.experiment_name,
+                    run_name=run_config.run_name,
+                    tags=dict(run_config.tags),
+                ),
+            )
+            training_result = _unwrap_execution_result(execution_result)
 
             # Step 6: Resolve MLflow run metadata and retrieve the checkpoint
             tracking_uri, artifacts_destination = resolve_runtime_tracking_config()
@@ -257,7 +245,7 @@ def train_model(
                     workspace=workspace,
                     training_result=training_result,
                     numpy_payload=normalized_numpy,
-                    model_config_path=config_path,
+                    job_config_path=config_path,
                     data_config_path=resolved_data_config_path,
                 )
                 _log_training_evaluation(

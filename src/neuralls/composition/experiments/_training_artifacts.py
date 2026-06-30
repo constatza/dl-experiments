@@ -151,6 +151,31 @@ def _resolve_mlflow_run_ids(
     return tracking_uri, fallback_experiment_id, fallback_run_id
 
 
+def create_fallback_training_run(
+    *,
+    tracking_uri: str,
+    experiment_name: str,
+    run_name: str,
+    tags: Mapping[str, str],
+    checkpoint_path: Path,
+) -> tuple[str, str]:
+    """Create a training run directly through MlflowClient when DLKit leaves none behind."""
+    client = MlflowClient(tracking_uri=tracking_uri)
+    experiment = client.get_experiment_by_name(experiment_name)
+    experiment_id = (
+        experiment.experiment_id
+        if experiment is not None
+        else client.create_experiment(experiment_name)
+    )
+    run = client.create_run(
+        experiment_id=experiment_id,
+        tags={"mlflow.runName": run_name, **dict(tags)},
+    )
+    client.log_artifact(run.info.run_id, str(checkpoint_path), artifact_path="model")
+    client.log_artifact(run.info.run_id, str(checkpoint_path), artifact_path="checkpoints")
+    return experiment_id, run.info.run_id
+
+
 def _log_training_context(
     *,
     tracking_uri: str,
@@ -338,7 +363,7 @@ def _stage_training_artifacts(
     workspace: Any,
     training_result: Any,
     numpy_payload: Mapping[str, Any] | None,
-    model_config_path: Path,
+    job_config_path: Path,
     data_config_path: Path | None,
 ) -> None:
     """Stage full training artifacts into the workspace for MLflow upload.
@@ -347,7 +372,7 @@ def _stage_training_artifacts(
         workspace: Experiment workspace (provides root_dir, predictions_dir).
         training_result: DLKit training result object.
         numpy_payload: Normalized prediction/target payload.
-        model_config_path: Path to the model TOML config.
+        job_config_path: Path to the job TOML config.
         data_config_path: Path to the dataset TOML config, or None.
     """
     import shutil
@@ -357,7 +382,7 @@ def _stage_training_artifacts(
     config_dir.mkdir(parents=True, exist_ok=True)
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
-    shutil.copy2(model_config_path, config_dir / model_config_path.name)
+    shutil.copy2(job_config_path, config_dir / job_config_path.name)
     if data_config_path is not None:
         shutil.copy2(data_config_path, config_dir / data_config_path.name)
 
@@ -451,6 +476,10 @@ def _resolve_training_checkpoint(
     local_checkpoint = get_latest_checkpoint(workspace.checkpoint_dir)
     if local_checkpoint is not None and local_checkpoint.exists():
         return local_checkpoint
+
+    retained_checkpoint = get_latest_checkpoint(workspace.root_dir / "retained-checkpoints")
+    if retained_checkpoint is not None and retained_checkpoint.exists():
+        return retained_checkpoint
 
     if tracking_uri and run_id:
         download_root = workspace.root_dir / "mlflow-downloads"

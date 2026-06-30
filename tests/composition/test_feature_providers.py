@@ -179,42 +179,38 @@ def test_declaration_order_is_preserved(
 
 
 def _make_minimal_settings(feature_names: list[str]):
-    """Build a minimal DLKit TrainingWorkflowConfig with placeholder feature entries."""
+    """Build a minimal lower-case DLKit TrainingJobConfig with placeholder feature entries."""
     from dlkit.infrastructure.config.data_entries import ValueEntry
-    from dlkit.infrastructure.config.dataset_settings import DatasetSettings
-    from dlkit.infrastructure.config.workflow_configs import TrainingWorkflowConfig
+    from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
     features = tuple(ValueEntry(name=name) for name in feature_names)
-    dataset = DatasetSettings(name="FlexibleDataset", features=features)
-    return TrainingWorkflowConfig.model_validate(
+    return TrainingJobConfig.model_validate(
         {
-            "SESSION": {"seed": 42, "workflow": "train"},
-            "TRAINING": {
+            "run": {"type": "train", "seed": 42},
+            "model": {"name": "FlexibleModel"},
+            "data": {
+                "name": "FlexibleDataset",
+                "features": [f.model_dump() for f in features],
+            },
+            "training": {
                 "trainer": {"max_epochs": 1},
-                "loss_function": {
+                "loss": {
                     "name": "relative_vector_norm_loss",
                     "module_path": "dlkit.domain.losses",
                     "target_key": "targets.y",
                 },
             },
-            "DATASET": dataset.model_dump(),
         }
     )
 
 
 def test_extra_names_returns_ordered_list(contract) -> None:
-    try:
-        settings = _make_minimal_settings(["x", "condition", "query"])
-        extra = _extra_feature_names_from_settings(settings, contract)
-        assert extra == ["condition", "query"]
-    except Exception:
-        pytest.skip("Minimal settings construction requires DLKit internals; skip if unavailable")
+    settings = _make_minimal_settings(["x", "condition", "query"])
+    extra = _extra_feature_names_from_settings(settings, contract)
+    assert extra == ["condition", "query"]
 
 
 def test_extra_names_empty_when_only_base(contract) -> None:
-    try:
-        settings = _make_minimal_settings(["x"])
-        extra = _extra_feature_names_from_settings(settings, contract)
-        assert extra == []
-    except Exception:
-        pytest.skip("Minimal settings construction requires DLKit internals; skip if unavailable")
+    settings = _make_minimal_settings(["x"])
+    extra = _extra_feature_names_from_settings(settings, contract)
+    assert extra == []

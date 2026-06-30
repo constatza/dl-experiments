@@ -122,16 +122,21 @@ def find_mlflow_run(
     if experiment is None:
         return None
 
-    filter_string = f"attributes.run_name = '{run_name}'" if run_name else ""
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
-        filter_string=filter_string,
-        max_results=1,
+        max_results=50,
         order_by=["attributes.start_time DESC"],
     )
     if not runs:
         return None
-    return experiment.experiment_id, runs[0].info.run_id
+    if run_name is None:
+        return experiment.experiment_id, runs[0].info.run_id
+
+    for run in runs:
+        candidate_name = getattr(run.info, "run_name", None) or run.data.tags.get("mlflow.runName")
+        if candidate_name == run_name:
+            return experiment.experiment_id, run.info.run_id
+    return None
 
 
 @contextmanager

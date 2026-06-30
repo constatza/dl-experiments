@@ -13,25 +13,42 @@ def test_load_experiment_injects_mlflow_from_case_config(
     tmp_path: Path,
     neuralls_settings,
 ) -> None:
-    """Model configs without [MLFLOW] get runtime-injected topology."""
-    model_path = tmp_path / "model.toml"
+    """Job configs without tracking config get runtime-injected topology."""
+    job_config_path = tmp_path / "job.toml"
+    model_profile_path = tmp_path / "model.toml"
     data_path = tmp_path / "data.toml"
     experiments_path = tmp_path / "experiments.toml"
 
     mlflow_db = tmp_path / "mlruns" / "mlflow.db"
     tracking_uri = f"sqlite:///{mlflow_db.as_posix()}"
 
-    model_config = {
-        "SESSION": {"name": "SystemInjected"},
-        "MODEL": {"name": "TestModel", "module_path": "dlkit.nn"},
-        "TRAINING": {
-            "trainer": {"max_epochs": 1, "accelerator": "cpu"},
+    model_profile = {
+        "model": {"name": "LinearNetwork", "module_path": "dlkit.nn"},
+        "data": {
+            "name": "FlexibleDataset",
+            "module": {"name": "ArrayDataModule"},
         },
-        "DATASET": {"name": "FlexibleDataset"},
-        "DATAMODULE": {"name": "ArrayDataModule"},
     }
-    with open(model_path, "wb") as fh:
-        tomli_w.dump(model_config, fh)
+    with open(model_profile_path, "wb") as fh:
+        tomli_w.dump(model_profile, fh)
+
+    job_config = {
+        "run": {
+            "type": "train",
+            "seed": 42,
+            "model": model_profile_path.name,
+            "data": model_profile_path.name,
+        },
+        "experiment": {"name": "SystemInjected"},
+        "training": {
+            "trainer": {"max_epochs": 1, "accelerator": "cpu"},
+            "optimizer": {
+                "default_optimizer": {"name": "AdamW", "lr": 1e-3},
+            },
+        },
+    }
+    with open(job_config_path, "wb") as fh:
+        tomli_w.dump(job_config, fh)
 
     data_config = {
         "id": "system-injected-data",
@@ -55,13 +72,12 @@ def test_load_experiment_injects_mlflow_from_case_config(
         tomli_w.dump(experiments_config, fh)
 
     experiment = load_experiment(
-        model_config_path=model_path,
+        job_config_path=job_config_path,
         data_config_path=data_path,
         neuralls_settings=neuralls_settings,
         case_config_path=experiments_path,
         dataset_registry_id=data_path.stem,
     )
 
-    assert experiment.settings.MLFLOW is not None
-    assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
-    assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
+    assert experiment.settings.tracking is not None
+    assert experiment.settings.tracking.backend == "mlflow"

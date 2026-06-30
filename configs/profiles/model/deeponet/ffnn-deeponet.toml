@@ -1,0 +1,6 @@
+[model]
+name = "FFNNDeepONet"
+module_path = "dlkit.nn"
+branch_num_layers = 1
+trunk_num_layers = 1
+dropout = 0.0

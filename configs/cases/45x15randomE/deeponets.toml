@@ -38,14 +38,14 @@ display_name = "Gaussian CG-100 45x15randomE"
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
-[[models]]
+[[jobs]]
 id           = "ffnn-deeponet"
-path         = "../../models/deeponet/ffnn-deeponet.toml"
+path         = "../../jobs/deeponet/ffnn-deeponet.toml"
 display_name = "FFNN DeepONet"
 
-[[models]]
+[[jobs]]
 id           = "embedded-deeponet"
-path         = "../../models/deeponet/embedded-deeponet.toml"
+path         = "../../jobs/deeponet/embedded-deeponet.toml"
 display_name = "Embedded DeepONet"
 
 # ── Comparisons ───────────────────────────────────────────────────────────────
@@ -72,16 +72,16 @@ experiments    = [
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
-model   = "ffnn-deeponet"
+job = "ffnn-deeponet"
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
-model   = "embedded-deeponet"
+job = "embedded-deeponet"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
-model   = "ffnn-deeponet"
+job = "ffnn-deeponet"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
-model   = "embedded-deeponet"
+job = "embedded-deeponet"

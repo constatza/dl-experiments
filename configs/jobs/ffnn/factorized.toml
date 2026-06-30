@@ -1,0 +1,7 @@
+[run]
+type = "train"
+seed = 42
+precision = "64"
+model = "../../profiles/model/ffnn/factorized.toml"
+data = "../../profiles/data/array-default.toml"
+training = "../../profiles/training/default.toml"

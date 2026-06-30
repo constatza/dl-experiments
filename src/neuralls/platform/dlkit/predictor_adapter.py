@@ -33,7 +33,7 @@ from ._prediction_outputs import extract_prediction_tensor
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-    from dlkit.interfaces.inference import CheckpointPredictor
+    from dlkit.interfaces.inference import CheckpointPredictor as DLKitCheckpointPredictor
 
 
 def _extra_to_tensors(
@@ -74,7 +74,7 @@ class DLKitPredictor(ExtraInputPredictorPort):
 
     def __init__(
         self,
-        predictor: CheckpointPredictor,
+        predictor: DLKitCheckpointPredictor,
         device: str,
         required_inputs: tuple[str, ...] = (),
     ) -> None:
@@ -86,7 +86,7 @@ class DLKitPredictor(ExtraInputPredictorPort):
             required_inputs: Names of extra arrays the model expects beyond the residual.
                 Derived from the model config by the adapter; eliminates TOML duplication.
         """
-        self._predictor: CheckpointPredictor = predictor
+        self._predictor: DLKitCheckpointPredictor = predictor
         self._device: str = device
         self._required_inputs: tuple[str, ...] = required_inputs
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 from mlflow.tracking import MlflowClient
@@ -15,7 +14,6 @@ from neuralls.platform.config.models.experiments import (
     CaseConfig,
     ExperimentEntry,
     RegistryEntry,
-    RunEntry,
     resolve_display_name,
 )
 from neuralls.platform.config.registry import (
@@ -43,8 +41,6 @@ from neuralls.composition.tracking.run_specs import (
     build_training_session_run_spec,
 )
 from neuralls.composition.experiments.training import train_model
-
-read_registered_model_name = read_model_class_name
 
 
 @dataclass(frozen=True)
@@ -118,61 +114,41 @@ def _make_label_map(
 
 
 def _resolve_config_paths(
-    experiment: Any,
+    experiment: ExperimentEntry,
     configs_dir: Path,
-    cfg: CaseConfig | None = None,
+    cfg: CaseConfig,
 ) -> tuple[Path, Path]:
     """Resolve job and dataset config paths from an experiment or run entry.
 
-    Supports two formats:
-    - registry-backed ``[[experiments]]`` entries resolved through ``cfg``
-    - ``RunEntry`` direct paths resolved relative to ``configs_dir``
-
     Args:
-        experiment: Single ``[[experiments]]`` or ``[[run]]`` entry.
+        experiment: Single ``[[experiments]]`` entry.
         configs_dir: Parent directory of the experiments TOML.
 
     Returns:
         Tuple of ``(job_config_path, data_config_path)``.
 
     Raises:
-        ValueError: If registry-backed entries are resolved without ``cfg``.
         FileNotFoundError: If either resolved config path does not exist.
     """
-    if isinstance(experiment, RunEntry):
-        model_path = configs_dir / experiment.job_config_path
-        dataset_path = configs_dir / experiment.data_config_path
-    elif isinstance(experiment, dict):
-        if cfg is None:
-            raise ValueError(
-                "Registry-backed experiment resolution requires a validated case config."
-            )
-        model_path = resolve_job_config_path(cfg, configs_dir, experiment["job"])
-        dataset_path = resolve_dataset_config_path(cfg, configs_dir, experiment["dataset"])
-    else:
-        if cfg is None:
-            raise ValueError(
-                "Registry-backed experiment resolution requires a validated case config."
-            )
-        model_path = resolve_job_config_path(
-            cfg,
-            configs_dir,
-            experiment.job_id,
-            experiment_id=experiment.id,
-        )
-        dataset_path = resolve_dataset_config_path(
-            cfg,
-            configs_dir,
-            experiment.dataset_id,
-            experiment_id=experiment.id,
-        )
+    job_path = resolve_job_config_path(
+        cfg,
+        configs_dir,
+        experiment.job_id,
+        experiment_id=experiment.id,
+    )
+    dataset_path = resolve_dataset_config_path(
+        cfg,
+        configs_dir,
+        experiment.dataset_id,
+        experiment_id=experiment.id,
+    )
 
-    if not model_path.exists():
-        raise FileNotFoundError(f"Job config not found: {model_path}")
+    if not job_path.exists():
+        raise FileNotFoundError(f"Job config not found: {job_path}")
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset config not found: {dataset_path}")
 
-    return model_path, dataset_path
+    return job_path, dataset_path
 
 
 _BATCH_METRIC_PREFIXES = ("eval/", "val/", "test/")
@@ -335,10 +311,10 @@ def _train_single(
         data_cfg=data_cfg,
         config_path=data_config_path,
     ).name
-    model_name = read_model_class_name(job_config_path)
+    model_class = read_model_class_name(job_config_path)
     resolved_dataset_display_name = resolve_display_name(dataset_id, dataset_display_name)
-    resolved_model_display_name = resolve_display_name(
-        model_name or job_registry_id or experiment_id,
+    resolved_job_display_name = resolve_display_name(
+        model_class or job_registry_id or experiment_id,
         job_display_name,
     )
 
@@ -373,7 +349,7 @@ def _train_single(
             dataset_display_name=resolved_dataset_display_name,
             dataset_registry_id=dataset_registry_id,
             job_registry_id=job_registry_id,
-            job_display_name=resolved_model_display_name,
+            job_display_name=resolved_job_display_name,
         )
 
     logger.info(
@@ -389,8 +365,8 @@ def _train_single(
         metrics=metrics,
         dataset_id=dataset_id,
         dataset_display_name=resolved_dataset_display_name,
-        model_class=model_name,
-        job_display_name=resolved_model_display_name,
+        model_class=model_class,
+        job_display_name=resolved_job_display_name,
         dataset_registry_id=dataset_registry_id,
         job_registry_id=job_registry_id,
         job_config_path=job_config_path,
@@ -411,27 +387,21 @@ def _find_registry_entry(
 
 def _resolve_training_entry_metadata(
     *,
-    entry: RunEntry | ExperimentEntry,
+    entry: ExperimentEntry,
     cfg: CaseConfig,
-    data_config_path: Path,
 ) -> tuple[str, str | None, str | None, str | None]:
     """Return registry/display metadata for one training entry."""
-    if isinstance(entry, RunEntry):
-        return data_config_path.stem, None, None, None
-
     dataset_entry = _find_registry_entry(cfg.datasets, entry.dataset_id)
-    model_entry = _find_registry_entry(cfg.jobs, entry.job_id)
+    job_entry = _find_registry_entry(cfg.jobs, entry.job_id)
     dataset_display_name = (
         dataset_entry.effective_display_name if dataset_entry is not None else entry.dataset_id
     )
-    model_display_name = (
-        model_entry.effective_display_name if model_entry is not None else entry.job_id
-    )
+    job_display_name = job_entry.effective_display_name if job_entry is not None else entry.job_id
     return (
         entry.dataset_id,
         dataset_display_name,
         entry.job_id,
-        model_display_name,
+        job_display_name,
     )
 
 
@@ -520,14 +490,13 @@ def train_batch(
         ``BatchResult`` with all run results, label map, and batch output directory.
 
     Raises:
-        ValueError: If the TOML contains no ``[[experiments]]`` or ``[[run]]`` entries.
+        ValueError: If the TOML contains no ``[[experiments]]`` entries.
         FileNotFoundError: If any resolved config path does not exist.
     """
     settings = require_settings(settings)
-    # Accept both direct [[run]] entries and registry-backed [[experiments]] entries.
-    run_entries: list[Any] = list(cfg.run) or list(cfg.experiments)
-    if not run_entries:
-        raise ValueError("No [[run]] or [[experiments]] entries found in case config.")
+    experiment_entries = list(cfg.experiments)
+    if not experiment_entries:
+        raise ValueError("No [[experiments]] entries found in case config.")
 
     tracking_uri = cfg.mlflow.tracking_uri
     if output_root is not None:
@@ -552,7 +521,7 @@ def train_batch(
     # Phase 1: Train — one session parent groups the independent child runs
     # ------------------------------------------------------------------
     results: list[TrainingRunResult] = []
-    n = len(run_entries)
+    n = len(experiment_entries)
     with scoped_mlflow_environment(training_mlflow_env.env):
         parent_run_id = _create_training_session_parent_run(
             tracking_uri=training_mlflow_env.tracking_uri,
@@ -562,27 +531,26 @@ def train_batch(
         )
         session_status = "FINISHED"
         try:
-            for i, entry in enumerate(run_entries, start=1):
+            for i, entry in enumerate(experiment_entries, start=1):
                 label = str(i)
                 experiment_id = entry.id
                 experiment_display_name = entry.effective_display_name
-                model_config, data_config = _resolve_config_paths(entry, configs_dir, cfg)
+                job_config_path, data_config = _resolve_config_paths(entry, configs_dir, cfg)
                 (
                     dataset_registry_id,
                     dataset_display_name,
-                    model_registry_id,
-                    model_display_name,
+                    job_registry_id,
+                    job_display_name,
                 ) = _resolve_training_entry_metadata(
                     entry=entry,
                     cfg=cfg,
-                    data_config_path=data_config,
                 )
 
                 result = _train_single(
                     settings=settings,
                     experiment_id=experiment_id,
                     experiment_display_name=experiment_display_name,
-                    job_config_path=model_config,
+                    job_config_path=job_config_path,
                     data_config_path=data_config,
                     label=label,
                     output_root=base_output,
@@ -590,8 +558,8 @@ def train_batch(
                     parent_run_id=parent_run_id,
                     dataset_registry_id=dataset_registry_id,
                     dataset_display_name=dataset_display_name,
-                    job_registry_id=model_registry_id,
-                    job_display_name=model_display_name,
+                    job_registry_id=job_registry_id,
+                    job_display_name=job_display_name,
                 )
                 results.append(result)
                 logger.info(f"Completed {i}/{n} experiments")

@@ -1,0 +1,7 @@
+[model]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+module_path = "dlkit.nn"
+num_layers = 1
+bias = true
+norm = "l2"
+dropout = 0.0

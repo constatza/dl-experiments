@@ -5,36 +5,55 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
 from loguru import logger
 
+from neuralls.composition.experiments._job_types import AnyJobConfig, TrainLikeJobConfig
+from neuralls.composition.experiments.job_loader import load_experiment_job
+from neuralls.composition.experiments.job_materializer import materialize_inference_job
+from neuralls.composition.experiments.runtime_tracking_patcher import patch_training_tracking
+from neuralls.composition.experiments.runtime_workspace_patcher import patch_runtime_workspace
+from neuralls.platform.config.loaders import load_case_config, load_data_config
+from neuralls.platform.config.models.experiments import CaseConfig, resolve_display_name
 from neuralls.platform.config.models.workspace import (
     ExperimentBatch,
     ExperimentSpec,
     RunnableExperiment,
 )
-from neuralls.platform.config.models.experiments import CaseConfig, resolve_display_name
 from neuralls.platform.config.registry import list_experiment_bindings
 from neuralls.platform.config.resolution import (
     derive_output_root_from_tracking_uri,
     resolve_case_config_path,
     resolve_path_context,
 )
-from neuralls.platform.config.settings import (
-    NeurallsSettings,
-    require_settings,
-)
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.storage.workspaces import WorkspaceFactory
-from neuralls.platform.config.dlkit_bridge import (
-    build_inference_settings,
-    build_settings,
-    load_job_config,
-)
-from neuralls.platform.config.loaders import (
-    load_case_config,
-    load_data_config,
-)
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
 from neuralls.platform.tracking.mlflow import build_workflow_environment
+
+
+def _base_name_from_settings(settings: AnyJobConfig, job_config_path: Path) -> str:
+    """Resolve a stable run/base name from one lower-case DLKit job."""
+    experiment = settings.experiment
+    experiment_name = getattr(experiment, "name", None) if experiment is not None else None
+    if isinstance(experiment_name, str) and experiment_name.strip():
+        return experiment_name.strip()
+
+    model = settings.model
+    model_name = getattr(model, "name", None) if model is not None else None
+    if isinstance(model_name, str) and model_name.strip():
+        return model_name.strip()
+
+    return job_config_path.stem
+
+
+def _require_train_like_job(settings: AnyJobConfig) -> TrainLikeJobConfig:
+    """Narrow one loaded job to the train/search family."""
+    if isinstance(settings, (TrainingJobConfig, SearchJobConfig)):
+        return settings
+    raise TypeError(
+        f"Training mode requires a DLKit training or search job, got {type(settings).__name__}."
+    )
 
 
 @dataclass(frozen=True)
@@ -43,7 +62,6 @@ class MlflowTopology:
 
     env: dict[str, str]
     experiment_name: str | None = None
-    force_enabled: bool = False
 
 
 def load_validated_case_config(
@@ -82,9 +100,7 @@ def _resolve_output_override(
     """Resolve output root from explicit override or case config."""
     if output_root is not None:
         return output_root.resolve()
-    if case_cfg is None:
-        return neuralls_settings.output_dir
-    if case_config_path is None:
+    if case_cfg is None or case_config_path is None:
         return neuralls_settings.output_dir
 
     tracking_uri = case_cfg.mlflow.tracking_uri
@@ -100,7 +116,7 @@ def _build_default_mlflow_topology(path_ctx_output_root: Path) -> MlflowTopology
         artifact_location=None,
         default_output_root=path_ctx_output_root,
     )
-    return MlflowTopology(env=runtime.env, force_enabled=True)
+    return MlflowTopology(env=runtime.env)
 
 
 def _build_case_mlflow_topology(
@@ -118,7 +134,6 @@ def _build_case_mlflow_topology(
     return MlflowTopology(
         env=runtime.env,
         experiment_name=case_cfg.names.training,
-        force_enabled=True,
     )
 
 
@@ -135,26 +150,9 @@ def load_experiment(
     dataset_display_name: str | None = None,
     job_registry_id: str | None = None,
     job_display_name: str | None = None,
-    model_config_path: Path | None = None,
 ) -> RunnableExperiment:
-    """Load a single experiment configuration.
-
-    Args:
-        job_config_path: Path to job config TOML.
-        data_config_path: Path to data config TOML.
-        output_root: Override for case output directory (optional).
-        mode: Workflow mode - "training" or "inference" (default: "training").
-        case_config_path: Optional path to a case TOML for settings and MLflow topology.
-
-    Returns:
-        RunnableExperiment with validated configs and workspace.
-
-    Raises:
-        ValueError: If configs are invalid or mode is invalid.
-        FileNotFoundError: If config files don't exist.
-    """
-    resolved_job_config_path = job_config_path or model_config_path
-    if resolved_job_config_path is None:
+    """Load a single experiment configuration."""
+    if job_config_path is None:
         raise ValueError("job_config_path is required.")
     if data_config_path is None:
         raise ValueError("data_config_path is required.")
@@ -168,7 +166,6 @@ def load_experiment(
     case_cfg = _load_case_config(resolved_case_config_path, neuralls_settings)
 
     data_cfg = load_data_config(data_config_path, neuralls_settings)
-
     resolved_output_root = _resolve_output_override(
         output_root=output_root,
         case_cfg=case_cfg,
@@ -192,89 +189,50 @@ def load_experiment(
     )
 
     with scoped_mlflow_environment(mlflow_topology.env):
-        job_cfg = load_job_config(resolved_job_config_path, neuralls_settings)
+        job_cfg = load_experiment_job(job_config_path, neuralls_settings)
 
     if dataset_registry_id is None:
         raise ValueError(
             "dataset_registry_id is required. Pass it from the case config via load_batch()."
         )
     dataset_id = dataset_registry_id
-    experiment_cfg = getattr(job_cfg, "experiment", None)
-    experiment_name = getattr(experiment_cfg, "name", None)
-    model_name = getattr(getattr(job_cfg, "model", None), "name", None)
-    base_name_candidate = experiment_name or model_name or resolved_job_config_path.stem
-
-    if not isinstance(base_name_candidate, str) or not base_name_candidate:
-        raise ValueError("Job name missing. Set [experiment].name or [model].class in job config.")
-    base_name = base_name_candidate
-
-    workspace_run_id = base_name
-
-    resolved_experiment_id = experiment_id or base_name
-    resolved_experiment_display_name = resolve_display_name(
-        resolved_experiment_id,
-        experiment_display_name,
-    )
+    base_name = _base_name_from_settings(job_cfg, job_config_path)
     spec = ExperimentSpec(
-        experiment_id=resolved_experiment_id,
-        experiment_display_name=resolved_experiment_display_name,
+        experiment_id=experiment_id or base_name,
+        experiment_display_name=resolve_display_name(
+            experiment_id or base_name,
+            experiment_display_name,
+        ),
         dataset_registry_id=dataset_registry_id,
         dataset_display_name=dataset_display_name,
         job_registry_id=job_registry_id,
         job_display_name=job_display_name,
-        job_config_path=resolved_job_config_path,
+        job_config_path=job_config_path,
         data_config_path=data_config_path,
     )
 
-    factory = WorkspaceFactory(path_ctx.output_root, path_ctx.processed_root)
-    workspace = factory.create(dataset_id, workspace_run_id)
+    workspace = WorkspaceFactory(path_ctx.output_root, path_ctx.processed_root).create(
+        dataset_id,
+        base_name,
+    )
 
     if mode == "inference":
-        settings = build_inference_settings(
-            job_config_path=resolved_job_config_path,
-            workspace=workspace,
-            data_cfg=data_cfg,
-            settings=neuralls_settings,
-            output_override=resolved_output_root,
-            mlflow_experiment_name=mlflow_topology.experiment_name,
-            force_mlflow_enabled=mlflow_topology.force_enabled,
-        )
-        logger.debug("Loaded inference settings (DATASET/DATAMODULE optional)")
+        settings = materialize_inference_job(job_cfg)
+        logger.debug("Loaded inference settings")
     else:
-        settings = build_settings(
-            job_config_path=resolved_job_config_path,
-            workspace=workspace,
-            data_cfg=data_cfg,
-            settings=neuralls_settings,
-            output_override=resolved_output_root,
-            force_mlflow_enabled=mlflow_topology.force_enabled,
-            base_settings=job_cfg,
-        )
-        logger.debug("Loaded training settings (DATASET/DATAMODULE required)")
+        training_job = _require_train_like_job(job_cfg)
+        settings = patch_runtime_workspace(training_job, output_dir=workspace.root_dir)
+        settings = patch_training_tracking(settings)
+        logger.debug("Loaded training settings")
 
-    return RunnableExperiment(
-        spec=spec,
-        workspace=workspace,
-        settings=settings,
-    )
+    return RunnableExperiment(spec=spec, workspace=workspace, settings=settings)
 
 
 def load_batch(
     case_config_path: Path,
     neuralls_settings: NeurallsSettings | None = None,
 ) -> ExperimentBatch:
-    """Load all experiments from one case config file.
-
-    Args:
-        case_config_path: Path to case TOML.
-
-    Returns:
-        ExperimentBatch with all runnable experiments.
-
-    Raises:
-        FileNotFoundError: If case config or experiment configs are not found.
-        ValueError: If config validation fails.
-    """
+    """Load all experiments from one case config file."""
     neuralls_settings = require_settings(
         neuralls_settings,
         case_config_path=case_config_path,
@@ -283,7 +241,6 @@ def load_batch(
         raise FileNotFoundError(f"Case config not found: {case_config_path}")
 
     cfg, config_dir = load_validated_case_config(case_config_path, neuralls_settings)
-
     output_root = neuralls_settings.output_dir
     bindings = list_experiment_bindings(cfg, config_dir)
     if not bindings:
@@ -291,30 +248,24 @@ def load_batch(
             "No experiments defined. Expected [[experiments]] entries with id, dataset, job fields."
         )
 
-    resolved_experiments = []
-
+    resolved_experiments: list[RunnableExperiment] = []
     for binding in bindings:
-        experiment_id = binding.experiment_id
-        data_path = binding.data_config_path
-        job_path = binding.job_config_path
-        checkpoint_path = binding.checkpoint_path
-
-        if not data_path.exists():
+        if not binding.data_config_path.exists():
             raise FileNotFoundError(
-                f"Experiment '{experiment_id}': Dataset config not found: {data_path}"
+                f"Experiment '{binding.experiment_id}': Dataset config not found: {binding.data_config_path}"
             )
-        if not job_path.exists():
+        if not binding.job_config_path.exists():
             raise FileNotFoundError(
-                f"Experiment '{experiment_id}': Job config not found: {job_path}"
+                f"Experiment '{binding.experiment_id}': Job config not found: {binding.job_config_path}"
             )
 
         experiment = load_experiment(
-            job_config_path=job_path,
-            data_config_path=data_path,
+            job_config_path=binding.job_config_path,
+            data_config_path=binding.data_config_path,
             neuralls_settings=neuralls_settings,
             output_root=output_root,
             case_config_path=case_config_path,
-            experiment_id=experiment_id,
+            experiment_id=binding.experiment_id,
             experiment_display_name=binding.experiment_display_name,
             dataset_registry_id=binding.dataset_registry_id,
             dataset_display_name=binding.dataset_display_name,
@@ -322,10 +273,12 @@ def load_batch(
             job_display_name=binding.job_display_name,
         )
 
-        if checkpoint_path is not None:
-            if not checkpoint_path.exists():
+        if binding.checkpoint_path is not None:
+            if not binding.checkpoint_path.exists():
                 logger.warning(
-                    f"Experiment '{experiment_id}': Checkpoint not found: {checkpoint_path}"
+                    "Experiment '{}': Checkpoint not found: {}",
+                    binding.experiment_id,
+                    binding.checkpoint_path,
                 )
             experiment = RunnableExperiment(
                 spec=ExperimentSpec(
@@ -337,7 +290,7 @@ def load_batch(
                     job_display_name=experiment.spec.job_display_name,
                     job_config_path=experiment.spec.job_config_path,
                     data_config_path=experiment.spec.data_config_path,
-                    checkpoint_path=checkpoint_path,
+                    checkpoint_path=binding.checkpoint_path,
                 ),
                 workspace=experiment.workspace,
                 settings=experiment.settings,
@@ -345,23 +298,7 @@ def load_batch(
 
         resolved_experiments.append(experiment)
 
-    final_output_root = output_root
-    if final_output_root is None:
-        first_data_cfg = load_data_config(
-            resolved_experiments[0].spec.data_config_path,
-            neuralls_settings,
-        )
-        path_ctx = resolve_path_context(
-            processed_root=neuralls_settings.processed_dir,
-            output_root=neuralls_settings.output_dir,
-            data_dir_override=first_data_cfg.output.data_dir,
-        )
-        final_output_root = path_ctx.output_root
-
     return ExperimentBatch(
-        output_root=final_output_root,
+        output_root=output_root,
         experiments=resolved_experiments,
     )
-
-
-load_validated_master_config = load_validated_case_config

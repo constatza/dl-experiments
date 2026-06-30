@@ -26,7 +26,7 @@ PREDICTION_ARTIFACTS: tuple[str, ...] = ("figures", "predictions")
 
 
 def get_session_name(settings: Any) -> str | None:
-    """Extract session name from settings.
+    """Extract experiment name from settings for tracking labels.
 
     Args:
         settings: DLKit workflow settings object
@@ -34,8 +34,8 @@ def get_session_name(settings: Any) -> str | None:
     Returns:
         Session name or None if not configured
     """
-    session = getattr(settings, "SESSION", None)
-    name = getattr(session, "name", None) if session else None
+    experiment = getattr(settings, "experiment", None)
+    name = getattr(experiment, "name", None) if experiment else None
     return name if isinstance(name, str) and name else None
 
 

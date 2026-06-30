@@ -110,10 +110,11 @@ def test_child_tags_no_timestamp_has_parent_run_name() -> None:
     }
 
 
-def test_training_session_run_spec_name_and_tags() -> None:
+def test_training_session_run_spec_name_and_tags(tmp_path: Path) -> None:
     """Training session parents carry case identity and launch time."""
+    case_config_path = tmp_path / "cases" / "ffnn.toml"
     run_name, tags = build_training_session_run_spec(
-        case_config_path=Path("/tmp/cases/ffnn.toml"),
+        case_config_path=case_config_path,
         training_experiment_name="Train",
         timestamp="2026-03-12T12:00:00",
     )
@@ -122,7 +123,7 @@ def test_training_session_run_spec_name_and_tags() -> None:
     assert tags.as_mlflow_tags() == {
         "phase": "session_training",
         "case_config": "ffnn",
-        "case_config_path": "/tmp/cases/ffnn.toml",
+        "case_config_path": str(case_config_path),
         "started_at": "2026-03-12T12:00:00",
         "training_experiment_name": "Train",
     }

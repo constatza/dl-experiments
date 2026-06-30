@@ -8,7 +8,7 @@ import importlib.util
 import pytest
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.platform.config.registry import list_experiment_bindings
-from neuralls.composition.experiments.assembler import load_validated_master_config
+from neuralls.composition.experiments.assembler import load_validated_case_config
 from neuralls.platform.config.dlkit_bridge import load_job_config
 
 pytestmark = pytest.mark.skipif(
@@ -17,20 +17,31 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-JOB_CONFIG_TEMPLATE = """
+def _write_job_config(path: Path, model_name: str, checkpoint_name: str) -> Path:
+    """Write one isolated thin job config and its model profile."""
+    model_profile_path = path.with_name(f"{path.stem}-profile.toml")
+    model_profile_path.write_text(
+        f"""
+[model]
+name = "{model_name}"
+module_path = "dlkit.nn"
+
+[data]
+name = "FlexibleDataset"
+
+[data.module]
+name = "ArrayDataModule"
+"""
+    )
+    path.write_text(
+        f"""
 [run]
 type = "train"
 seed = 42
 precision = "64"
+model = "{model_profile_path.name}"
+data = "{model_profile_path.name}"
 
-[model]
-class = "{model_name}"
-module_path = "dlkit.nn"
-
-[data]
-class = "FlexibleDataset"
-
-[training]
 [training.trainer]
 max_epochs = 1
 accelerator = "cpu"
@@ -44,15 +55,6 @@ monitor = "val_loss"
 [training.optimizer]
 default_optimizer = {{ name = "AdamW", lr = 1e-3 }}
 """
-
-
-def _write_job_config(path: Path, model_name: str, checkpoint_name: str) -> Path:
-    """Write one isolated job config."""
-    path.write_text(
-        JOB_CONFIG_TEMPLATE.format(
-            model_name=model_name,
-            checkpoint_name=checkpoint_name,
-        )
     )
     return path
 
@@ -137,7 +139,7 @@ def test_structured_linear_model_configs_load(
 
 
 def test_legacy_model_workflow_toml_is_rejected(tmp_path: Path, neuralls_settings) -> None:
-    """Hard-cut loaders reject the removed standalone model-workflow format."""
+    """Legacy uppercase manifests fail fast via DLKit's own [run] validation."""
     bad_config = tmp_path / "bad.toml"
     bad_config.write_text(
         "\n".join(
@@ -164,7 +166,7 @@ def test_legacy_model_workflow_toml_is_rejected(tmp_path: Path, neuralls_setting
         )
     )
 
-    with pytest.raises(Exception, match="run.type|\\[run\\]"):
+    with pytest.raises(Exception, match="run.type"):
         load_job_config(bad_config, neuralls_settings)
 
 
@@ -197,7 +199,7 @@ def test_default_structured_linear_registry_has_expected_models_and_experiments(
         ],
     )
 
-    cfg, config_dir = load_validated_master_config(config_path)
+    cfg, config_dir = load_validated_case_config(config_path)
     bindings = list_experiment_bindings(cfg, config_dir)
 
     assert [entry.id for entry in cfg.jobs] == ["symmetric", "spd", "factorized"]
@@ -244,7 +246,7 @@ def test_linear_registry_uses_single_normalized_model(tmp_path: Path) -> None:
         ],
     )
 
-    cfg, config_dir = load_validated_master_config(config_path)
+    cfg, config_dir = load_validated_case_config(config_path)
     bindings = list_experiment_bindings(cfg, config_dir)
 
     assert [entry.id for entry in cfg.jobs] == ["linear"]

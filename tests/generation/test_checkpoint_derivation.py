@@ -17,57 +17,63 @@ from neuralls.platform.storage.filesystem import extract_model_name
 class TestExtractModelName:
     """Tests for extract_model_name function."""
 
-    def test_extract_from_session_name(self, tmp_path: Path) -> None:
-        """Test extracting model name from SESSION.name field."""
+    def test_extract_from_experiment_name(self, tmp_path: Path) -> None:
+        """Test extracting model name from lower-case experiment.name."""
         config_path = tmp_path / "test_model.toml"
         config_path.write_text("""
-[SESSION]
-name = "my_model"
+[run]
+type = "train"
 seed = 42
+
+[experiment]
+name = "my_model"
 """)
 
         model_name = extract_model_name(config_path)
         assert model_name == "my_model"
 
-    def test_extract_from_model_name_when_session_missing(self, tmp_path: Path) -> None:
-        """Test using MODEL.name when SESSION.name not present."""
+    def test_extract_from_inline_model_name_when_experiment_missing(self, tmp_path: Path) -> None:
+        """Test using lower-case model.name when experiment.name is missing."""
         config_path = tmp_path / "linear.toml"
         config_path.write_text("""
-[MODEL]
+[model]
 name = "SomeModel"
 """)
 
         model_name = extract_model_name(config_path)
         assert model_name == "SomeModel"
 
-    def test_extract_raises_error_when_session_name_empty_and_no_model(
-        self, tmp_path: Path
-    ) -> None:
-        """Test error raised when SESSION.name is empty and MODEL.name missing."""
-        import pytest
-
-        config_path = tmp_path / "linear.toml"
-        config_path.write_text("""
-[SESSION]
-name = ""
-seed = 42
+    def test_extract_from_referenced_model_profile(self, tmp_path: Path) -> None:
+        """Test using a referenced lower-case model profile when job is otherwise thin."""
+        profile_path = tmp_path / "model-profile.toml"
+        profile_path.write_text("""
+[model]
+name = "ProfileModel"
 """)
+        config_path = tmp_path / "linear.toml"
+        config_path.write_text(
+            f"""
+[run]
+type = "train"
+seed = 42
+model = "{profile_path.name}"
+"""
+        )
 
-        with pytest.raises(ValueError, match="Model name missing"):
-            extract_model_name(config_path)
+        model_name = extract_model_name(config_path)
+        assert model_name == "ProfileModel"
 
-    def test_extract_raises_error_when_session_name_none_and_no_model(self, tmp_path: Path) -> None:
-        """Test error raised when SESSION.name is None and MODEL.name missing."""
-        import pytest
-
+    def test_extract_falls_back_to_filename_when_identity_missing(self, tmp_path: Path) -> None:
+        """Test fallback to filename stem when no lower-case identity fields exist."""
         config_path = tmp_path / "gnn.toml"
         config_path.write_text("""
-[SESSION]
+[run]
+type = "train"
 seed = 42
 """)
 
-        with pytest.raises(ValueError, match="Model name missing"):
-            extract_model_name(config_path)
+        model_name = extract_model_name(config_path)
+        assert model_name == "gnn"
 
     def test_extract_from_filename_when_file_unreadable(self, tmp_path: Path) -> None:
         """Test fallback to filename when config file can't be read."""
@@ -85,7 +91,11 @@ class TestDeriveCheckpointPath:
         model_config = tmp_path / "configs" / "linear.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
-[SESSION]
+[run]
+type = "train"
+seed = 42
+
+[experiment]
 name = "ffnn"
 """)
 
@@ -102,7 +112,11 @@ name = "ffnn"
         model_config = tmp_path / "configs" / "linear.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
-[SESSION]
+[run]
+type = "train"
+seed = 42
+
+[experiment]
 name = "linear"
 """)
 
@@ -114,12 +128,16 @@ name = "linear"
         expected = output_root / "collect-504" / "linear" / "checkpoints" / "linear.ckpt"
         assert checkpoint_path == expected
 
-    def test_path_derivation_uses_model_name_not_filename(self, tmp_path: Path) -> None:
-        """Test that SESSION.name is used, not config filename."""
+    def test_path_derivation_uses_experiment_name_not_filename(self, tmp_path: Path) -> None:
+        """Test that lower-case experiment.name is used, not config filename."""
         model_config = tmp_path / "configs" / "my_config_file.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
-[SESSION]
+[run]
+type = "train"
+seed = 42
+
+[experiment]
 name = "custom_model_name"
 """)
 
@@ -128,7 +146,7 @@ name = "custom_model_name"
 
         checkpoint_path = derive_checkpoint_path(model_config, data_config, output_root)
 
-        # Should use SESSION.name, not filename
+        # Should use experiment.name, not filename
         expected = (
             output_root / "test" / "custom_model_name" / "checkpoints" / "custom_model_name.ckpt"
         )
@@ -139,7 +157,11 @@ name = "custom_model_name"
         model_config = tmp_path / "configs" / "linear.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
-[SESSION]
+[run]
+type = "train"
+seed = 42
+
+[experiment]
 name = "ffnn"
 """)
 
@@ -156,7 +178,11 @@ name = "ffnn"
         model_config = tmp_path / "configs" / "gnn.toml"
         model_config.parent.mkdir(parents=True)
         model_config.write_text("""
-[SESSION]
+[run]
+type = "train"
+seed = 42
+
+[experiment]
 name = "gnn"
 """)
 
@@ -178,7 +204,11 @@ class TestPathConventionConsistency:
         """Test that derived path matches prepare_experiment_outputs convention."""
         model_config = tmp_path / "linear.toml"
         model_config.write_text("""
-[SESSION]
+[run]
+type = "train"
+seed = 42
+
+[experiment]
 name = "test_model"
 """)
 
@@ -219,7 +249,11 @@ name = "test_model"
         for example in examples:
             model_config = tmp_path / f"{example['model_name']}.toml"
             model_config.write_text(f"""
-[SESSION]
+[run]
+type = "train"
+seed = 42
+
+[experiment]
 name = "{example["model_name"]}"
 """)
 

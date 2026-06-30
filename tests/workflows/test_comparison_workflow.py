@@ -722,12 +722,44 @@ def test_run_comparison_ignores_unrelated_broken_experiments(
 ) -> None:
     (tmp_path / "datasets").mkdir()
     (tmp_path / "models").mkdir()
+    (tmp_path / "jobs").mkdir()
     (tmp_path / "datasets" / "valid-dataset.toml").write_text(
         'id = "valid-dataset"\n',
         encoding="utf-8",
     )
     (tmp_path / "models" / "valid-model.toml").write_text(
-        "[MODEL]\nname = 'NormScaledLinearFFNN'\nmodule_path = 'dlkit.nn'\n",
+        "\n".join(
+            [
+                "[model]",
+                "name = 'NormScaledLinearFFNN'",
+                "module_path = 'dlkit.nn'",
+                "",
+                "[data]",
+                "name = 'FlexibleDataset'",
+                "",
+                "[data.module]",
+                "name = 'ArrayDataModule'",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "jobs" / "valid-job.toml").write_text(
+        "\n".join(
+            [
+                "[run]",
+                'type = "train"',
+                "seed = 42",
+                'model = "../models/valid-model.toml"',
+                'data = "../models/valid-model.toml"',
+                "",
+                "[training.trainer]",
+                "max_epochs = 1",
+                "",
+                "[training.optimizer.default_optimizer]",
+                'name = "AdamW"',
+                "lr = 1e-3",
+            ]
+        ),
         encoding="utf-8",
     )
     experiments_config = tmp_path / "experiments.toml"
@@ -740,14 +772,14 @@ tracking_uri = "{build_sqlite_tracking_uri(tmp_path / "mlflow.db")}"
 id = "valid-dataset"
 path = "datasets/valid-dataset.toml"
 
-[[models]]
-id = "valid-model"
-path = "models/valid-model.toml"
+[[jobs]]
+id = "valid-job"
+path = "jobs/valid-job.toml"
 
 [[experiments]]
 id = "valid-exp"
 dataset = "valid-dataset"
-model = "valid-model"
+job = "valid-job"
         """.strip(),
         encoding="utf-8",
     )

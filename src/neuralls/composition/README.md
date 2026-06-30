@@ -31,6 +31,21 @@ right collaborators, construct workflow-local DTOs, and hand execution to
 application or platform entrypoints without re-implementing path, environment,
 or client policy.
 
+For DLKit training, composition now consumes already-loaded lower-case DLKit
+jobs. DLKit owns TOML parsing, profile references under `[run]`, section merge
+order, and typed validation. Composition owns only runtime materialization:
+dataset entry injection, workspace path patching, and tracking enablement on
+top of the validated job object.
+
+That materialization is split on purpose. `job_loader.py` is the only local
+boundary that asks platform to load one typed DLKit job. `assembler.py` then
+applies only the minimal mode-specific startup patching needed to create a
+runnable experiment workspace, while `job_materializer.py` owns the later
+training-only runtime patch sequence for dataset entries, dataloader defaults,
+workspace callback wiring, and tracking enablement. Composition no longer
+duplicates that patch policy by re-parsing TOML or by open-coding workspace
+and tracking mutations in multiple call sites.
+
 For DLKit-supervised training, composition is also the only layer allowed to
 translate repository storage names into runtime dataset-entry names. That
 translation is owned by a composition-level runtime dataset contract. The
@@ -44,16 +59,17 @@ translate those specs into concrete DLKit entries such as `NpyEntry` or
 composition does not expose `solutions` as a runtime target alias.
 
 Additional runtime model inputs are opt-in and come from exactly one source:
-extra `[[DATASET.features]]` declarations in the model TOML. Composition
+extra `[[data.features]]` declarations in the DLKit job or data profile. Composition
 preserves their declaration order and binds them positionally to persisted
 `parameters_0`, `parameters_1`, ... dataset artifacts. Model hyperparameters in
-`[MODEL]` are never treated as dataset inputs.
+`[model]` are never treated as dataset inputs.
 
-This bridge is intentionally declarative at the config boundary. Model TOMLs
-remain the source of truth for runtime entry names, transforms, and supported
-entry-routing metadata, while composition only patches in the resolved on-disk
-paths and neutral runtime semantics at execution time. DLKit-specific entry
-construction and optional metadata application stay in platform code.
+This bridge is intentionally declarative at the config boundary. DLKit job and
+profile TOMLs remain the source of truth for runtime entry names, transforms,
+and supported entry-routing metadata, while composition only patches in the
+resolved on-disk paths and neutral runtime semantics at execution time.
+DLKit-specific entry construction and optional metadata application stay in
+platform code.
 
 Training assembly keeps feature specs path-backed instead of eagerly opening
 dataset arrays inside `neuralls`, but that does not guarantee fully lazy `.npy`

@@ -55,9 +55,9 @@ display_name = "Sparse RHS 45x15"
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
-[[models]]
+[[jobs]]
 id           = "ffnn-pca"
-path         = "../../models/ffnn/ffnn-pca.toml"
+path         = "../../jobs/ffnn/ffnn-pca.toml"
 display_name = "FFNN PCA"
 
 # ── Comparisons ───────────────────────────────────────────────────────────────
@@ -77,12 +77,12 @@ id             = "sparse"
 matrix_dataset = "gaussian-cg10-45x15"
 rhs_dataset    = "sparse-rhs-45x15"
 
-# ── Experiments (2 solutions datasets × 1 PCA model = 2) ─────────────────────
+# ── Experiments (2 solutions datasets × 1 PCA job = 2) ─────────────────────
 
 [[experiments]]
 dataset      = "solutions-cg10-45x15"
-model        = "ffnn-pca"
+job = "ffnn-pca"
 
 [[experiments]]
 dataset      = "solutions-cg100-45x15"
-model        = "ffnn-pca"
+job = "ffnn-pca"

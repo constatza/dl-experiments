@@ -1,0 +1,27 @@
+[model]
+name = "ScaleEquivariantFFNN"
+module_path = "dlkit.nn"
+num_layers = 1
+norm = "l2"
+dropout = 0.0
+
+[data]
+name = "FlexibleDataset"
+batch_size = 256
+pin_memory = true
+shuffle = true
+
+[[data.features]]
+name = "x"
+transforms = [
+    { name = "PCA", n_components = 50 },
+]
+
+[[data.targets]]
+name = "y"
+transforms = [
+    { name = "PCA", n_components = 50 },
+]
+
+[data.module]
+name = "ArrayDataModule"

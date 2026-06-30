@@ -162,47 +162,6 @@ class ExperimentEntry(BaseModel):
         return resolve_display_name(self.id, self.display_name)
 
 
-class RunEntry(BaseModel):
-    """Single run entry from the ``[[run]]`` TOML table.
-
-    Uses direct relative config paths instead of short name references.
-
-    Attributes:
-        id: Stable identifier for the legacy direct-path run.
-        job_config_path: Relative path to job config.
-        data_config_path: Relative path to data config.
-    """
-
-    id: str
-    job_config_path: str = Field(alias="job_config")
-    data_config_path: str = Field(alias="data_config")
-
-    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
-
-    @field_validator("job_config_path", "data_config_path", mode="before")
-    @classmethod
-    def _expand_config_paths(cls, v: object, info: ValidationInfo) -> object:
-        """Expand ${NEURALLS_*} placeholders and resolve config paths.
-
-        Args:
-            v: Raw value from config field.
-            info: Pydantic validation info carrying context.
-
-        Returns:
-            Resolved absolute path string, or original value if not a string.
-        """
-        if info.context is None or not isinstance(v, str):
-            return v
-        from neuralls.platform.config.context import ConfigContext, expand_config_path
-
-        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
-
-    @property
-    def effective_display_name(self) -> str:
-        """Direct runs do not carry separate display names."""
-        return self.id
-
-
 class ComparisonDefaults(BaseModel):
     """Shared methodology defaults applied to all ``[[comparisons]]`` entries.
 
@@ -389,7 +348,6 @@ class CaseConfig(BaseModel):
         jobs: Job registry entries.
         comparisons: Comparison registry entries with data binding.
         experiments: Experiment entries referencing registry ids.
-        run: Optional legacy direct-path entries.
         mlflow: MLflow topology config (tracking URI, etc.).
         names: MLflow experiment names for training and comparison.
         comparison_defaults: Shared solver params and preconditioner list applied to
@@ -400,7 +358,6 @@ class CaseConfig(BaseModel):
     jobs: list[RegistryEntry] = Field(default_factory=list)
     comparisons: list[ComparisonRegistryEntry] = Field(default_factory=list)
     experiments: list[ExperimentEntry] = Field(default_factory=list)
-    run: list[RunEntry] = Field(default_factory=list)
     mlflow: MlflowTopologyConfig = Field(default_factory=MlflowTopologyConfig)
     names: ExperimentNamesConfig = Field(default_factory=ExperimentNamesConfig)
     comparison_defaults: ComparisonDefaults | None = None
@@ -525,6 +482,3 @@ class CaseConfig(BaseModel):
         )
         _validate_comparison_dataset_refs(self.comparisons, dataset_ids=dataset_ids)
         return self
-
-
-ExperimentsConfig = CaseConfig

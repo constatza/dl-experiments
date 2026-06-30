@@ -1,0 +1,23 @@
+[data]
+name = "FlexibleDataset"
+batch_size = 256
+pin_memory = true
+shuffle = true
+
+[[data.features]]
+name = "branch"
+
+[[data.features]]
+name = "trunk"
+transforms = [
+    { name = "Unsqueeze", dim = 1 },
+]
+
+[[data.targets]]
+name = "y"
+transforms = [
+    { name = "Unsqueeze", dim = 1 },
+]
+
+[data.module]
+name = "ArrayDataModule"

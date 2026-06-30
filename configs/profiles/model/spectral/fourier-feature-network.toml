@@ -1,0 +1,10 @@
+[model]
+name = "ScaleEquivariantFourierFeatureNetwork"
+module_path = "dlkit.nn"
+hidden_size = 256
+num_layers = 1
+n_frequencies = 64
+sigma = 1.0
+learnable_B = false
+norm = "l2"
+dropout = 0.0

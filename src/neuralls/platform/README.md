@@ -4,7 +4,7 @@ The platform package isolates external integrations and side-effecting helpers.
 
 ## Package Map
 
-- `config/`: settings, config-validation context, workflow config models, registry resolution, TOML loaders, and DLKit workflow bridging
+- `config/`: settings, config-validation context, registry resolution, TOML loaders, lower-case job metadata readers, and the thin DLKit job loader adapter
 - `storage/`: filesystem, workspaces, dataset I/O, and storage validation helpers
 - `tracking/`: MLflow run helpers, naming/query policy, workflow topology resolution, and client adapters
 - `reporting/`: plotting, artifact staging, and inference output adapters
@@ -19,10 +19,21 @@ runtime services, or serializes artifacts. It should not decide workflow order
 or contain domain algorithms.
 
 Platform also owns translation between repository-facing configuration data and
-external runtimes. That includes workflow-model validation, path and tracking
-resolution, DLKit-specific config bridging, and MLflow client operations.
-These concerns stay here so composition can assemble workflows without owning
-filesystem, environment, or third-party policy details.
+external runtimes. That includes path and tracking resolution, the thin DLKit
+job loader adapter, and MLflow client operations. DLKit itself owns job
+composition and schema validation; platform does not reconstruct DLKit sections
+locally.
+
+The current DLKit bridge is intentionally thin. It rejects removed uppercase
+neuralls job manifests and forwards lower-case job TOMLs to DLKit's native
+`load_job()` entrypoint. DLKit resolves `run.model`, `run.data`,
+`run.training`, and `run.tracking` profile references itself; platform does not
+re-implement that merge policy.
+
+Lower-case job identity lookup is also centralized here. Platform config
+helpers read experiment/model metadata from one job plus its referenced model
+profile, and storage/tracking code reuse that single reader instead of
+duplicating TOML traversal logic in multiple modules.
 
 Case-config auto naming also lives at this boundary. Auto-generated experiment
 ids are model-first (`{model_id}-{dataset_id}`), and auto-generated experiment
@@ -56,6 +67,10 @@ quirks or registry helpers.
 Solver-side DLKit predictors must preserve fitted checkpoint transforms during
 load so transform-aware models such as PCA-preprocessed preconditioners receive
 inputs in the feature space they were trained on.
+The adapter layer also owns compatibility shims for checkpoint inference when
+DLKit metadata serializes constructor hyperparameters under a nested `params`
+object; that flattening stays local to platform code rather than leaking into
+solver or comparison orchestration.
 
 `DLKitPredictor` exposes a `required_inputs: tuple[str, ...]` property so that
 the solver layer can derive which extra arrays a neural model needs without

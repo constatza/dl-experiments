@@ -11,6 +11,7 @@ import mlflow
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
+from neuralls.platform.config.job_metadata import read_job_metadata
 from neuralls.platform.config.models.dataset_identity import normalize_registry_id
 
 RESERVED_ALIASES: set[str] = {"latest"}
@@ -178,30 +179,5 @@ def assign_dataset_alias_to_registered_model(
 
 
 def read_model_class_name(job_config_path: Path) -> str | None:
-    """Read the model class name from a job config TOML.
-
-    Reads ``[model].class`` from the new DLKit JobConfig layout.
-
-    Args:
-        job_config_path: Path to the job configuration TOML file.
-
-    Returns:
-        Model name string, or ``None`` if missing or unreadable.
-    """
-    import tomllib
-
-    try:
-        with open(job_config_path, "rb") as fh:
-            raw = tomllib.load(fh)
-    except FileNotFoundError, OSError, ValueError:
-        return None
-    model_section = raw.get("model")
-    if not isinstance(model_section, dict):
-        return None
-    model_name = model_section.get("class")
-    if not isinstance(model_name, str):
-        return None
-    return model_name.strip() or None
-
-
-read_registered_model_name = read_model_class_name
+    """Read the resolved lower-case DLKit model class name from one job."""
+    return read_job_metadata(job_config_path).model_name

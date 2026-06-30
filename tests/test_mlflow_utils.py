@@ -141,29 +141,34 @@ def test_build_workflow_environment_uses_default_output_root(tmp_path: Path) -> 
     assert runtime.artifact_uri == str((tmp_path / "mlartifacts").resolve())
 
 
-def test_runtime_paths_from_env_reads_tracking_values() -> None:
+def test_runtime_paths_from_env_reads_tracking_values(tmp_path: Path) -> None:
+    tracking_db = tmp_path / "mlruns.db"
+    artifact_dir = tmp_path / "mlartifacts"
     paths = runtime_paths_from_env(
         {
-            "MLFLOW_TRACKING_URI": "sqlite:////tmp/mlruns.db",
-            "MLFLOW_ARTIFACT_URI": "/tmp/mlartifacts",
+            "MLFLOW_TRACKING_URI": f"sqlite:///{tracking_db.as_posix()}",
+            "MLFLOW_ARTIFACT_URI": str(artifact_dir),
         }
     )
 
     assert paths == MlflowPaths(
-        tracking_uri="sqlite:////tmp/mlruns.db",
-        artifact_uri="/tmp/mlartifacts",
+        tracking_uri=f"sqlite:///{tracking_db.as_posix()}",
+        artifact_uri=str(artifact_dir),
     )
 
 
 def test_resolve_runtime_tracking_config_reads_environment(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:////tmp/runtime.db")
-    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", "/tmp/runtime-artifacts")
+    tracking_db = tmp_path / "runtime.db"
+    artifact_dir = tmp_path / "runtime-artifacts"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tracking_db.as_posix()}")
+    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", str(artifact_dir))
 
     assert resolve_runtime_tracking_config() == (
-        "sqlite:////tmp/runtime.db",
-        "/tmp/runtime-artifacts",
+        f"sqlite:///{tracking_db.as_posix()}",
+        str(artifact_dir),
     )
 
 
@@ -171,11 +176,12 @@ def test_build_runtime_environment_prefers_existing_tracking_uri(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:////tmp/existing.db")
+    tracking_db = tmp_path / "existing.db"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tracking_db.as_posix()}")
 
     runtime = build_runtime_environment(tmp_path / "unused", default_output_root=tmp_path)
 
-    assert runtime.tracking_uri == "sqlite:////tmp/existing.db"
+    assert runtime.tracking_uri == f"sqlite:///{tracking_db.as_posix()}"
     assert runtime.artifact_uri is None
 
 
@@ -183,17 +189,19 @@ def test_build_runtime_environment_preserves_existing_artifact_uri(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:////tmp/existing.db")
-    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", "/tmp/existing-artifacts")
+    tracking_db = tmp_path / "existing.db"
+    artifact_dir = tmp_path / "existing-artifacts"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tracking_db.as_posix()}")
+    monkeypatch.setenv("MLFLOW_ARTIFACT_URI", str(artifact_dir))
 
     runtime = build_runtime_environment(tmp_path / "unused", default_output_root=tmp_path)
 
     assert runtime.env == {
-        "MLFLOW_TRACKING_URI": "sqlite:////tmp/existing.db",
-        "MLFLOW_ARTIFACT_URI": "/tmp/existing-artifacts",
+        "MLFLOW_TRACKING_URI": f"sqlite:///{tracking_db.as_posix()}",
+        "MLFLOW_ARTIFACT_URI": str(artifact_dir),
     }
-    assert runtime.tracking_uri == "sqlite:////tmp/existing.db"
-    assert runtime.artifact_uri == "/tmp/existing-artifacts"
+    assert runtime.tracking_uri == f"sqlite:///{tracking_db.as_posix()}"
+    assert runtime.artifact_uri == str(artifact_dir)
 
 
 def test_start_run_and_logging(dummy_mlflow: DummyMlflow, tmp_path: Path) -> None:

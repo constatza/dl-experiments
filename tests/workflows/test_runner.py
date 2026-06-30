@@ -27,10 +27,8 @@ def _write_training_job_config(path: Path, *, experiment_name: str) -> None:
         "model": {
             "class": "ScaleEquivariantFFNN",
             "module_path": "dlkit.nn",
-            "params": {
-                "hidden_size": 2,
-                "num_layers": 1,
-            },
+            "hidden_size": 2,
+            "num_layers": 1,
         },
         "data": {
             "class": "FlexibleDataset",

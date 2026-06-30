@@ -70,11 +70,11 @@ def build_run_config(
     enabled: bool = True,
 ) -> MlflowRunConfig | None:
     """Create a run config when MLflow is enabled."""
-    mlflow_cfg = getattr(settings, "MLFLOW", None)
-    if not enabled or mlflow_cfg is None or not getattr(mlflow_cfg, "enabled", False):
+    tracking_cfg = getattr(settings, "tracking", None)
+    backend = getattr(tracking_cfg, "backend", "none") if tracking_cfg is not None else "none"
+    if not enabled or backend != "mlflow":
         return None
-    paths_cfg = getattr(settings, "PATHS", None)
-    output_dir = getattr(paths_cfg, "output_dir", None)
+    output_dir = workspace_root
     default_tracking_uri = None
     default_artifact_location = None
     if output_dir:
@@ -86,13 +86,13 @@ def build_run_config(
     paths = resolve_mlflow_paths(
         tracking_uri=tracking_uri,
         artifact_uri=artifact_uri,
-        project_root=Path(getattr(paths_cfg, "project_root", DEFAULT_PROJECT_ROOT)),
+        project_root=DEFAULT_PROJECT_ROOT,
         workspace_root=workspace_root,
         default_tracking_uri=default_tracking_uri,
         default_artifact_location=default_artifact_location,
     )
-    experiment_name = getattr(mlflow_cfg, "experiment_name", None) or dataset_id
-    run_name = getattr(mlflow_cfg, "run_name", None) or model_name
+    experiment_name = dataset_id
+    run_name = model_name
     tags = make_run_tags(dataset_id, model_name, session_name)
     return MlflowRunConfig(
         experiment_name=experiment_name,

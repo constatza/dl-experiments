@@ -1,105 +1,117 @@
 # Configuration Guide
 
-The public CLI is case-oriented. One case config drives the batch workflows for
-dataset generation, training, full execution, and comparison.
+The public CLI is case-oriented. One case config binds datasets, jobs,
+comparisons, and experiment batches.
 
-This checkout is pinned to CUDA 13.0. Run `uv sync` once for the project
-environment, then use plain `uv run neuralls ...` commands.
+## Warning
 
-`SESSION.precision` must use Lightning-compatible precision names. Use `64`,
-`32`, `16`, `bf16`, `16-mixed`, or `bf16-mixed`; do not use dtype strings such
-as `float64`.
+The runnable job contract is now fully lower-case DLKit-native.
 
-## Start With The Right File
+Hard-cut rules:
 
-Choose the config type that matches the case you want to run:
+- no legacy monolithic job configs
+- no `[[models]]` in case configs
+- no uppercase runnable sections such as `[JOB]`, `[SESSION]`, `[TRAINING]`, `[MODEL]`, `[DATASET]`, or `[DATAMODULE]`
 
-- `datasets/train/<system>/*.toml`: training dataset configs (gaussian-cg{N}, solutions-cg{N}, and any single-matrix variants)
-- `datasets/test/<system>/*.toml`: comparison/test dataset configs (scaled-solutions, sparse-rhs, and any non-Gaussian benchmarks)
-- `models/<family>/*.toml`: model architecture and trainer setup (shared across systems)
-- `cases/<system>/*.toml`: case configs that tie datasets, models, comparisons,
-  MLflow, and experiment ids together
+## Config Roles
 
-Current systems: `45x15`, `45x15randomE`, and `93x31`. Each system has case
-configs named `{model}-{dataset}.toml` with an optional `-pca` suffix for PCA-transform
-variants where that family exists. `evaluate-all.toml` runs the curated candidate models;
-`ffnn-mixed.toml` runs FFNN on all dataset variants; `films.toml` and
-`deeponets.toml` split the `45x15randomE` parameter-conditioned cases by FiLM
-and DeepONet family; `solutions-pca.toml` remains specific to the plain
-`45x15` system. `factorized-single-matrix.toml` adds a dedicated
-`45x15randomE` case for the one-matrix CG-100 dataset and keeps only the
-scale-equivariant factorized models. Its benchmark datasets also use that same
-fixed `45x15randomE` matrix for `scaled_solutions` and `sparse_rhs` tables.
-The plain `45x15randomE/factorized.toml` case now uses `45x15randomE` benchmark
-datasets too, so every explicit comparison matrix in the non-conditional
-factorized family stays within the `45x15randomE` training matrix family.
-Gaussian benchmark comparisons now reuse the corresponding `gaussian-cg1`
-training dataset instead of carrying duplicate `gaussian-rhs` TOMLs. The
-`45x15randomE` case family also reuses the existing `45x15`
-`scaled-solutions` benchmark dataset rather than defining a separate solution
-archive. Its training datasets also read per-sample E vectors from
-`${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_YoungModuli_E1_E2_E3_E4.txt`.
-When you need a one-matrix `45x15randomE` training dataset, use a dataset TOML
-with a concrete `source.matrix_path` and omit both `enumerate_by` and
-`parameters_paths`; `configs/datasets/train/45x15randomE/gaussian-cg100-single-matrix.toml`
-is the reference example.
+### `configs/datasets/**/*.toml`
 
-Model families (all `ScaleEquivariant*`, `module_path = "dlkit.nn"`):
-- `ffnn/`: `ScaleEquivariantFFNN` — plain skip residual FFNN
-- `film/`: `ScaleEquivariantFiLM{,Embedded}FFNN` — parameter-conditioned FiLM FFNN variants using `hidden_size` and `num_layers`
-- `deeponet/`: `FFNNDeepONet`, `EmbeddedDeepONet` — branch/trunk operator models driven by `query`
-- `embedded/`: `ScaleEquivariantEmbedded{Factorized,SPD,SPDFactorized}FFNN` — embedded square-output; current factorized case configs use the regular embedded-factorized variant
-- `symmetric/`: `ScaleEquivariant{SPD,Factorized}FFNN` — non-embedded square-output; current factorized case configs do not select the SPD-factorized variants
-- `spectral/`: `ScaleEquivariant{Siren,FourierFeatureNetwork,ModifiedMLP}` — sine/Fourier networks
+Dataset configs own:
 
-## Recommended Progression
+- raw input paths
+- generation strategy
+- normalization and output settings
+- processed dataset identity
 
-### 1. Configure one machine profile
+There should be as many dataset configs as there are real dataset variants.
+Datasets stay dataset-only; they do not own model architecture or training
+policy.
 
-```bash
-uv run neuralls config init
-uv run neuralls config create default --raw-dir /data/raw --processed-dir /data/processed --output-dir /data/output
-```
+### `configs/profiles/model/**/*.toml`
 
-### 2. Generate datasets
+Model profiles are reusable lower-case DLKit model fragments.
 
-```bash
-uv run neuralls generate /path/to/case.toml
-uv run neuralls generate-single /path/to/dataset.toml \
-  --case-config /path/to/case.toml
-```
+They may contain:
 
-`neuralls generate <case.toml>` only builds the case `[[datasets]]` entries.
-It does not infer or materialize standalone benchmark datasets referenced in
-`[[comparisons]]` entries.
+- `[model]`
+- optional `[data]` / `[data.module]` / `[[data.features]]` / `[[data.targets]]`
+  — only when the data shape is genuinely coupled to the model architecture
 
-### 3. Train the case batch
+They must not contain:
 
-```bash
-uv run neuralls train /path/to/case.toml
-```
+- `[run]`
+- `[training]`
+- `[tracking]`
+- `[search]`
 
-### 4. Run or compare the same case
+Most model profiles should stay thin (`[model]` only) and reference a shared
+data profile from `configs/profiles/data/**` via `run.data` instead of
+repeating the default data block. Only special model families should embed
+custom runtime input structure directly in the model profile, for example:
 
-```bash
-uv run neuralls run /path/to/case.toml
-uv run neuralls compare /path/to/case.toml
-```
+- DeepONet branch/trunk inputs (`configs/profiles/data/deeponet-branch-trunk.toml`)
+- conditional or FiLM-style models with multiple feature inputs (`configs/profiles/data/film-condition.toml`)
+- PCA-specific runtime transforms used by only one model family
 
-If one comparison profile depends on a test dataset, build it explicitly first:
+### `configs/profiles/data/**/*.toml`
 
-```bash
-uv run neuralls generate-single configs/datasets/train/45x15/gaussian-cg1.toml \
-  --case-config configs/cases/45x15/evaluate-all.toml
-```
+Shared data profiles for the common case: any number of model families with
+identical data shape should point `run.data` at the same file here instead of
+duplicating `[data]` in every model profile.
 
-When a benchmark dataset is missing, `neuralls compare <case.toml>` now fails
-that comparison before opening an MLflow run, reports the missing processed
-path, and continues the rest of the batch.
+Current checked-in example:
+
+- `array-default.toml` — the default `FlexibleDataset` + `ArrayDataModule`
+  shape with no custom features/targets
+
+### `configs/profiles/training/**/*.toml`
+
+Training profiles are the small shared optimization-policy layer.
+
+`default.toml` is the baseline. Every other profile should deviate from it
+in exactly one named way — that's what the filename documents. Don't stack
+multiple deviations into one profile; add a new single-deviation profile
+instead.
+
+They may contain:
+
+- `[training.*]`
+
+Current checked-in examples:
+
+- `default.toml` — baseline: 300 epochs, `max_lr = 1e-3`, early stopping
+  patience 30 / min_delta 1e-4
+- `extended.toml` — deviates by epoch count: 600 epochs
+- `high-max-lr.toml` — deviates by LR tuner ceiling: `max_lr = 1e-2`
+- `strict-early-stopping.toml` — deviates by early stopping: patience 10,
+  min_delta 1e-3
+
+### `configs/jobs/**/*.toml`
+
+Jobs are thin runnable entrypoints.
+
+They own:
+
+- `run.type`
+- references to one model profile and one training profile
+- optional inline `[search]` for search jobs
+- optional `[experiment]` when a job needs a stable explicit name
+
+They should not duplicate the shared training block unless a job has a genuine
+job-specific override.
+
+### `configs/cases/**/*.toml`
+
+Case configs bind:
+
+- dataset ids
+- job ids
+- experiment ids
+- comparison ids
+- case-level MLflow topology
 
 ## Case Anatomy
-
-Each `case-*.toml` file is a case config for one experiment family.
 
 ```toml
 [mlflow]
@@ -110,156 +122,107 @@ training = "Train"
 comparison = "Comparisons"
 
 [[datasets]]
-id = "my-dataset"
-path = "datasets/my-dataset.toml"
+id = "train-dataset"
+path = "../../datasets/train/45x15/gaussian-cg100.toml"
 
 [[datasets]]
-id = "my-bench-dataset"
-path = "datasets/my-bench-dataset.toml"
+id = "benchmark-dataset"
+path = "../../datasets/test/45x15/scaled-solutions.toml"
 
-[[models]]
-id = "my-model"
-path = "models/<family>/my-model.toml"
+[[jobs]]
+id = "factorized"
+path = "../../jobs/ffnn/factorized.toml"
 
 [[comparisons]]
-id             = "my-comparison"
-matrix_dataset = "my-bench-dataset"
-rhs_dataset    = "my-bench-dataset"
+id = "scaled"
+matrix_dataset = "train-dataset"
+rhs_dataset = "benchmark-dataset"
 
 [[experiments]]
-id      = "my-dataset-my-model"
-dataset = "my-dataset"
-model   = "my-model"
+dataset = "train-dataset"
+job = "factorized"
 ```
 
-`[names].training` controls the MLflow experiment bucket used for training
-runs, and `[names].comparison` controls the MLflow experiment bucket used for
-comparison runs. If you omit `[names]`, the defaults come from the case-config
-model: `"Train"` for training and `"Comparisons"` for comparison.
+`[names].training` controls the MLflow experiment bucket for training runs.
+`[names].comparison` controls the comparison bucket.
 
-## What Lives In Each Config
+## Thin Job Example
 
-### Dataset configs
+```toml
+[run]
+type = "train"
+seed = 42
+precision = "64"
+model = "../../profiles/model/ffnn/factorized.toml"
+data = "../../profiles/data/array-default.toml"
+training = "../../profiles/training/default.toml"
+```
 
-Dataset configs define:
+## Search Job Example
 
-- raw matrix and optional archive paths
-- generation strategy blocks
-- normalization and output settings
-- optional test-set metadata
+```toml
+[run]
+type = "search"
+seed = 42
+precision = "64"
+model = "../../profiles/model/ffnn/ffnn.toml"
+data = "../../profiles/data/array-default.toml"
+training = "../../profiles/training/default.toml"
 
-Comparison-matrix invariant:
-- For every `cases/<problem>/` family, `[[comparisons]].matrix_dataset` must reference a training dataset from that same case/problem family.
-- Benchmark/test datasets may still be used as `rhs_dataset`, but they must not be the source of the comparison matrix.
-- If a case trains on a single fixed matrix, every comparison in that case must use that same fixed-matrix training dataset as `matrix_dataset`.
+[search]
+objective = "val_loss"
+space."training.optimizer.default_optimizer.lr" = { type = "log_float", low = 1e-5, high = 1e-2 }
+```
 
-### Model configs
+Search stays coupled to jobs, not training profiles. The job is the runnable
+entrypoint, so the inline `[search]` block belongs there.
 
-Model configs define:
+## Model Profile Example
 
-- DLKit model module and hyperparameters
-- trainer, loss, and optimizer-policy settings
-- the `[DATASET]` dataset class name only; do not add removed legacy keys such as `memmap_cache`
-- either `TRAINING.optimizer.default_optimizer` / `default_scheduler` or
-  staged optimization under `TRAINING.optimizer.stages`
-- checkpoint callback naming
+```toml
+[model]
+name = "ScaleEquivariantFactorizedFFNN"
+module_path = "dlkit.nn"
+num_layers = 1
 
-Model configs keep `module_path = "dlkit.nn"` as the user-facing entrypoint.
-`MODEL.name` must match the target class name exactly; kwargs stay flat under
-`[MODEL]` and are forwarded through DLKit's `ModelComponentSettings`
-filtering, so they must match the target constructor signature exactly.
-`TRAINING.loss_function.name` and each `TRAINING.metrics[].name` must match
-the current DLKit export names exactly, for example
-`relative_vector_norm_loss` and `RelativeVectorNormError`.
-For constant-width FFNN variants, "constant width" means the hidden body uses
-the model's built-in width policy. Do not add an explicit `size` or
-`hidden_size` override unless the DLKit constructor for that exact class
-accepts it.
+[data]
+name = "FlexibleDataset"
+batch_size = 256
+pin_memory = true
+shuffle = true
 
-Optimizer sections may omit per-optimizer kwargs when DLKit defaults are
-acceptable. Scheduler settings should still be written explicitly unless the
-case intentionally wants DLKit's scheduler defaults.
+[data.module]
+name = "ArrayDataModule"
+```
 
-Model configs use canonical DLKit syntax: the default scheduler lives
-under `TRAINING.optimizer.default_scheduler`, and any staged program lives
-under `TRAINING.optimizer.stages`.
+## Composition Boundary
 
-For the local supervised workflows, model configs must route the label through
-`TRAINING.loss_function.target_key = "targets.y"`. When `[[DATASET.targets]]`
-placeholders are present, use the canonical runtime target name `y`. Keep
-domain/storage names such as `solutions` for dataset files and dataset ids, not
-for runtime DLKit target aliases. Runtime naming comes from the composition
-dataset contract, while on-disk artifact names come from `[output].dataset_format`
-and resolve through the dataset manifest as `rhs.{npy|zarr}`,
-`solutions.{npy|zarr}`, `matrix.{npy|zarr}`, and optional `parameters_*.{npy|zarr}`.
-Training diagnostics also consume one canonical prediction key, `y_pred`, after
-composition normalizes DLKit's raw prediction payload once at the training
-boundary.
+`neuralls` composes the final executable DLKit workflow by combining:
 
-### Comparison entries
+1. model defaults from `configs/profiles/model` and shared data defaults from `configs/profiles/data`
+2. shared optimization policy from `configs/profiles/training`
+3. run-mode and search intent from `configs/jobs`
+4. runtime dataset injection from the selected dataset config
+5. runtime-only workspace and tracking values
 
-`[[comparisons]]` entries in a case config define:
+DLKit remains the validator for the final workflow object.
 
-- `matrix_dataset` and `rhs_dataset`: ids from the case `[[datasets]]` registry
-- optional `method` path to a methodology override TOML with solver params and preconditioners
-- optional `display_name`, `rhs_index`, `matrix_index`
+## Practical Rules
 
-Shared solver parameters live in `[comparison_defaults]`. A `method` override
-can selectively replace preconditioners or solver tolerances for a single entry.
-
-Datasets referenced by `[[comparisons]]` must be materialised with
-`neuralls generate-single` before comparison runs if they are not part of the
-training dataset batch.
-
-Case-driven comparison sample selection is explicit. Each `[[comparisons]]`
-entry uses `matrix_index` and `rhs_index` to choose one system from the
-comparison datasets; both default to `0` when omitted. The comparison workflow
-does not infer held-out-only evaluation from training runs or split artifacts.
-If a specific sample matters, set the indices directly in the case config.
+- create one dataset config per real dataset variant
+- keep shared training policy small and reusable
+- keep jobs thin
+- only special model families should define custom `data.features` / `data.targets`
+- keep case configs as registries and bindings, not payload containers
 
 ## MLflow And Paths
 
-Model configs do not define their own `[MLFLOW]` block. Runtime tracking
-settings come from the selected case config or the execution environment.
+Case configs may define `[mlflow].tracking_uri` and optional artifacts
+destination. Jobs and model profiles must not embed machine-specific
+infrastructure paths.
 
-Model configs must use DLKit's canonical workflow syntax directly. `neuralls`
-does not translate top-level `[OPTIMIZATION]` or infer optimization mode from
-`OPTUNA.enabled`. To run Optuna, set `SESSION.workflow = "optimize"` explicitly.
-Keeping `workflow = "train"` with `OPTUNA.enabled = true` still executes a
-normal training run.
-
-Optuna search spaces live under `[OPTUNA.model]`. Numeric ranges use
-`{low=..., high=..., step=...}` and categorical sweeps use
-`{choices=[...]}`. For example, layer-count candidates `1`, `6`, and `9`
-must be written as `num_layers = {choices = [1, 6, 9]}`.
-
-## Machine Roots
-
-Case configs contain experiment structure only. Machine-specific roots live in
-the user config directory and are managed with `neuralls config`.
-
-Set up once per machine:
+Machine roots still come from the active neuralls profile:
 
 ```bash
 uv run neuralls config create default --raw-dir /data/raw --processed-dir /data/processed --output-dir /data/output
 ```
-
-Select a named profile at runtime with `--profile NAME` or
-`NEURALLS_PROFILE=NAME`.
-
-Profiles provide three roots:
-
-- `raw_dir`: raw matrix and archive inputs
-- `processed_dir`: processed datasets used by training and comparison
-- `output_dir`: MLflow, checkpoints, figures, and reports
-
-Explicit `--env-file` or `NEURALLS_ENV_FILE` still override the active profile
-for one invocation. `neuralls` does not auto-discover `.env` or `.env.local`.
-
-Local path normalization and sqlite URI handling delegate to DLKit's
-`PathResolver` and local URI helpers. Relative paths are resolved against the
-config file directory instead of assuming a Unix-only working directory layout.
-
-## What To Read Next
-
-- [`../README.md`](../README.md) for the end-to-end workflow

@@ -1,0 +1,6 @@
+[model]
+name = "ScaleEquivariantModifiedMLP"
+module_path = "dlkit.nn"
+hidden_size = 504
+num_layers = 1
+norm = "l2"

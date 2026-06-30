@@ -9,10 +9,10 @@ Functions in this module perform I/O operations and are not pure.
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
 from typing import Any
 
+from neuralls.platform.config.job_metadata import read_job_metadata
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
 
 
@@ -43,32 +43,11 @@ def extract_model_name(job_config_path: Path | str) -> str:
     """Extract a stable job/model name from a DLKit job config."""
     job_config_path = Path(job_config_path)
 
-    try:
-        with job_config_path.open("rb") as f:
-            config = tomllib.load(f)
-    except FileNotFoundError, tomllib.TOMLDecodeError:
-        return job_config_path.stem
-
-    experiment = config.get("experiment") or {}
-    experiment_name = experiment.get("name")
-    if isinstance(experiment_name, str) and experiment_name:
-        return experiment_name
-
-    session = config.get("SESSION") or {}
-    session_name = session.get("name")
-    if isinstance(session_name, str) and session_name:
-        return session_name
-
-    model_cfg = config.get("model") or {}
-    model_class = model_cfg.get("class") or model_cfg.get("name")
-    if isinstance(model_class, str) and model_class:
-        return model_class
-
-    model_cfg = config.get("MODEL") or {}
-    model_name = model_cfg.get("name") or model_cfg.get("class")
-    if isinstance(model_name, str) and model_name:
-        return model_name
-
+    metadata = read_job_metadata(job_config_path)
+    if metadata.experiment_name is not None:
+        return metadata.experiment_name
+    if metadata.model_name is not None:
+        return metadata.model_name
     return job_config_path.stem
 
 
@@ -98,13 +77,13 @@ def derive_model_identifier(
     config_path = Path(config_path)
 
     candidates: list[str | None] = []
-    model = getattr(settings, "model", None) or getattr(settings, "MODEL", None)
+    model = getattr(settings, "model", None)
     if model is not None:
         model_name = getattr(model, "name", None)
         if model_name is not None:
             candidates.append(str(model_name))
 
-    experiment = getattr(settings, "experiment", None) or getattr(settings, "SESSION", None)
+    experiment = getattr(settings, "experiment", None)
     if experiment is not None:
         candidates.append(getattr(experiment, "name", None))
 

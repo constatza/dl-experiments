@@ -41,14 +41,14 @@ display_name = "Gaussian CG-100 45x15randomE"
 # These models condition on E via feature-wise linear modulation (FiLM)
 # and apply scale-equivariant feature embeddings.
 
-[[models]]
+[[jobs]]
 id           = "film-ffnn"
-path         = "../../models/film/film-ffnn.toml"
+path         = "../../jobs/film/film-ffnn.toml"
 display_name = "Scale-Equivariant FiLM FFNN"
 
-[[models]]
+[[jobs]]
 id           = "film-ffnn-embedded"
-path         = "../../models/film/film-ffnn-embedded.toml"
+path         = "../../jobs/film/film-ffnn-embedded.toml"
 display_name = "Scale-Equivariant FiLM Embedded FFNN"
 
 # ── Comparisons ───────────────────────────────────────────────────────────────
@@ -75,16 +75,16 @@ experiments    = [
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
-model   = "film-ffnn"
+job = "film-ffnn"
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
-model   = "film-ffnn-embedded"
+job = "film-ffnn-embedded"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
-model   = "film-ffnn"
+job = "film-ffnn"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
-model   = "film-ffnn-embedded"
+job = "film-ffnn-embedded"

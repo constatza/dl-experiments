@@ -81,41 +81,41 @@ def _write_data_config(path: Path, data_root: Path) -> None:
 
 def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
     """Write minimal model config for test."""
-    path.write_text(
+    profile_path = path.with_name(f"{path.stem}-profile.toml")
+    profile_path.write_text(
         "\n".join(
             [
-                "[SESSION]",
-                'name = "test-experiment"',
-                'workflow = "train"',
-                "",
-                "[MODEL]",
+                "[model]",
                 'name = "ScaleEquivariantFFNN"',
                 'module_path = "dlkit.nn"',
                 "",
-                "[TRAINING.trainer]",
-                "max_epochs = 1",
-                "",
-                "[[TRAINING.optimizer.stages]]",
-                "",
-                "[TRAINING.optimizer.stages.optimizer]",
-                'name = "AdamW"',
-                "lr = 0.001",
-                "",
-                "[TRAINING.optimizer.stages.trigger]",
-                "at_epoch = 200",
-                "",
-                "[[TRAINING.optimizer.stages]]",
-                "",
-                "[TRAINING.optimizer.stages.optimizer]",
-                'name = "LBFGS"',
-                "lr = 1.0",
-                "",
-                "[DATAMODULE.dataloader]",
-                "batch_size = 32",
-                "",
-                "[DATASET]",
+                "[data]",
                 'name = "FlexibleDataset"',
                 "",
+                "[data.module]",
+                'name = "ArrayDataModule"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    path.write_text(
+        "\n".join(
+            [
+                "[run]",
+                'type = "train"',
+                "seed = 42",
+                f'model = "{profile_path.name}"',
+                f'data = "{profile_path.name}"',
+                "",
+                "[experiment]",
+                'name = "test-experiment"',
+                "",
+                "[training.trainer]",
+                "max_epochs = 1",
+                "",
+                "[training.optimizer.default_optimizer]",
+                'name = "AdamW"',
+                "lr = 0.001",
             ]
         ),
         encoding="utf-8",

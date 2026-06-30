@@ -1,4 +1,4 @@
-"""TOML loading and validation for all neuralls config types."""
+"""TOML loading and validation for neuralls-owned config types."""
 
 from __future__ import annotations
 
@@ -50,8 +50,3 @@ def load_case(path: Path, env_file: Path | None = None) -> tuple[CaseConfig, Neu
     """Load one case config together with its resolved runtime settings."""
     settings = load_case_settings(path, env_file)
     return load_case_config(path, settings), settings
-
-
-def load_experiments_config(path: Path, settings: NeurallsSettings) -> CaseConfig:
-    """Compatibility alias for the old case-loader name."""
-    return load_case_config(path, settings)

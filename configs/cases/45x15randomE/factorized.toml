@@ -48,9 +48,9 @@ display_name = "Sparse RHS 45x15randomE"
 
 # ── Models (regular factorized variants, including embedded) ──────────────────
 
-[[models]]
+[[jobs]]
 id           = "embedded-factorized"
-path         = "../../models/ffnn/embedded-factorized-optuna.toml"
+path         = "../../jobs/ffnn/embedded-factorized-optuna.toml"
 display_name = "Scale-Equivariant Embedded Factorized FFNN"
 
 # ── Comparisons (one per training dataset, filtered to own experiments) ───────
@@ -91,8 +91,8 @@ experiments    = [
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
-model   = "embedded-factorized"
+job = "embedded-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
-model   = "embedded-factorized"
+job = "embedded-factorized"

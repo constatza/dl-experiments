@@ -45,14 +45,14 @@ display_name = "Sparse RHS 93x31"
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
-[[models]]
+[[jobs]]
 id           = "ffnn-standard"
-path         = "../../models/ffnn/ffnn.toml"
+path         = "../../jobs/ffnn/ffnn.toml"
 display_name = "FFNN Standard"
 
-[[models]]
+[[jobs]]
 id           = "embedded-factorized"
-path         = "../../models/ffnn/embedded-factorized.toml"
+path         = "../../jobs/ffnn/embedded-factorized.toml"
 display_name = "Embedded Factorized"
 
 # ── Comparisons ───────────────────────────────────────────────────────────────
@@ -71,8 +71,8 @@ rhs_dataset    = "sparse-rhs-93x31"
 
 [[experiments]]
 dataset      = "gaussian-cg100-93x31"
-model        = "ffnn-standard"
+job = "ffnn-standard"
 
 [[experiments]]
 dataset      = "gaussian-cg100-93x31"
-model        = "embedded-factorized"
+job = "embedded-factorized"

@@ -55,9 +55,9 @@ display_name = "Sparse RHS 93x31"
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
-[[models]]
+[[jobs]]
 id           = "ffnn-standard"
-path         = "../../models/ffnn/ffnn.toml"
+path         = "../../jobs/ffnn/ffnn.toml"
 display_name = "FFNN Standard"
 
 # ── Comparisons ───────────────────────────────────────────────────────────────
@@ -76,16 +76,16 @@ rhs_dataset    = "sparse-rhs-93x31"
 
 [[experiments]]
 dataset      = "gaussian-cg1-93x31"
-model        = "ffnn-standard"
+job = "ffnn-standard"
 
 [[experiments]]
 dataset      = "gaussian-cg10-93x31"
-model        = "ffnn-standard"
+job = "ffnn-standard"
 
 [[experiments]]
 dataset      = "gaussian-cg50-93x31"
-model        = "ffnn-standard"
+job = "ffnn-standard"
 
 [[experiments]]
 dataset      = "gaussian-cg100-93x31"
-model        = "ffnn-standard"
+job = "ffnn-standard"

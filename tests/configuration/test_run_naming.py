@@ -1,4 +1,4 @@
-"""Unit tests for run naming logic (no timestamps — temp dir guarantees uniqueness)."""
+"""Unit tests for lower-case DLKit run naming logic."""
 
 from __future__ import annotations
 
@@ -9,123 +9,77 @@ import pytest
 from neuralls.composition.experiments.assembler import load_experiment
 
 
-@pytest.fixture
-def model_config_with_session(tmp_path: Path) -> Path:
-    """Create a model config with SESSION.name set."""
-    config_path = tmp_path / "model_with_session.toml"
-    config_content = """
-[SESSION]
-name = "MyCustomSession"
-seed = 42
-workflow = "train"
-
-[MODEL]
-name = "FFNNModel"
+def _write_model_profile(
+    path: Path,
+    *,
+    model_name: str,
+    dataset_name: str = "FlexibleDataset",
+) -> Path:
+    path.write_text(
+        f"""
+[model]
+name = "{model_name}"
 module_path = "dlkit.nn"
 
-[TRAINING]
-[TRAINING.trainer]
+[data]
+name = "{dataset_name}"
+
+[data.module]
+name = "ArrayDataModule"
+"""
+    )
+    return path
+
+
+def _write_job_config(
+    path: Path,
+    *,
+    model_profile_path: Path,
+    experiment_name: str | None = None,
+) -> Path:
+    experiment_block = f'\n[experiment]\nname = "{experiment_name}"\n' if experiment_name else ""
+    path.write_text(
+        f"""
+[run]
+type = "train"
+seed = 42
+model = "{model_profile_path.relative_to(path.parent).as_posix()}"
+data = "{model_profile_path.relative_to(path.parent).as_posix()}"
+
+[training.trainer]
 max_epochs = 1
 
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
+[training.optimizer.default_optimizer]
 name = "AdamW"
-lr = 1e-3
-
-[TRAINING.optimizer.stages.trigger]
-at_epoch = 200
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "LBFGS"
-lr = 1.0
-
-[DATASET]
-name = "FlexibleDataset"
+lr = 1e-3{experiment_block}
 """
-    config_path.write_text(config_content)
-    return config_path
+    )
+    return path
 
 
 @pytest.fixture
-def model_config_without_session(tmp_path: Path) -> Path:
-    """Create a model config without SESSION.name (uses MODEL.name)."""
-    config_path = tmp_path / "model_no_session.toml"
-    config_content = """
-[SESSION]
-seed = 42
-workflow = "train"
-
-[MODEL]
-name = "NormScaledLinearFFNN"
-module_path = "dlkit.nn"
-
-[TRAINING]
-[TRAINING.trainer]
-max_epochs = 1
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "AdamW"
-lr = 1e-3
-
-[TRAINING.optimizer.stages.trigger]
-at_epoch = 200
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "LBFGS"
-lr = 1.0
-
-[DATASET]
-name = "FlexibleDataset"
-"""
-    config_path.write_text(config_content)
-    return config_path
+def job_config_with_experiment_name(tmp_path: Path) -> Path:
+    """Create a job config whose experiment.name should drive run naming."""
+    model_profile = _write_model_profile(tmp_path / "ffnn-profile.toml", model_name="FFNNModel")
+    return _write_job_config(
+        tmp_path / "job_with_experiment.toml",
+        model_profile_path=model_profile,
+        experiment_name="MyCustomExperiment",
+    )
 
 
 @pytest.fixture
-def model_config_with_dlkit_default_session(tmp_path: Path) -> Path:
-    """Create a model config with dlkit's default SESSION.name."""
-    config_path = tmp_path / "model_dlkit_default.toml"
-    config_content = """
-[SESSION]
-name = "dlkit-session"
-seed = 42
-workflow = "train"
-
-[MODEL]
-name = "GNNModel"
-module_path = "dlkit.domain.nn.graph"
-
-[TRAINING]
-[TRAINING.trainer]
-max_epochs = 1
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "AdamW"
-lr = 1e-3
-
-[TRAINING.optimizer.stages.trigger]
-at_epoch = 200
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "LBFGS"
-lr = 1.0
-
-[DATASET]
-name = "FlexibleDataset"
-"""
-    config_path.write_text(config_content)
-    return config_path
+def job_config_without_experiment_name(tmp_path: Path) -> Path:
+    """Create a job config that falls back to model.name."""
+    model_profile = _write_model_profile(
+        tmp_path / "linear-profile.toml",
+        model_name="NormScaledLinearFFNN",
+    )
+    return _write_job_config(
+        tmp_path / "job_without_experiment.toml",
+        model_profile_path=model_profile,
+        experiment_name=None,
+    )
 
 
 @pytest.fixture
@@ -133,7 +87,8 @@ def sample_data_config(tmp_path: Path) -> Path:
     """Create a minimal data config TOML."""
     config_path = tmp_path / "test-dataset.toml"
     matrix_path = tmp_path / "test_matrix.txt"
-    config_content = f"""
+    config_path.write_text(
+        f"""
 id = "test-data"
 
 [source]
@@ -142,23 +97,22 @@ matrix_path = "{matrix_path.as_posix()}"
 [generation]
 normalize = "matrix"
 """
-    config_path.write_text(config_content)
+    )
     return config_path
 
 
 class TestRunNaming:
-    """Tests for run_id generation — plain model name, no timestamp."""
+    """Tests for stable lower-case job naming."""
 
-    def test_run_id_equals_model_name(
+    def test_run_id_falls_back_to_model_name(
         self,
-        model_config_without_session: Path,
+        job_config_without_experiment_name: Path,
         sample_data_config: Path,
         tmp_path: Path,
         neuralls_settings,
-    ):
-        """Verify run_id is exactly the model name with no timestamp suffix."""
+    ) -> None:
         experiment = load_experiment(
-            model_config_without_session,
+            job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
             output_root=tmp_path / "output",
@@ -167,59 +121,39 @@ class TestRunNaming:
 
         assert experiment.workspace.run_id == "NormScaledLinearFFNN"
 
-    def test_run_id_uses_session_name_when_set(
+    def test_run_id_uses_experiment_name_when_set(
         self,
-        model_config_with_session: Path,
+        job_config_with_experiment_name: Path,
         sample_data_config: Path,
         tmp_path: Path,
         neuralls_settings,
-    ):
-        """Verify SESSION.name takes precedence over MODEL.name."""
+    ) -> None:
         experiment = load_experiment(
-            model_config_with_session,
+            job_config_with_experiment_name,
             sample_data_config,
             neuralls_settings,
             output_root=tmp_path / "output",
             dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.workspace.run_id == "MyCustomSession"
-
-    def test_run_id_uses_model_name_when_session_is_dlkit_default(
-        self,
-        model_config_with_dlkit_default_session: Path,
-        sample_data_config: Path,
-        tmp_path: Path,
-        neuralls_settings,
-    ):
-        """Verify dlkit-session default is treated as unset, uses MODEL.name."""
-        experiment = load_experiment(
-            model_config_with_dlkit_default_session,
-            sample_data_config,
-            neuralls_settings,
-            output_root=tmp_path / "output",
-            dataset_registry_id=sample_data_config.stem,
-        )
-
-        assert experiment.workspace.run_id == "GNNModel"
+        assert experiment.workspace.run_id == "MyCustomExperiment"
 
     def test_run_id_is_stable_across_loads(
         self,
-        model_config_without_session: Path,
+        job_config_without_experiment_name: Path,
         sample_data_config: Path,
         tmp_path: Path,
         neuralls_settings,
-    ):
-        """Verify the same config always produces the same run_id."""
+    ) -> None:
         exp1 = load_experiment(
-            model_config_without_session,
+            job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
             output_root=tmp_path / "output1",
             dataset_registry_id=sample_data_config.stem,
         )
         exp2 = load_experiment(
-            model_config_without_session,
+            job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
             output_root=tmp_path / "output2",
@@ -230,14 +164,13 @@ class TestRunNaming:
 
     def test_experiment_spec_id_matches_run_id(
         self,
-        model_config_without_session: Path,
+        job_config_without_experiment_name: Path,
         sample_data_config: Path,
         tmp_path: Path,
         neuralls_settings,
-    ):
-        """Verify ExperimentSpec.id and workspace.run_id are both the base name."""
+    ) -> None:
         experiment = load_experiment(
-            model_config_without_session,
+            job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
             output_root=tmp_path / "output",
@@ -246,20 +179,17 @@ class TestRunNaming:
 
         assert experiment.spec.experiment_id == "NormScaledLinearFFNN"
         assert experiment.workspace.run_id == "NormScaledLinearFFNN"
-        assert experiment.spec.experiment_id == experiment.workspace.run_id
 
     def test_workspace_directories_use_run_id(
         self,
-        model_config_without_session: Path,
+        job_config_without_experiment_name: Path,
         sample_data_config: Path,
         tmp_path: Path,
         neuralls_settings,
-    ):
-        """Verify workspace directories incorporate the run_id."""
+    ) -> None:
         output_root = tmp_path / "output"
-
         experiment = load_experiment(
-            model_config_without_session,
+            job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
             output_root=output_root,
@@ -267,9 +197,7 @@ class TestRunNaming:
         )
 
         run_id = experiment.workspace.run_id
-        dataset_id = "test-dataset"  # From sample_data_config filename
-
-        expected_root = output_root / dataset_id / run_id
+        expected_root = output_root / "test-dataset" / run_id
         assert experiment.workspace.root_dir == expected_root
         assert str(run_id) in str(experiment.workspace.checkpoint_dir)
 
@@ -277,97 +205,56 @@ class TestRunNaming:
 class TestRunNamingEdgeCases:
     """Edge cases and error scenarios for run naming."""
 
-    def test_missing_model_name_raises_error(
+    def test_missing_model_name_falls_back_to_job_stem(
         self,
         sample_data_config: Path,
         tmp_path: Path,
         neuralls_settings,
-    ):
-        """Verify error when MODEL.name is empty string."""
-        bad_config = tmp_path / "bad_model.toml"
-        bad_config_content = """
-[SESSION]
-seed = 42
-workflow = "train"
-
-[MODEL]
+    ) -> None:
+        model_profile = tmp_path / "bad-profile.toml"
+        model_profile.write_text(
+            """
+[model]
 name = ""
 module_path = "dlkit.nn"
 
-[TRAINING]
-[TRAINING.trainer]
-max_epochs = 1
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "AdamW"
-lr = 1e-3
-
-[TRAINING.optimizer.stages.trigger]
-at_epoch = 200
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "LBFGS"
-lr = 1.0
-
-[DATASET]
+[data]
 name = "FlexibleDataset"
+
+[data.module]
+name = "ArrayDataModule"
 """
-        bad_config.write_text(bad_config_content)
+        )
+        bad_config = _write_job_config(
+            tmp_path / "bad-model.toml",
+            model_profile_path=model_profile,
+            experiment_name=None,
+        )
 
-        with pytest.raises(ValueError, match="Model name missing"):
-            load_experiment(
-                bad_config,
-                sample_data_config,
-                neuralls_settings,
-                output_root=tmp_path / "output",
-                dataset_registry_id=sample_data_config.stem,
-            )
+        experiment = load_experiment(
+            bad_config,
+            sample_data_config,
+            neuralls_settings,
+            output_root=tmp_path / "output",
+            dataset_registry_id=sample_data_config.stem,
+        )
 
-    def test_run_id_handles_special_characters_in_model_name(
+        assert experiment.workspace.run_id == "bad-model"
+
+    def test_run_id_handles_special_characters_in_experiment_name(
         self,
         sample_data_config: Path,
         tmp_path: Path,
         neuralls_settings,
-    ):
-        """Verify run_id preserves special characters from model name."""
-        special_config = tmp_path / "special_model.toml"
-        special_config_content = """
-[SESSION]
-name = "Model_release-alpha"
-seed = 42
-workflow = "train"
-
-[MODEL]
-name = "TestModel"
-module_path = "dlkit.nn"
-
-[TRAINING]
-[TRAINING.trainer]
-max_epochs = 1
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "AdamW"
-lr = 1e-3
-
-[TRAINING.optimizer.stages.trigger]
-at_epoch = 200
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "LBFGS"
-lr = 1.0
-
-[DATASET]
-name = "FlexibleDataset"
-"""
-        special_config.write_text(special_config_content)
+    ) -> None:
+        model_profile = _write_model_profile(
+            tmp_path / "special-profile.toml", model_name="TestModel"
+        )
+        special_config = _write_job_config(
+            tmp_path / "special-model.toml",
+            model_profile_path=model_profile,
+            experiment_name="Model_release-alpha",
+        )
 
         experiment = load_experiment(
             special_config,

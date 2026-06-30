@@ -115,9 +115,8 @@ def create_inference_predictor(checkpoint_path: Path, settings: Any) -> Inferenc
 
 def resolve_batch_size(settings: Any) -> int:
     """Resolve inference batch size from DLKit workflow settings."""
-    datamodule = getattr(settings, "DATAMODULE", None)
-    dataloader = getattr(datamodule, "dataloader", None) if datamodule else None
-    configured = getattr(dataloader, "batch_size", None)
+    data_cfg = getattr(settings, "data", None)
+    configured = getattr(data_cfg, "batch_size", None) if data_cfg else None
     try:
         return int(configured) if configured is not None else 256
     except TypeError, ValueError:

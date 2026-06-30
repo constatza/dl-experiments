@@ -289,8 +289,9 @@ def test_generate_preserves_enriched_storage_error_message(
     cfg = MagicMock(datasets=[MagicMock()])
     mock_load_settings.return_value = settings
     mock_load_case_config.return_value = (cfg, MagicMock())
+    matrix_store = tmp_path / "matrix.zarr"
     mock_generate_batch.side_effect = OSError(
-        "Updating matrix.zarr store at /tmp/matrix.zarr failed. "
+        f"Updating matrix.zarr store at {matrix_store} failed. "
         "PermissionError: denied, winerror=5, src=a.partial, dst=zarr.json"
     )
 
@@ -315,8 +316,9 @@ def test_generate_single_preserves_enriched_storage_error_message(
     case_config.write_text("", encoding="utf-8")
     settings = MagicMock()
     mock_load_settings.return_value = settings
+    rhs_store = tmp_path / "rhs.zarr"
     mock_process_data.side_effect = PermissionError(
-        "Writing rhs.zarr at /tmp/rhs.zarr failed. "
+        f"Writing rhs.zarr at {rhs_store} failed. "
         "PermissionError: denied, winerror=5, src=b.partial, dst=zarr.json"
     )
 

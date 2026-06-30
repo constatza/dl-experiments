@@ -263,7 +263,6 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
         DataModuleSelector,
         DataSettings,
         ExperimentSettings,
-        ModelSettings,
         RunSettings,
         TrackingSettings,
         TrainingSettings,
@@ -271,6 +270,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     from dlkit.infrastructure.config.trainer_settings import TrainerSettings
     from dlkit.infrastructure.config.model_components import (
         MetricComponentSettings,
+        ModelComponentSettings,
     )
     from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
 
@@ -307,10 +307,11 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
                 ),
             ),
         ),
-        model=ModelSettings(
+        model=ModelComponentSettings(
             name="FFNN",
             module_path="dlkit.nn",
-            params={"hidden_size": 4, "num_layers": 1},
+            hidden_size=4,
+            num_layers=1,
         ),
     )
 
@@ -367,7 +368,7 @@ def test_resolve_training_checkpoint_downloads_into_scratch_dir(
         resolved = _resolve_training_checkpoint(
             training_result=training_result,
             workspace=workspace,
-            tracking_uri="sqlite:///tmp/mlflow.db",
+            tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
             run_id="run-1",
         )
 
@@ -590,12 +591,12 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         DataModuleSelector,
         DataSettings,
         ExperimentSettings,
-        ModelSettings,
         RunSettings,
         TrackingSettings,
         TrainingSettings,
     )
     from dlkit.infrastructure.config.job_config import TrainingJobConfig
+    from dlkit.infrastructure.config.model_components import ModelComponentSettings
     from dlkit.infrastructure.config.trainer_settings import TrainerSettings
     from neuralls.platform.config.models.workspace import ExperimentWorkspace
     from neuralls.composition.experiments.training import train_model
@@ -611,7 +612,7 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         run=RunSettings(type="train", seed=42),
         experiment=ExperimentSettings(name="exp-1"),
         tracking=TrackingSettings(backend="none"),
-        model=ModelSettings(name="LinearModel"),
+        model=ModelComponentSettings(name="LinearModel"),
         data=DataSettings(
             name="FlexibleDataset",
             module=DataModuleSelector(name="InMemoryModule"),

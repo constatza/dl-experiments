@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -11,7 +12,7 @@ import pytest
 
 from neuralls.platform.config.models.experiments import CaseConfig, ExperimentNamesConfig
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
-from neuralls.platform.config.loaders import load_experiments_config, load_raw_toml
+from neuralls.platform.config.loaders import load_case_config, load_raw_toml
 from neuralls.composition.experiments.multi_training import (
     TrainingRunResult,
     _annotate_mlflow_run,
@@ -22,6 +23,52 @@ from neuralls.composition.experiments.multi_training import (
     _train_single,
     train_batch,
 )
+
+
+def _write_model_profile(path: Path, model_name: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""
+[model]
+name = "{model_name}"
+module_path = "dlkit.nn"
+
+[data]
+name = "FlexibleDataset"
+batch_size = 2
+num_workers = 0
+pin_memory = false
+shuffle = true
+
+[data.module]
+name = "ArrayDataModule"
+"""
+    )
+    return path
+
+
+def _write_job_config(
+    path: Path, model_profile_path: Path, *, session_name: str = "dlkit-session"
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    model_ref = Path(os.path.relpath(model_profile_path, start=path.parent)).as_posix()
+    path.write_text(
+        f"""
+[run]
+type = "train"
+seed = 42
+precision = "64"
+model = "{model_ref}"
+data = "{model_ref}"
+
+[experiment]
+name = "{session_name}"
+
+[training.trainer]
+max_epochs = 1
+"""
+    )
+    return path
 
 
 @pytest.fixture
@@ -58,11 +105,10 @@ def training_run_results(tmp_path: Path) -> list[TrainingRunResult]:
 @pytest.fixture
 def job_config_file(tmp_path: Path) -> Path:
     """Create a minimal job config TOML file."""
-    jobs_dir = tmp_path / "jobs"
-    jobs_dir.mkdir()
-    path = jobs_dir / "ffnn.toml"
-    path.write_text('[run]\ntype = "train"\n[model]\nclass = "NormScaledLinearFFNN"\n')
-    return path
+    model_profile = _write_model_profile(
+        tmp_path / "models" / "ffnn-model.toml", "NormScaledLinearFFNN"
+    )
+    return _write_job_config(tmp_path / "jobs" / "ffnn.toml", model_profile, session_name="ffnn")
 
 
 @pytest.fixture
@@ -131,7 +177,7 @@ def test_resolve_config_paths(
     neuralls_settings,
 ) -> None:
     """Registry-backed entries resolve into concrete config files."""
-    cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
+    cfg = load_case_config(valid_experiments_toml, neuralls_settings)
     job_path, data_path = _resolve_config_paths(
         cfg.experiments[0],
         tmp_path,
@@ -143,8 +189,8 @@ def test_resolve_config_paths(
 
 def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_settings) -> None:
     """Single training run returns the training checkpoint and MLflow metadata."""
-    job_cfg = tmp_path / "job.toml"
-    job_cfg.write_text('[run]\ntype = "train"\n[model]\nclass = "NormScaledLinearFFNN"\n')
+    model_profile = _write_model_profile(tmp_path / "model.toml", "NormScaledLinearFFNN")
+    job_cfg = _write_job_config(tmp_path / "job.toml", model_profile)
     data_cfg = tmp_path / "dataset.toml"
     data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
     ckpt_dir = tmp_path / "ckpt"
@@ -187,8 +233,8 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_setting
 
 def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) -> None:
     """Single training forwards the optional batch parent run id unchanged."""
-    job_cfg = tmp_path / "job.toml"
-    job_cfg.write_text('[run]\ntype = "train"\n[model]\nclass = "NormScaledLinearFFNN"\n')
+    model_profile = _write_model_profile(tmp_path / "model.toml", "NormScaledLinearFFNN")
+    job_cfg = _write_job_config(tmp_path / "job.toml", model_profile)
     data_cfg = tmp_path / "dataset.toml"
     data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
     ckpt_dir = tmp_path / "ckpt"
@@ -204,7 +250,7 @@ def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) 
         patch(
             "neuralls.composition.experiments.multi_training.resolve_dataset_identity"
         ) as mock_identity,
-        patch("neuralls.composition.experiments.multi_training.read_registered_model_name"),
+        patch("neuralls.composition.experiments.multi_training.read_model_class_name"),
         patch(
             "neuralls.composition.experiments.multi_training.read_mlflow_sidecar", return_value=None
         ),
@@ -227,10 +273,9 @@ def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) 
 
 @pytest.fixture
 def job_config_with_model_name(tmp_path: Path) -> Path:
-    """Job config TOML with [model].class set."""
-    path = tmp_path / "job.toml"
-    path.write_text('[run]\ntype = "train"\n[model]\nclass = "NormScaledLinearFFNN"\n')
-    return path
+    """Thin job config TOML with a referenced model profile."""
+    model_profile = _write_model_profile(tmp_path / "model.toml", "NormScaledLinearFFNN")
+    return _write_job_config(tmp_path / "job.toml", model_profile)
 
 
 def test_annotate_mlflow_run_registers_under_experiment_id(
@@ -298,7 +343,7 @@ def test_train_batch_returns_local_output_dir(
     fake_ckpt = tmp_path / "ckpt" / "model.ckpt"
     fake_ckpt.parent.mkdir()
     fake_ckpt.touch()
-    cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
+    cfg = load_case_config(valid_experiments_toml, neuralls_settings)
 
     with (
         patch(
@@ -364,7 +409,7 @@ def test_train_batch_forwards_custom_training_experiment_name(
         ),
         encoding="utf-8",
     )
-    cfg = load_experiments_config(valid_experiments_toml, neuralls_settings)
+    cfg = load_case_config(valid_experiments_toml, neuralls_settings)
 
     with (
         patch(
@@ -390,6 +435,9 @@ def test_train_batch_forwards_custom_training_experiment_name(
 
 def test_create_training_session_parent_run_uses_case_config_identity(tmp_path: Path) -> None:
     """Training session parents are named from case config stem and timestamp."""
+    case_config_path = tmp_path / "ffnn.toml"
+    tracking_db = tmp_path / "mlflow.db"
+    artifact_dir = tmp_path / "mlartifacts"
     with (
         patch(
             "neuralls.composition.experiments.multi_training._ensure_training_experiment",
@@ -404,7 +452,7 @@ def test_create_training_session_parent_run_uses_case_config_identity(tmp_path: 
                     as_mlflow_tags=lambda: {
                         "phase": "session_training",
                         "case_config": "ffnn",
-                        "case_config_path": "/tmp/ffnn.toml",
+                        "case_config_path": str(case_config_path),
                         "started_at": "2026-03-12T12:00:00",
                         "training_experiment_name": "Train",
                     }
@@ -415,9 +463,9 @@ def test_create_training_session_parent_run_uses_case_config_identity(tmp_path: 
         mock_client = mock_client_cls.return_value
         mock_client.create_run.return_value.info.run_id = "parent-123"
         run_id = _create_training_session_parent_run(
-            tracking_uri="sqlite:///tmp/mlflow.db",
-            artifact_uri="/tmp/mlartifacts",
-            case_config_path=tmp_path / "ffnn.toml",
+            tracking_uri=f"sqlite:///{tracking_db.as_posix()}",
+            artifact_uri=str(artifact_dir),
+            case_config_path=case_config_path,
             training_experiment_name="Train",
         )
 
@@ -428,7 +476,7 @@ def test_create_training_session_parent_run_uses_case_config_identity(tmp_path: 
             "mlflow.runName": "ffnn | 2026-03-12T12:00:00",
             "phase": "session_training",
             "case_config": "ffnn",
-            "case_config_path": "/tmp/ffnn.toml",
+            "case_config_path": str(case_config_path),
             "started_at": "2026-03-12T12:00:00",
             "training_experiment_name": "Train",
         },
@@ -480,7 +528,7 @@ def test_experiments_config_rejects_legacy_singular_experiment_table(
     )
 
     with pytest.raises(ValueError, match=r"\[\[experiment\]\]"):
-        load_experiments_config(config, neuralls_settings)
+        load_case_config(config, neuralls_settings)
 
 
 def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:

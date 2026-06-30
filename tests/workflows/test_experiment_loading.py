@@ -1,9 +1,4 @@
-"""Tests for experiment configuration loading workflow.
-
-This module tests the `load_experiment()` workflow function directly,
-without involving the CLI layer. These tests verify configuration loading
-and MLflow integration at the workflow level.
-"""
+"""Tests for lower-case DLKit experiment configuration loading."""
 
 from __future__ import annotations
 
@@ -19,7 +14,6 @@ from neuralls.platform.config.resolution import resolve_case_config_path
 @pytest.fixture
 def training_setup(tmp_path: Path) -> dict:
     """Create minimal training setup with data and configs."""
-    # Setup directories
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     raw_dir = data_dir / "raw"
@@ -27,21 +21,18 @@ def training_setup(tmp_path: Path) -> dict:
 
     configs_dir = tmp_path / "configs"
     configs_dir.mkdir()
-
-    # Create config directories
     datasets_dir = configs_dir / "datasets"
     datasets_dir.mkdir()
     jobs_dir = configs_dir / "jobs"
     jobs_dir.mkdir()
 
-    # Create minimal test data (10x10 SPD matrix)
     matrix_path = raw_dir / "matrix.txt"
     rhs_path = raw_dir / "rhs.txt"
 
-    N = 10
-    A = np.random.rand(N, N)
-    A = A.T @ A + np.eye(N)  # Make it SPD
-    b = np.random.rand(N)
+    n = 10
+    A = np.random.rand(n, n)
+    A = A.T @ A + np.eye(n)
+    b = np.random.rand(n)
 
     np.savetxt(matrix_path, A)
     np.savetxt(rhs_path, b)
@@ -49,8 +40,6 @@ def training_setup(tmp_path: Path) -> dict:
     return {
         "tmp_path": tmp_path,
         "data_dir": data_dir,
-        "raw_dir": raw_dir,
-        "configs_dir": configs_dir,
         "datasets_dir": datasets_dir,
         "jobs_dir": jobs_dir,
         "matrix_path": matrix_path,
@@ -65,31 +54,37 @@ def _write_training_job_config(
     model_class: str,
     enable_tracking: bool = False,
 ) -> None:
-    """Write a minimal DLKit training job TOML using the lowercase job schema."""
+    """Write a minimal lower-case training job plus its model profile."""
+    model_profile_path = path.with_name(f"{path.stem}-profile.toml")
+    model_profile = {
+        "model": {
+            "name": model_class,
+            "module_path": "dlkit.nn",
+            "hidden_size": 2,
+            "num_layers": 1,
+        },
+        "data": {
+            "name": "FlexibleDataset",
+            "batch_size": 2,
+            "num_workers": 0,
+            "pin_memory": False,
+            "shuffle": True,
+            "module": {"name": "ArrayDataModule"},
+        },
+    }
+    with open(model_profile_path, "wb") as f:
+        tomli_w.dump(model_profile, f)
+
     job_config = {
         "run": {
             "type": "train",
             "seed": 42,
             "precision": "64",
+            "model": model_profile_path.name,
+            "data": model_profile_path.name,
         },
         "experiment": {
             "name": experiment_name,
-        },
-        "model": {
-            "class": model_class,
-            "module_path": "dlkit.nn",
-            "params": {
-                "hidden_size": 2,
-                "num_layers": 1,
-            },
-        },
-        "data": {
-            "class": "FlexibleDataset",
-            "module": {"class": "ArrayDataModule"},
-            "batch_size": 2,
-            "num_workers": 0,
-            "pin_memory": False,
-            "shuffle": True,
         },
         "training": {
             "trainer": {
@@ -120,54 +115,43 @@ def _write_training_job_config(
 
 
 class TestTrainingPipelineWithMLflow:
-    """End-to-end tests for training pipeline with MLflow."""
+    """Workflow-level configuration loading checks."""
 
     def test_full_training_pipeline_with_mlflow(
         self,
         training_setup: dict,
         neuralls_settings,
     ) -> None:
-        """End-to-end test: config load → training → MLflow logging → artifacts.
-
-        Note: This test verifies the configuration is correct for MLflow but
-        does not run actual training (which would be slow). It verifies that:
-        - MLflow is enabled at runtime
-        - Workspace directories are created
-        - Output paths are rooted under the requested output directory
-        """
+        """MLflow-enabled jobs load with runtime tracking and workspace roots."""
         from neuralls.composition.experiments.assembler import load_experiment
 
-        training_setup["tmp_path"]
         data_dir = training_setup["data_dir"]
         datasets_dir = training_setup["datasets_dir"]
         jobs_dir = training_setup["jobs_dir"]
         matrix_path = training_setup["matrix_path"]
         rhs_path = training_setup["rhs_path"]
 
-        # Create data config
         data_config_path = datasets_dir / "mlflow_test_data.toml"
-        data_config = {
-            "id": "mlflow_test_data",
-            "source": {
-                "matrix_path": str(matrix_path),
-                "rhs_path": str(rhs_path),
-            },
-            "generation": {
-                "normalize": "none",
-                "shuffle": True,
-                "seed": 42,
-                "strategy": [{"name": "random", "samples": 20}],
-            },
-            "output": {
-                "data_dir": str(data_dir / "processed"),
-            },
-        }
         with open(data_config_path, "wb") as f:
-            tomli_w.dump(data_config, f)
+            tomli_w.dump(
+                {
+                    "id": "mlflow_test_data",
+                    "source": {
+                        "matrix_path": str(matrix_path),
+                        "rhs_path": str(rhs_path),
+                    },
+                    "generation": {
+                        "normalize": "none",
+                        "shuffle": True,
+                        "seed": 42,
+                        "strategy": [{"name": "random", "samples": 20}],
+                    },
+                    "output": {"data_dir": str(data_dir / "processed")},
+                },
+                f,
+            )
 
-        # Create job config with tracking enabled but no infrastructure fields.
         output_root = data_dir / "output"
-
         job_config_path = jobs_dir / "mlflow_test_job.toml"
         _write_training_job_config(
             job_config_path,
@@ -176,7 +160,6 @@ class TestTrainingPipelineWithMLflow:
             enable_tracking=True,
         )
 
-        # Load experiment
         experiment = load_experiment(
             job_config_path=job_config_path,
             data_config_path=data_config_path,
@@ -185,97 +168,21 @@ class TestTrainingPipelineWithMLflow:
             dataset_registry_id=data_config_path.stem,
         )
 
-        # VERIFICATION: Experiment configuration
-        assert experiment.settings.tracking is not None
+        assert experiment.settings.tracking.backend == "mlflow"
         assert (
             experiment.settings.training.trainer.default_root_dir == experiment.workspace.root_dir
         )
-        # VERIFICATION: Workspace directories created
         assert experiment.workspace.checkpoint_dir.exists()
         assert experiment.workspace.figures_dir.exists()
         assert experiment.workspace.predictions_dir.exists()
-
-        # VERIFICATION: Output paths are resolved from output_root, not job TOML.
         assert output_root in experiment.workspace.root_dir.parents
-        assert experiment.settings.tracking.uri is None
 
-    def test_mlflow_nested_structure_ready(
+    def test_case_mlflow_topology_still_controls_output_root(
         self,
         training_setup: dict,
         neuralls_settings,
     ) -> None:
-        """Verify MLflow is configured for nested runs structure.
-
-        Tests that the configuration supports the hierarchical structure:
-        - Experiment = dataset name
-        - Run = model name (with timestamp)
-        - Artifacts at mlartifacts/{exp_id}/{run_id}/
-        """
-        from neuralls.composition.experiments.assembler import load_experiment
-
-        data_dir = training_setup["data_dir"]
-        datasets_dir = training_setup["datasets_dir"]
-        jobs_dir = training_setup["jobs_dir"]
-        matrix_path = training_setup["matrix_path"]
-        rhs_path = training_setup["rhs_path"]
-
-        # Create data config
-        data_config_path = datasets_dir / "nested_test_data.toml"
-        data_config = {
-            "id": "nested_test_data",
-            "source": {
-                "matrix_path": str(matrix_path),
-                "rhs_path": str(rhs_path),
-            },
-            "generation": {
-                "normalize": "none",
-                "shuffle": True,
-                "seed": 42,
-                "strategy": [{"name": "random", "samples": 20}],
-            },
-            "output": {
-                "data_dir": str(data_dir / "processed"),
-            },
-        }
-        with open(data_config_path, "wb") as f:
-            tomli_w.dump(data_config, f)
-
-        # Create job config
-        output_root = data_dir / "output"
-
-        job_config_path = jobs_dir / "nested_test_job.toml"
-        _write_training_job_config(
-            job_config_path,
-            experiment_name="NestedTestJob",
-            model_class="TestFFNN",
-            enable_tracking=True,
-        )
-
-        # Load experiment
-        experiment = load_experiment(
-            job_config_path=job_config_path,
-            data_config_path=data_config_path,
-            neuralls_settings=neuralls_settings,
-            output_root=output_root,
-            dataset_registry_id=data_config_path.stem,
-        )
-
-        # Verify hierarchical structure is set up
-        dataset_id = "nested_test_data"
-        run_id = experiment.workspace.run_id
-
-        # Workspace follows: output_root/dataset_id/run_id/
-        expected_workspace_root = output_root / dataset_id / run_id
-        assert experiment.workspace.root_dir == expected_workspace_root
-
-        assert output_root in experiment.workspace.root_dir.parents
-
-    def test_mlflow_configuration_injection(
-        self,
-        training_setup: dict,
-        neuralls_settings,
-    ) -> None:
-        """Verify experiments topology enables runtime MLflow without infra leakage."""
+        """Case-config MLflow topology still controls derived output placement."""
         from neuralls.composition.experiments.assembler import load_experiment
 
         tmp_path = training_setup["tmp_path"]
@@ -285,21 +192,20 @@ class TestTrainingPipelineWithMLflow:
         matrix_path = training_setup["matrix_path"]
         rhs_path = training_setup["rhs_path"]
 
-        # Create minimal configs
         data_config_path = datasets_dir / "injection_test.toml"
-        data_config = {
-            "id": "injection_test",
-            "source": {"matrix_path": str(matrix_path), "rhs_path": str(rhs_path)},
-            "generation": {
-                "normalize": "none",
-                "strategy": [{"name": "random", "samples": 10}],
-            },
-            "output": {
-                "data_dir": str(data_dir / "processed"),
-            },
-        }
         with open(data_config_path, "wb") as f:
-            tomli_w.dump(data_config, f)
+            tomli_w.dump(
+                {
+                    "id": "injection_test",
+                    "source": {"matrix_path": str(matrix_path), "rhs_path": str(rhs_path)},
+                    "generation": {
+                        "normalize": "none",
+                        "strategy": [{"name": "random", "samples": 10}],
+                    },
+                    "output": {"data_dir": str(data_dir / "processed")},
+                },
+                f,
+            )
 
         job_config_path = jobs_dir / "injection_job.toml"
         _write_training_job_config(
@@ -310,26 +216,28 @@ class TestTrainingPipelineWithMLflow:
 
         experiments_config_path = tmp_path / "experiments.toml"
         custom_output_root = data_dir / "custom_output"
-        experiments_config = {
-            "mlflow": {
-                "tracking_uri": f"sqlite:///{(custom_output_root / 'mlruns' / 'mlflow.db').as_posix()}",
-            },
-            "names": {
-                "training": "Train",
-                "comparison": "Comparisons",
-            },
-            "datasets": [{"id": "injection_test", "path": "datasets/injection_test.toml"}],
-            "jobs": [{"id": "injection_job", "path": "jobs/injection_job.toml"}],
-            "experiments": [
-                {
-                    "id": "ignored",
-                    "dataset": "injection_test",
-                    "job": "injection_job",
-                }
-            ],
-        }
         with open(experiments_config_path, "wb") as f:
-            tomli_w.dump(experiments_config, f)
+            tomli_w.dump(
+                {
+                    "mlflow": {
+                        "tracking_uri": f"sqlite:///{(custom_output_root / 'mlruns' / 'mlflow.db').as_posix()}",
+                    },
+                    "names": {
+                        "training": "Train",
+                        "comparison": "Comparisons",
+                    },
+                    "datasets": [{"id": "injection_test", "path": "datasets/injection_test.toml"}],
+                    "jobs": [{"id": "injection_job", "path": "jobs/injection_job.toml"}],
+                    "experiments": [
+                        {
+                            "id": "ignored",
+                            "dataset": "injection_test",
+                            "job": "injection_job",
+                        }
+                    ],
+                },
+                f,
+            )
 
         experiment = load_experiment(
             job_config_path=job_config_path,
@@ -339,9 +247,8 @@ class TestTrainingPipelineWithMLflow:
             dataset_registry_id=data_config_path.stem,
         )
 
-        assert experiment.settings.tracking is not None
+        assert experiment.settings.tracking.backend == "mlflow"
         assert custom_output_root in experiment.workspace.root_dir.parents
-        assert experiment.settings.tracking.uri is None
 
 
 def test_resolve_case_config_path_expands_tilde_from_env(

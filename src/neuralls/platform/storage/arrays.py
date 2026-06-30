@@ -32,10 +32,10 @@ def derive_checkpoint_path(
 
     Follows convention: {output_root}/{data_config_stem}/{model_name}/checkpoints/{model_name}.ckpt
 
-    I/O action - reads model config to extract SESSION.name.
+    I/O action - reads job config to extract lower-case experiment/model identity.
 
     Args:
-        model_template: Path to model config (extracts SESSION.name)
+        model_template: Path to job config (extracts experiment/model identity)
         data_config: Path to data config (extracts stem)
         output_root: Base output directory
 

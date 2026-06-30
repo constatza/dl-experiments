@@ -36,40 +36,40 @@ def output_root(tmp_path: Path) -> Path:
 def minimal_model_config(tmp_path: Path, output_root: Path) -> Path:
     """Create a minimal model config that relies on default MLflow settings."""
     config_path = tmp_path / "minimal_model.toml"
+    profile_path = tmp_path / "minimal_model_profile.toml"
 
-    config_content = """
-[SESSION]
-name = "TestSession"
-seed = 42
-workflow = "train"
-
-[MODEL]
+    profile_path.write_text(
+        """
+[model]
 name = "MinimalModel"
 module_path = "dlkit.nn"
 
-[TRAINING]
-[TRAINING.trainer]
+[data]
+name = "FlexibleDataset"
+
+[data.module]
+name = "ArrayDataModule"
+"""
+    )
+
+    config_content = f"""
+[run]
+type = "train"
+seed = 42
+model = "{profile_path.name}"
+data = "{profile_path.name}"
+
+[experiment]
+name = "TestSession"
+
+[training.trainer]
 max_epochs = 1
 accelerator = "cpu"
 devices = 1
 
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
+[training.optimizer.default_optimizer]
 name = "AdamW"
 lr = 1e-3
-
-[TRAINING.optimizer.stages.trigger]
-at_epoch = 200
-
-[[TRAINING.optimizer.stages]]
-
-[TRAINING.optimizer.stages.optimizer]
-name = "LBFGS"
-lr = 1.0
-
-[DATASET]
-name = "FlexibleDataset"
 """
     config_path.write_text(config_content)
     return config_path
@@ -112,7 +112,7 @@ class TestMLflowExperimentCreation:
             dataset_registry_id=minimal_data_config.stem,
         )
 
-        assert experiment.settings.MLFLOW is not None
+        assert experiment.settings.tracking is not None
 
     def test_mlflow_run_creation_with_timestamp(
         self,
@@ -130,7 +130,7 @@ class TestMLflowExperimentCreation:
             dataset_registry_id=minimal_data_config.stem,
         )
 
-        assert experiment.settings.MLFLOW is not None
+        assert experiment.settings.tracking is not None
 
 
 class TestMLflowArtifactStorage:
@@ -198,9 +198,9 @@ class TestMLflowArtifactStorage:
             dataset_registry_id=minimal_data_config.stem,
         )
 
-        assert experiment.settings.MLFLOW is not None
-        assert not hasattr(experiment.settings.MLFLOW, "tracking_uri")
-        assert not hasattr(experiment.settings.MLFLOW, "artifacts_destination")
+        assert experiment.settings.tracking is not None
+        assert not hasattr(experiment.settings.tracking, "tracking_uri")
+        assert not hasattr(experiment.settings.tracking, "artifacts_destination")
 
 
 class TestCustomArtifacts:

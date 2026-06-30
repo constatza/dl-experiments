@@ -164,6 +164,3 @@ def list_experiment_bindings(
 ) -> list[ResolvedExperimentBinding]:
     """Resolve all experiment entries with concrete config paths."""
     return [resolve_experiment_binding(cfg, config_dir, entry) for entry in cfg.experiments]
-
-
-resolve_model_config_path = resolve_job_config_path

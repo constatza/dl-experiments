@@ -10,7 +10,7 @@ import pytest
 import tomli_w
 import torch
 
-from neuralls.platform.config.models.experiments import ExperimentsConfig
+from neuralls.platform.config.models.experiments import CaseConfig
 from neuralls.platform.config.loaders import load_raw_toml
 from neuralls.composition.experiments.comparison_batch import run_comparison_batch
 from neuralls.composition.generation.process_data import process_data_from_config
@@ -35,7 +35,7 @@ def integration_root(tmp_path: Path) -> Path:
 def config_root(integration_root: Path) -> Path:
     """Configuration root with expected subdirectories."""
     root = integration_root / "configs"
-    (root / "models").mkdir(parents=True)
+    (root / "jobs").mkdir(parents=True)
     (root / "datasets").mkdir(parents=True)
     return root
 
@@ -112,21 +112,23 @@ def data_config_path(
 
 
 @pytest.fixture
-def model_config_path(config_root: Path) -> Path:
-    """Minimal training config: single epoch with checkpoint each epoch."""
-    path = config_root / "models" / "tiny-linear.toml"
+def job_config_path(config_root: Path) -> Path:
+    """Minimal job config: single epoch with checkpoint each epoch."""
+    path = config_root / "jobs" / "tiny-linear.toml"
     payload = {
-        "SESSION": {
+        "run": {
+            "type": "train",
             "seed": 42,
-            "workflow": "train",
         },
-        "MODEL": {
-            "name": "LinearNetwork",
+        "experiment": {
+            "name": "tiny-linear",
+        },
+        "model": {
+            "class": "LinearNetwork",
             "module_path": "dlkit.nn",
         },
-        "TRAINING": {
+        "training": {
             "trainer": {
-                # Keep the slow integration test minimal.
                 "max_epochs": TEST_MAX_EPOCHS,
                 "accelerator": "cpu",
                 "enable_checkpointing": True,
@@ -152,23 +154,12 @@ def model_config_path(config_root: Path) -> Path:
                 },
             },
         },
-        "DATASET": {
-            "name": "FlexibleDataset",
-        },
-        "DATAMODULE": {
-            "name": "ArrayDataModule",
-            "dataloader": {
-                "num_workers": 0,
-                "batch_size": 2,
-                "pin_memory": False,
-                "shuffle": True,
-            },
-        },
-        "MLFLOW": {
-            "enabled": False,
-        },
-        "OPTUNA": {
-            "enabled": False,
+        "data": {
+            "class": "FlexibleDataset",
+            "batch_size": 2,
+            "num_workers": 0,
+            "pin_memory": False,
+            "shuffle": True,
         },
     }
     with path.open("wb") as fh:
@@ -179,12 +170,12 @@ def model_config_path(config_root: Path) -> Path:
 @pytest.fixture
 def runs_config_path(
     config_root: Path,
-    model_config_path: Path,
+    job_config_path: Path,
     data_config_path: Path,
     output_root: Path,
     processed_root: Path,
 ) -> Path:
-    """Run matrix with a single model+dataset pair plus comparison registry entries."""
+    """Case config with one job, one dataset, and one comparison entry."""
     tracking_uri = f"sqlite:///{(output_root / 'mlruns' / 'mlflow.db').as_posix()}"
     path = config_root / "experiments.toml"
     path.write_text(
@@ -208,16 +199,20 @@ def runs_config_path(
                 'id = "tiny-data"',
                 f'path = "datasets/{data_config_path.name}"',
                 "",
+                "[[jobs]]",
+                'id = "tiny-linear"',
+                f'path = "jobs/{job_config_path.name}"',
+                "",
                 "[[comparisons]]",
                 'id = "tiny-comparison"',
                 'matrix_dataset = "tiny-data"',
                 'rhs_dataset = "tiny-data"',
                 'method = "comparison.toml"',
                 "",
-                "[[run]]",
+                "[[experiments]]",
                 'id = "tiny-linear-run"',
-                f'model_config = "models/{model_config_path.name}"',
-                f'data_config = "datasets/{data_config_path.name}"',
+                'job = "tiny-linear"',
+                'dataset = "tiny-data"',
                 "",
             ]
         )
@@ -240,7 +235,7 @@ def trained_batch_result(
     monkeypatch.setenv("MLFLOW_ARTIFACT_URI", str((output_root / "mlartifacts").resolve()))
     monkeypatch.chdir(runs_config_path.parent.parent)
     process_data_from_config(data_config_path, neuralls_settings)
-    cfg = ExperimentsConfig.model_validate(load_raw_toml(runs_config_path))
+    cfg = CaseConfig.model_validate(load_raw_toml(runs_config_path))
     batch_result = train_batch(
         cfg=cfg,
         configs_dir=runs_config_path.parent,
