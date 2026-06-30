@@ -7,9 +7,18 @@ import pytest
 
 from neuralls.domain.generation.orchestration import (
     _allocate_strategy_counts_across_bindings,
+    _generate_mixture_with_metadata,
     _resolve_binding_strategy_counts,
 )
 from neuralls.domain.generation.source_streams import SystemBinding
+
+
+@pytest.fixture
+def spd_matrix() -> np.ndarray:
+    """Small SPD matrix for orchestration tests."""
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 8))
+    return A.T @ A + np.eye(8)
 
 
 class _FakeRng:
@@ -93,3 +102,27 @@ def test_resolve_binding_strategy_counts_rejects_finite_trace_replacement(
             has_rhs_source=True,
             num_matrix_samples=3,
         )
+
+
+def test_generate_mixture_rhs_kind_codes_length_matches_trace_rows_after_shuffle(
+    spd_matrix: np.ndarray,
+) -> None:
+    """rhs_kind_codes must align with error_traces.residuals, not with base-system count.
+
+    gaussian_residuals produces N base systems but N*rows_per_system trace pairs.
+    With shuffle=True the shuffle used to index rhs_kind_codes (trace-level, final_rows entries)
+    with base-system-level indices (referenced_samples entries), silently truncating it.
+    _finalize_payload then caught the mismatch: rhs_kind_codes.shape[0] != rhs_all.shape[0].
+    """
+    # cg_iters=3 → rows_per_system=4; samples=8 → 2 base systems, 8 trace pairs.
+    # Bug: shuffle indexed rhs_kind_codes (len=8) with 2 base-system indices → truncated to len=2.
+    result = _generate_mixture_with_metadata(
+        spd_matrix,
+        counts={"gaussian_residuals": 8},
+        seed=0,
+        shuffle=True,
+        strategy_overrides={"gaussian_residuals": {"cg_iters": 3}},
+    )
+
+    assert result.error_traces is not None
+    assert result.rhs_kind_codes.shape[0] == result.error_traces.residuals.shape[0]

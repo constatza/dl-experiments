@@ -155,13 +155,17 @@ def _shuffle_samples_with_metadata(
     X_shuffled, Y_shuffled, residual_traces, error_traces = _shuffle_samples_by_indices(
         X, Y, residual_traces, error_traces, indices
     )
+    # When traces are present, rhs_kind_codes is trace-level (final_rows entries), not
+    # base-system-level (len(X) entries). Indexing with X-level indices would silently
+    # truncate it, causing a shape mismatch in _finalize_payload.
+    has_traces = error_traces is not None or residual_traces is not None
     return _GeneratedMixtureWithMetadata(
         rhs=X_shuffled,
         solutions=Y_shuffled,
         residual_traces=residual_traces,
         error_traces=error_traces,
-        rhs_kind_codes=rhs_kind_codes[indices],
-        target_kind_codes=target_kind_codes[indices],
+        rhs_kind_codes=rhs_kind_codes if has_traces else rhs_kind_codes[indices],
+        target_kind_codes=target_kind_codes if has_traces else target_kind_codes[indices],
     )
 
 
@@ -1084,11 +1088,26 @@ def _finalize_payload(
         else np.empty((0,), dtype=np.int64)
     )
     if rhs_kind_codes.shape[0] != rhs_all.shape[0]:
-        raise ValueError("rhs_kind metadata length must match persisted RHS row count.")
+        raise ValueError(
+            f"rhs_kind metadata has {rhs_kind_codes.shape[0]} entries "
+            f"but RHS matrix has {rhs_all.shape[0]} rows — "
+            "counts must match. A generation strategy may have produced a "
+            "mismatched number of samples."
+        )
     if target_kind_codes.shape[0] != rhs_all.shape[0]:
-        raise ValueError("target_kind metadata length must match persisted RHS row count.")
+        raise ValueError(
+            f"target_kind metadata has {target_kind_codes.shape[0]} entries "
+            f"but RHS matrix has {rhs_all.shape[0]} rows — "
+            "counts must match. A generation strategy may have produced a "
+            "mismatched number of samples."
+        )
     if matrix_sample_index.shape[0] != rhs_all.shape[0]:
-        raise ValueError("matrix_sample_index length must match persisted RHS row count.")
+        raise ValueError(
+            f"matrix_sample_index has {matrix_sample_index.shape[0]} entries "
+            f"but RHS matrix has {rhs_all.shape[0]} rows — "
+            "counts must match. A generation strategy may have produced a "
+            "mismatched number of samples."
+        )
     matrix_artifact_path = accumulator.finalize()
     matrix_size = accumulator.matrix_size
 
