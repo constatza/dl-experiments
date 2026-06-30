@@ -129,6 +129,9 @@ Case configs bind:
 - comparison ids
 - case-level MLflow topology
 
+The 45x15 `evaluate-all.toml` case is restricted to the scale-equivariant
+embedded factorized FFNN and the constant-width FFNN variants.
+
 ## Case Anatomy
 
 ```toml
