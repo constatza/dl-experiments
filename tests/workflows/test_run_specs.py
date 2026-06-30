@@ -123,7 +123,7 @@ def test_training_session_run_spec_name_and_tags(tmp_path: Path) -> None:
     assert tags.as_mlflow_tags() == {
         "phase": "session_training",
         "case_config": "ffnn",
-        "case_config_path": str(case_config_path),
+        "case_config_path": case_config_path.as_posix(),
         "started_at": "2026-03-12T12:00:00",
         "training_experiment_name": "Train",
     }
