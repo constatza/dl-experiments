@@ -14,7 +14,7 @@ from loguru import logger
 from .data_types import NormalizeType
 from .semantics import classify_strategy_rhs_kind, classify_strategy_target_kind
 from neuralls.shared.types import LayoutType, ScaleMetadata
-from neuralls.shared.types import GenerationStrategyKind
+from neuralls.shared.types import GenerationStrategyKind, RhsKind
 from neuralls.domain.normalization import ErrorTraceSamples, IScale, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .helpers import serialize_scale_metadata
@@ -320,11 +320,17 @@ def _generate_mixture_with_metadata(
             semantic_size = int(generated.rhs.shape[0])
 
         if semantic_size > 0:
-            rhs_kind_blocks.append(
-                encode_rhs_kind_array(
-                    [classify_strategy_rhs_kind(strategy_kind) for _ in range(semantic_size)]
-                )
-            )
+            base_kind = classify_strategy_rhs_kind(strategy_kind)
+            if generated.error_traces is not None:
+                # ponytail: iteration_index==0 is r_0=b (original RHS, x_0=0), not a CG residual
+                iter_indices = generated.error_traces.iteration_indices
+                rhs_kinds = [RhsKind.NON_RESIDUAL if i == 0 else base_kind for i in iter_indices]
+            elif generated.residual_traces is not None:
+                iter_indices = generated.residual_traces.iteration_indices
+                rhs_kinds = [RhsKind.NON_RESIDUAL if i == 0 else base_kind for i in iter_indices]
+            else:
+                rhs_kinds = [base_kind] * semantic_size
+            rhs_kind_blocks.append(encode_rhs_kind_array(rhs_kinds))
             target_kind_blocks.append(
                 encode_target_kind_array(
                     [classify_strategy_target_kind(strategy_kind) for _ in range(semantic_size)]

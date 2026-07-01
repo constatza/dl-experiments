@@ -9,6 +9,7 @@ from neuralls.composition.comparison._input_resolution import resolve_comparison
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
+from neuralls.shared.enum_codecs import encode_rhs_kind_array
 from neuralls.shared.types import ComparisonRhsGenerationKind, RhsKind
 
 
@@ -92,6 +93,11 @@ def test_resolve_comparison_input_selects_safe_dataset_rhs(tmp_path: Path) -> No
 
 def test_resolve_comparison_input_rejects_unsafe_dataset_rhs(tmp_path: Path) -> None:
     dataset_dir = _build_safe_dataset(tmp_path, residual=True)
+    # Overwrite rhs_kind codes with all-RESIDUAL to simulate a dataset with no safe rows.
+    # (build_dataset now correctly marks r_0=b as NON_RESIDUAL; this tests the filter itself.)
+    np.save(
+        dataset_dir / "rhs_kind.npy", encode_rhs_kind_array([RhsKind.RESIDUAL, RhsKind.RESIDUAL])
+    )
 
     with pytest.raises(ValueError, match="No safe RHS rows"):
         resolve_comparison_input(

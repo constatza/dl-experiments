@@ -321,7 +321,7 @@ def test_build_dataset_marks_residual_rows_unsafe_for_comparison(tmp_path: Path)
     rhs_kinds = decode_rhs_kind_array(load_rhs_kind_codes(out_dir))
     target_kinds = decode_target_kind_array(load_target_kind_codes(out_dir))
 
-    assert rhs_kinds == (RhsKind.RESIDUAL, RhsKind.RESIDUAL)
+    assert rhs_kinds == (RhsKind.NON_RESIDUAL, RhsKind.RESIDUAL)
     assert target_kinds == (TargetKind.ITERATE, TargetKind.ITERATE)
 
 
