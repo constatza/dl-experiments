@@ -102,13 +102,16 @@ artifact-layout knowledge rather than workflow sequencing.
 Generated-RHS workflows therefore validate only the matrix artifact they
 actually consume, while dataset-backed RHS workflows validate both matrix and
 RHS artifacts.
-The same boundary owns filesystem and write-failure enrichment for dataset
-artifacts so CLI callers receive operation- and path-specific diagnostics
-without importing storage policy into composition.
+The same boundary owns filesystem replacement, stale artifact cleanup, and
+write-failure enrichment for dataset artifacts so CLI callers receive
+operation- and path-specific diagnostics without importing storage policy into
+composition. Same-format generation rewrites replace the previous artifact set;
+cross-format rewrites remain blocked by the manifest guard before persistence.
 
 Dataset storage is split by responsibility:
 - `storage/manifest.py`: typed dataset manifest dataclasses and JSON serialization
-- `storage/generation_formats.py`: generation-time `zarr` and `npy` writers/accumulators
+- `storage/generation_formats.py`: generation-time `zarr`, `npy`, and `hdf5`
+  writers/accumulators plus backend-neutral artifact replacement helpers
 - `storage/dataset_readers.py`: manifest-driven read helpers and explicit resolved dataset contracts
 
 Safe comparison selection relies on manifest-declared metadata artifacts stored

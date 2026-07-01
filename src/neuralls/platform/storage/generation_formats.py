@@ -71,6 +71,42 @@ def _raise_storage_error(operation: str, path: Path, exc: OSError) -> Never:
     raise OSError(message) from exc
 
 
+class ArtifactReplacer:
+    """Filesystem replacement helper for generated dataset artifacts."""
+
+    def replace_file(self, source: Path, target: Path, *, operation: str) -> None:
+        try:
+            source.replace(target)
+        except OSError as exc:
+            _raise_storage_error(operation, target, exc)
+
+    def replace_directory(self, source: Path, target: Path, *, operation: str) -> None:
+        try:
+            if target.exists():
+                shutil.rmtree(str(target))
+            shutil.move(str(source), str(target))
+        except OSError as exc:
+            _raise_storage_error(operation, target, exc)
+
+    def remove_path(self, path: Path, *, operation: str) -> None:
+        if not path.exists():
+            return
+        try:
+            if path.is_dir():
+                shutil.rmtree(str(path))
+                return
+            path.unlink()
+        except OSError as exc:
+            _raise_storage_error(operation, path, exc)
+
+    def remove_matching(self, directory: Path, *, prefix: str, suffix: str, operation: str) -> None:
+        if not directory.exists():
+            return
+        for path in directory.iterdir():
+            if path.name.startswith(prefix) and path.name.endswith(suffix):
+                self.remove_path(path, operation=operation)
+
+
 class DenseZarrAccumulator:
     """Streams dense matrix slices to a staged zarr array during generation."""
 
@@ -210,6 +246,9 @@ class ZarrGenerationStorage:
 
     format_name = "zarr"
 
+    def __init__(self, replacer: ArtifactReplacer | None = None) -> None:
+        self._replacer = replacer or ArtifactReplacer()
+
     def make_accumulator(self, dataset_dir: Path) -> DatasetAccumulatorPort:
         return DenseZarrAccumulator(dataset_dir / ".matrix-staging.zarr")
 
@@ -249,12 +288,11 @@ class ZarrGenerationStorage:
 
         pack_src = Path(payload.matrix_artifact_path)
         if pack_src != paths.matrix_path:
-            try:
-                if paths.matrix_path.exists():
-                    shutil.rmtree(str(paths.matrix_path))
-                shutil.move(str(pack_src), str(paths.matrix_path))
-            except OSError as exc:
-                _raise_storage_error("Moving matrix staging into group", paths.matrix_path, exc)
+            self._replacer.replace_directory(
+                pack_src,
+                paths.matrix_path,
+                operation="Moving matrix staging into group",
+            )
 
         try:
             mat_arr = zarr.open_array(str(paths.matrix_path), mode="r")
@@ -369,6 +407,9 @@ class NpyGenerationStorage:
 
     format_name = "npy"
 
+    def __init__(self, replacer: ArtifactReplacer | None = None) -> None:
+        self._replacer = replacer or ArtifactReplacer()
+
     def make_accumulator(self, dataset_dir: Path) -> DatasetAccumulatorPort:
         return DenseNpyAccumulator(dataset_dir / ".matrix-staging.npy")
 
@@ -383,6 +424,7 @@ class NpyGenerationStorage:
     def write_dataset(self, dataset_dir: Path, payload: GeneratedDatasetPayload) -> None:
         paths = self.artifact_paths(dataset_dir, len(payload.parameters_arrays))
         dataset_dir.mkdir(parents=True, exist_ok=True)
+        self._remove_stale_optional_artifacts(dataset_dir)
         try:
             np.save(paths.rhs_path, payload.rhs)
             np.save(paths.solutions_path, payload.solutions)
@@ -395,10 +437,11 @@ class NpyGenerationStorage:
 
         pack_src = Path(payload.matrix_artifact_path)
         if pack_src != paths.matrix_path:
-            try:
-                shutil.move(str(pack_src), str(paths.matrix_path))
-            except OSError as exc:
-                _raise_storage_error("Moving matrix.npy into place", paths.matrix_path, exc)
+            self._replacer.replace_file(
+                pack_src,
+                paths.matrix_path,
+                operation="Moving matrix.npy into place",
+            )
 
         params_manifest: list[DatasetArtifact] = []
         for index, (params_arr, params_path) in enumerate(
@@ -478,6 +521,22 @@ class NpyGenerationStorage:
             ),
         )
 
+    def _remove_stale_optional_artifacts(self, dataset_dir: Path) -> None:
+        self._replacer.remove_path(
+            dataset_dir / "row_kind.npy",
+            operation="Removing stale row_kind numpy artifact",
+        )
+        self._replacer.remove_path(
+            dataset_dir / "matrix_sample_index.npy",
+            operation="Removing stale matrix_sample_index numpy artifact",
+        )
+        self._replacer.remove_matching(
+            dataset_dir,
+            prefix=PARAMETERS_ZARR_PREFIX,
+            suffix=".npy",
+            operation="Removing stale parameter numpy artifact",
+        )
+
 
 _HDF5_FILENAME = "dataset.h5"
 _HDF5_MATRIX_STAGING_KEY = "matrix"
@@ -555,6 +614,9 @@ class Hdf5GenerationStorage:
 
     format_name = "hdf5"
 
+    def __init__(self, replacer: ArtifactReplacer | None = None) -> None:
+        self._replacer = replacer or ArtifactReplacer()
+
     def make_accumulator(self, dataset_dir: Path) -> DatasetAccumulatorPort:
         return DenseHdf5Accumulator(dataset_dir / ".matrix-staging.h5")
 
@@ -563,17 +625,12 @@ class Hdf5GenerationStorage:
         h5_path = dataset_dir / _HDF5_FILENAME
         staging_path = Path(payload.matrix_artifact_path)
 
-        # Move staging file to final path — matrix dataset already named "matrix".
-        # Open in append mode to add rhs/solutions without re-reading the matrix.
-        # ponytail: avoids the staging→final copy (was an extra full-matrix disk write)
-        staging_path.rename(h5_path)
-
         n_samples = int(payload.rhs.shape[0])
         vec_dim = int(payload.rhs.shape[1])
         chunk_rows = min(_HDF5_DEFAULT_CHUNK_ROWS, n_samples)
 
         try:
-            with h5py.File(str(h5_path), "a") as out:
+            with h5py.File(str(staging_path), "a") as out:
                 mat_shape = tuple(int(d) for d in out["matrix"].shape)
                 out.create_dataset(
                     "rhs",
@@ -610,7 +667,13 @@ class Hdf5GenerationStorage:
                         )
                     )
         except OSError as exc:
-            _raise_storage_error("Writing dataset HDF5", h5_path, exc)
+            _raise_storage_error("Writing dataset HDF5", staging_path, exc)
+
+        self._replacer.replace_file(
+            staging_path,
+            h5_path,
+            operation="Replacing dataset HDF5",
+        )
 
         save_dataset_manifest(
             dataset_dir,
