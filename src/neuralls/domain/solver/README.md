@@ -93,6 +93,12 @@ RHS norm) on every `apply()` call. There is no `isinstance` dispatch — the
 context is always provided. `ContextualPreconditioner` was removed; use
 `NonLinearPreconditioner` for preconditioners that change per iteration.
 
+`ScheduledPreconditioner` uses that context to choose between primary and
+fallback preconditioners. `start_iter` delays activation of the primary
+preconditioner, and `limit_iters` bounds how many iterations the primary stays
+active after that start. Before activation and after the optional limit, the
+fallback preconditioner is used.
+
 ## AMG Preconditioner
 
 `AMGPreconditioner` lives under

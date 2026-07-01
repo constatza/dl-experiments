@@ -53,11 +53,13 @@ class PreconditionerScheduleConfig:
     Separates scheduling concerns from preconditioner configuration.
 
     Attributes:
+        start_iter: Iteration at which the primary preconditioner becomes active.
         limit_iters: Number of iterations to apply primary preconditioner.
                      -1 means unlimited (use primary for entire solve).
         fallback: Preconditioner type to switch to after limit is reached.
     """
 
+    start_iter: int = 0
     limit_iters: int = -1
     fallback: PreconditionerType = PreconditionerType.IDENTITY
 
@@ -212,6 +214,7 @@ def _extract_schedule(cfg: ConcretePreconditionerConfig) -> PreconditionerSchedu
         Extracted schedule configuration
     """
     return PreconditionerScheduleConfig(
+        start_iter=cfg.start_iter,
         limit_iters=cfg.limit_iters,
         fallback=cfg.fallback,
     )
@@ -225,17 +228,17 @@ def create_scheduled_preconditioner(
 
     Args:
         primary: Main preconditioner to apply
-        schedule: Schedule configuration with iteration limit and fallback type
+        schedule: Schedule configuration with activation, limit, and fallback type
 
     Returns:
-        ScheduledPreconditioner if limit_iters > 0, otherwise primary unchanged
+        ScheduledPreconditioner if delayed or limited, otherwise primary unchanged
 
     Example:
         >>> # Limit neural preconditioner to first 10 iterations
         >>> schedule = PreconditionerScheduleConfig(limit_iters=10)
         >>> scheduled = create_scheduled_preconditioner(neural_precond, schedule)
     """
-    if schedule.limit_iters < 0:
+    if schedule.start_iter == 0 and schedule.limit_iters < 0:
         return primary
 
     from neuralls.domain.solver.preconditioners.implementations.scheduled import (
@@ -251,5 +254,6 @@ def create_scheduled_preconditioner(
     return ScheduledPreconditioner(
         primary=primary,
         fallback=fallback_precond,
-        limit_iters=schedule.limit_iters,
+        limit_iters=None if schedule.limit_iters < 0 else schedule.limit_iters,
+        start_iter=schedule.start_iter,
     )

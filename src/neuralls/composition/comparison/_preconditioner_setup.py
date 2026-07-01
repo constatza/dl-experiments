@@ -121,6 +121,7 @@ def _create_scheduled_preconditioners(
     for cfg in preconditioner_configs:
         primary = base_preconditioners[cfg.name]
         schedule = PreconditionerScheduleConfig(
+            start_iter=cfg.start_iter,
             limit_iters=cfg.limit_iters,
             fallback=cfg.fallback,
         )

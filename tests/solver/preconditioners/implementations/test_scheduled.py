@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from neuralls.domain.solver.preconditioners import (
     Identity,
@@ -17,6 +18,18 @@ from neuralls.domain.solver.preconditioners import (
     PreconditionerContext,
     ScheduledPreconditioner,
 )
+
+
+@pytest.fixture
+def diagonal_matrix() -> NDArray:
+    """Provide a diagonal matrix for Jacobi schedule tests."""
+    return np.diag([2.0, 2.0])
+
+
+@pytest.fixture
+def residual_vector() -> NDArray:
+    """Provide a residual vector for schedule tests."""
+    return np.array([2.0, 4.0])
 
 
 def test_scheduled_preconditioner_limit_iters() -> None:
@@ -118,3 +131,70 @@ def test_scheduled_preconditioner_iteration_zero() -> None:
     ctx = PreconditionerContext(iteration=0, residual_norm=1.0, rhs_norm=1.0)
     z = scheduled.apply(r, ctx)
     np.testing.assert_allclose(z, [1.0, 2.0])  # Primary (Jacobi)
+
+
+def test_scheduled_preconditioner_uses_fallback_before_start_iter(
+    diagonal_matrix: NDArray,
+    residual_vector: NDArray,
+) -> None:
+    """Verify delayed schedules use fallback before start_iter."""
+    primary = JacobiPreconditioner(diagonal_matrix)
+    fallback = Identity()
+    scheduled = ScheduledPreconditioner(
+        primary,
+        fallback,
+        limit_iters=None,
+        start_iter=3,
+    )
+
+    ctx = PreconditionerContext(iteration=2, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(residual_vector, ctx)
+
+    np.testing.assert_allclose(z, residual_vector)
+
+
+def test_scheduled_preconditioner_starts_primary_at_start_iter(
+    diagonal_matrix: NDArray,
+    residual_vector: NDArray,
+) -> None:
+    """Verify delayed schedules activate primary at start_iter."""
+    primary = JacobiPreconditioner(diagonal_matrix)
+    fallback = Identity()
+    scheduled = ScheduledPreconditioner(
+        primary,
+        fallback,
+        limit_iters=None,
+        start_iter=3,
+    )
+
+    ctx = PreconditionerContext(iteration=3, residual_norm=1.0, rhs_norm=1.0)
+    z = scheduled.apply(residual_vector, ctx)
+
+    np.testing.assert_allclose(z, [1.0, 2.0])
+
+
+def test_scheduled_preconditioner_delayed_limit_switches_back_to_fallback(
+    diagonal_matrix: NDArray,
+    residual_vector: NDArray,
+) -> None:
+    """Verify limit_iters is measured from start_iter."""
+    primary = JacobiPreconditioner(diagonal_matrix)
+    fallback = Identity()
+    scheduled = ScheduledPreconditioner(
+        primary,
+        fallback,
+        limit_iters=2,
+        start_iter=3,
+    )
+
+    active_ctx = PreconditionerContext(iteration=4, residual_norm=1.0, rhs_norm=1.0)
+    inactive_ctx = PreconditionerContext(iteration=5, residual_norm=1.0, rhs_norm=1.0)
+
+    np.testing.assert_allclose(scheduled.apply(residual_vector, active_ctx), [1.0, 2.0])
+    np.testing.assert_allclose(scheduled.apply(residual_vector, inactive_ctx), residual_vector)
+
+
+def test_scheduled_preconditioner_rejects_negative_start_iter() -> None:
+    """Verify delayed schedules reject negative activation iterations."""
+    with pytest.raises(ValueError, match="start_iter"):
+        ScheduledPreconditioner(Identity(), start_iter=-1)

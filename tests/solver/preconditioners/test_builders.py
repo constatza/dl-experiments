@@ -437,6 +437,45 @@ def test_create_scheduled_preconditioner_with_limit() -> None:
     # Should wrap in ScheduledPreconditioner
     assert isinstance(result, ScheduledPreconditioner)
     assert result._limit_iters == 10
+    assert result._start_iter == 0
+
+
+def test_create_scheduled_preconditioner_with_start_iter() -> None:
+    """Test builder forwards delayed activation to ScheduledPreconditioner."""
+    primary = Identity()
+    schedule = PreconditionerScheduleConfig(start_iter=7, limit_iters=10)
+    result = create_scheduled_preconditioner(primary, schedule)
+
+    assert isinstance(result, ScheduledPreconditioner)
+    assert result._start_iter == 7
+    assert result._limit_iters == 10
+
+
+def test_create_scheduled_preconditioner_wraps_unlimited_delayed_schedule() -> None:
+    """Test delayed unlimited schedules are still wrapped."""
+    primary = Identity()
+    schedule = PreconditionerScheduleConfig(start_iter=3, limit_iters=-1)
+    result = create_scheduled_preconditioner(primary, schedule)
+
+    assert isinstance(result, ScheduledPreconditioner)
+    assert result._start_iter == 3
+    assert result._limit_iters is None
+
+
+def test_create_scheduled_preconditioner_delayed_schedule_uses_fallback_before_start(
+    well_conditioned_matrix: NDArray,
+    residual_vector: NDArray,
+) -> None:
+    """Test delayed factory schedules use identity fallback before activation."""
+    primary = JacobiPreconditioner(well_conditioned_matrix)
+    schedule = PreconditionerScheduleConfig(start_iter=2, limit_iters=-1)
+    result = create_scheduled_preconditioner(primary, schedule)
+
+    early_ctx = PreconditionerContext(iteration=1, residual_norm=1.0, rhs_norm=1.0)
+    active_ctx = PreconditionerContext(iteration=2, residual_norm=1.0, rhs_norm=1.0)
+
+    assert_array_equal(result.apply(residual_vector, early_ctx), residual_vector)
+    np.testing.assert_allclose(result.apply(residual_vector, active_ctx), [0.25, 2 / 3, 1.5, 2.0])
 
 
 def test_create_scheduled_preconditioner_default_fallback() -> None:

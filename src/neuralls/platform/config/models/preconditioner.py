@@ -161,6 +161,11 @@ class BasePreconditionerConfig(BaseModel):
     """
 
     name: str
+    start_iter: int = Field(
+        default=0,
+        ge=0,
+        description="Iteration at which the primary preconditioner becomes active.",
+    )
     limit_iters: int = Field(default=-1, description="Iterations to apply; -1 means unlimited.")
     fallback: PreconditionerType = Field(
         default=PreconditionerType.IDENTITY,

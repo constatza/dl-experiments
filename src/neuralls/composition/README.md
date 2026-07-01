@@ -31,6 +31,11 @@ right collaborators, construct workflow-local DTOs, and hand execution to
 application or platform entrypoints without re-implementing path, environment,
 or client policy.
 
+Preconditioner assembly follows the same boundary. Platform config validates
+shared schedule fields such as `start_iter`, `limit_iters`, and `fallback`;
+composition maps those values into the domain `ScheduledPreconditioner` without
+owning the iteration-switching policy.
+
 For DLKit training, composition now consumes already-loaded lower-case DLKit
 jobs. DLKit owns TOML parsing, profile references under `[run]`, section merge
 order, and typed validation. Composition owns only runtime materialization:

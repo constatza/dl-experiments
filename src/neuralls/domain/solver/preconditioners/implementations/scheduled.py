@@ -8,23 +8,28 @@ from ..base import BindableInputs, NonLinearPreconditioner, Preconditioner, Prec
 
 
 class ScheduledPreconditioner(NonLinearPreconditioner, BindableInputs):
-    """Preconditioner that switches to fallback after iteration limit.
+    """Preconditioner that switches between primary and fallback by iteration.
 
-    Use primary preconditioner for first N iterations, then switch to fallback.
-    This is useful for expensive preconditioners (e.g., neural networks) that
-    provide most benefit in early iterations.
+    Use fallback before ``start_iter``, primary while the schedule is active,
+    then fallback again after ``limit_iters`` if a limit is configured. This is
+    useful for expensive preconditioners that should be delayed, bounded, or
+    both.
 
     Args:
         primary: Main preconditioner to apply
         fallback: Fallback preconditioner (default: Identity)
-        limit_iters: Switch to fallback after this iteration (None = unlimited)
+        limit_iters: Iterations to apply primary after start_iter (None = unlimited)
+        start_iter: Iteration at which primary becomes active
 
     Example:
-        >>> # Use ILU for first 10 iterations, then Jacobi
+        >>> # Use ILU from iterations 5 through 14, then Jacobi
         >>> from .ilu import ILUPreconditioner
         >>> from .jacobi import JacobiPreconditioner
         >>> scheduled = ScheduledPreconditioner(
-        ...     primary=ILUPreconditioner(A), fallback=JacobiPreconditioner(A), limit_iters=10
+        ...     primary=ILUPreconditioner(A),
+        ...     fallback=JacobiPreconditioner(A),
+        ...     limit_iters=10,
+        ...     start_iter=5,
         ... )
     """
 
@@ -33,17 +38,22 @@ class ScheduledPreconditioner(NonLinearPreconditioner, BindableInputs):
         primary: Preconditioner,
         fallback: Preconditioner | None = None,
         limit_iters: int | None = None,
+        start_iter: int = 0,
     ) -> None:
         """Initialize scheduled preconditioner.
 
         Args:
             primary: Main preconditioner to apply
             fallback: Fallback preconditioner (default: Identity)
-            limit_iters: Switch to fallback after this iteration
+            limit_iters: Iterations to apply primary after start_iter
+            start_iter: Iteration at which primary becomes active
         """
+        if start_iter < 0:
+            raise ValueError("start_iter must be non-negative")
         self._primary = primary
         self._fallback = fallback
         self._limit_iters = limit_iters
+        self._start_iter = start_iter
 
     @property
     def extra_input_names(self) -> tuple[str, ...]:
@@ -94,11 +104,15 @@ class ScheduledPreconditioner(NonLinearPreconditioner, BindableInputs):
 
         iteration = context.iteration
 
-        # Switch to fallback after iteration limit
-        if self._limit_iters is not None and iteration >= self._limit_iters:
-            precond = self._fallback
-        else:
-            precond = self._primary
+        precond = self._primary if self._uses_primary(iteration) else self._fallback
 
         # Apply chosen preconditioner (pass context through for nested contextual preconditioners)
         return precond.apply(residual, context)
+
+    def _uses_primary(self, iteration: int) -> bool:
+        """Return whether primary is active for the given zero-based iteration."""
+        if iteration < self._start_iter:
+            return False
+        if self._limit_iters is None:
+            return True
+        return iteration < self._start_iter + self._limit_iters
