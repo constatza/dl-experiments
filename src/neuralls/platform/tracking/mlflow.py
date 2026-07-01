@@ -12,6 +12,7 @@ from typing import Any
 import mlflow
 from mlflow import ActiveRun
 
+from neuralls.platform.config.loaders import load_tracking_config
 from neuralls.platform.config.resolution import (
     MlflowPaths,
     build_mlflow_environment,
@@ -144,7 +145,13 @@ def build_runtime_environment(
     *,
     default_output_root: Path,
 ) -> MlflowRuntimeEnvironment:
-    """Resolve the MLflow environment for a runtime workflow execution."""
+    """Resolve the MLflow environment for a runtime workflow execution.
+
+    Precedence:
+    1. ``MLFLOW_TRACKING_URI`` env var (already set in the process)
+    2. ``configs/tracking.toml`` (shared project-level source of truth)
+    3. Local sqlite fallback under *output_root* / *default_output_root*
+    """
     existing_uri = os.environ.get("MLFLOW_TRACKING_URI")
     if existing_uri:
         existing_artifact_uri = os.environ.get("MLFLOW_ARTIFACT_URI")
@@ -155,6 +162,18 @@ def build_runtime_environment(
             env=env,
             tracking_uri=existing_uri,
             artifact_uri=existing_artifact_uri,
+        )
+
+    shared = load_tracking_config()
+    if shared is not None and shared.uri is not None:
+        env = build_mlflow_environment(
+            tracking_uri=shared.uri,
+            artifacts_destination=shared.artifacts_destination,
+        )
+        return MlflowRuntimeEnvironment(
+            env=env,
+            tracking_uri=env["MLFLOW_TRACKING_URI"],
+            artifact_uri=env.get("MLFLOW_ARTIFACT_URI"),
         )
 
     permanent_root = Path(output_root).resolve() if output_root else default_output_root
@@ -176,16 +195,28 @@ def build_workflow_environment(
     default_output_root: Path,
     config_path: Path | None = None,
 ) -> MlflowRuntimeEnvironment:
-    """Build the MLflow environment for a case-driven workflow."""
-    if tracking_uri is None:
+    """Build the MLflow environment for a case-driven workflow.
+
+    Precedence when *tracking_uri* is ``None``:
+    1. ``configs/tracking.toml`` (shared project-level source of truth)
+    2. Local sqlite fallback under *default_output_root*
+    """
+    resolved_uri = tracking_uri
+    resolved_artifacts = artifact_location
+    if resolved_uri is None:
+        shared = load_tracking_config()
+        if shared is not None:
+            resolved_uri = shared.uri
+            resolved_artifacts = resolved_artifacts or shared.artifacts_destination
+    if resolved_uri is None:
         env = build_mlflow_environment(
             tracking_uri=build_sqlite_tracking_uri(default_output_root / "mlruns" / "mlflow.db"),
             artifacts_destination=str((default_output_root / "mlartifacts").resolve()),
         )
     else:
         env = build_mlflow_environment(
-            tracking_uri=tracking_uri,
-            artifacts_destination=artifact_location,
+            tracking_uri=resolved_uri,
+            artifacts_destination=resolved_artifacts,
             config_path=config_path,
         )
     return MlflowRuntimeEnvironment(

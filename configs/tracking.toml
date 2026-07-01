@@ -1,0 +1,16 @@
+# Shared MLflow tracking configuration — single source of truth for the project.
+# Set uri to your MLflow server before running any training or comparison.
+# This value is used by all neuralls workflows when a case config does not explicitly
+# override [mlflow].tracking_uri.
+#
+# Examples:
+#   uri = "http://localhost:5000"
+#   uri = "http://myserver.local:5000"
+#   uri = "sqlite:///path/to/mlruns/mlflow.db"
+#
+# artifacts_destination is optional (server handles artifacts for remote backends).
+# For sqlite: omit it to use a sibling "mlartifacts" directory next to the DB.
+
+[tracking]
+backend = "mlflow"
+uri = "http://localhost:5000"

@@ -21,27 +21,29 @@ def test_build_registered_model_name_uses_architecture_only() -> None:
 
 
 @pytest.fixture
-def mock_mlflow_and_client():
-    """Patched mlflow module and MlflowClient for registration tests."""
+def mock_dlkit_register_and_client():
+    """Patched dlkit register_logged_model and MlflowClient for registration tests."""
     with (
-        patch("neuralls.platform.tracking.model_registry.mlflow") as mock_mlflow,
+        patch("dlkit.mlflow.register_logged_model") as mock_dlkit_register,
         patch("neuralls.platform.tracking.model_registry.MlflowClient") as mock_client_cls,
     ):
-        mock_mlflow.register_model.return_value.version = "3"
+        mock_dlkit_register.return_value.version = "3"
+        mock_dlkit_register.return_value.source = "runs:/run-exp/model"
         client = mock_client_cls.return_value
         client.get_model_version_by_alias.return_value.version = "3"
-        yield mock_mlflow, client
+        yield mock_dlkit_register, client
 
 
 @patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("neuralls.platform.tracking.model_registry.mlflow")
+@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_applies_aliases_and_tags(
-    mock_mlflow: MagicMock,
+    mock_dlkit_register: MagicMock,
     mock_client_cls: MagicMock,
     tmp_path: Path,
 ) -> None:
     """Registration normalizes aliases and writes version tags."""
-    mock_mlflow.register_model.return_value.version = "7"
+    mock_dlkit_register.return_value.version = "7"
+    mock_dlkit_register.return_value.source = "runs:/run-1/model"
     client = mock_client_cls.return_value
     client.get_model_version_by_alias.return_value.version = "7"
 
@@ -89,14 +91,15 @@ def test_register_logged_model_applies_aliases_and_tags(
 
 
 @patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("neuralls.platform.tracking.model_registry.mlflow")
+@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_rejects_reserved_alias(
-    mock_mlflow: MagicMock,
+    mock_dlkit_register: MagicMock,
     _mock_client_cls: MagicMock,
     tmp_path: Path,
 ) -> None:
     """Reserved aliases fail fast before assignment."""
-    mock_mlflow.register_model.return_value.version = "7"
+    mock_dlkit_register.return_value.version = "7"
+    mock_dlkit_register.return_value.source = "runs:/run-1/model"
     with pytest.raises(ValueError, match="reserved"):
         register_logged_model(
             run_id="run-1",
@@ -172,26 +175,29 @@ def test_assign_dataset_alias_to_registered_model_returns_none_when_missing(
 
 
 def test_register_logged_model_uses_experiment_id_as_name(
-    mock_mlflow_and_client: tuple,
+    mock_dlkit_register_and_client: tuple,
     tmp_path: Path,
 ) -> None:
     """Registering under experiment_id produces a model named by experiment, not architecture."""
-    mock_mlflow, client = mock_mlflow_and_client
+    mock_dlkit_register, client = mock_dlkit_register_and_client
     experiment_id = "spectral-energy"
     model_class = "NormScaledLinearFFNN"
+    tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
 
     record = register_logged_model(
         run_id="run-exp",
         registered_model_name=experiment_id,
-        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tracking_uri=tracking_uri,
         aliases=("candidate",),
         tags={"model_class": model_class},
     )
 
     assert record.name == experiment_id
-    mock_mlflow.register_model.assert_called_once_with(
-        model_uri="runs:/run-exp/model",
-        name=experiment_id,
+    mock_dlkit_register.assert_called_once_with(
+        experiment_id,
+        run_id="run-exp",
+        artifact_path="model",
+        tracking_uri=tracking_uri,
     )
     registered_at_value = next(
         call_args.kwargs["value"]
@@ -220,15 +226,16 @@ def test_register_logged_model_uses_experiment_id_as_name(
 
 @patch("neuralls.platform.tracking.model_registry.logger")
 @patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("neuralls.platform.tracking.model_registry.mlflow")
+@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_warns_when_name_exists(
-    mock_mlflow: MagicMock,
+    mock_dlkit_register: MagicMock,
     mock_client_cls: MagicMock,
     mock_logger: MagicMock,
     tmp_path: Path,
 ) -> None:
     """Existing registered names still register a new version and emit one warning."""
-    mock_mlflow.register_model.return_value.version = "5"
+    mock_dlkit_register.return_value.version = "5"
+    mock_dlkit_register.return_value.source = "runs:/run-1/model"
     client = mock_client_cls.return_value
     client.get_registered_model.return_value = object()
 
@@ -240,19 +247,20 @@ def test_register_logged_model_warns_when_name_exists(
     )
 
     client.get_registered_model.assert_called_once_with("exp-1")
-    mock_mlflow.register_model.assert_called_once()
+    mock_dlkit_register.assert_called_once()
     mock_logger.warning.assert_called_once()
 
 
 @patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("neuralls.platform.tracking.model_registry.mlflow")
+@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_always_sets_registered_at(
-    mock_mlflow: MagicMock,
+    mock_dlkit_register: MagicMock,
     mock_client_cls: MagicMock,
     tmp_path: Path,
 ) -> None:
     """Every registered model version receives a UTC registration timestamp tag."""
-    mock_mlflow.register_model.return_value.version = "5"
+    mock_dlkit_register.return_value.version = "5"
+    mock_dlkit_register.return_value.source = "runs:/run-1/model"
     client = mock_client_cls.return_value
 
     register_logged_model(
@@ -272,14 +280,15 @@ def test_register_logged_model_always_sets_registered_at(
 
 
 @patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("neuralls.platform.tracking.model_registry.mlflow")
+@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_registered_at_not_overridden_by_caller(
-    mock_mlflow: MagicMock,
+    mock_dlkit_register: MagicMock,
     mock_client_cls: MagicMock,
     tmp_path: Path,
 ) -> None:
     """Caller-provided registered_at values must not replace the invariant timestamp."""
-    mock_mlflow.register_model.return_value.version = "5"
+    mock_dlkit_register.return_value.version = "5"
+    mock_dlkit_register.return_value.source = "runs:/run-1/model"
     client = mock_client_cls.return_value
 
     register_logged_model(
@@ -303,10 +312,11 @@ def test_register_logged_model_two_experiments_no_alias_collision(
 ) -> None:
     """Two experiments on the same dataset register under separate names without collision."""
     with (
-        patch("neuralls.platform.tracking.model_registry.mlflow") as mock_mlflow,
+        patch("dlkit.mlflow.register_logged_model") as mock_dlkit_register,
         patch("neuralls.platform.tracking.model_registry.MlflowClient") as mock_client_cls,
     ):
-        mock_mlflow.register_model.return_value.version = "1"
+        mock_dlkit_register.return_value.version = "1"
+        mock_dlkit_register.return_value.source = "runs:/run-a/model"
         client = mock_client_cls.return_value
         client.get_model_version_by_alias.return_value.version = "1"
         tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"

@@ -25,6 +25,7 @@ from neuralls.platform.tracking.mlflow_client import (
     find_mlflow_run,
     log_diagnostics_to_mlflow,
 )
+from neuralls.platform.tracking.model_registry import upload_checkpoint_artifacts
 from neuralls.platform.reporting.training_diagnostics import (
     compute_diagnostics,
     write_diagnostics_figure,
@@ -171,8 +172,7 @@ def create_fallback_training_run(
         experiment_id=experiment_id,
         tags={"mlflow.runName": run_name, **dict(tags)},
     )
-    client.log_artifact(run.info.run_id, str(checkpoint_path), artifact_path="model")
-    client.log_artifact(run.info.run_id, str(checkpoint_path), artifact_path="checkpoints")
+    upload_checkpoint_artifacts(client, run.info.run_id, checkpoint_path)
     return experiment_id, run.info.run_id
 
 

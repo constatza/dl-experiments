@@ -130,7 +130,11 @@ def test_quote_filter_value_escapes_backslashes_and_quotes() -> None:
     assert quote_filter_value(r"foo\bar'baz") == r"foo\\bar\'baz"
 
 
-def test_build_workflow_environment_uses_default_output_root(tmp_path: Path) -> None:
+def test_build_workflow_environment_uses_default_output_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Patch out tracking.toml so only the sqlite fallback path is exercised.
+    monkeypatch.setattr(tracking_mlflow, "load_tracking_config", lambda: None)
     runtime = build_workflow_environment(
         tracking_uri=None,
         artifact_location=None,
@@ -139,6 +143,38 @@ def test_build_workflow_environment_uses_default_output_root(tmp_path: Path) -> 
 
     assert runtime.tracking_uri.endswith("/mlruns/mlflow.db")
     assert runtime.artifact_uri == str((tmp_path / "mlartifacts").resolve())
+
+
+def test_build_workflow_environment_uses_tracking_toml_when_no_case_uri(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from neuralls.platform.config.models.experiments import SharedTrackingSettings
+
+    shared = SharedTrackingSettings(uri="http://tracking.test:5000")
+    monkeypatch.setattr(tracking_mlflow, "load_tracking_config", lambda: shared)
+    runtime = build_workflow_environment(
+        tracking_uri=None,
+        artifact_location=None,
+        default_output_root=tmp_path,
+    )
+
+    assert runtime.tracking_uri == "http://tracking.test:5000"
+
+
+def test_build_workflow_environment_case_uri_overrides_tracking_toml(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from neuralls.platform.config.models.experiments import SharedTrackingSettings
+
+    shared = SharedTrackingSettings(uri="http://tracking.test:5000")
+    monkeypatch.setattr(tracking_mlflow, "load_tracking_config", lambda: shared)
+    runtime = build_workflow_environment(
+        tracking_uri="http://case-override:5000",
+        artifact_location=None,
+        default_output_root=tmp_path,
+    )
+
+    assert runtime.tracking_uri == "http://case-override:5000"
 
 
 def test_runtime_paths_from_env_reads_tracking_values(tmp_path: Path) -> None:

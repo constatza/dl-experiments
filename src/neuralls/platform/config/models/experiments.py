@@ -68,6 +68,20 @@ class MlflowTopologyConfig(BaseModel):
         return self
 
 
+class SharedTrackingSettings(BaseModel):
+    """Shared dlkit-native tracking settings from configs/tracking.toml [tracking] section.
+
+    Attributes:
+        backend: dlkit tracking backend identifier ("mlflow" or "none").
+        uri: MLflow server URI forwarded to dlkit TrackingSettings.
+        artifacts_destination: Optional artifact root for local backends (neuralls only).
+    """
+
+    backend: str = "mlflow"
+    uri: str | None = None
+    artifacts_destination: str | None = None
+
+
 class ExperimentNamesConfig(BaseModel):
     """MLflow experiment names configuration.
 

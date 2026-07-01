@@ -12,8 +12,11 @@ from neuralls.platform.config.models.comparison import (
     parse_comparison_config,
 )
 from neuralls.platform.config.models.data_models import DataConfigFile
-from neuralls.platform.config.models.experiments import CaseConfig
+from neuralls.platform.config.models.experiments import CaseConfig, SharedTrackingSettings
 from neuralls.platform.config.settings import NeurallsSettings, load_case_settings
+from neuralls.shared.constants import DEFAULT_PROJECT_ROOT
+
+_DEFAULT_TRACKING_TOML = DEFAULT_PROJECT_ROOT / "configs" / "tracking.toml"
 
 
 def load_raw_toml(path: Path) -> dict[str, Any]:
@@ -50,3 +53,23 @@ def load_case(path: Path, env_file: Path | None = None) -> tuple[CaseConfig, Neu
     """Load one case config together with its resolved runtime settings."""
     settings = load_case_settings(path, env_file)
     return load_case_config(path, settings), settings
+
+
+def load_tracking_config(path: Path | None = None) -> SharedTrackingSettings | None:
+    """Load the shared dlkit tracking config from configs/tracking.toml [tracking] section.
+
+    Args:
+        path: Optional explicit path. Defaults to ``configs/tracking.toml`` at project root.
+
+    Returns:
+        Validated ``SharedTrackingSettings`` when the file exists and has a [tracking] section,
+        ``None`` if the file is missing or has no [tracking] section.
+    """
+    resolved = path or _DEFAULT_TRACKING_TOML
+    if not resolved.exists():
+        return None
+    raw = load_raw_toml(resolved)
+    section = raw.get("tracking")
+    if not section:
+        return None
+    return SharedTrackingSettings.model_validate(section)

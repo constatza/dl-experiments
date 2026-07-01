@@ -24,11 +24,13 @@ from neuralls.composition.experiments._training_artifacts import (
     _resolve_mlflow_run_ids,
     _resolve_training_checkpoint,
     _stage_training_artifacts,
+    create_fallback_training_run,
 )
 from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.composition.experiments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
+from neuralls.platform.config.loaders import load_tracking_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.predictions import write_mlflow_sidecar
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
@@ -177,7 +179,20 @@ def train_model(
                 workflow_settings,
                 {"training": {"trainer": {"max_epochs": max_epochs}}},
             )
+        # Read backend and uri from tracking.toml so both come from config, not code.
+        _shared_tracking = load_tracking_config()
+        _tracking_backend = _shared_tracking.backend if _shared_tracking else "mlflow"
+        workflow_settings = patch_model(
+            workflow_settings,
+            {
+                "tracking": {
+                    "backend": _tracking_backend,
+                    "uri": runtime_mlflow_env["MLFLOW_TRACKING_URI"],
+                }
+            },
+        )
         with scoped_mlflow_environment(runtime_mlflow_env):
+            # neuralls owns all model registration; dlkit's own registration surface is removed.
             execution_result = execute(
                 workflow_settings,
                 overrides=ExecutionOverrides(
@@ -264,8 +279,19 @@ def train_model(
                 from loguru import logger
 
                 logger.warning(
-                    "Training completed without MLflow run metadata; skipping artifact upload."
+                    "Training completed without MLflow run metadata; creating fallback run."
                 )
+                try:
+                    fallback_exp_id, fallback_run_id = create_fallback_training_run(
+                        tracking_uri=tracking_uri or "",
+                        experiment_name=run_config.experiment_name,
+                        run_name=run_config.run_name,
+                        tags=dict(run_config.tags),
+                        checkpoint_path=local_checkpoint,
+                    )
+                    mlflow_coords = (tracking_uri or "", fallback_exp_id, fallback_run_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Could not create fallback MLflow run: {}", exc)
 
         # Step 8: Copy checkpoint to permanent location (temp dir deleted after this block)
         permanent_dir = permanent_root / "checkpoints" / dataset_id

@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from datetime import datetime, UTC
 from pathlib import Path
 
-import mlflow
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
@@ -25,12 +24,6 @@ class RegisteredModelRecord:
     version: int
     model_uri: str
     run_id: str
-
-
-def _build_logged_model_uri(*, run_id: str, artifact_path: str) -> str:
-    """Build a canonical MLflow logged-model URI."""
-    normalized_artifact_path = artifact_path.strip("/")
-    return f"runs:/{run_id}/{normalized_artifact_path}"
 
 
 def build_registered_model_name(job_id: str) -> str:
@@ -79,14 +72,20 @@ def register_logged_model(
     tags: Mapping[str, str] | None = None,
 ) -> RegisteredModelRecord:
     """Register a logged model artifact and attach aliases."""
-    model_uri = _build_logged_model_uri(run_id=run_id, artifact_path=artifact_path)
-    mlflow.set_tracking_uri(tracking_uri)
+    from dlkit.mlflow import register_logged_model as _dlkit_register
+
     client = MlflowClient(tracking_uri=tracking_uri)
     _warn_existing_registered_model_name(
         client=client,
         registered_model_name=registered_model_name,
     )
-    registered = mlflow.register_model(model_uri=model_uri, name=registered_model_name)
+    registered = _dlkit_register(
+        registered_model_name,
+        run_id=run_id,
+        artifact_path=artifact_path,
+        tracking_uri=tracking_uri,
+    )
+    model_uri = registered.source or f"runs:/{run_id}/{artifact_path.strip('/')}"
     version = int(registered.version)
     for alias in _normalize_aliases(aliases):
         client.set_registered_model_alias(
@@ -121,6 +120,47 @@ def register_logged_model(
         model_uri=model_uri,
         run_id=run_id,
     )
+
+
+def upload_checkpoint_artifacts(
+    client: MlflowClient,
+    run_id: str,
+    checkpoint_path: Path,
+) -> None:
+    """Upload a checkpoint file to both canonical artifact paths in an MLflow run.
+
+    Args:
+        client: MLflow client bound to the correct tracking URI.
+        run_id: Target run ID.
+        checkpoint_path: Local path to the ``.ckpt`` file.
+    """
+    client.log_artifact(run_id, str(checkpoint_path), artifact_path="checkpoints")
+    client.log_artifact(run_id, str(checkpoint_path), artifact_path="model")
+
+
+def ensure_checkpoint_artifact(
+    *,
+    tracking_uri: str,
+    run_id: str,
+    checkpoint_path: Path,
+) -> None:
+    """Guarantee a checkpoint artifact exists under ``checkpoints/`` in an MLflow run.
+
+    If the ``checkpoints`` artifact directory is empty or absent, uploads
+    *checkpoint_path* to both ``checkpoints`` and ``model`` artifact paths.
+    No-ops when the artifact is already present.
+
+    Args:
+        tracking_uri: MLflow tracking URI for the run.
+        run_id: Target run ID.
+        checkpoint_path: Local path to the permanent ``.ckpt`` file.
+    """
+    from dlkit.mlflow import has_checkpoint_artifact
+
+    if not has_checkpoint_artifact(run_id, tracking_uri=tracking_uri):
+        client = MlflowClient(tracking_uri=tracking_uri)
+        upload_checkpoint_artifacts(client, run_id, checkpoint_path)
+        logger.info("Uploaded missing checkpoint artifact for run {}", run_id)
 
 
 def assign_dataset_alias_to_registered_model(

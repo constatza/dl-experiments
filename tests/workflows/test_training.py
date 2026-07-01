@@ -454,6 +454,10 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
         patch("neuralls.composition.experiments.training._log_training_evaluation"),
         patch("neuralls.composition.experiments.training.log_artifacts_to_mlflow"),
         patch("neuralls.composition.experiments.training.log_extra_feature_names_tag"),
+        patch(
+            "neuralls.composition.experiments.training.patch_model",
+            side_effect=lambda s, _: s,
+        ),
     ):
         train_model(
             config_path=str(config_path),
@@ -562,6 +566,10 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
         patch("neuralls.composition.experiments.training._log_training_evaluation"),
         patch("neuralls.composition.experiments.training.log_artifacts_to_mlflow"),
         patch("neuralls.composition.experiments.training.log_extra_feature_names_tag"),
+        patch(
+            "neuralls.composition.experiments.training.patch_model",
+            side_effect=lambda s, _: s,
+        ),
     ):
         train_model(
             config_path=config_path,

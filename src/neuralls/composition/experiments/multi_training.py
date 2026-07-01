@@ -33,6 +33,8 @@ from neuralls.platform.tracking.environment import scoped_mlflow_environment
 from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
 from neuralls.platform.tracking.model_registry import (
+    build_registered_model_name,
+    ensure_checkpoint_artifact,
     register_logged_model,
     read_model_class_name,
 )
@@ -209,8 +211,9 @@ def _annotate_mlflow_run(
         job_config_path: Path to job config (provides [model].class as model_class tag).
         experiment_id: Experiment identifier used as the registered model name.
     """
+    client = MlflowClient(tracking_uri=tracking_uri)
+
     try:
-        client = MlflowClient(tracking_uri=tracking_uri)
         client.log_param(run_id, "batch_label", label)
         client.log_param(run_id, "experiment_id", experiment_id)
         client.log_param(run_id, "experiment_display_name", experiment_display_name)
@@ -225,7 +228,15 @@ def _annotate_mlflow_run(
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"[{label}] Could not log params to MLflow: {exc}")
 
+    try:
+        ensure_checkpoint_artifact(
+            tracking_uri=tracking_uri, run_id=run_id, checkpoint_path=checkpoint_path
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"[{label}] Could not ensure checkpoint artifact for run {run_id}: {exc}")
+
     model_class = read_model_class_name(job_config_path)
+    registered_name = build_registered_model_name(experiment_id)
     entry = ExperimentEntry(
         id=experiment_id,
         dataset=dataset_registry_id or dataset_id,
@@ -240,7 +251,7 @@ def _annotate_mlflow_run(
     try:
         record = register_logged_model(
             run_id=run_id,
-            registered_model_name=experiment_id,
+            registered_model_name=registered_name,
             tracking_uri=tracking_uri,
             tags=reg_tags.as_mlflow_tags(),
         )

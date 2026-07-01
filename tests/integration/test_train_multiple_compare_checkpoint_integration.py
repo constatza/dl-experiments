@@ -283,6 +283,13 @@ def comparison_config_path(
     return path
 
 
+@pytest.mark.xfail(
+    strict=False,
+    reason=(
+        "dlkit bug: ArtifactLogger logs model without input_example; "
+        "mlflow>=3.14 defaults serialization_format to 'pt2' which requires it."
+    ),
+)
 @pytest.mark.integration
 @pytest.mark.slow
 def test_train_multiple_checkpoint_then_compare_model_loading(

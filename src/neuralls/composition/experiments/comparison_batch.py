@@ -59,6 +59,7 @@ from neuralls.composition.experiments.model_resolution import (
     ExperimentModelContext,
     resolve_preconditioner_models_with_warnings,
 )
+from neuralls.platform.tracking.model_registry import build_registered_model_name
 from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.composition.tracking.run_specs import (
     build_comparison_run_spec,
@@ -148,7 +149,7 @@ def _build_master_experiment_contexts(
         ).name
         contexts[experiment_id] = ExperimentModelContext(
             dataset_alias=dataset_id,
-            model_name=experiment_id,
+            model_name=build_registered_model_name(experiment_id),
         )
     return contexts
 

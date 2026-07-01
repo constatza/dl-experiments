@@ -6,6 +6,8 @@ from collections.abc import Iterable
 
 from mlflow.tracking import MlflowClient
 
+from neuralls.platform.tracking.model_registry import build_registered_model_name
+
 EXTRA_FEATURE_NAMES_TAG: str = "neuralls.extra_feature_names"
 
 
@@ -55,7 +57,7 @@ def _lookup_run_id_for_model(entry_id: str, client: MlflowClient) -> str | None:
         MLflow run ID of the latest model version, or None if unavailable.
     """
     try:
-        versions = client.search_model_versions(f"name='{entry_id}'")
+        versions = client.search_model_versions(f"name='{build_registered_model_name(entry_id)}'")
         if not versions:
             return None
         latest = max(versions, key=lambda v: int(v.version))
