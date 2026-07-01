@@ -101,6 +101,7 @@ Current checked-in examples:
 - `default.toml` — baseline: 300 epochs, `max_lr = 1e-3`, early stopping
   patience 30 / min_delta 1e-4
 - `extended.toml` — deviates by epoch count: 600 epochs
+- `limited-200.toml` — deviates by epoch count: 200 epochs
 - `high-max-lr.toml` — deviates by LR tuner ceiling: `max_lr = 1e-2`
 - `strict-early-stopping.toml` — deviates by early stopping: patience 10,
   min_delta 1e-3
@@ -129,8 +130,12 @@ Case configs bind:
 - comparison ids
 - case-level MLflow topology
 
-The 45x15 `evaluate-all.toml` case is restricted to the scale-equivariant
-embedded factorized FFNN and the constant-width FFNN variants.
+The 45x15 `scale-equivariant-cg.toml` and
+`scale-equivariant-mixed-cg.toml` cases compare pure CG-N and mixed CG-N
+training datasets for the non-FiLM, non-simple scale-equivariant FFNN variants.
+Those cases use `configs/jobs/scale-equivariant-200/` entrypoints so the sweep
+is capped at 200 training epochs without changing the shared default job
+configs used by other cases.
 
 ## Case Anatomy
 

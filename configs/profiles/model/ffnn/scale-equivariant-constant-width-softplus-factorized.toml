@@ -1,0 +1,3 @@
+[model]
+name = "ScaleEquivariantConstantWidthSoftplusFactorizedFFNN"
+num_layers = 1

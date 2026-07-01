@@ -1,0 +1,3 @@
+[model]
+name = "ScaleEquivariantEmbeddedFullyFactorizedFFNN"
+num_layers = 1

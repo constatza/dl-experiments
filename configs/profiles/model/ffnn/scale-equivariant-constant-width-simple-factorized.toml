@@ -1,4 +1,3 @@
 [model]
 name = "ScaleEquivariantConstantWidthSimpleFactorizedFFNN"
-activation = "gelu"
 num_layers = 1

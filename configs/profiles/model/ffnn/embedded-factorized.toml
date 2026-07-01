@@ -1,7 +1,3 @@
 [model]
 name = "ScaleEquivariantEmbeddedFactorizedFFNN"
-activation = "gelu"
 num_layers = 1
-bias = true
-norm = "l2"
-dropout = 0.0
