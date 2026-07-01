@@ -11,9 +11,15 @@ seed = 42
 
 [[generation.strategy]]
 name = "residuals"
-samples = 25000
+samples = 12500
 cg_iters = 10
 solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[[generation.strategy]]
+name = "solution_archive"
+samples = 12500
+solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+skip = 1137
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"

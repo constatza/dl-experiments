@@ -197,6 +197,7 @@ class FileInputProvider:
         glob_pattern: str,
         shuffle: bool = False,
         seed: int | None = None,
+        skip: int = 0,
     ) -> None:
         """Initialize file provider.
 
@@ -204,10 +205,12 @@ class FileInputProvider:
             glob_pattern: Pattern like "/data/sols_*.npy"
             shuffle: Whether to shuffle files before selection
             seed: Random seed for shuffling
+            skip: Number of files to skip after deterministic ordering/shuffling
         """
         self.glob_pattern = glob_pattern
         self.shuffle = shuffle
         self.seed = seed
+        self.skip = skip
 
     def provide(
         self,
@@ -234,6 +237,7 @@ class FileInputProvider:
             count=count,
             shuffle=self.shuffle,
             seed=self.seed,
+            skip=self.skip,
         )
         vectors = [np.loadtxt(f) for f in files]
         return np.array(vectors, dtype=np.float64)
@@ -333,6 +337,7 @@ class PairedFileInputProvider:
         rhs_glob: str,
         shuffle: bool = False,
         seed: int | None = None,
+        skip: int = 0,
     ) -> None:
         """Initialize paired file provider.
 
@@ -341,9 +346,10 @@ class PairedFileInputProvider:
             rhs_glob: Pattern for RHS files
             shuffle: Whether to shuffle files
             seed: Random seed for shuffling
+            skip: Number of pairs to skip after deterministic ordering/shuffling
         """
-        self.solution_provider = FileInputProvider(solution_glob, shuffle, seed)
-        self.rhs_provider = FileInputProvider(rhs_glob, shuffle, seed)
+        self.solution_provider = FileInputProvider(solution_glob, shuffle, seed, skip)
+        self.rhs_provider = FileInputProvider(rhs_glob, shuffle, seed, skip)
 
     def provide(
         self,
@@ -376,6 +382,7 @@ def provide_solutions(
     shuffle: bool,
     seed: int | None,
     strategy_name: str,
+    skip: int = 0,
 ) -> np.ndarray:
     """Load solution vectors from glob, archive, or raise immediately.
 
@@ -391,6 +398,7 @@ def provide_solutions(
         shuffle: Whether to shuffle the loaded files (passed to FileInputProvider).
         seed: Random seed for shuffling (passed to FileInputProvider).
         strategy_name: Name used in the error message when no source is available.
+        skip: Number of solution files to skip after deterministic ordering/shuffling.
 
     Returns:
         Solution vectors, shape (count, n).
@@ -399,7 +407,7 @@ def provide_solutions(
         ValueError: If neither solutions_glob nor archive solutions are available.
     """
     if solutions_glob is not None:
-        return FileInputProvider(solutions_glob, shuffle=shuffle, seed=seed).provide(
+        return FileInputProvider(solutions_glob, shuffle=shuffle, seed=seed, skip=skip).provide(
             matrix, count=count, rng=rng
         )
     if archive is not None and archive.solutions is not None:

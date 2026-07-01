@@ -10,8 +10,13 @@ seed = 42
 
 [[generation.strategy]]
 name = "gaussian_residuals"
-samples = 25000
+samples = 12500
 cg_iters = 10
+
+[[generation.strategy]]
+name = "gaussian_forward"
+samples = 12500
+seed = 43
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"

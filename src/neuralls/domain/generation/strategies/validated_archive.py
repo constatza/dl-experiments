@@ -109,6 +109,7 @@ class ValidatedArchiveStrategy:
         samples = config.samples
         shuffle = config.shuffle
         seed = config.seed
+        skip = config.skip
         verification_tolerance = config.verification_tolerance
         fail_on_invalid = config.fail_on_invalid
 
@@ -124,6 +125,7 @@ class ValidatedArchiveStrategy:
             rhs_glob=rhs_glob,
             shuffle=shuffle,
             seed=seed,
+            skip=skip,
         )
         rng = np.random.default_rng(seed)
         solutions, rhs = provider.provide(matrix, count=samples, rng=rng)

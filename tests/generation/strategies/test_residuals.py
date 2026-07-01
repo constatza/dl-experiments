@@ -8,6 +8,7 @@ Mathematical properties under test:
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,10 @@ import pytest
 from neuralls.domain.generation import run_generation
 from neuralls.domain.generation.helpers import trace_rows_per_system
 from neuralls.domain.generation.interfaces import TracingSolverCallable
+
+
+def _expected_trace_systems(samples: int, rows_per_system: int) -> int:
+    return max(1, math.ceil(samples / rows_per_system))
 
 
 @pytest.fixture
@@ -80,8 +85,8 @@ def test_residuals_single_rhs_shapes(
     )
 
     rows_per_system = trace_rows_per_system(cg_iters)
-    expected_systems = max(1, requested_rows // rows_per_system)
-    total = expected_systems * rows_per_system
+    expected_systems = _expected_trace_systems(requested_rows, rows_per_system)
+    total = requested_rows
 
     assert result.rhs is not None
     assert result.rhs.shape == (expected_systems, n)
@@ -123,8 +128,8 @@ def test_residuals_multi_rhs_shapes(
     result = run_generation("residuals", spd_matrix, cfg=cfg)
 
     rows_per_system = trace_rows_per_system(cg_iters)
-    expected_systems = max(1, requested_rows // rows_per_system)
-    total = expected_systems * rows_per_system
+    expected_systems = _expected_trace_systems(requested_rows, rows_per_system)
+    total = requested_rows
 
     assert result.rhs is not None
     assert result.rhs.shape == (expected_systems, n)
@@ -148,8 +153,8 @@ def test_gaussian_residuals_multi_rhs_shapes(spd_matrix: np.ndarray) -> None:
     result = run_generation("gaussian_residuals", spd_matrix, cfg=cfg)
 
     rows_per_system = trace_rows_per_system(cg_iters)
-    expected_systems = max(1, requested_rows // rows_per_system)
-    total = expected_systems * rows_per_system
+    expected_systems = _expected_trace_systems(requested_rows, rows_per_system)
+    total = requested_rows
 
     assert result.rhs is not None
     assert result.rhs.shape == (expected_systems, n)
@@ -266,8 +271,8 @@ def test_residual_equals_a_times_error(
 def test_residuals_trace_count(
     spd_matrix: np.ndarray, single_rhs: np.ndarray, residual_solver: TracingSolverCallable
 ) -> None:
-    """Total trace entries = num_systems × (cg_iters + 1) when every_n=1."""
-    requested_rows = 10
+    """Positive samples are exact final trace rows, trimming partial final systems."""
+    requested_rows = 7
     cg_iters = 4
     cfg = {"samples": requested_rows, "cg_iters": cg_iters, "seed": 0}
 
@@ -278,8 +283,10 @@ def test_residuals_trace_count(
     et = result.error_traces
     assert et is not None
     rows_per_system = trace_rows_per_system(cg_iters)
-    expected_systems = max(1, requested_rows // rows_per_system)
-    assert et.residuals.shape[0] == expected_systems * rows_per_system
+    expected_systems = _expected_trace_systems(requested_rows, rows_per_system)
+    assert et.residuals.shape[0] == requested_rows
+    assert result.rhs is not None
+    assert result.rhs.shape[0] == expected_systems
 
 
 def test_residuals_sample_indices(
@@ -298,10 +305,10 @@ def test_residuals_sample_indices(
     assert et is not None
 
     entries_per_system = trace_rows_per_system(cg_iters)
-    expected_systems = max(1, requested_rows // entries_per_system)
+    expected_systems = _expected_trace_systems(requested_rows, entries_per_system)
     for s in range(expected_systems):
         start = s * entries_per_system
-        end = start + entries_per_system
+        end = min(start + entries_per_system, requested_rows)
         np.testing.assert_array_equal(et.sample_indices[start:end], s)
 
 
@@ -322,11 +329,13 @@ def test_residuals_iteration_indices(
 
     entries_per_system = trace_rows_per_system(cg_iters)
     expected_iters = np.arange(entries_per_system, dtype=np.int64)
-    expected_systems = max(1, requested_rows // entries_per_system)
+    expected_systems = _expected_trace_systems(requested_rows, entries_per_system)
     for s in range(expected_systems):
         start = s * entries_per_system
-        end = start + entries_per_system
-        np.testing.assert_array_equal(et.iteration_indices[start:end], expected_iters)
+        end = min(start + entries_per_system, requested_rows)
+        np.testing.assert_array_equal(
+            et.iteration_indices[start:end], expected_iters[: end - start]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +367,7 @@ def test_residuals_every_n_indices_correct(
     spd_matrix: np.ndarray, single_rhs: np.ndarray, residual_solver: TracingSolverCallable
 ) -> None:
     """every_n=2 with cg_iters=5: iteration_indices are [0, 2, 4] not [0, 1, 2]."""
-    cfg = {"samples": 1, "cg_iters": 5, "seed": 0, "every_n": 2}
+    cfg = {"samples": 3, "cg_iters": 5, "seed": 0, "every_n": 2}
 
     result = run_generation(
         "residuals", spd_matrix, cfg=cfg, solver=residual_solver, single_rhs=single_rhs

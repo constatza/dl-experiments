@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -154,6 +156,75 @@ def test_mixed_strategy_row_kind_codes_concatenated_correctly(
     assert kinds[4] == RowKind.CG_INTERNAL  # iter 1, system 0
     assert kinds[5] == RowKind.STANDARD  # iter 0, system 1
     assert kinds[6] == RowKind.CG_INTERNAL  # iter 1, system 1
+
+
+def test_gaussian_split_mix_preserves_requested_total_rows(spd_matrix: np.ndarray) -> None:
+    """A residual/pure Gaussian split uses exact row budgets for both strategies."""
+    from neuralls.shared.enum_codecs import decode_row_kind_array
+    from neuralls.shared.types import RowKind
+
+    result = _generate_mixture_with_metadata(
+        spd_matrix,
+        counts={"gaussian_residuals": 5, "gaussian_forward": 5},
+        seed=0,
+        shuffle=False,
+        strategy_overrides={
+            "gaussian_residuals": {"cg_iters": 2, "seed": 42},
+            "gaussian_forward": {"seed": 43},
+        },
+    )
+
+    assert result.rhs.shape[0] == 10
+    assert result.solutions.shape == result.rhs.shape
+    assert result.row_kind_codes.shape[0] == 10
+    assert decode_row_kind_array(result.row_kind_codes) == (
+        RowKind.STANDARD,
+        RowKind.CG_INTERNAL,
+        RowKind.CG_INTERNAL,
+        RowKind.STANDARD,
+        RowKind.CG_INTERNAL,
+        RowKind.STANDARD,
+        RowKind.STANDARD,
+        RowKind.STANDARD,
+        RowKind.STANDARD,
+        RowKind.STANDARD,
+    )
+
+
+def test_archive_split_mix_uses_solution_archive_skip(
+    tmp_path: Path,
+    spd_matrix: np.ndarray,
+) -> None:
+    """Archive-backed split rows can skip residual base systems to avoid duplicate pairs."""
+    vectors = []
+    for idx in range(4):
+        vector = np.full(spd_matrix.shape[0], float(idx + 1), dtype=np.float64)
+        path = tmp_path / f"solution_{idx:03d}.txt"
+        np.savetxt(path, vector)
+        vectors.append(vector)
+
+    glob_pattern = str(tmp_path / "solution_*.txt")
+    result = _generate_mixture_with_metadata(
+        spd_matrix,
+        counts={"residuals": 3, "solution_archive": 2},
+        seed=0,
+        shuffle=False,
+        strategy_overrides={
+            "residuals": {
+                "cg_iters": 2,
+                "solutions_glob": glob_pattern,
+                "shuffle": False,
+            },
+            "solution_archive": {
+                "solutions_glob": glob_pattern,
+                "shuffle": False,
+                "skip": 1,
+            },
+        },
+    )
+
+    assert result.rhs.shape[0] == 5
+    np.testing.assert_array_equal(result.solutions[3:], np.vstack(vectors[1:3]))
 
 
 def test_resolve_binding_strategy_counts_rejects_single_multi_matrix_mix(

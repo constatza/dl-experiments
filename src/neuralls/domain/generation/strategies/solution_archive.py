@@ -107,6 +107,7 @@ class SolutionArchiveStrategy:
         samples = config.samples
         shuffle = config.shuffle
         seed = config.seed
+        skip = config.skip
 
         logger.info(f"Loading solution vectors from archive: {solutions_glob}")
 
@@ -115,6 +116,7 @@ class SolutionArchiveStrategy:
             glob_pattern=solutions_glob,
             shuffle=shuffle,
             seed=seed,
+            skip=skip,
         )
         rng = np.random.default_rng(seed)
         solutions = provider.provide(matrix, count=samples, rng=rng)

@@ -11,7 +11,6 @@ from scipy.linalg import eigh
 from neuralls.domain.generation import generate_mixture
 from neuralls.domain.generation.helpers import (
     _generate_eigenvector_combinations,
-    trace_rows_per_system,
 )
 from neuralls.domain.generation.orchestration import _shuffle_samples
 from neuralls.domain.normalization import (
@@ -19,10 +18,6 @@ from neuralls.domain.normalization import (
     ResidualTraceSamples,
     apply_normalization,
 )
-
-
-def _expected_trace_systems(samples: int, cg_iters: int, every_n: int = 1) -> int:
-    return max(1, samples // trace_rows_per_system(cg_iters, every_n=every_n))
 
 
 def test_diagonal_normalization_scales_rows(tmp_path: Path) -> None:
@@ -147,7 +142,7 @@ def test_error_strategy_with_random(
         archive_rhs=archive_rhs,
     )
 
-    expected_rows = _expected_trace_systems(2, cg_iters) * trace_rows_per_system(cg_iters)
+    expected_rows = 2
     assert rhs.shape == (expected_rows, small_spd_matrix.shape[0])
     assert solutions.shape == rhs.shape
     assert residuals is None
@@ -178,7 +173,7 @@ def test_error_strategy_with_archive(
         archive_rhs=archive_rhs,
     )
 
-    expected_rows = _expected_trace_systems(2, cg_iters) * trace_rows_per_system(cg_iters)
+    expected_rows = 2
     assert rhs.shape == (expected_rows, small_spd_matrix.shape[0])
     assert solutions.shape == rhs.shape
     assert error_traces is None
@@ -260,7 +255,7 @@ def test_error_strategy_mixed_with_forward_strategy(
         archive_rhs=archive_rhs,
     )
 
-    residual_rows = _expected_trace_systems(6, cg_iters) * trace_rows_per_system(cg_iters)
+    residual_rows = 6
     assert rhs.shape == (1 + residual_rows, small_spd_matrix.shape[0])
     assert solutions.shape == rhs.shape
     assert error_traces is None
@@ -364,7 +359,7 @@ def test_error_strategy_in_generate_mixture(
     )
 
     normal_rows = 2
-    residual_rows = _expected_trace_systems(2, cg_iters) * trace_rows_per_system(cg_iters)
+    residual_rows = 2
     assert rhs.shape == (normal_rows + residual_rows, small_spd_matrix.shape[0])
     assert solutions.shape == rhs.shape
     assert error_traces is None
@@ -395,7 +390,7 @@ def test_error_strategy_traces_structure(
         archive_rhs=archive_rhs,
     )
 
-    expected_rows = _expected_trace_systems(3, cg_iters) * trace_rows_per_system(cg_iters)
+    expected_rows = 3
     assert rhs.shape == (expected_rows, small_spd_matrix.shape[0])
     assert solutions.shape == rhs.shape
     assert error_traces is None

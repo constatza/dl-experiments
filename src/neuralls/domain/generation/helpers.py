@@ -393,7 +393,7 @@ def required_trace_systems(
 ) -> int:
     """Return the base-system count for a desired trace-row budget."""
     rows_per_system = trace_rows_per_system(cg_iters, every_n=every_n)
-    return max(1, samples // rows_per_system)
+    return max(1, math.ceil(samples / rows_per_system))
 
 
 def resolve_trace_generation_counts(
@@ -412,11 +412,14 @@ def resolve_trace_generation_counts(
                 "a finite archive-backed source."
             )
         return available_systems, None
-    return required_trace_systems(
+    return (
+        required_trace_systems(
+            samples,
+            cg_iters=cg_iters,
+            every_n=every_n,
+        ),
         samples,
-        cg_iters=cg_iters,
-        every_n=every_n,
-    ), None
+    )
 
 
 def _merge_strategy_outputs(
@@ -581,6 +584,7 @@ def select_archive_files(
     count: int,
     shuffle: bool,
     seed: int | None,
+    skip: int = 0,
 ) -> list:
     """Select N files from glob pattern with optional shuffling.
 
@@ -591,13 +595,14 @@ def select_archive_files(
         count: Number of files to select (-1 means all available files)
         shuffle: Whether to shuffle before selection
         seed: Random seed for shuffling (required if shuffle=True)
+        skip: Number of files to skip after deterministic ordering/shuffling
 
     Returns:
         List of selected file paths (pathlib.Path objects)
 
     Raises:
         FileNotFoundError: If no files match pattern or directory doesn't exist
-        ValueError: If count exceeds available files
+        ValueError: If count and skip exceed available files
 
     Examples:
         >>> # Select first 10 files
@@ -624,24 +629,37 @@ def select_archive_files(
     if not candidates:
         raise FileNotFoundError(f"No files found matching pattern: {directory / pattern}")
 
+    if skip < 0:
+        raise ValueError(f"Archive skip must be non-negative, got {skip}")
+    if skip > len(candidates):
+        raise ValueError(
+            f"Requested skip={skip} but only {len(candidates)} files are available "
+            f"matching pattern: {glob_pattern}"
+        )
+
     # Handle "all files" case
     if count == -1:
-        count = len(candidates)
+        count = len(candidates) - skip
 
     # Validate sufficient files available
-    if count > len(candidates):
+    if skip + count > len(candidates):
+        if skip == 0:
+            raise ValueError(
+                f"Requested {count} files but only {len(candidates)} available "
+                f"matching pattern: {glob_pattern}"
+            )
         raise ValueError(
-            f"Requested {count} files but only {len(candidates)} available "
+            f"Requested {count} files with skip={skip} but only {len(candidates)} available "
             f"matching pattern: {glob_pattern}"
         )
 
     # Select files with optional shuffling
     if shuffle:
         rng = rng_from_seed(seed)
-        indices = rng.permutation(len(candidates))[:count]
+        indices = rng.permutation(len(candidates))[skip : skip + count]
         return [candidates[idx] for idx in indices]
 
-    return candidates[:count]
+    return candidates[skip : skip + count]
 
 
 # =============================================================================

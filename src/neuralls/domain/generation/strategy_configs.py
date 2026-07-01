@@ -273,6 +273,11 @@ class SolutionArchiveConfig(BaseStrategyConfig):
     solutions_glob: str = Field(
         ..., description="Glob pattern for solution files to load. Overrides source.solutions_path."
     )
+    skip: int = Field(
+        0,
+        description="Number of solution files to skip after deterministic ordering/shuffling.",
+        ge=0,
+    )
 
 
 class ValidatedArchiveConfig(BaseStrategyConfig):
@@ -283,6 +288,11 @@ class ValidatedArchiveConfig(BaseStrategyConfig):
 
     solutions_glob: str = Field(..., description="Glob pattern for solution files to load.")
     rhs_glob: str = Field(..., description="Glob pattern for RHS files to load.")
+    skip: int = Field(
+        0,
+        description="Number of paired archive files to skip after deterministic ordering/shuffling.",
+        ge=0,
+    )
     verification_tolerance: float = Field(
         1e-10,
         description="Maximum relative residual ||A@x - b|| / ||b|| to accept as valid.",

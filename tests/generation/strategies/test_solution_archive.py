@@ -97,6 +97,63 @@ def test_solution_archive_deterministic_shuffle(
     np.testing.assert_array_equal(r1.solutions, r2.solutions)
 
 
+def test_solution_archive_skip_selects_later_files(
+    spd_matrix: np.ndarray, solution_files: tuple[list[Path], str]
+) -> None:
+    """skip offsets deterministic archive selection before loading vectors."""
+    files, glob_pattern = solution_files
+
+    result = run_generation(
+        "solution_archive",
+        spd_matrix,
+        cfg={"solutions_glob": glob_pattern, "samples": 2, "shuffle": False, "skip": 2},
+    )
+
+    assert result.solutions is not None
+    expected = np.array([np.loadtxt(files[2]), np.loadtxt(files[3])], dtype=np.float64)
+    np.testing.assert_array_equal(result.solutions, expected)
+
+
+def test_solution_archive_skip_applies_after_shuffle(
+    spd_matrix: np.ndarray, solution_files: tuple[list[Path], str]
+) -> None:
+    """Shuffled archives skip within the deterministic permutation."""
+    files, glob_pattern = solution_files
+    seed = 42
+    skip = 1
+    count = 2
+
+    result = run_generation(
+        "solution_archive",
+        spd_matrix,
+        cfg={
+            "solutions_glob": glob_pattern,
+            "samples": count,
+            "shuffle": True,
+            "seed": seed,
+            "skip": skip,
+        },
+    )
+
+    assert result.solutions is not None
+    indices = np.random.default_rng(seed).permutation(len(files))[skip : skip + count]
+    expected = np.array([np.loadtxt(files[idx]) for idx in indices], dtype=np.float64)
+    np.testing.assert_array_equal(result.solutions, expected)
+
+
+def test_solution_archive_skip_plus_samples_beyond_available_raises(
+    spd_matrix: np.ndarray, solution_files: tuple[list[Path], str]
+) -> None:
+    """skip and samples are validated together against available files."""
+    _, glob_pattern = solution_files
+    with pytest.raises(ValueError, match="skip=4.*only 5 available"):
+        run_generation(
+            "solution_archive",
+            spd_matrix,
+            cfg={"solutions_glob": glob_pattern, "samples": 2, "skip": 4},
+        )
+
+
 def test_solution_archive_missing_glob_raises() -> None:
     """Missing solutions_glob raises ValidationError."""
     with pytest.raises(ValueError, match="solutions_glob"):

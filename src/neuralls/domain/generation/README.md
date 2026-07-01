@@ -101,6 +101,19 @@ The repo now uses explicit residual strategy names:
 These names are the supported user-facing identifiers in dataset configs and
 tests.
 
+Residual and trace strategies interpret positive `samples` as the exact final
+flattened row budget. Internally they generate enough complete CG traces to
+cover that budget, then trim the final trace block so downstream arrays and
+row-kind metadata have exactly `samples` rows. `samples = -1` still means all
+available base systems for finite archive-backed trace sources.
+
+Archive-backed pure-pair strategies can skip an initial slice of the deterministic
+archive order with `skip`. When `shuffle = true`, files are shuffled once with
+the configured seed and then selected as `permutation[skip:skip + samples]`.
+This is useful when combining a residual strategy with `solution_archive`: set
+`solution_archive.skip` to the number of base systems consumed by the residual
+block to avoid reusing the same `(b, x)` pairs.
+
 ## Package Map
 
 - `orchestration.py`: mixed-strategy payload assembly; `build_dataset_payload()` requires an
