@@ -48,8 +48,7 @@ class DatasetManifest:
     solutions: DatasetArtifact
     normalization: DatasetNormalization
     params: tuple[DatasetArtifact, ...] = ()
-    rhs_kind: DatasetArtifact | None = None
-    target_kind: DatasetArtifact | None = None
+    row_kind: DatasetArtifact | None = None
     matrix_sample_index: DatasetArtifact | None = None
 
 

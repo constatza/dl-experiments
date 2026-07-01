@@ -166,7 +166,6 @@ def _execute_synthetic_generation(
         solver_overrides={
             "residuals": _DEFAULT_RESIDUAL_SOLVER,
             "gaussian_residuals": _DEFAULT_RESIDUAL_SOLVER,
-            "residual_traces": _DEFAULT_RESIDUAL_SOLVER,
             "search_directions": _DEFAULT_DIRECTION_SOLVER,
         },
         dataset_format=context.dataset_format,

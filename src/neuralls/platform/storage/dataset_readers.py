@@ -41,8 +41,7 @@ class DatasetArtifacts:
     rhs: ResolvedDatasetArtifact
     solutions: ResolvedDatasetArtifact
     params: tuple[ResolvedDatasetArtifact, ...] = ()
-    rhs_kind: ResolvedDatasetArtifact | None = None
-    target_kind: ResolvedDatasetArtifact | None = None
+    row_kind: ResolvedDatasetArtifact | None = None
     matrix_sample_index: ResolvedDatasetArtifact | None = None
 
 
@@ -95,14 +94,9 @@ def resolve_dataset_artifacts(dataset_dir: str | Path) -> DatasetArtifacts:
         rhs=_resolve_artifact(root, manifest.rhs),
         solutions=_resolve_artifact(root, manifest.solutions),
         params=tuple(_resolve_artifact(root, artifact) for artifact in manifest.params),
-        rhs_kind=_resolve_artifact(root, manifest.rhs_kind)
-        if manifest.rhs_kind is not None
+        row_kind=_resolve_artifact(root, manifest.row_kind)
+        if manifest.row_kind is not None
         else None,
-        target_kind=(
-            _resolve_artifact(root, manifest.target_kind)
-            if manifest.target_kind is not None
-            else None
-        ),
         matrix_sample_index=(
             _resolve_artifact(root, manifest.matrix_sample_index)
             if manifest.matrix_sample_index is not None
@@ -210,31 +204,21 @@ def load_parameter_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, ...]:
     return tuple(_load_resolved(a) for a in artifacts.params)
 
 
-def load_rhs_kind_codes(dataset_dir: str | Path) -> np.ndarray:
-    """Load persisted compact RHS semantic codes for a dataset."""
-    artifact = resolve_dataset_artifacts(dataset_dir).rhs_kind
+def load_row_kind_codes(dataset_dir: str | Path) -> np.ndarray:
+    """Load persisted compact row-kind semantic codes for a dataset."""
+    artifact = resolve_dataset_artifacts(dataset_dir).row_kind
     if artifact is None:
         raise ValueError(
-            f"Dataset '{dataset_dir}' does not expose rhs_kind metadata. Regenerate it first."
+            f"Dataset '{dataset_dir}' does not expose row_kind metadata. Regenerate it first."
         )
     return _load_resolved_native(artifact).astype(np.uint8, copy=False).reshape(-1)
 
 
-def load_optional_rhs_kind_codes(dataset_dir: str | Path) -> np.ndarray | None:
-    """Load RHS semantic codes when present, otherwise return None."""
-    artifact = resolve_dataset_artifacts(dataset_dir).rhs_kind
+def load_optional_row_kind_codes(dataset_dir: str | Path) -> np.ndarray | None:
+    """Load row-kind semantic codes when present, otherwise return None."""
+    artifact = resolve_dataset_artifacts(dataset_dir).row_kind
     if artifact is None:
         return None
-    return _load_resolved_native(artifact).astype(np.uint8, copy=False).reshape(-1)
-
-
-def load_target_kind_codes(dataset_dir: str | Path) -> np.ndarray:
-    """Load persisted compact target semantic codes for a dataset."""
-    artifact = resolve_dataset_artifacts(dataset_dir).target_kind
-    if artifact is None:
-        raise ValueError(
-            f"Dataset '{dataset_dir}' does not expose target_kind metadata. Regenerate it first."
-        )
     return _load_resolved_native(artifact).astype(np.uint8, copy=False).reshape(-1)
 
 
@@ -258,15 +242,15 @@ def list_available_matrix_indices(dataset_dir: str | Path) -> tuple[int, ...]:
     return ()
 
 
-def list_safe_rhs_indices(
-    dataset_dir: str | Path, require_non_residual_rhs: bool = True
+def load_standard_row_indices(
+    dataset_dir: str | Path, require_standard: bool = True
 ) -> tuple[int, ...]:
-    """List RHS sample indices allowed by the active safety policy."""
-    from neuralls.shared.enum_codecs import decode_rhs_kind_array
-    from neuralls.shared.types import RhsKind
+    """List row indices that are STANDARD (safe for solver comparison)."""
+    from neuralls.shared.enum_codecs import decode_row_kind_array
+    from neuralls.shared.types import RowKind
 
-    codes = load_rhs_kind_codes(dataset_dir)
-    kinds = decode_rhs_kind_array(codes)
-    if not require_non_residual_rhs:
+    codes = load_row_kind_codes(dataset_dir)
+    kinds = decode_row_kind_array(codes)
+    if not require_standard:
         return tuple(range(len(kinds)))
-    return tuple(index for index, kind in enumerate(kinds) if kind is RhsKind.NON_RESIDUAL)
+    return tuple(index for index, kind in enumerate(kinds) if kind is RowKind.STANDARD)

@@ -9,7 +9,7 @@ from neuralls.platform.reporting.comparison_inputs import (
     ComparisonInputArtifacts,
     stage_comparison_inputs,
 )
-from neuralls.shared.types import ComparisonRhsGenerationKind, RhsKind
+from neuralls.shared.types import ComparisonRhsGenerationKind, RowKind
 
 
 def test_stage_comparison_inputs_writes_artifacts(tmp_path: Path) -> None:
@@ -19,7 +19,7 @@ def test_stage_comparison_inputs_writes_artifacts(tmp_path: Path) -> None:
         matrix_dataset_id="matrix-ds",
         matrix_index=0,
         rhs_source_type="generated",
-        rhs_kind=RhsKind.NON_RESIDUAL,
+        rhs_kind=RowKind.STANDARD,
         generator_kind=ComparisonRhsGenerationKind.GAUSSIAN,
         generator_params={"mean": 0.0, "std": 1.0},
     )

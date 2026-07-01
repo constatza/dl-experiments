@@ -12,22 +12,13 @@ from typing import Any
 import numpy as np
 from loguru import logger
 from .data_types import NormalizeType
-from .semantics import classify_strategy_rhs_kind, classify_strategy_target_kind
+from .semantics import classify_strategy_row_kind
 from neuralls.shared.types import LayoutType, ScaleMetadata
-from neuralls.shared.types import GenerationStrategyKind, RhsKind
+from neuralls.shared.types import GenerationStrategyKind, RowKind
 from neuralls.domain.normalization import ErrorTraceSamples, IScale, ResidualTraceSamples
 from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
 from .helpers import serialize_scale_metadata
-from neuralls.shared.enum_codecs import (
-    encode_rhs_kind_array,
-    encode_target_kind_array,
-)
-from .trace_utils import (
-    _offset_error_traces,
-    _offset_residual_traces,
-    _merge_residual_traces,
-    _merge_error_traces,
-)
+from neuralls.shared.enum_codecs import encode_row_kind_array
 from .interfaces import ArchiveData, TracingSolverCallable
 from .payloads import GeneratedDatasetPayload
 from .ports import DenseAccumulatorPort
@@ -62,7 +53,6 @@ _STRATEGY_PROPERTIES: dict[str, _StrategyProperties] = {
     "rhs_archive": _StrategyProperties(uses_finite_source=True, supports_replacement=False),
     "scaled_solutions": _StrategyProperties(uses_finite_source=True, supports_replacement=False),
     "validated_archive": _StrategyProperties(uses_finite_source=True, supports_replacement=False),
-    "residual_traces": _StrategyProperties(uses_finite_source=True, supports_replacement=True),
     "residuals": _StrategyProperties(uses_finite_source=True, supports_replacement=True),
     "gaussian_residuals": _StrategyProperties(uses_finite_source=True, supports_replacement=True),
     "search_directions": _StrategyProperties(uses_finite_source=True, supports_replacement=True),
@@ -77,8 +67,7 @@ class _GeneratedMixtureWithMetadata:
     solutions: np.ndarray
     residual_traces: ResidualTraceSamples | None
     error_traces: ErrorTraceSamples | None
-    rhs_kind_codes: np.ndarray
-    target_kind_codes: np.ndarray
+    row_kind_codes: np.ndarray
 
 
 def _shuffle_samples(
@@ -146,8 +135,7 @@ def _shuffle_samples_with_metadata(
     Y: np.ndarray,
     residual_traces: ResidualTraceSamples | None,
     error_traces: ErrorTraceSamples | None,
-    rhs_kind_codes: np.ndarray,
-    target_kind_codes: np.ndarray,
+    row_kind_codes: np.ndarray,
     rng: np.random.Generator,
 ) -> _GeneratedMixtureWithMetadata:
     """Shuffle samples and aligned metadata while preserving trace references."""
@@ -155,17 +143,12 @@ def _shuffle_samples_with_metadata(
     X_shuffled, Y_shuffled, residual_traces, error_traces = _shuffle_samples_by_indices(
         X, Y, residual_traces, error_traces, indices
     )
-    # When traces are present, rhs_kind_codes is trace-level (final_rows entries), not
-    # base-system-level (len(X) entries). Indexing with X-level indices would silently
-    # truncate it, causing a shape mismatch in _finalize_payload.
-    has_traces = error_traces is not None or residual_traces is not None
     return _GeneratedMixtureWithMetadata(
         rhs=X_shuffled,
         solutions=Y_shuffled,
         residual_traces=residual_traces,
         error_traces=error_traces,
-        rhs_kind_codes=rhs_kind_codes if has_traces else rhs_kind_codes[indices],
-        target_kind_codes=target_kind_codes if has_traces else target_kind_codes[indices],
+        row_kind_codes=row_kind_codes[indices],
     )
 
 
@@ -229,18 +212,18 @@ def _generate_mixture_with_metadata(
         >>> # Generate explicit counts with strategy-specific configuration
         >>> X, Y, _, _ = generate_mixture(
         ...     A,
-        ...     counts={"normal": 50, "krylov": 30, "residual_traces": 20},
+        ...     counts={"gaussian_forward": 50, "krylov": 30, "gaussian_residuals": 20},
         ...     seed=42,
         ...     strategy_overrides={
-        ...         "residual_traces": {"cg_iters": 10},
+        ...         "gaussian_residuals": {"cg_iters": 10},
         ...     },
         ... )
 
         >>> # Generate with single RHS for trace strategies
         >>> rhs = np.random.randn(n)
-        >>> X, Y, res_traces, _ = generate_mixture(
+        >>> X, Y, _, _ = generate_mixture(
         ...     A,
-        ...     counts={"residual_traces": 20},
+        ...     counts={"gaussian_residuals": 20},
         ...     single_rhs=rhs,  # All 20 samples solve A @ x = rhs
         ...     seed=42,
         ... )
@@ -256,13 +239,9 @@ def _generate_mixture_with_metadata(
         name: dict(options) for name, options in (strategy_overrides or {}).items()
     }
 
-    all_features = []
-    all_targets = []
-    residual_blocks: list[ResidualTraceSamples] = []
-    error_blocks: list[ErrorTraceSamples] = []
-    rhs_kind_blocks: list[np.ndarray] = []
-    target_kind_blocks: list[np.ndarray] = []
-    sample_offset = 0
+    all_features: list[np.ndarray] = []
+    all_targets: list[np.ndarray] = []
+    row_kind_blocks: list[np.ndarray] = []
 
     for strategy_name, count in strategy_counts.items():
         if count == 0:
@@ -299,16 +278,24 @@ def _generate_mixture_with_metadata(
         except ValidationError as e:
             raise ValueError(f"Invalid configuration for strategy '{strategy_name}': {e}") from e
 
-        if generated.rhs is not None:
-            all_features.append(generated.rhs)
-        if generated.solutions is not None:
-            all_targets.append(generated.solutions)
-        if generated.residual_traces is not None:
-            residual_blocks.append(
-                _offset_residual_traces(generated.residual_traces, sample_offset)
-            )
+        # Trace strategies expose their training pairs via trace structs, not rhs/solutions.
+        # Flatten them directly into the accumulated arrays so mixing strategies is correct.
         if generated.error_traces is not None:
-            error_blocks.append(_offset_error_traces(generated.error_traces, sample_offset))
+            all_features.append(generated.error_traces.residuals)  # r_k
+            all_targets.append(generated.error_traces.errors)  # e_k = x_true - x_k
+        elif generated.residual_traces is not None:
+            all_features.append(generated.residual_traces.residuals)  # A @ p_k
+            all_targets.append(generated.residual_traces.solutions)  # p_k
+        else:
+            if (generated.rhs is None) != (generated.solutions is None):
+                raise ValueError(
+                    f"Strategy '{strategy_name}' returned rhs and solutions with inconsistent "
+                    f"None-ness: rhs={'None' if generated.rhs is None else 'array'}, "
+                    f"solutions={'None' if generated.solutions is None else 'array'}."
+                )
+            if generated.rhs is not None and generated.solutions is not None:
+                all_features.append(generated.rhs)
+                all_targets.append(generated.solutions)
 
         strategy_kind = GenerationStrategyKind(strategy_name)
         semantic_size = 0
@@ -320,58 +307,46 @@ def _generate_mixture_with_metadata(
             semantic_size = int(generated.rhs.shape[0])
 
         if semantic_size > 0:
-            base_kind = classify_strategy_rhs_kind(strategy_kind)
-            if generated.error_traces is not None:
-                # ponytail: iteration_index==0 is r_0=b (original RHS, x_0=0), not a CG residual
-                iter_indices = generated.error_traces.iteration_indices
-                rhs_kinds = [RhsKind.NON_RESIDUAL if i == 0 else base_kind for i in iter_indices]
-            elif generated.residual_traces is not None:
-                iter_indices = generated.residual_traces.iteration_indices
-                rhs_kinds = [RhsKind.NON_RESIDUAL if i == 0 else base_kind for i in iter_indices]
+            base_kind = classify_strategy_row_kind(strategy_kind)
+            iter_indices = None
+            if (et := generated.error_traces) is not None:
+                iter_indices = et.iteration_indices
+            elif (rt := generated.residual_traces) is not None:
+                iter_indices = rt.iteration_indices
+            # iter 0 is STANDARD only because CG initialises at x_0 = 0:
+            # r_0 = b - A@0 = b  and  e_0 = x_true - 0 = x_true → (r_0, e_0) = (b, x_true).
+            # WARNING: if the solver ever uses a non-zero initial guess this breaks silently.
+            if iter_indices is not None:
+                row_kinds = [RowKind.STANDARD if i == 0 else base_kind for i in iter_indices]
             else:
-                rhs_kinds = [base_kind] * semantic_size
-            rhs_kind_blocks.append(encode_rhs_kind_array(rhs_kinds))
-            target_kind_blocks.append(
-                encode_target_kind_array(
-                    [classify_strategy_target_kind(strategy_kind) for _ in range(semantic_size)]
-                )
-            )
-
-        if generated.rhs is not None:
-            sample_offset += generated.rhs.shape[0]
+                row_kinds = [base_kind] * semantic_size
+            row_kind_blocks.append(encode_row_kind_array(row_kinds))
 
     if all_features and all_targets:
         X, Y = _merge_strategy_outputs(all_features, all_targets)
     else:
         X = np.empty((0, A.shape[0]), dtype=np.float64)
         Y = np.empty((0, A.shape[0]), dtype=np.float64)
-    residual_traces = _merge_residual_traces(residual_blocks) if residual_blocks else None
-    error_traces = _merge_error_traces(error_blocks) if error_blocks else None
-    rhs_kind_codes = (
-        np.concatenate(rhs_kind_blocks) if rhs_kind_blocks else np.empty((0,), dtype=np.uint8)
-    )
-    target_kind_codes = (
-        np.concatenate(target_kind_blocks) if target_kind_blocks else np.empty((0,), dtype=np.uint8)
+    row_kind_codes = (
+        np.concatenate(row_kind_blocks) if row_kind_blocks else np.empty((0,), dtype=np.uint8)
     )
 
     if shuffle and X.shape[0] > 0:
         return _shuffle_samples_with_metadata(
             X,
             Y,
-            residual_traces,
-            error_traces,
-            rhs_kind_codes,
-            target_kind_codes,
+            None,
+            None,
+            row_kind_codes,
             rng,
         )
 
     return _GeneratedMixtureWithMetadata(
         rhs=X,
         solutions=Y,
-        residual_traces=residual_traces,
-        error_traces=error_traces,
-        rhs_kind_codes=rhs_kind_codes,
-        target_kind_codes=target_kind_codes,
+        residual_traces=None,
+        error_traces=None,
+        row_kind_codes=row_kind_codes,
     )
 
 
@@ -517,23 +492,37 @@ def _validate_replacement_support(
     strategy_overrides: Mapping[str, Mapping[str, Any]] | None,
     has_rhs_source: bool,
 ) -> None:
-    """Fail fast when replacement is requested for unsupported strategy allocations."""
-    if not replacement or num_matrix_samples <= 1:
+    """Fail fast when replacement is requested or incompatible strategies are mixed."""
+    if num_matrix_samples <= 1:
         return
 
-    for strategy_name, count in strategy_counts.items():
-        if count == 0:
-            continue
-        props = _STRATEGY_PROPERTIES.get(strategy_name)
-        supports_replacement = (
+    def _supports(name: str) -> bool:
+        props = _STRATEGY_PROPERTIES.get(name)
+        return (
             props.supports_replacement
             if props is not None
-            else strategy_supports_matrix_replacement(strategy_name)
+            else strategy_supports_matrix_replacement(name)
         )
-        if not supports_replacement:
-            raise ValueError(
-                f"Strategy '{strategy_name}' does not support matrix replacement allocation."
-            )
+
+    active = [name for name, count in strategy_counts.items() if count > 0]
+    multi_matrix = [name for name in active if _supports(name)]
+    single_matrix = [name for name in active if not _supports(name)]
+
+    if single_matrix and multi_matrix:
+        raise ValueError(
+            f"Cannot mix single-matrix strategies {single_matrix} with "
+            f"multi-matrix strategies {multi_matrix}: "
+            "the matrix source contains multiple matrices. Use a single-matrix source."
+        )
+
+    if not replacement:
+        return
+
+    if single_matrix:
+        raise ValueError(
+            f"Strategy '{single_matrix[0]}' does not support matrix replacement allocation."
+        )
+    for strategy_name in multi_matrix:
         if _strategy_uses_finite_source(strategy_name, strategy_overrides, has_rhs_source):
             raise ValueError(
                 f"Strategy '{strategy_name}' does not support matrix replacement when configured "
@@ -641,8 +630,7 @@ class _BindingResult:
 
     rhs_block: np.ndarray
     solution_block: np.ndarray
-    rhs_kind_codes: np.ndarray
-    target_kind_codes: np.ndarray
+    row_kind_codes: np.ndarray
     matrix_sample_index: np.ndarray
     matrix_norm_value: float
     matrix_value_scale: float
@@ -718,23 +706,9 @@ def _process_binding(
         single_rhs=single_rhs,
         single_solution=single_solution,
     )
-    X = generated.rhs
-    Y = generated.solutions
-    residual_traces = generated.residual_traces
-    error_traces = generated.error_traces
-    rhs_kind_codes = generated.rhs_kind_codes
-    target_kind_codes = generated.target_kind_codes
-
-    # Select final blocks based on available traces
-    if error_traces is not None:
-        X_final = error_traces.residuals
-        Y_final = error_traces.errors
-    elif residual_traces is not None:
-        X_final = residual_traces.residuals
-        Y_final = residual_traces.solutions
-    else:
-        X_final = X
-        Y_final = Y
+    X_final = generated.rhs
+    Y_final = generated.solutions
+    row_kind_codes = generated.row_kind_codes
 
     if X_final.shape != Y_final.shape:
         raise ValueError(
@@ -744,8 +718,7 @@ def _process_binding(
     return _BindingResult(
         rhs_block=np.asarray(X_final, dtype=np.float64),
         solution_block=np.asarray(Y_final, dtype=np.float64),
-        rhs_kind_codes=np.asarray(rhs_kind_codes, dtype=np.uint8),
-        target_kind_codes=np.asarray(target_kind_codes, dtype=np.uint8),
+        row_kind_codes=np.asarray(row_kind_codes, dtype=np.uint8),
         matrix_sample_index=np.full(X_final.shape[0], binding.matrix_sample_id, dtype=np.int64),
         matrix_norm_value=float(cached.matrix_norm_value),
         matrix_value_scale=float(cached.matrix_value_scale),
@@ -832,8 +805,7 @@ def _build_dataset_payload(
     num_bindings: int,
     parameters_arrays: tuple[np.ndarray, ...] = (),
     layout: LayoutType = LayoutType.MANY_MATRICES,
-    rhs_kind_codes: np.ndarray | None = None,
-    target_kind_codes: np.ndarray | None = None,
+    row_kind_codes: np.ndarray | None = None,
     matrix_sample_index: np.ndarray | None = None,
 ) -> GeneratedDatasetPayload:
     """Build the final immutable dataset payload for the composition layer."""
@@ -850,8 +822,7 @@ def _build_dataset_payload(
         num_bindings=num_bindings,
         parameters_arrays=parameters_arrays,
         layout=layout,
-        rhs_kind_codes=rhs_kind_codes,
-        target_kind_codes=target_kind_codes,
+        row_kind_codes=row_kind_codes,
         matrix_sample_index=matrix_sample_index,
     )
 
@@ -938,7 +909,6 @@ def _accumulate_bindings(
     list[np.ndarray],
     list[np.ndarray],
     list[np.ndarray],
-    list[np.ndarray],
     list[list[np.ndarray]],
     list[float],
     list[float],
@@ -969,8 +939,7 @@ def _accumulate_bindings(
     single_matrix_written = False
     rhs_blocks: list[np.ndarray] = []
     solution_blocks: list[np.ndarray] = []
-    rhs_kind_blocks: list[np.ndarray] = []
-    target_kind_blocks: list[np.ndarray] = []
+    row_kind_blocks: list[np.ndarray] = []
     matrix_sample_index_blocks: list[np.ndarray] = []
     param_blocks: list[list[np.ndarray]] = [[] for _ in param_streams]
     matrix_norm_values: list[float] = []
@@ -1001,8 +970,7 @@ def _accumulate_bindings(
 
         rhs_blocks.append(result.rhs_block)
         solution_blocks.append(result.solution_block)
-        rhs_kind_blocks.append(result.rhs_kind_codes)
-        target_kind_blocks.append(result.target_kind_codes)
+        row_kind_blocks.append(result.row_kind_codes)
         matrix_sample_index_blocks.append(result.matrix_sample_index)
         emitted_binding_count += 1
 
@@ -1026,8 +994,7 @@ def _accumulate_bindings(
     return (
         rhs_blocks,
         solution_blocks,
-        rhs_kind_blocks,
-        target_kind_blocks,
+        row_kind_blocks,
         matrix_sample_index_blocks,
         param_blocks,
         matrix_norm_values,
@@ -1041,8 +1008,7 @@ def _finalize_payload(
     *,
     rhs_blocks: list[np.ndarray],
     solution_blocks: list[np.ndarray],
-    rhs_kind_blocks: list[np.ndarray],
-    target_kind_blocks: list[np.ndarray],
+    row_kind_blocks: list[np.ndarray],
     matrix_sample_index_blocks: list[np.ndarray],
     param_blocks: list[list[np.ndarray]],
     matrix_norm_values: list[float],
@@ -1082,27 +1048,17 @@ def _finalize_payload(
     )
     rhs_all = np.vstack(rhs_blocks)
     solutions_all = np.vstack(solution_blocks)
-    rhs_kind_codes = (
-        np.concatenate(rhs_kind_blocks) if rhs_kind_blocks else np.empty((0,), dtype=np.uint8)
-    )
-    target_kind_codes = (
-        np.concatenate(target_kind_blocks) if target_kind_blocks else np.empty((0,), dtype=np.uint8)
+    row_kind_codes = (
+        np.concatenate(row_kind_blocks) if row_kind_blocks else np.empty((0,), dtype=np.uint8)
     )
     matrix_sample_index = (
         np.concatenate(matrix_sample_index_blocks)
         if matrix_sample_index_blocks
         else np.empty((0,), dtype=np.int64)
     )
-    if rhs_kind_codes.shape[0] != rhs_all.shape[0]:
+    if row_kind_codes.shape[0] != rhs_all.shape[0]:
         raise ValueError(
-            f"rhs_kind metadata has {rhs_kind_codes.shape[0]} entries "
-            f"but RHS matrix has {rhs_all.shape[0]} rows — "
-            "counts must match. A generation strategy may have produced a "
-            "mismatched number of samples."
-        )
-    if target_kind_codes.shape[0] != rhs_all.shape[0]:
-        raise ValueError(
-            f"target_kind metadata has {target_kind_codes.shape[0]} entries "
+            f"row_kind metadata has {row_kind_codes.shape[0]} entries "
             f"but RHS matrix has {rhs_all.shape[0]} rows — "
             "counts must match. A generation strategy may have produced a "
             "mismatched number of samples."
@@ -1136,8 +1092,7 @@ def _finalize_payload(
         emitted_binding_count,
         parameters_arrays,
         layout,
-        rhs_kind_codes,
-        target_kind_codes,
+        row_kind_codes,
         matrix_sample_index,
     )
 
@@ -1251,8 +1206,7 @@ def build_dataset_payload(
     (
         rhs_blocks,
         solution_blocks,
-        rhs_kind_blocks,
-        target_kind_blocks,
+        row_kind_blocks,
         matrix_sample_index_blocks,
         param_blocks,
         norm_vals,
@@ -1276,8 +1230,7 @@ def build_dataset_payload(
     payload = _finalize_payload(
         rhs_blocks=rhs_blocks,
         solution_blocks=solution_blocks,
-        rhs_kind_blocks=rhs_kind_blocks,
-        target_kind_blocks=target_kind_blocks,
+        row_kind_blocks=row_kind_blocks,
         matrix_sample_index_blocks=matrix_sample_index_blocks,
         param_blocks=param_blocks,
         matrix_norm_values=norm_vals,

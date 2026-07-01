@@ -240,10 +240,6 @@ class ResidualErrorConfig(BaseTraceConfig):
     """Configuration for residual-error trace strategies."""
 
 
-class ResidualTraceConfig(BaseTraceConfig):
-    """Configuration for the residual_traces strategy."""
-
-
 class SearchDirectionsConfig(BaseStrategyConfig):
     """Configuration for SearchDirectionsStrategy.
 

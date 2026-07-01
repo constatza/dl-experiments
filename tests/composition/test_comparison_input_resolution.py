@@ -9,8 +9,8 @@ from neuralls.composition.comparison._input_resolution import resolve_comparison
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
-from neuralls.shared.enum_codecs import encode_rhs_kind_array
-from neuralls.shared.types import ComparisonRhsGenerationKind, RhsKind
+from neuralls.shared.enum_codecs import encode_row_kind_array
+from neuralls.shared.types import ComparisonRhsGenerationKind, RowKind
 
 
 def _build_safe_dataset(root: Path, *, residual: bool = False) -> Path:
@@ -19,17 +19,13 @@ def _build_safe_dataset(root: Path, *, residual: bool = False) -> Path:
     np.save(matrix_path, matrix)
     dataset_dir = root / ("residual_dataset" if residual else "safe_dataset")
     if residual:
-        rhs_path = root / "rhs.npy"
-        np.save(rhs_path, np.array([[1.0, 2.0]], dtype=np.float64))
         build_dataset(
             matrix_path=str(matrix_path),
             dataset_dir=str(dataset_dir),
-            counts={"residual_traces": 2},
-            rhs_path=str(rhs_path),
+            counts={"neutral_ones": 2},
             normalize="none",
             shuffle=False,
             seed=7,
-            strategy_overrides={"residual_traces": {"cg_iters": 1}},
             dataset_format="npy",
         )
     else:
@@ -86,7 +82,7 @@ def test_resolve_comparison_input_selects_safe_dataset_rhs(tmp_path: Path) -> No
     assert resolved.rhs_source_type == "dataset"
     assert resolved.rhs_dataset_id == "safe-dataset"
     assert resolved.rhs_index is not None
-    assert resolved.rhs_kind is RhsKind.NON_RESIDUAL
+    assert resolved.rhs_kind is RowKind.STANDARD
     assert resolved.matrix.shape == (2, 2)
     assert resolved.rhs.shape == (2,)
 
@@ -96,7 +92,8 @@ def test_resolve_comparison_input_rejects_unsafe_dataset_rhs(tmp_path: Path) -> 
     # Overwrite rhs_kind codes with all-RESIDUAL to simulate a dataset with no safe rows.
     # (build_dataset now correctly marks r_0=b as NON_RESIDUAL; this tests the filter itself.)
     np.save(
-        dataset_dir / "rhs_kind.npy", encode_rhs_kind_array([RhsKind.RESIDUAL, RhsKind.RESIDUAL])
+        dataset_dir / "row_kind.npy",
+        encode_row_kind_array([RowKind.CG_INTERNAL, RowKind.CG_INTERNAL]),
     )
 
     with pytest.raises(ValueError, match="No safe RHS rows"):

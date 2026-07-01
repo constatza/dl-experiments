@@ -291,26 +291,16 @@ class ZarrGenerationStorage:
                 )
             )
 
-        if payload.rhs_kind_codes is not None:
-            rhs_kind_path = group_dir / "rhs_kind"
-            rhs_kind_arr = zarr.open_array(
-                str(rhs_kind_path),
+        if payload.row_kind_codes is not None:
+            row_kind_path = group_dir / "row_kind"
+            row_kind_arr = zarr.open_array(
+                str(row_kind_path),
                 mode="w",
-                shape=payload.rhs_kind_codes.shape,
-                chunks=payload.rhs_kind_codes.shape,
+                shape=payload.row_kind_codes.shape,
+                chunks=payload.row_kind_codes.shape,
                 dtype="uint8",
             )
-            rhs_kind_arr[:] = payload.rhs_kind_codes
-        if payload.target_kind_codes is not None:
-            target_kind_path = group_dir / "target_kind"
-            target_kind_arr = zarr.open_array(
-                str(target_kind_path),
-                mode="w",
-                shape=payload.target_kind_codes.shape,
-                chunks=payload.target_kind_codes.shape,
-                dtype="uint8",
-            )
-            target_kind_arr[:] = payload.target_kind_codes
+            row_kind_arr[:] = payload.row_kind_codes
         if payload.matrix_sample_index is not None:
             matrix_sample_index_path = group_dir / "matrix_sample_index"
             matrix_sample_index_arr = zarr.open_array(
@@ -354,21 +344,13 @@ class ZarrGenerationStorage:
                     scale=dict(payload.scale_metadata or {}),
                 ),
                 params=tuple(params_manifest),
-                rhs_kind=DatasetArtifact(
-                    path=f"{_ZARR_GROUP_NAME}/rhs_kind",
+                row_kind=DatasetArtifact(
+                    path=f"{_ZARR_GROUP_NAME}/row_kind",
                     format=self.format_name,
                     dtype="uint8",
-                    shape=tuple(int(dim) for dim in payload.rhs_kind_codes.shape),
+                    shape=tuple(int(dim) for dim in payload.row_kind_codes.shape),
                 )
-                if payload.rhs_kind_codes is not None
-                else None,
-                target_kind=DatasetArtifact(
-                    path=f"{_ZARR_GROUP_NAME}/target_kind",
-                    format=self.format_name,
-                    dtype="uint8",
-                    shape=tuple(int(dim) for dim in payload.target_kind_codes.shape),
-                )
-                if payload.target_kind_codes is not None
+                if payload.row_kind_codes is not None
                 else None,
                 matrix_sample_index=DatasetArtifact(
                     path=f"{_ZARR_GROUP_NAME}/matrix_sample_index",
@@ -404,10 +386,8 @@ class NpyGenerationStorage:
         try:
             np.save(paths.rhs_path, payload.rhs)
             np.save(paths.solutions_path, payload.solutions)
-            if payload.rhs_kind_codes is not None:
-                np.save(dataset_dir / "rhs_kind.npy", payload.rhs_kind_codes)
-            if payload.target_kind_codes is not None:
-                np.save(dataset_dir / "target_kind.npy", payload.target_kind_codes)
+            if payload.row_kind_codes is not None:
+                np.save(dataset_dir / "row_kind.npy", payload.row_kind_codes)
             if payload.matrix_sample_index is not None:
                 np.save(dataset_dir / "matrix_sample_index.npy", payload.matrix_sample_index)
         except OSError as exc:
@@ -479,21 +459,13 @@ class NpyGenerationStorage:
                     scale=dict(payload.scale_metadata or {}),
                 ),
                 params=tuple(params_manifest),
-                rhs_kind=DatasetArtifact(
-                    path="rhs_kind.npy",
+                row_kind=DatasetArtifact(
+                    path="row_kind.npy",
                     format=self.format_name,
                     dtype="uint8",
-                    shape=tuple(int(dim) for dim in payload.rhs_kind_codes.shape),
+                    shape=tuple(int(dim) for dim in payload.row_kind_codes.shape),
                 )
-                if payload.rhs_kind_codes is not None
-                else None,
-                target_kind=DatasetArtifact(
-                    path="target_kind.npy",
-                    format=self.format_name,
-                    dtype="uint8",
-                    shape=tuple(int(dim) for dim in payload.target_kind_codes.shape),
-                )
-                if payload.target_kind_codes is not None
+                if payload.row_kind_codes is not None
                 else None,
                 matrix_sample_index=DatasetArtifact(
                     path="matrix_sample_index.npy",
@@ -613,12 +585,8 @@ class Hdf5GenerationStorage:
                     data=payload.solutions.astype(np.float64),
                     chunks=(chunk_rows, vec_dim),
                 )
-                if payload.rhs_kind_codes is not None:
-                    out.create_dataset("rhs_kind", data=payload.rhs_kind_codes.astype(np.uint8))
-                if payload.target_kind_codes is not None:
-                    out.create_dataset(
-                        "target_kind", data=payload.target_kind_codes.astype(np.uint8)
-                    )
+                if payload.row_kind_codes is not None:
+                    out.create_dataset("row_kind", data=payload.row_kind_codes.astype(np.uint8))
                 if payload.matrix_sample_index is not None:
                     out.create_dataset(
                         "matrix_sample_index",
@@ -679,23 +647,14 @@ class Hdf5GenerationStorage:
                     scale=dict(payload.scale_metadata or {}),
                 ),
                 params=tuple(params_manifest),
-                rhs_kind=DatasetArtifact(
+                row_kind=DatasetArtifact(
                     path=_HDF5_FILENAME,
                     format=self.format_name,
                     dtype="uint8",
-                    shape=tuple(int(d) for d in payload.rhs_kind_codes.shape),
-                    key="rhs_kind",
+                    shape=tuple(int(d) for d in payload.row_kind_codes.shape),
+                    key="row_kind",
                 )
-                if payload.rhs_kind_codes is not None
-                else None,
-                target_kind=DatasetArtifact(
-                    path=_HDF5_FILENAME,
-                    format=self.format_name,
-                    dtype="uint8",
-                    shape=tuple(int(d) for d in payload.target_kind_codes.shape),
-                    key="target_kind",
-                )
-                if payload.target_kind_codes is not None
+                if payload.row_kind_codes is not None
                 else None,
                 matrix_sample_index=DatasetArtifact(
                     path=_HDF5_FILENAME,

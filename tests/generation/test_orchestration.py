@@ -93,7 +93,7 @@ def test_resolve_binding_strategy_counts_rejects_finite_trace_replacement(
     with pytest.raises(ValueError, match="finite external source"):
         _resolve_binding_strategy_counts(
             bindings=three_bindings,
-            counts={"residual_traces": 5},
+            counts={"residuals": 5},
             mix=None,
             total=None,
             replacement=True,
@@ -104,18 +104,18 @@ def test_resolve_binding_strategy_counts_rejects_finite_trace_replacement(
         )
 
 
-def test_generate_mixture_rhs_kind_codes_length_matches_trace_rows_after_shuffle(
+def test_generate_mixture_row_kind_codes_length_matches_trace_rows_after_shuffle(
     spd_matrix: np.ndarray,
 ) -> None:
-    """rhs_kind_codes must align with error_traces.residuals, not with base-system count.
+    """row_kind_codes must align with error_traces.residuals, not with base-system count.
 
     gaussian_residuals produces N base systems but N*rows_per_system trace pairs.
-    With shuffle=True the shuffle used to index rhs_kind_codes (trace-level, final_rows entries)
+    With shuffle=True the shuffle used to index row_kind_codes (trace-level, final_rows entries)
     with base-system-level indices (referenced_samples entries), silently truncating it.
-    _finalize_payload then caught the mismatch: rhs_kind_codes.shape[0] != rhs_all.shape[0].
+    _finalize_payload then caught the mismatch: row_kind_codes.shape[0] != rhs_all.shape[0].
     """
     # cg_iters=3 → rows_per_system=4; samples=8 → 2 base systems, 8 trace pairs.
-    # Bug: shuffle indexed rhs_kind_codes (len=8) with 2 base-system indices → truncated to len=2.
+    # Bug: shuffle indexed row_kind_codes (len=8) with 2 base-system indices → truncated to len=2.
     result = _generate_mixture_with_metadata(
         spd_matrix,
         counts={"gaussian_residuals": 8},
@@ -124,5 +124,51 @@ def test_generate_mixture_rhs_kind_codes_length_matches_trace_rows_after_shuffle
         strategy_overrides={"gaussian_residuals": {"cg_iters": 3}},
     )
 
-    assert result.error_traces is not None
-    assert result.rhs_kind_codes.shape[0] == result.error_traces.residuals.shape[0]
+    assert result.row_kind_codes.shape[0] == result.rhs.shape[0]
+
+
+def test_mixed_strategy_row_kind_codes_concatenated_correctly(
+    spd_matrix: np.ndarray,
+) -> None:
+    """row_kind_codes must cover every row in order: forward rows first, then trace rows."""
+    from neuralls.shared.enum_codecs import decode_row_kind_array
+    from neuralls.shared.types import RowKind
+
+    # gaussian_forward:3 → 3 STANDARD rows
+    # gaussian_residuals:4 with cg_iters=1 → 2 base systems × 2 rows = 4 trace rows
+    #   each system: [iter0=STANDARD, iter1=CG_INTERNAL]
+    result = _generate_mixture_with_metadata(
+        spd_matrix,
+        counts={"gaussian_forward": 3, "gaussian_residuals": 4},
+        seed=0,
+        shuffle=False,
+        strategy_overrides={"gaussian_residuals": {"cg_iters": 1}},
+    )
+
+    assert result.rhs.shape[0] == 7
+    assert result.row_kind_codes.shape[0] == 7
+
+    kinds = decode_row_kind_array(result.row_kind_codes)
+    assert kinds[:3] == (RowKind.STANDARD,) * 3
+    assert kinds[3] == RowKind.STANDARD  # iter 0, system 0
+    assert kinds[4] == RowKind.CG_INTERNAL  # iter 1, system 0
+    assert kinds[5] == RowKind.STANDARD  # iter 0, system 1
+    assert kinds[6] == RowKind.CG_INTERNAL  # iter 1, system 1
+
+
+def test_resolve_binding_strategy_counts_rejects_single_multi_matrix_mix(
+    three_bindings: list[SystemBinding],
+) -> None:
+    """Mixing single-matrix and multi-matrix strategies with multiple matrices must fail."""
+    with pytest.raises(ValueError, match="Cannot mix single-matrix strategies"):
+        _resolve_binding_strategy_counts(
+            bindings=three_bindings,
+            counts={"gaussian_forward": 5, "solution_archive": 5},
+            mix=None,
+            total=None,
+            replacement=False,
+            seed=0,
+            strategy_overrides={"solution_archive": {"solutions_glob": "/fake/*.txt"}},
+            has_rhs_source=False,
+            num_matrix_samples=3,
+        )

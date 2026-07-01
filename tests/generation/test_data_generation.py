@@ -25,62 +25,6 @@ def _expected_trace_systems(samples: int, cg_iters: int, every_n: int = 1) -> in
     return max(1, samples // trace_rows_per_system(cg_iters, every_n=every_n))
 
 
-def test_residual_strategy_with_archive() -> None:
-    """Test residual strategy accepts pre-existing solutions from archive."""
-    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    np.array([1.0, 0.0], dtype=np.float64)
-
-    # Create archive solutions
-    archive_sols = np.array(
-        [[0.5, 0.3], [0.2, 0.8], [0.1, 0.4]],
-        dtype=np.float64,
-    )
-    archive_rhs = np.array([A @ x for x in archive_sols], dtype=np.float64)
-
-    # Generate with archive
-    rhs, solutions, residuals, error_traces = generate_mixture(
-        A=A,
-        mix={"residual_traces": 1.0},
-        total=2,
-        strategy_overrides={"residual_traces": {"cg_iters": 3}},
-        seed=7,
-        shuffle=False,
-        archive_solutions=archive_sols,
-        archive_rhs=archive_rhs,
-    )
-
-    expected_systems = _expected_trace_systems(2, 3)
-    assert np.allclose(solutions, archive_sols[:expected_systems])
-    assert np.allclose(rhs, archive_rhs[:expected_systems])
-
-    # Verify residuals were collected
-    assert residuals is not None
-    assert residuals.residuals.shape[1] == A.shape[0]
-
-
-def test_residual_strategy_archive_validation() -> None:
-    """Test residual strategy validates archive has enough samples."""
-    A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
-    np.array([1.0, 0.0], dtype=np.float64)
-
-    # Archive with only 1 solution, but we need 2 base systems after integer division
-    archive_sols = np.array([[0.5, 0.3]], dtype=np.float64)
-
-    try:
-        rhs, solutions, residuals, error_traces = generate_mixture(
-            A=A,
-            mix={"residual_traces": 1.0},
-            total=8,
-            strategy_overrides={"residual_traces": {"cg_iters": 3}},
-            seed=7,
-            shuffle=False,
-            archive_solutions=archive_sols,
-        )
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        assert "Not enough archive solutions" in str(e)
-
-
 def test_diagonal_normalization_scales_rows(tmp_path: Path) -> None:
     """Diagonal normalization should apply symmetric diagonal scaling: D^(-1/2) @ A @ D^(-1/2)."""
     A = np.array([[4.0, 1.0], [2.0, 6.0]], dtype=np.float64)
@@ -177,182 +121,109 @@ def test_diagonal_normalization_rejects_zero_diagonal(tmp_path: Path) -> None:
 
 def test_error_strategy_with_random(
     small_spd_matrix: np.ndarray,
-    small_rhs: np.ndarray,
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Test error strategy generates traces from archive solutions.
+    """Residuals strategy embeds trace pairs (r_k, e_k) directly into rhs/solutions.
 
-    Verifies that the error strategy:
-    - Generates error traces successfully
-    - Produces consistent shapes
-    - Populates all expected fields
+    A @ e_k = r_k must hold for every row.
 
     Args:
         small_spd_matrix: Test SPD matrix fixture
-        small_rhs: Test RHS vector fixture
         archive_solutions: Pre-computed archive solutions fixture
         archive_rhs: Pre-computed archive RHS vectors fixture
         test_seed: Random seed fixture
     """
+    cg_iters = 3
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
         mix={"residuals": 1.0},
         total=2,
-        strategy_overrides={"residuals": {"cg_iters": 3}},
+        strategy_overrides={"residuals": {"cg_iters": cg_iters}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
         archive_rhs=archive_rhs,
     )
 
-    expected_systems = _expected_trace_systems(2, 3)
-    assert rhs.shape == (expected_systems, 2)
-    assert solutions.shape == (expected_systems, 2)
-
-    # Verify error traces are populated
-    assert error_traces is not None, "Error traces should be populated"
-    assert error_traces.residuals.shape[1] == small_spd_matrix.shape[0]
-    assert error_traces.solutions_current.shape[1] == small_spd_matrix.shape[0]
-    assert error_traces.errors.shape[1] == small_spd_matrix.shape[0]
-
-    # Verify trace dimensions match
-    n_traces = error_traces.residuals.shape[0]
-    assert error_traces.solutions_current.shape[0] == n_traces
-    assert error_traces.errors.shape[0] == n_traces
-    assert error_traces.sample_indices.shape[0] == n_traces
-    assert error_traces.iteration_indices.shape[0] == n_traces
-
-    # Verify true_solutions matches solutions
-    assert error_traces.true_solutions.shape == solutions.shape
-    assert np.allclose(error_traces.true_solutions, solutions)
-
-    # Verify sample indices are valid
-    assert error_traces.sample_indices.max() < solutions.shape[0]
-    assert np.all(error_traces.sample_indices >= 0)
-
-    # Verify iteration indices are valid
-    assert np.all(error_traces.iteration_indices >= 0)
-    assert error_traces.iteration_indices.max() <= 3  # cg_iters
+    expected_rows = _expected_trace_systems(2, cg_iters) * trace_rows_per_system(cg_iters)
+    assert rhs.shape == (expected_rows, small_spd_matrix.shape[0])
+    assert solutions.shape == rhs.shape
+    assert residuals is None
+    assert error_traces is None
+    np.testing.assert_allclose(
+        (small_spd_matrix @ solutions.T).T,
+        rhs,
+        atol=1e-10,
+    )
 
 
 def test_error_strategy_with_archive(
     small_spd_matrix: np.ndarray,
-    small_rhs: np.ndarray,
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Test error strategy with archive solutions.
-
-    Verifies that the error strategy:
-    - Uses archive solutions instead of random generation
-    - Computes error traces based on archive data
-    - Correctly associates errors with true solutions
-
-    Args:
-        small_spd_matrix: Test SPD matrix fixture
-        small_rhs: Test RHS vector fixture
-        archive_solutions: Pre-computed archive solutions fixture
-        archive_rhs: Pre-computed archive RHS vectors fixture
-        test_seed: Random seed fixture
-    """
+    """Residuals strategy with archive produces trace rows satisfying A @ sol = rhs."""
+    cg_iters = 3
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
         mix={"residuals": 1.0},
         total=2,
-        strategy_overrides={"residuals": {"cg_iters": 3}},
+        strategy_overrides={"residuals": {"cg_iters": cg_iters}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
         archive_rhs=archive_rhs,
     )
 
-    expected_systems = _expected_trace_systems(2, 3)
-    assert np.allclose(solutions, archive_solutions[:expected_systems]), (
-        "Solutions should match the archive solutions used for trace generation"
-    )
-    assert np.allclose(rhs, archive_rhs[:expected_systems]), (
-        "RHS should match the archive RHS vectors used for trace generation"
-    )
-
-    # Verify error traces were collected
-    assert error_traces is not None, "Error traces should be populated"
-    assert error_traces.residuals.shape[1] == small_spd_matrix.shape[0]
-
-    # Verify true_solutions matches archive solutions
-    assert np.allclose(error_traces.true_solutions, archive_solutions[:expected_systems]), (
-        "True solutions should match archive solutions"
+    expected_rows = _expected_trace_systems(2, cg_iters) * trace_rows_per_system(cg_iters)
+    assert rhs.shape == (expected_rows, small_spd_matrix.shape[0])
+    assert solutions.shape == rhs.shape
+    assert error_traces is None
+    np.testing.assert_allclose(
+        (small_spd_matrix @ solutions.T).T,
+        rhs,
+        atol=1e-10,
     )
 
 
 def test_error_vectors_satisfy_equation(
     small_spd_matrix: np.ndarray,
-    small_rhs: np.ndarray,
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Test that error vectors satisfy error_k = x* - x_k.
-
-    This is the KEY mathematical property: for each CG iteration k,
-    the error vector should equal the true solution minus the current iterate.
-
-    Args:
-        small_spd_matrix: Test SPD matrix fixture
-        small_rhs: Test RHS vector fixture
-        archive_solutions: Pre-computed archive solutions fixture
-        archive_rhs: Pre-computed archive RHS vectors fixture
-        test_seed: Random seed fixture
-    """
-    rhs, solutions, residuals, error_traces = generate_mixture(
+    """A @ e_k = r_k holds for all trace rows (A e_k = r_k by construction)."""
+    cg_iters = 5
+    rhs, solutions, _, error_traces = generate_mixture(
         A=small_spd_matrix,
         mix={"residuals": 1.0},
         total=3,
-        strategy_overrides={"residuals": {"cg_iters": 5}},
+        strategy_overrides={"residuals": {"cg_iters": cg_iters}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
         archive_rhs=archive_rhs,
     )
 
-    assert error_traces is not None, "Error traces should be populated"
-
-    # For each trace entry, verify: error_k = x* - x_k
-    for i in range(error_traces.residuals.shape[0]):
-        sample_idx = error_traces.sample_indices[i]
-        x_star = error_traces.true_solutions[sample_idx]
-        x_k = error_traces.solutions_current[i]
-        error_k = error_traces.errors[i]
-
-        expected_error = x_star - x_k
-
-        assert np.allclose(error_k, expected_error, atol=1e-12), (
-            f"Error vector at trace {i} should equal x* - x_k"
-        )
+    assert error_traces is None
+    np.testing.assert_allclose(
+        (small_spd_matrix @ solutions.T).T,
+        rhs,
+        atol=1e-10,
+    )
 
 
 def test_residuals_match_current_solutions(
     small_spd_matrix: np.ndarray,
-    small_rhs: np.ndarray,
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Test that residuals match current solutions: r_k = b - A @ x_k.
-
-    This ensures that the captured CG states are consistent:
-    the residual should equal b - A @ x_k for the current iterate.
-
-    Args:
-        small_spd_matrix: Test SPD matrix fixture
-        small_rhs: Test RHS vector fixture
-        archive_solutions: Pre-computed archive solutions fixture
-        archive_rhs: Pre-computed archive RHS vectors fixture
-        test_seed: Random seed fixture
-    """
-    rhs, solutions, residuals, error_traces = generate_mixture(
+    """A @ solutions = rhs holds for all rows (r_k = A @ e_k by construction)."""
+    rhs, solutions, _, error_traces = generate_mixture(
         A=small_spd_matrix,
         mix={"residuals": 1.0},
         total=2,
@@ -363,55 +234,41 @@ def test_residuals_match_current_solutions(
         archive_rhs=archive_rhs,
     )
 
-    assert error_traces is not None, "Error traces should be populated"
-
-    # For each trace entry, verify: r_k ≈ b - A @ x_k
-    for i in range(error_traces.residuals.shape[0]):
-        sample_idx = error_traces.sample_indices[i]
-        b_vec = rhs[sample_idx]
-        x_k = error_traces.solutions_current[i]
-        r_k = error_traces.residuals[i]
-
-        expected_residual = b_vec - small_spd_matrix @ x_k
-
-        assert np.allclose(r_k, expected_residual, atol=1e-10), (
-            f"Residual at trace {i} should equal b - A @ x_k"
-        )
+    assert error_traces is None
+    np.testing.assert_allclose(
+        (small_spd_matrix @ solutions.T).T,
+        rhs,
+        atol=1e-10,
+    )
 
 
-def test_error_strategy_offsets_sample_indices_in_mixed_generation(
+def test_error_strategy_mixed_with_forward_strategy(
     small_spd_matrix: np.ndarray,
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Residual-error traces must index the combined base-system arrays correctly."""
+    """Mixing neutral_ones + residuals concatenates rows; A @ sol = rhs for all."""
+    cg_iters = 2
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
         counts={"neutral_ones": 1, "residuals": 6},
-        strategy_overrides={"residuals": {"cg_iters": 2}},
+        strategy_overrides={"residuals": {"cg_iters": cg_iters}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
         archive_rhs=archive_rhs,
     )
 
-    assert error_traces is not None
-    assert rhs.shape[0] == solutions.shape[0] == 3
-    assert np.all(error_traces.sample_indices >= 1)
-
-    for i in range(error_traces.residuals.shape[0]):
-        sample_idx = int(error_traces.sample_indices[i])
-        x_true = solutions[sample_idx]
-        b_vec = rhs[sample_idx]
-        x_k = error_traces.solutions_current[i]
-
-        np.testing.assert_allclose(error_traces.errors[i], x_true - x_k, atol=1e-12)
-        np.testing.assert_allclose(
-            error_traces.residuals[i],
-            b_vec - small_spd_matrix @ x_k,
-            atol=1e-10,
-        )
+    residual_rows = _expected_trace_systems(6, cg_iters) * trace_rows_per_system(cg_iters)
+    assert rhs.shape == (1 + residual_rows, small_spd_matrix.shape[0])
+    assert solutions.shape == rhs.shape
+    assert error_traces is None
+    np.testing.assert_allclose(
+        (small_spd_matrix @ solutions.T).T,
+        rhs,
+        atol=1e-10,
+    )
 
 
 def test_shuffle_samples_reindexes_error_traces() -> None:
@@ -489,96 +346,64 @@ def test_error_strategy_validation(
 
 def test_error_strategy_in_generate_mixture(
     small_spd_matrix: np.ndarray,
-    small_rhs: np.ndarray,
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Test error strategy works in generate_mixture with multiple strategies.
-
-    Verifies that error strategy can be combined with other strategies
-    in a mixed dataset generation.
-
-    Args:
-        small_spd_matrix: Test SPD matrix fixture
-        small_rhs: Test RHS vector fixture
-        archive_solutions: Pre-computed archive solutions fixture
-        archive_rhs: Pre-computed archive RHS vectors fixture
-        test_seed: Random seed fixture
-    """
+    """Mixing normal + residuals produces concatenated rows satisfying A @ sol = rhs."""
+    cg_iters = 3
     rhs, solutions, residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
         mix={"normal": 0.5, "residuals": 0.5},
         total=4,
-        strategy_overrides={"residuals": {"cg_iters": 3}},
+        strategy_overrides={"residuals": {"cg_iters": cg_iters}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
         archive_rhs=archive_rhs,
     )
 
-    expected_normal = 2
-    expected_trace = _expected_trace_systems(2, 3)
-    assert rhs.shape == (expected_normal + expected_trace, 2)
-    assert solutions.shape == (expected_normal + expected_trace, 2)
-
-    # Verify error traces are present (from residuals strategy)
-    assert error_traces is not None, "Error traces should be populated"
-
-    # Verify error traces have at least 1 sample
-    unique_samples = np.unique(error_traces.sample_indices)
-    assert len(unique_samples) >= 1, "Should have error traces from at least 1 sample"
-
-    # Verify residuals is None (normal strategy doesn't produce residual traces)
-    assert residuals is None, "Residuals should be None when only one strategy produces them"
+    normal_rows = 2
+    residual_rows = _expected_trace_systems(2, cg_iters) * trace_rows_per_system(cg_iters)
+    assert rhs.shape == (normal_rows + residual_rows, small_spd_matrix.shape[0])
+    assert solutions.shape == rhs.shape
+    assert error_traces is None
+    assert residuals is None
+    np.testing.assert_allclose(
+        (small_spd_matrix @ solutions.T).T,
+        rhs,
+        atol=1e-10,
+    )
 
 
 def test_error_strategy_traces_structure(
     small_spd_matrix: np.ndarray,
-    small_rhs: np.ndarray,
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
 ) -> None:
-    """Test the internal structure of error traces.
-
-    Verifies that:
-    - Each sample generates multiple traces (one per CG iteration)
-    - Iteration indices are sequential for each sample
-    - Sample indices correctly map to true solutions
-
-    Args:
-        small_spd_matrix: Test SPD matrix fixture
-        small_rhs: Test RHS vector fixture
-        archive_solutions: Pre-computed archive solutions fixture
-        archive_rhs: Pre-computed archive RHS vectors fixture
-        test_seed: Random seed fixture
-    """
-    rhs, solutions, residuals, error_traces = generate_mixture(
+    """Residuals strategy produces base_systems * (cg_iters+1) rows total."""
+    cg_iters = 4
+    rhs, solutions, _, error_traces = generate_mixture(
         A=small_spd_matrix,
         mix={"residuals": 1.0},
         total=3,
-        strategy_overrides={"residuals": {"cg_iters": 4}},
+        strategy_overrides={"residuals": {"cg_iters": cg_iters}},
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
         archive_rhs=archive_rhs,
     )
 
-    assert error_traces is not None, "Error traces should be populated"
-
-    # Verify each sample has multiple traces (CG iterations)
-    for sample_idx in range(solutions.shape[0]):
-        mask = error_traces.sample_indices == sample_idx
-        sample_traces = error_traces.iteration_indices[mask]
-
-        assert len(sample_traces) > 0, f"Sample {sample_idx} should have at least one trace"
-
-        # Verify iteration indices are sequential starting from 0
-        assert sample_traces[0] == 0, f"First iteration for sample {sample_idx} should be 0"
-        assert np.all(np.diff(sample_traces) == 1), (
-            f"Iteration indices for sample {sample_idx} should be sequential"
-        )
+    expected_rows = _expected_trace_systems(3, cg_iters) * trace_rows_per_system(cg_iters)
+    assert rhs.shape == (expected_rows, small_spd_matrix.shape[0])
+    assert solutions.shape == rhs.shape
+    assert error_traces is None
+    np.testing.assert_allclose(
+        (small_spd_matrix @ solutions.T).T,
+        rhs,
+        atol=1e-10,
+    )
 
 
 def test_error_strategy_with_zero_iterations(

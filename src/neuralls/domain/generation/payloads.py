@@ -45,9 +45,7 @@ class GeneratedDatasetPayload:
     """One array per entry in ``parameters_paths``; shape ``(N, param_dim)``."""
     layout: LayoutType = LayoutType.MANY_MATRICES
     """Physical matrix layout: one row per sample or one shared row for all samples."""
-    rhs_kind_codes: np.ndarray | None = None
-    """Compact uint8 semantic codes aligned with persisted RHS rows."""
-    target_kind_codes: np.ndarray | None = None
-    """Compact uint8 semantic codes aligned with persisted target rows."""
+    row_kind_codes: np.ndarray | None = None
+    """Compact uint8 semantic row-kind codes aligned with persisted rows."""
     matrix_sample_index: np.ndarray | None = None
     """Per-row physical matrix sample binding aligned with persisted RHS rows."""

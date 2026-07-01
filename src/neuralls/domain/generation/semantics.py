@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from neuralls.shared.types import GenerationStrategyKind, RhsKind, TargetKind
+from neuralls.shared.types import GenerationStrategyKind, RowKind
 
 
-def classify_strategy_rhs_kind(kind: GenerationStrategyKind) -> RhsKind:
-    """Return the persisted RHS semantic kind for one generation strategy."""
-    if kind in {
+_NON_RESIDUAL_STRATEGIES: frozenset[GenerationStrategyKind] = frozenset(
+    {
         GenerationStrategyKind.RANDOM,
         GenerationStrategyKind.NORMAL,
         GenerationStrategyKind.KRYLOV,
@@ -25,48 +24,34 @@ def classify_strategy_rhs_kind(kind: GenerationStrategyKind) -> RhsKind:
         GenerationStrategyKind.CONSTANT_FORWARD,
         GenerationStrategyKind.CONSTANT_INVERSE,
         GenerationStrategyKind.NEUTRAL_ONES,
-    }:
-        return RhsKind.NON_RESIDUAL
-    if kind in {
-        GenerationStrategyKind.RESIDUAL_TRACES,
+    }
+)
+
+_CG_INTERNAL_STRATEGIES: frozenset[GenerationStrategyKind] = frozenset(
+    {
         GenerationStrategyKind.RESIDUALS,
         GenerationStrategyKind.GAUSSIAN_RESIDUALS,
-    }:
-        return RhsKind.RESIDUAL
-    if kind is GenerationStrategyKind.SEARCH_DIRECTIONS:
-        return RhsKind.SEARCH_DIRECTION_PRODUCT
-    return RhsKind.UNKNOWN
+        GenerationStrategyKind.SEARCH_DIRECTIONS,
+    }
+)
 
 
-def classify_strategy_target_kind(kind: GenerationStrategyKind) -> TargetKind:
-    """Return the persisted target semantic kind for one generation strategy."""
-    if kind in {
-        GenerationStrategyKind.RANDOM,
-        GenerationStrategyKind.NORMAL,
-        GenerationStrategyKind.KRYLOV,
-        GenerationStrategyKind.RHS_ARCHIVE,
-        GenerationStrategyKind.SOLUTION_ARCHIVE,
-        GenerationStrategyKind.VALIDATED_ARCHIVE,
-        GenerationStrategyKind.SCALED_SOLUTIONS,
-        GenerationStrategyKind.SPARSE_RHS,
-        GenerationStrategyKind.EIGENVECTOR_FORWARD,
-        GenerationStrategyKind.EIGENVECTOR_INVERSE,
-        GenerationStrategyKind.GAUSSIAN_FORWARD,
-        GenerationStrategyKind.GAUSSIAN_INVERSE,
-        GenerationStrategyKind.UNIFORM_FORWARD,
-        GenerationStrategyKind.UNIFORM_INVERSE,
-        GenerationStrategyKind.CONSTANT_FORWARD,
-        GenerationStrategyKind.CONSTANT_INVERSE,
-        GenerationStrategyKind.NEUTRAL_ONES,
-    }:
-        return TargetKind.SOLUTION
-    if kind is GenerationStrategyKind.RESIDUAL_TRACES:
-        return TargetKind.ITERATE
-    if kind in {
-        GenerationStrategyKind.RESIDUALS,
-        GenerationStrategyKind.GAUSSIAN_RESIDUALS,
-    }:
-        return TargetKind.ERROR
-    if kind is GenerationStrategyKind.SEARCH_DIRECTIONS:
-        return TargetKind.SEARCH_DIRECTION
-    return TargetKind.UNKNOWN
+def classify_strategy_row_kind(kind: GenerationStrategyKind) -> RowKind:
+    """Return the RowKind for all rows produced by this strategy (non-iter-0 rows).
+
+    Args:
+        kind: The generation strategy to classify.
+
+    Returns:
+        ``RowKind.STANDARD`` for externally-drawn (b, x) pairs;
+        ``RowKind.CG_INTERNAL`` for CG-internal pairs (residuals, errors, or
+        search-direction products — all unsafe for direct solver comparison).
+
+    Raises:
+        ValueError: If ``kind`` is not mapped to either category.
+    """
+    if kind in _NON_RESIDUAL_STRATEGIES:
+        return RowKind.STANDARD
+    if kind in _CG_INTERNAL_STRATEGIES:
+        return RowKind.CG_INTERNAL
+    raise ValueError(f"Unknown strategy kind: {kind!r}")

@@ -9,7 +9,7 @@ import numpy as np
 
 from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
-from neuralls.shared.types import ComparisonRhsGenerationKind, RhsKind
+from neuralls.shared.types import ComparisonRhsGenerationKind, RowKind
 
 __all__ = [
     "ComparisonResult",
@@ -97,7 +97,7 @@ class ResolvedComparisonInput:
     rhs_source_type: str
     rhs_dataset_id: str | None = None
     rhs_index: int | None = None
-    rhs_kind: RhsKind | None = None
+    rhs_kind: RowKind | None = None
     generator_kind: ComparisonRhsGenerationKind | None = None
     generator_params: dict[str, object] | None = None
 

@@ -67,7 +67,8 @@ display_name = "Scale-Equivariant Constant-Width Simple Factorized FFNN"
 [[comparisons]]
 id = "gaussian"
 matrix_dataset = "gaussian-cg100-45x15"
-rhs_dataset = "gaussian-cg100-45x15"
+rhs_generation = { kind = "gaussian" }
+seed = 42
 experiments = [
   "embedded-factorized-gaussian-cg100-45x15",
   "constant-width-factorized-gaussian-cg100-45x15",
@@ -91,7 +92,7 @@ experiments = [
 [[comparisons]]
 id = "sparse"
 matrix_dataset = "gaussian-cg100-45x15"
-rhs_dataset = "sparse-rhs-45x15"
+rhs_generation = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 experiments = [
   "embedded-factorized-gaussian-cg100-45x15",
   "constant-width-factorized-gaussian-cg100-45x15",

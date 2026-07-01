@@ -65,7 +65,8 @@ display_name = "FFNN PCA"
 [[comparisons]]
 id             = "gaussian"
 matrix_dataset = "gaussian-cg10-45x15"
-rhs_dataset    = "gaussian-cg10-45x15"
+rhs_generation = { kind = "gaussian" }
+seed           = 42
 
 [[comparisons]]
 id             = "scaled"
@@ -75,7 +76,7 @@ rhs_dataset    = "scaled-solutions-45x15"
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "gaussian-cg10-45x15"
-rhs_dataset    = "sparse-rhs-45x15"
+rhs_generation = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 
 # ── Experiments (2 solutions datasets × 1 PCA job = 2) ─────────────────────
 

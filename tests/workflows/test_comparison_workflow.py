@@ -11,6 +11,7 @@ import pytest
 import tomli_w
 
 from neuralls.composition.comparison.config_assembler import resolve_comparison_config
+from neuralls.composition.comparison._input_resolution import resolve_comparison_input
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.composition.experiments.comparison_batch import (
     _resolve_neural_preconditioners,
@@ -311,6 +312,40 @@ def test_resolve_comparison_config_recovers_omitted_index_semantics(tmp_path: Pa
     assert explicit_cfg.general.data.rhs_index == 0
 
 
+def test_resolve_comparison_config_carries_generated_rhs_without_rhs_path(
+    tmp_path: Path,
+) -> None:
+    datasets_dir = tmp_path / "datasets"
+    datasets_dir.mkdir()
+    _write_dataset_config(datasets_dir / "matrix.toml", "matrix")
+    settings = _make_settings(tmp_path)
+    case_cfg = CaseConfig.model_validate(
+        {
+            "datasets": [{"id": "matrix", "path": "datasets/matrix.toml"}],
+            "comparison_defaults": {
+                "rtol": 1.0e-6,
+                "atol": 1.0e-14,
+                "max_iterations": 10,
+                "stopping_criterion": "residual_norm",
+                "m_max": 20,
+                "preconditioners": [{"name": "none", "type": "identity"}],
+            },
+        }
+    )
+    entry = ComparisonRegistryEntry(
+        id="generated",
+        matrix_dataset="matrix",
+        rhs_generation={"kind": "gaussian"},
+        seed=42,
+    )
+
+    cfg = resolve_comparison_config(case_cfg, tmp_path, entry, settings)
+
+    assert cfg.general.data.rhs_path is None
+    assert cfg.general.data.rhs_generation_kind is ComparisonRhsGenerationKind.GAUSSIAN
+    assert cfg.general.data.selection_seed == 42
+
+
 def test_comparison_data_model_tracks_explicit_normalize_in_fields_set() -> None:
     """model_fields_set must distinguish explicit normalize_system from default."""
     from neuralls.platform.config.models.comparison import ComparisonDataModel
@@ -478,6 +513,55 @@ def test_run_comparison_generated_rhs_accepts_matrix_only_input(tmp_path: Path) 
         outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
 
     assert outcomes[0].success is True
+
+
+def test_resolved_generated_rhs_uses_matrix_source_without_rhs_dataset(tmp_path: Path) -> None:
+    matrix_path, _rhs_path = _write_system_inputs(tmp_path)
+    cfg = _mock_cfg(
+        matrix_path=matrix_path,
+        rhs_path=None,
+        preconditioners=[
+            StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
+        ],
+    )
+    cfg.general.data.matrix_index = 0
+    cfg.general.data.rhs_index = None
+    cfg.general.data.require_non_residual_rhs = True
+    cfg.general.data.selection_seed = None
+    cfg.general.data.rhs_generation_kind = ComparisonRhsGenerationKind.SPARSE
+    cfg.general.data.rhs_generation_params = {
+        "indices": [0, 1],
+        "values": [3.0, -2.0],
+    }
+    entry = ComparisonRegistryEntry(
+        id="generated-sparse",
+        matrix_dataset="solutions",
+        rhs_generation={
+            "kind": "sparse",
+            "indices": [0, 1],
+            "values": [3.0, -2.0],
+        },
+    )
+
+    resolved = resolve_comparison_input(
+        matrix_path=Path(cfg.general.data.matrix_path),
+        matrix_dataset_id=entry.matrix_dataset,
+        matrix_index=cfg.general.data.matrix_index,
+        rhs_path=cfg.general.data.rhs_path,
+        rhs_dataset_id=entry.rhs_dataset,
+        rhs_index=cfg.general.data.rhs_index,
+        require_non_residual_rhs=cfg.general.data.require_non_residual_rhs,
+        seed=cfg.general.data.selection_seed,
+        rhs_generation_kind=cfg.general.data.rhs_generation_kind,
+        rhs_generation_params=cfg.general.data.rhs_generation_params,
+    )
+
+    assert resolved.rhs_source_type == "generated"
+    assert resolved.rhs_dataset_id is None
+    assert resolved.rhs_index is None
+    assert resolved.generator_kind is ComparisonRhsGenerationKind.SPARSE
+    assert resolved.generator_params == {"indices": [0, 1], "values": [3.0, -2.0]}
+    np.testing.assert_allclose(resolved.rhs, np.array([3.0, -2.0], dtype=np.float64))
 
 
 def test_run_comparison_does_not_require_split_artifacts(tmp_path: Path) -> None:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from neuralls.shared.types import ComparisonRhsGenerationKind, RhsKind
+from neuralls.shared.types import ComparisonRhsGenerationKind, RowKind
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class ComparisonInputArtifacts:
     rhs_source_type: str
     rhs_dataset_id: str | None = None
     rhs_index: int | None = None
-    rhs_kind: RhsKind | None = None
+    rhs_kind: RowKind | None = None
     generator_kind: ComparisonRhsGenerationKind | None = None
     generator_params: dict[str, object] | None = None
 

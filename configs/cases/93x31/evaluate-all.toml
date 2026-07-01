@@ -60,12 +60,13 @@ display_name = "Embedded Factorized"
 [[comparisons]]
 id             = "gaussian"
 matrix_dataset = "gaussian-cg10-93x31"
-rhs_dataset    = "gaussian-cg10-93x31"
+rhs_generation = { kind = "gaussian" }
+seed           = 42
 
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "gaussian-cg10-93x31"
-rhs_dataset    = "sparse-rhs-93x31"
+rhs_generation = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 
 # ── Experiments (2 models × gaussian-cg100-93x31) ────────────────────────────
 

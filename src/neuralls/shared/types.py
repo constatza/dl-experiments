@@ -9,7 +9,7 @@ Moving cross-boundary types here prevents upward dependencies, e.g. io → gener
 
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum, StrEnum
 from typing import Literal, TypedDict
 
 DatasetFormat = Literal["zarr", "npy", "hdf5"]
@@ -48,23 +48,22 @@ class MatrixNormType(StrEnum):
     INF = "inf"  # Infinity norm: max row sum
 
 
-class RhsKind(StrEnum):
-    """Semantic category of a persisted RHS row."""
+class RowKind(int, Enum):
+    """Semantic category of a dataset row.
 
-    UNKNOWN = "unknown"
-    NON_RESIDUAL = "non_residual"
-    RESIDUAL = "residual"
-    SEARCH_DIRECTION_PRODUCT = "search_direction_product"
+    STANDARD: externally drawn (b, x) pair — A@x=b, b from outside CG.
+        Safe for solver comparison and standard training.
+    CG_INTERNAL: pair derived from a CG trace — (r_k, e_k) where r_k is a
+        CG residual and e_k = x_true - x_k is the correction, or (A@p_k, p_k).
+        Not safe for direct solver comparison.
+    """
 
+    STANDARD = 0
+    CG_INTERNAL = 1
 
-class TargetKind(StrEnum):
-    """Semantic category of a persisted target row."""
-
-    UNKNOWN = "unknown"
-    SOLUTION = "solution"
-    ITERATE = "iterate"
-    ERROR = "error"
-    SEARCH_DIRECTION = "search_direction"
+    def __str__(self) -> str:
+        """Return the lowercase name of the enum member."""
+        return self.name.lower()
 
 
 class ComparisonRhsGenerationKind(StrEnum):
@@ -85,7 +84,6 @@ class GenerationStrategyKind(StrEnum):
     VALIDATED_ARCHIVE = "validated_archive"
     SCALED_SOLUTIONS = "scaled_solutions"
     SPARSE_RHS = "sparse_rhs"
-    RESIDUAL_TRACES = "residual_traces"
     RESIDUALS = "residuals"
     GAUSSIAN_RESIDUALS = "gaussian_residuals"
     SEARCH_DIRECTIONS = "search_directions"

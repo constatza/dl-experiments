@@ -58,7 +58,8 @@ display_name = "Scale-Equivariant Embedded Factorized FFNN"
 [[comparisons]]
 id             = "gaussian-cg10"
 matrix_dataset = "gaussian-cg10-45x15randomE"
-rhs_dataset    = "gaussian-cg10-45x15randomE"
+rhs_generation = { kind = "gaussian" }
+seed           = 42
 experiments    = [
   "embedded-factorized-gaussian-cg10-45x15randomE",
 ]
@@ -66,7 +67,8 @@ experiments    = [
 [[comparisons]]
 id             = "gaussian-cg100"
 matrix_dataset = "gaussian-cg100-45x15randomE"
-rhs_dataset    = "gaussian-cg100-45x15randomE"
+rhs_generation = { kind = "gaussian" }
+seed           = 42
 experiments    = [
   "embedded-factorized-gaussian-cg100-45x15randomE",
 ]
@@ -82,7 +84,7 @@ experiments    = [
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "gaussian-cg100-45x15randomE"
-rhs_dataset    = "sparse-rhs-45x15randomE"
+rhs_generation = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 experiments    = [
   "embedded-factorized-gaussian-cg100-45x15randomE",
 ]

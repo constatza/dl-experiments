@@ -25,14 +25,10 @@ from neuralls.platform.storage.datasets import (
 )
 from neuralls.platform.storage.dataset_readers import (
     load_matrix_sample_index,
-    load_rhs_kind_codes,
-    load_target_kind_codes,
+    load_row_kind_codes,
 )
-from neuralls.platform.storage.enum_codecs import (
-    decode_rhs_kind_array,
-    decode_target_kind_array,
-)
-from neuralls.shared.types import RhsKind, TargetKind
+from neuralls.platform.storage.enum_codecs import decode_row_kind_array
+from neuralls.shared.types import RowKind
 
 
 @pytest.fixture
@@ -187,33 +183,6 @@ def test_single_matrix_stored_once_in_zarr(tmp_path: Path) -> None:
     np.testing.assert_allclose(dense_last, matrix)
 
 
-def test_build_dataset_persists_residual_trace_pairs(tmp_path: Path) -> None:
-    matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
-    matrix_path = tmp_path / "matrix.npy"
-    np.save(matrix_path, matrix)
-
-    rhs = np.array([[1.0, 2.0]], dtype=np.float64)
-    rhs_path = tmp_path / "rhs.npy"
-    np.save(rhs_path, rhs)
-
-    out_dir = tmp_path / "residual_dataset"
-    build_dataset(
-        matrix_path=str(matrix_path),
-        dataset_dir=str(out_dir),
-        counts={"residual_traces": 4},
-        rhs_path=str(rhs_path),
-        normalize="none",
-        shuffle=False,
-        seed=7,
-        strategy_overrides={"residual_traces": {"cg_iters": 1}},
-        dataset_format="zarr",
-    )
-
-    saved_rhs, saved_solutions = load_dense_training_arrays(out_dir)
-    assert saved_rhs.shape == (4, 2)
-    assert saved_solutions.shape == (4, 2)
-
-
 def test_build_dataset_persists_residuals_pairs(tmp_path: Path) -> None:
     matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
     matrix_path = tmp_path / "matrix.npy"
@@ -283,46 +252,36 @@ def test_build_dataset_persists_row_metadata_artifacts(tmp_path: Path) -> None:
     )
 
     manifest = load_dataset_manifest(out_dir)
-    assert manifest["rhs_kind"]["path"] == "rhs_kind.npy"
-    assert manifest["target_kind"]["path"] == "target_kind.npy"
+    assert manifest["row_kind"]["path"] == "row_kind.npy"
     assert manifest["matrix_sample_index"]["path"] == "matrix_sample_index.npy"
 
-    rhs_kinds = decode_rhs_kind_array(load_rhs_kind_codes(out_dir))
-    target_kinds = decode_target_kind_array(load_target_kind_codes(out_dir))
+    row_kinds = decode_row_kind_array(load_row_kind_codes(out_dir))
     matrix_indices = load_matrix_sample_index(out_dir)
 
-    assert rhs_kinds == (RhsKind.NON_RESIDUAL, RhsKind.NON_RESIDUAL, RhsKind.NON_RESIDUAL)
-    assert target_kinds == (TargetKind.SOLUTION, TargetKind.SOLUTION, TargetKind.SOLUTION)
+    assert row_kinds == (RowKind.STANDARD, RowKind.STANDARD, RowKind.STANDARD)
     np.testing.assert_array_equal(matrix_indices, np.array([0, 0, 0], dtype=np.int64))
 
 
-def test_build_dataset_marks_residual_rows_unsafe_for_comparison(tmp_path: Path) -> None:
+def test_build_dataset_marks_residual_error_rows_with_kind_codes(tmp_path: Path) -> None:
     matrix = np.array([[3.0, 1.0], [1.0, 2.0]], dtype=np.float64)
     matrix_path = tmp_path / "matrix.npy"
     np.save(matrix_path, matrix)
-
-    rhs = np.array([[1.0, 2.0]], dtype=np.float64)
-    rhs_path = tmp_path / "rhs.npy"
-    np.save(rhs_path, rhs)
 
     out_dir = tmp_path / "dataset_residual_meta"
     build_dataset(
         matrix_path=str(matrix_path),
         dataset_dir=str(out_dir),
-        counts={"residual_traces": 2},
-        rhs_path=str(rhs_path),
+        counts={"gaussian_residuals": 2},
         normalize="none",
         shuffle=False,
         seed=7,
-        strategy_overrides={"residual_traces": {"cg_iters": 1}},
+        strategy_overrides={"gaussian_residuals": {"cg_iters": 1}},
         dataset_format="npy",
     )
 
-    rhs_kinds = decode_rhs_kind_array(load_rhs_kind_codes(out_dir))
-    target_kinds = decode_target_kind_array(load_target_kind_codes(out_dir))
+    row_kinds = decode_row_kind_array(load_row_kind_codes(out_dir))
 
-    assert rhs_kinds == (RhsKind.NON_RESIDUAL, RhsKind.RESIDUAL)
-    assert target_kinds == (TargetKind.ITERATE, TargetKind.ITERATE)
+    assert row_kinds == (RowKind.STANDARD, RowKind.CG_INTERNAL)
 
 
 def test_glob_matrix_gaussian_uses_global_sample_budget(

@@ -13,7 +13,6 @@ EXPECTED_STRATEGIES = {
     "random",
     "normal",
     "krylov",
-    "residual_traces",
     "residuals",
     "gaussian_residuals",
     "search_directions",
@@ -76,6 +75,6 @@ def test_matrix_replacement_capabilities_are_centrally_registered() -> None:
     """Replacement support is opt-in and queried through registry metadata."""
     assert strategy_supports_matrix_replacement("random") is True
     assert strategy_supports_matrix_replacement("gaussian_forward") is True
-    assert strategy_supports_matrix_replacement("residual_traces") is True
+    assert strategy_supports_matrix_replacement("gaussian_residuals") is True
     assert strategy_supports_matrix_replacement("solution_archive") is False
     assert strategy_supports_matrix_replacement("neutral_ones") is False

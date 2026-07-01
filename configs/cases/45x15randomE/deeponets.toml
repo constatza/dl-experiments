@@ -53,7 +53,8 @@ display_name = "Embedded DeepONet"
 [[comparisons]]
 id             = "gaussian-cg10"
 matrix_dataset = "gaussian-cg10-45x15randomE"
-rhs_dataset    = "gaussian-cg10-45x15randomE"
+rhs_generation = { kind = "gaussian" }
+seed           = 42
 experiments    = [
   "ffnn-deeponet-gaussian-cg10-45x15randomE",
   "embedded-deeponet-gaussian-cg10-45x15randomE",
@@ -62,7 +63,8 @@ experiments    = [
 [[comparisons]]
 id             = "gaussian-cg100"
 matrix_dataset = "gaussian-cg100-45x15randomE"
-rhs_dataset    = "gaussian-cg100-45x15randomE"
+rhs_generation = { kind = "gaussian" }
+seed           = 42
 experiments    = [
   "ffnn-deeponet-gaussian-cg100-45x15randomE",
   "embedded-deeponet-gaussian-cg100-45x15randomE",

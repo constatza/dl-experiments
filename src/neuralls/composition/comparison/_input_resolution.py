@@ -21,10 +21,10 @@ from neuralls.platform.storage.comparison import load_system_arrays
 from neuralls.platform.storage.dataset_readers import (
     list_available_matrix_indices,
     load_dense_training_arrays,
-    load_optional_rhs_kind_codes,
+    load_optional_row_kind_codes,
 )
-from neuralls.shared.enum_codecs import decode_rhs_kind_array
-from neuralls.shared.types import ComparisonRhsGenerationKind, RhsKind
+from neuralls.shared.enum_codecs import decode_row_kind_array
+from neuralls.shared.types import ComparisonRhsGenerationKind, RowKind
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class _AllowedRhsResolution:
     """Comparison-local RHS candidate set and semantic enforcement status."""
 
     allowed_indices: tuple[int, ...]
-    rhs_kinds: tuple[RhsKind, ...] | None
+    row_kinds: tuple[RowKind, ...] | None
     metadata_enforced: bool
 
 
@@ -61,34 +61,34 @@ def _resolve_allowed_rhs_rows(
     require_non_residual_rhs: bool,
 ) -> _AllowedRhsResolution:
     """Resolve allowed dataset RHS rows with optional semantic metadata enforcement."""
-    codes = load_optional_rhs_kind_codes(rhs_path)
+    codes = load_optional_row_kind_codes(rhs_path)
     if codes is None:
         rhs, _solutions = load_dense_training_arrays(rhs_path)
         sample_count = int(rhs.shape[0]) if rhs.ndim > 1 else 1
         if require_non_residual_rhs:
             logger.warning(
-                "Comparison dataset '{}' does not expose rhs_kind metadata; "
+                "Comparison dataset '{}' does not expose row_kind metadata; "
                 "non-residual RHS enforcement cannot be verified.",
                 rhs_path,
             )
         return _AllowedRhsResolution(
             allowed_indices=tuple(range(sample_count)),
-            rhs_kinds=None,
+            row_kinds=None,
             metadata_enforced=False,
         )
 
-    rhs_kinds = decode_rhs_kind_array(codes)
+    row_kinds = decode_row_kind_array(codes)
     if not require_non_residual_rhs:
         return _AllowedRhsResolution(
-            allowed_indices=tuple(range(len(rhs_kinds))),
-            rhs_kinds=rhs_kinds,
+            allowed_indices=tuple(range(len(row_kinds))),
+            row_kinds=row_kinds,
             metadata_enforced=True,
         )
     return _AllowedRhsResolution(
         allowed_indices=tuple(
-            index for index, kind in enumerate(rhs_kinds) if kind is RhsKind.NON_RESIDUAL
+            index for index, kind in enumerate(row_kinds) if kind is RowKind.STANDARD
         ),
-        rhs_kinds=rhs_kinds,
+        row_kinds=row_kinds,
         metadata_enforced=True,
     )
 
@@ -235,6 +235,6 @@ def resolve_comparison_input(
         rhs_dataset_id=rhs_dataset_id,
         rhs_index=resolved_rhs_index,
         rhs_kind=(
-            allowed_rhs.rhs_kinds[resolved_rhs_index] if allowed_rhs.rhs_kinds is not None else None
+            allowed_rhs.row_kinds[resolved_rhs_index] if allowed_rhs.row_kinds is not None else None
         ),
     )
