@@ -50,30 +50,21 @@ id           = "ffnn-standard"
 path         = "../../jobs/ffnn/ffnn.toml"
 display_name = "FFNN Standard"
 
-[[jobs]]
-id           = "embedded-factorized"
-path         = "../../jobs/ffnn/embedded-factorized.toml"
-display_name = "Embedded Factorized"
-
 # ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
 id             = "gaussian"
 matrix_dataset = "gaussian-cg10-93x31"
-rhs_generation = { kind = "gaussian" }
+rhs_source = { kind = "gaussian" }
 seed           = 42
 
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "gaussian-cg10-93x31"
-rhs_generation = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
+rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 
-# ── Experiments (2 models × gaussian-cg100-93x31) ────────────────────────────
+# ── Experiments (ffnn-standard × gaussian-cg100-93x31) ───────────────────────
 
 [[experiments]]
 dataset      = "gaussian-cg100-93x31"
 job = "ffnn-standard"
-
-[[experiments]]
-dataset      = "gaussian-cg100-93x31"
-job = "embedded-factorized"

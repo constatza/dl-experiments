@@ -1,0 +1,242 @@
+"""Source-specific comparison input handlers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
+
+import numpy as np
+
+from neuralls.composition.comparison.models import ResolvedComparisonInput
+from neuralls.composition.comparison.rhs_generation import (
+    generate_gaussian_rhs,
+    generate_sparse_rhs,
+)
+from neuralls.platform.config.models.comparison import (
+    DatasetRhsSourceModel,
+    GaussianRhsSourceModel,
+    RawLhsSourceModel,
+    RawRhsSourceModel,
+    SparseRhsSourceModel,
+)
+from neuralls.platform.storage.comparison import load_system_arrays
+from neuralls.platform.storage.dataset_readers import (
+    list_available_matrix_indices,
+    resolve_canonical_training_triplet,
+)
+from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
+
+
+@dataclass(frozen=True)
+class ComparisonSourceContext:
+    """Inputs shared by concrete RHS source handlers."""
+
+    matrix_path: Path
+    matrix_dataset_id: str
+    matrix_index: int | None
+    require_non_residual_rhs: bool
+    seed: int | None
+    rhs_source_kind: ComparisonRhsSourceKind
+    rhs_source_params: dict[str, object] | None
+
+
+class ComparisonSourceHandler(Protocol):
+    """Resolve one concrete comparison RHS source kind."""
+
+    def resolve(self, ctx: ComparisonSourceContext) -> ResolvedComparisonInput: ...
+
+
+def resolve_source_matrix_index(
+    matrix_path: Path, matrix_index: int | None, seed: int | None
+) -> int:
+    """Resolve the matrix index used by generated/raw sources."""
+    if not matrix_path.is_dir():
+        return matrix_index if matrix_index is not None else 0
+    matrix_indices = list_available_matrix_indices(matrix_path)
+    if not matrix_indices:
+        raise ValueError(f"No matrix samples are available in comparison dataset '{matrix_path}'.")
+    resolved = matrix_index
+    if resolved is None:
+        rng = np.random.default_rng(seed)
+        resolved = int(rng.choice(np.asarray(matrix_indices)))
+    if resolved not in matrix_indices:
+        raise ValueError(
+            f"matrix_index={resolved} is not valid for comparison dataset '{matrix_path}'."
+        )
+    return resolved
+
+
+def _load_matrix(matrix_path: Path, matrix_index: int) -> np.ndarray:
+    matrix, _dummy_rhs = load_system_arrays(
+        matrix_path=matrix_path,
+        rhs_path=matrix_path,
+        rhs_sample_index=0,
+        matrix_index=matrix_index,
+    )
+    return matrix
+
+
+def _validate_raw_row_kind(
+    row_kind: RowKind | None,
+    *,
+    require_non_residual_rhs: bool,
+    source_path: Path,
+) -> None:
+    if not require_non_residual_rhs:
+        return
+    if row_kind is None:
+        raise ValueError(
+            f"Raw comparison source '{source_path}' must define row_kind when "
+            "non-residual RHS enforcement is enabled."
+        )
+    if row_kind is RowKind.CG_INTERNAL:
+        raise ValueError(
+            f"Raw comparison source '{source_path}' is marked as CG_INTERNAL and cannot be used "
+            "with non-residual RHS enforcement."
+        )
+
+
+@dataclass(frozen=True)
+class GeneratedSourceHandler:
+    """Resolve generated Gaussian or sparse RHS sources."""
+
+    def resolve(self, ctx: ComparisonSourceContext) -> ResolvedComparisonInput:
+        matrix_index = resolve_source_matrix_index(ctx.matrix_path, ctx.matrix_index, ctx.seed)
+        matrix = _load_matrix(ctx.matrix_path, matrix_index)
+        match ctx.rhs_source_kind:
+            case ComparisonRhsSourceKind.GAUSSIAN:
+                cfg = GaussianRhsSourceModel.model_validate(
+                    {"kind": ctx.rhs_source_kind, **(ctx.rhs_source_params or {})}
+                )
+                rhs = generate_gaussian_rhs(matrix.shape[0], cfg, ctx.seed)
+            case ComparisonRhsSourceKind.SPARSE:
+                cfg = SparseRhsSourceModel.model_validate(
+                    {"kind": ctx.rhs_source_kind, **(ctx.rhs_source_params or {})}
+                )
+                rhs = generate_sparse_rhs(matrix.shape[0], cfg)
+            case _:
+                raise ValueError(
+                    f"Unsupported generated comparison RHS source: {ctx.rhs_source_kind}."
+                )
+        return ResolvedComparisonInput(
+            matrix=matrix,
+            rhs=rhs,
+            matrix_dataset_id=ctx.matrix_dataset_id,
+            matrix_index=matrix_index,
+            rhs_source_kind=ctx.rhs_source_kind,
+            rhs_source_params=ctx.rhs_source_params,
+        )
+
+
+@dataclass(frozen=True)
+class RawLhsSourceHandler:
+    """Resolve raw LHS vectors by computing `b = scale * A @ x`."""
+
+    def resolve(self, ctx: ComparisonSourceContext) -> ResolvedComparisonInput:
+        matrix_index = resolve_source_matrix_index(ctx.matrix_path, ctx.matrix_index, ctx.seed)
+        cfg = RawLhsSourceModel.model_validate(
+            {"kind": ctx.rhs_source_kind, **(ctx.rhs_source_params or {})}
+        )
+        if cfg.path.is_dir():
+            raise ValueError(f"Raw LHS source must be a file, got directory: {cfg.path}")
+        _validate_raw_row_kind(
+            cfg.row_kind,
+            require_non_residual_rhs=ctx.require_non_residual_rhs,
+            source_path=cfg.path,
+        )
+        matrix, lhs = load_system_arrays(
+            matrix_path=ctx.matrix_path,
+            rhs_path=cfg.path,
+            rhs_sample_index=cfg.sample_index,
+            matrix_index=matrix_index,
+        )
+        return ResolvedComparisonInput(
+            matrix=matrix,
+            rhs=float(cfg.scale) * matrix @ lhs,
+            lhs=lhs,
+            matrix_dataset_id=ctx.matrix_dataset_id,
+            matrix_index=matrix_index,
+            rhs_sample_index=cfg.sample_index,
+            rhs_kind=cfg.row_kind,
+            rhs_source_kind=ctx.rhs_source_kind,
+            rhs_source_params=ctx.rhs_source_params,
+        )
+
+
+@dataclass(frozen=True)
+class RawRhsSourceHandler:
+    """Resolve raw RHS vectors directly as `b`."""
+
+    def resolve(self, ctx: ComparisonSourceContext) -> ResolvedComparisonInput:
+        matrix_index = resolve_source_matrix_index(ctx.matrix_path, ctx.matrix_index, ctx.seed)
+        cfg = RawRhsSourceModel.model_validate(
+            {"kind": ctx.rhs_source_kind, **(ctx.rhs_source_params or {})}
+        )
+        if cfg.path.is_dir():
+            raise ValueError(f"Raw RHS source must be a file, got directory: {cfg.path}")
+        _validate_raw_row_kind(
+            cfg.row_kind,
+            require_non_residual_rhs=ctx.require_non_residual_rhs,
+            source_path=cfg.path,
+        )
+        matrix, rhs = load_system_arrays(
+            matrix_path=ctx.matrix_path,
+            rhs_path=cfg.path,
+            rhs_sample_index=cfg.sample_index,
+            matrix_index=matrix_index,
+        )
+        return ResolvedComparisonInput(
+            matrix=matrix,
+            rhs=float(cfg.scale) * rhs,
+            matrix_dataset_id=ctx.matrix_dataset_id,
+            matrix_index=matrix_index,
+            rhs_sample_index=cfg.sample_index,
+            rhs_kind=cfg.row_kind,
+            rhs_source_kind=ctx.rhs_source_kind,
+            rhs_source_params=ctx.rhs_source_params,
+        )
+
+
+@dataclass(frozen=True)
+class DatasetSourceHandler:
+    """Resolve canonical manifest-backed dataset triplets."""
+
+    def resolve(self, ctx: ComparisonSourceContext) -> ResolvedComparisonInput:
+        cfg = DatasetRhsSourceModel.model_validate(
+            {"kind": ctx.rhs_source_kind, **(ctx.rhs_source_params or {})}
+        )
+        if not cfg.path.is_dir():
+            raise ValueError(f"Dataset RHS source must be a directory, got file: {cfg.path}")
+        triplet = resolve_canonical_training_triplet(
+            cfg.path,
+            cfg.sample_index,
+            require_standard=ctx.require_non_residual_rhs,
+            matrix_index=ctx.matrix_index,
+        )
+        return ResolvedComparisonInput(
+            matrix=triplet.matrix,
+            rhs=triplet.rhs,
+            lhs=triplet.lhs,
+            matrix_dataset_id=ctx.matrix_dataset_id,
+            matrix_index=triplet.matrix_index,
+            rhs_dataset_id=str(cfg.path),
+            rhs_sample_index=triplet.sample_index,
+            rhs_kind=triplet.row_kind,
+            rhs_source_kind=ctx.rhs_source_kind,
+            rhs_source_params=ctx.rhs_source_params,
+        )
+
+
+_SOURCE_HANDLERS: dict[ComparisonRhsSourceKind, ComparisonSourceHandler] = {
+    ComparisonRhsSourceKind.GAUSSIAN: GeneratedSourceHandler(),
+    ComparisonRhsSourceKind.SPARSE: GeneratedSourceHandler(),
+    ComparisonRhsSourceKind.RAW_LHS: RawLhsSourceHandler(),
+    ComparisonRhsSourceKind.RAW_RHS: RawRhsSourceHandler(),
+    ComparisonRhsSourceKind.DATASET: DatasetSourceHandler(),
+}
+
+
+def resolve_comparison_source(ctx: ComparisonSourceContext) -> ResolvedComparisonInput:
+    """Dispatch source resolution without workflow-level branching."""
+    return _SOURCE_HANDLERS[ctx.rhs_source_kind].resolve(ctx)

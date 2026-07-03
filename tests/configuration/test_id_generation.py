@@ -47,20 +47,20 @@ def exp_unknown_registry() -> dict[str, object]:
 
 @pytest.fixture
 def comp_same_datasets() -> dict[str, object]:
-    """Comparison with identical matrix and rhs dataset, no id or display_name."""
-    return {"matrix_dataset": "gaussian-rhs-45x15", "rhs_dataset": "gaussian-rhs-45x15"}
+    """Comparison with identical matrix and RHS source ids, no id or display_name."""
+    return {"matrix_dataset": "gaussian-rhs-45x15", "rhs_source": "gaussian-rhs-45x15"}
 
 
 @pytest.fixture
 def comp_diff_datasets() -> dict[str, object]:
-    """Comparison with different matrix and rhs datasets, no id or display_name."""
-    return {"matrix_dataset": "gaussian-cg1-45x15", "rhs_dataset": "solutions-45x15"}
+    """Comparison with different matrix and RHS source ids, no id or display_name."""
+    return {"matrix_dataset": "gaussian-cg1-45x15", "rhs_source": "solutions-45x15"}
 
 
 @pytest.fixture
 def comp_same_display_name_test_data() -> dict[str, object]:
-    """Comparison with same matrix/rhs dataset used to test auto display name."""
-    return {"matrix_dataset": "gaussian-cg1-45x15", "rhs_dataset": "gaussian-cg1-45x15"}
+    """Comparison with same matrix/RHS source id used to test auto display name."""
+    return {"matrix_dataset": "gaussian-cg1-45x15", "rhs_source": "gaussian-cg1-45x15"}
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ def test_infer_comparison_id_uses_matrix_id_when_datasets_same(
 ) -> None:
     result = _infer_comparison_id(
         matrix_id=str(comp_same_datasets["matrix_dataset"]),
-        rhs_id=str(comp_same_datasets["rhs_dataset"]),
+        rhs_id=str(comp_same_datasets["rhs_source"]),
         user_id=None,
         user_dn=None,
     )
@@ -318,7 +318,7 @@ def test_infer_comparison_id_joins_ids_when_datasets_differ(
 ) -> None:
     result = _infer_comparison_id(
         matrix_id=str(comp_diff_datasets["matrix_dataset"]),
-        rhs_id=str(comp_diff_datasets["rhs_dataset"]),
+        rhs_id=str(comp_diff_datasets["rhs_source"]),
         user_id=None,
         user_dn=None,
     )
@@ -330,7 +330,7 @@ def test_infer_comparison_id_derives_from_display_name(
 ) -> None:
     result = _infer_comparison_id(
         matrix_id=str(comp_same_datasets["matrix_dataset"]),
-        rhs_id=str(comp_same_datasets["rhs_dataset"]),
+        rhs_id=str(comp_same_datasets["rhs_source"]),
         user_id=None,
         user_dn="Gaussian Test",
     )
@@ -360,7 +360,7 @@ def test_infer_comparison_display_name_when_same_datasets(
 ) -> None:
     result = _infer_comparison_display_name(
         matrix_id=str(comp_same_display_name_test_data["matrix_dataset"]),
-        rhs_id=str(comp_same_display_name_test_data["rhs_dataset"]),
+        rhs_id=str(comp_same_display_name_test_data["rhs_source"]),
         user_dn=None,
         dataset_display=dataset_display,
     )
@@ -373,7 +373,7 @@ def test_infer_comparison_display_name_when_datasets_differ(
 ) -> None:
     result = _infer_comparison_display_name(
         matrix_id=str(comp_diff_datasets["matrix_dataset"]),
-        rhs_id=str(comp_diff_datasets["rhs_dataset"]),
+        rhs_id=str(comp_diff_datasets["rhs_source"]),
         user_dn=None,
         dataset_display=dataset_display,
     )
@@ -386,7 +386,7 @@ def test_infer_comparison_display_name_uses_explicit_user_dn(
 ) -> None:
     result = _infer_comparison_display_name(
         matrix_id=str(comp_same_datasets["matrix_dataset"]),
-        rhs_id=str(comp_same_datasets["rhs_dataset"]),
+        rhs_id=str(comp_same_datasets["rhs_source"]),
         user_dn="Gaussian Test",
         dataset_display=dataset_display,
     )
@@ -399,7 +399,7 @@ def test_infer_comparison_display_name_is_dataset_only(
 ) -> None:
     result = _infer_comparison_display_name(
         matrix_id=str(comp_diff_datasets["matrix_dataset"]),
-        rhs_id=str(comp_diff_datasets["rhs_dataset"]),
+        rhs_id=str(comp_diff_datasets["rhs_source"]),
         user_dn=None,
         dataset_display=dataset_display,
     )

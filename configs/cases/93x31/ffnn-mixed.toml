@@ -65,13 +65,13 @@ display_name = "FFNN Standard"
 [[comparisons]]
 id             = "gaussian"
 matrix_dataset = "gaussian-cg1-93x31"
-rhs_generation = { kind = "gaussian" }
+rhs_source = { kind = "gaussian" }
 seed           = 42
 
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "gaussian-cg1-93x31"
-rhs_generation = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
+rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 
 # ── Experiments (ffnn-standard × 4 training datasets) ────────────────────────
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.composition.comparison.single_run import _bind_system_inputs
+from neuralls.composition.comparison._preconditioner_setup import _bind_system_inputs
 from neuralls.domain.solver.preconditioners.base import Preconditioner, PreconditionerContext
 from numpy.typing import NDArray
 

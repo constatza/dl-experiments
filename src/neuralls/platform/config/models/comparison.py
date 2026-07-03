@@ -14,6 +14,7 @@ from neuralls.shared.constants import (
     DEFAULT_ATOL,
     DEFAULT_M_MAX,
 )
+from neuralls.shared.types import RowKind
 from neuralls.domain.solver.models.config import (
     ComparisonData,
     ComparisonGeneral,
@@ -56,7 +57,6 @@ class ComparisonDataModel(BaseModel):
 
     matrix_path: Path | None = None
     rhs_path: Path | None = None
-    rhs_index: int = 0
     matrix_index: int = 0
     dataset_alias: str | None = None
     normalize_system: NormalizeSystem = "matrix"
@@ -81,8 +81,8 @@ class _ComparisonGeneralModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class GaussianRhsGenerationModel(BaseModel):
-    """Direct Gaussian RHS generation for comparison workflows."""
+class GaussianRhsSourceModel(BaseModel):
+    """Direct Gaussian RHS source for comparison workflows."""
 
     kind: Literal["gaussian"] = "gaussian"
     mean: float = 0.0
@@ -91,8 +91,8 @@ class GaussianRhsGenerationModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class SparseRhsGenerationModel(BaseModel):
-    """Direct sparse RHS generation for comparison workflows."""
+class SparseRhsSourceModel(BaseModel):
+    """Direct sparse RHS source for comparison workflows."""
 
     kind: Literal["sparse"] = "sparse"
     indices: list[int]
@@ -101,14 +101,88 @@ class SparseRhsGenerationModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     @model_validator(mode="after")
-    def _validate_lengths(self) -> SparseRhsGenerationModel:
+    def _validate_lengths(self) -> SparseRhsSourceModel:
         if len(self.indices) != len(self.values):
-            raise ValueError("Sparse RHS generation requires indices and values of equal length.")
+            raise ValueError("Sparse RHS source requires indices and values of equal length.")
         return self
 
 
-type ComparisonRhsGenerationModel = Annotated[
-    GaussianRhsGenerationModel | SparseRhsGenerationModel,
+def _parse_row_kind(value: object) -> RowKind | None:
+    """Parse row-kind config values from enum, integer code, or lowercase name."""
+    if value is None or isinstance(value, RowKind):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        for kind in RowKind:
+            if normalized in {kind.name.lower(), str(kind.value)}:
+                return kind
+    if isinstance(value, int):
+        return RowKind(value)
+    raise ValueError(f"Unsupported row_kind value: {value!r}")
+
+
+class _RawVectorSourceBase(BaseModel):
+    """Shared fields for concrete raw vector comparison sources."""
+
+    path: Path
+    sample_index: int = Field(default=0, ge=0)
+    row_kind: RowKind | None = None
+    scale: float = 1.0
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def _expand_path(cls, v: object, info: ValidationInfo) -> object:
+        if not isinstance(v, str) or info.context is None:
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
+    @field_validator("row_kind", mode="before")
+    @classmethod
+    def _parse_row_kind(cls, v: object) -> RowKind | None:
+        return _parse_row_kind(v)
+
+
+class RawLhsSourceModel(_RawVectorSourceBase):
+    """Load a raw solution-side vector and convert it to RHS with A @ vector."""
+
+    kind: Literal["raw_lhs"] = "raw_lhs"
+
+
+class RawRhsSourceModel(_RawVectorSourceBase):
+    """Load a raw vector that is already an RHS."""
+
+    kind: Literal["raw_rhs"] = "raw_rhs"
+
+
+class DatasetRhsSourceModel(BaseModel):
+    """Load a comparison RHS from a manifest-backed neuralls dataset directory."""
+
+    kind: Literal["dataset"] = "dataset"
+    path: Path
+    sample_index: int | None = Field(default=None, ge=0)
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def _expand_path(cls, v: object, info: ValidationInfo) -> object:
+        if not isinstance(v, str) or info.context is None:
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
+
+type ComparisonRhsSourceModel = Annotated[
+    GaussianRhsSourceModel
+    | SparseRhsSourceModel
+    | RawLhsSourceModel
+    | RawRhsSourceModel
+    | DatasetRhsSourceModel,
     Field(discriminator="kind"),
 ]
 

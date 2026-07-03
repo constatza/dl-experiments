@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
@@ -14,6 +15,13 @@ from neuralls.composition.preconditioners.factory import (
 )
 from neuralls.domain.solver.preconditioners.base import BindableInputs, Preconditioner
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
+from neuralls.platform.storage.training_artifacts import (
+    load_array_source_sample,
+    load_training_arrays,
+)
+
+if TYPE_CHECKING:
+    from neuralls.domain.solver.preconditioners.ports import PredictorAdapter
 
 # Arrays always available from LinearSystem — never need loading from disk.
 _SYSTEM_ARRAYS_ALWAYS_AVAILABLE: frozenset[str] = frozenset({"matrix"})
@@ -66,7 +74,7 @@ class PreconditionerService:
         adapter: Optional adapter for neural preconditioners (dependency injection for testing).
     """
 
-    def __init__(self, adapter: Any = None) -> None:
+    def __init__(self, adapter: PredictorAdapter | None = None) -> None:
         self._adapter = adapter
 
     def create_preconditioner(
@@ -130,6 +138,75 @@ def _create_scheduled_preconditioners(
             schedule=schedule,
         )
     return scheduled
+
+
+def _collect_extra_name_positions(
+    preconditioners: dict[str, Preconditioner],
+) -> dict[str, int]:
+    """Map extra-input name → declaration-order index across all bindable preconditioners.
+
+    Args:
+        preconditioners: Scheduled preconditioner map to inspect.
+
+    Returns:
+        Dict mapping each extra name to its position in ``extra_input_names``
+        (first occurrence wins, preserving training-config declaration order).
+    """
+    positions: dict[str, int] = {}
+    for p in preconditioners.values():
+        if not isinstance(p, BindableInputs):
+            continue
+        for i, name in enumerate(p.extra_input_names):
+            if name not in _SYSTEM_ARRAYS_ALWAYS_AVAILABLE:
+                positions.setdefault(name, i)
+    return positions
+
+
+def _load_extra_data(
+    matrix_path: Path,
+    name_to_position: dict[str, int],
+    matrix_index: int,
+) -> dict[str, np.ndarray]:
+    """Load named extra arrays from a dataset dir using declaration-order positions.
+
+    Args:
+        matrix_path: Dataset directory containing ``parameters_N`` array files.
+        name_to_position: Mapping from semantic name to its positional index.
+        matrix_index: Sample index to extract from each parameter array.
+
+    Returns:
+        Dict mapping names to loaded arrays (entries whose position exceeds the
+        available parameter count are silently skipped).
+    """
+    arrays = load_training_arrays(matrix_path)
+    return {
+        name: load_array_source_sample(arrays.parameter_sources[pos], matrix_index)
+        for name, pos in name_to_position.items()
+        if pos < len(arrays.parameter_sources)
+    }
+
+
+def _load_and_bind_extra_inputs(
+    scheduled_preconditioners: dict[str, Preconditioner],
+    matrix: np.ndarray,
+    matrix_path: Path,
+    matrix_index: int,
+) -> None:
+    """Load extra parameter arrays and bind them alongside the system matrix.
+
+    Args:
+        scheduled_preconditioners: Preconditioners to inspect and bind.
+        matrix: System matrix — always bound as ``"matrix"``.
+        matrix_path: Dataset directory; loading is skipped when not a directory.
+        matrix_index: Sample index used when extracting from parameter arrays.
+    """
+    name_to_position = _collect_extra_name_positions(scheduled_preconditioners)
+    extra_data = (
+        _load_extra_data(matrix_path, name_to_position, matrix_index)
+        if name_to_position and matrix_path.is_dir()
+        else {}
+    )
+    _bind_system_inputs(scheduled_preconditioners, {"matrix": matrix, **extra_data})
 
 
 def _bind_system_inputs(

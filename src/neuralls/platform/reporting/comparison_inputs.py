@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 import numpy as np
 
-from neuralls.shared.types import ComparisonRhsGenerationKind, RowKind
+from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
 
 @dataclass(frozen=True)
@@ -20,11 +21,27 @@ class ComparisonInputArtifacts:
     matrix_dataset_id: str
     matrix_index: int
     rhs_source_type: str
+    lhs: np.ndarray | None = None
     rhs_dataset_id: str | None = None
-    rhs_index: int | None = None
+    rhs_sample_index: int | None = None
     rhs_kind: RowKind | None = None
-    generator_kind: ComparisonRhsGenerationKind | None = None
-    generator_params: dict[str, object] | None = None
+    rhs_source_kind: ComparisonRhsSourceKind | None = None
+    rhs_source_params: dict[str, object] | None = None
+
+
+def _jsonable(value: object) -> object:
+    """Convert provenance leaf values into JSON-compatible primitives."""
+    match value:
+        case Path():
+            return str(value)
+        case Enum():
+            return str(value)
+        case dict():
+            return {str(key): _jsonable(item) for key, item in value.items()}
+        case list() | tuple():
+            return [_jsonable(item) for item in value]
+        case _:
+            return value
 
 
 def stage_comparison_inputs(root: Path, resolved: ComparisonInputArtifacts) -> Path:
@@ -33,17 +50,21 @@ def stage_comparison_inputs(root: Path, resolved: ComparisonInputArtifacts) -> P
     output_dir.mkdir(parents=True, exist_ok=True)
     np.save(output_dir / "matrix.npy", resolved.matrix)
     np.save(output_dir / "rhs.npy", resolved.rhs)
+    if resolved.lhs is not None:
+        np.save(output_dir / "lhs.npy", resolved.lhs)
     provenance = {
         "matrix_dataset_id": resolved.matrix_dataset_id,
         "matrix_index": resolved.matrix_index,
         "rhs_source_type": resolved.rhs_source_type,
         "rhs_dataset_id": resolved.rhs_dataset_id,
-        "rhs_index": resolved.rhs_index,
+        "rhs_sample_index": resolved.rhs_sample_index,
         "rhs_kind": str(resolved.rhs_kind) if resolved.rhs_kind is not None else None,
-        "generator_kind": (
-            str(resolved.generator_kind) if resolved.generator_kind is not None else None
+        "row_kind": str(resolved.rhs_kind) if resolved.rhs_kind is not None else None,
+        "rhs_source_kind": (
+            str(resolved.rhs_source_kind) if resolved.rhs_source_kind is not None else None
         ),
-        "generator_params": resolved.generator_params,
+        "rhs_source_params": _jsonable(resolved.rhs_source_params),
+        "lhs_available": resolved.lhs is not None,
         "matrix_shape": list(resolved.matrix.shape),
         "rhs_shape": list(resolved.rhs.shape),
     }

@@ -42,7 +42,7 @@ def log_extra_feature_names_tag(
         extra_names: Set of extra feature names declared in the model TOML.
     """
     client = MlflowClient(tracking_uri=tracking_uri)
-    tag_value = ",".join(sorted(extra_names))
+    tag_value = ",".join(extra_names)
     client.set_tag(run_id, EXTRA_FEATURE_NAMES_TAG, tag_value)
 
 

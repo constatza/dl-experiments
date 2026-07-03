@@ -41,7 +41,14 @@ from neuralls.platform.reporting.comparison_inputs import (
 from neuralls.platform.storage.validation import (
     validate_comparison_inputs,
     validate_comparison_matrix_input,
+    validate_comparison_rhs_input,
 )
+from neuralls.platform.config.models.comparison import (
+    DatasetRhsSourceModel,
+    RawLhsSourceModel,
+    RawRhsSourceModel,
+)
+from neuralls.shared.types import ComparisonRhsSourceKind
 from neuralls.platform.tracking.comparison_tracking import (
     log_comparison_artifact_uri,
     log_comparison_input_artifacts,
@@ -254,6 +261,14 @@ def _resolve_comparison_topology(
     )
 
 
+def _require_rhs_source_kind(cfg: ComparisonConfig) -> ComparisonRhsSourceKind:
+    """Return the configured RHS source kind or fail with a focused error."""
+    kind = cfg.general.data.rhs_source_kind
+    if kind is None:
+        raise ValueError("Comparison config must define rhs_source.")
+    return kind
+
+
 def _run_comparison_body(
     cfg: ComparisonConfig,
     entry: ComparisonRegistryEntry,
@@ -287,17 +302,15 @@ def _run_comparison_body(
     )
     if not resolved_specs:
         raise ValueError("No runnable preconditioners remain after model resolution.")
+    rhs_source_kind = _require_rhs_source_kind(cfg)
     resolved_input = resolve_comparison_input(
         matrix_path=Path(cfg.general.data.matrix_path),
         matrix_dataset_id=entry.matrix_dataset,
-        matrix_index=entry.matrix_index,
-        rhs_path=cfg.general.data.rhs_path,
-        rhs_dataset_id=entry.rhs_dataset,
-        rhs_index=entry.rhs_index,
+        matrix_index=cfg.general.data.matrix_index,
         require_non_residual_rhs=cfg.general.data.require_non_residual_rhs,
         seed=cfg.general.data.selection_seed,
-        rhs_generation_kind=cfg.general.data.rhs_generation_kind,
-        rhs_generation_params=cfg.general.data.rhs_generation_params,
+        rhs_source_kind=rhs_source_kind,
+        rhs_source_params=cfg.general.data.rhs_source_params,
     )
     staged_input_dir = stage_comparison_inputs(
         work_root,
@@ -307,11 +320,12 @@ def _run_comparison_body(
             matrix_dataset_id=resolved_input.matrix_dataset_id,
             matrix_index=resolved_input.matrix_index,
             rhs_source_type=resolved_input.rhs_source_type,
+            lhs=resolved_input.lhs,
             rhs_dataset_id=resolved_input.rhs_dataset_id,
-            rhs_index=resolved_input.rhs_index,
+            rhs_sample_index=resolved_input.rhs_sample_index,
             rhs_kind=resolved_input.rhs_kind,
-            generator_kind=resolved_input.generator_kind,
-            generator_params=resolved_input.generator_params,
+            rhs_source_kind=resolved_input.rhs_source_kind,
+            rhs_source_params=resolved_input.rhs_source_params,
         ),
     )
     raw_result = compare_preconditioners(
@@ -466,18 +480,28 @@ def _run_comparison_from_config(
 def _validate_comparison_sources(cfg: ComparisonConfig) -> None:
     """Validate only the concrete input artifacts required by this workflow mode."""
     matrix_path = Path(cfg.general.data.matrix_path)
-    rhs_generation_kind = cfg.general.data.rhs_generation_kind
-    if rhs_generation_kind is not None:
-        validate_comparison_matrix_input(matrix_path)
-        return
-
-    rhs_path = cfg.general.data.rhs_path
-    if rhs_path is None:
-        raise ValueError("Dataset-backed comparison RHS requires rhs_path.")
-    validate_comparison_inputs(
-        matrix_path=matrix_path,
-        rhs_path=Path(rhs_path),
-    )
+    rhs_source_kind = _require_rhs_source_kind(cfg)
+    rhs_source_params = cfg.general.data.rhs_source_params or {}
+    match rhs_source_kind:
+        case ComparisonRhsSourceKind.GAUSSIAN | ComparisonRhsSourceKind.SPARSE:
+            validate_comparison_matrix_input(matrix_path)
+        case ComparisonRhsSourceKind.DATASET:
+            source = DatasetRhsSourceModel.model_validate(
+                {"kind": rhs_source_kind, **rhs_source_params}
+            )
+            validate_comparison_rhs_input(source.path)
+        case ComparisonRhsSourceKind.RAW_LHS:
+            source = RawLhsSourceModel.model_validate(
+                {"kind": rhs_source_kind, **rhs_source_params}
+            )
+            validate_comparison_inputs(matrix_path=matrix_path, rhs_path=source.path)
+        case ComparisonRhsSourceKind.RAW_RHS:
+            source = RawRhsSourceModel.model_validate(
+                {"kind": rhs_source_kind, **rhs_source_params}
+            )
+            validate_comparison_inputs(matrix_path=matrix_path, rhs_path=source.path)
+        case _:
+            raise ValueError(f"Unsupported comparison RHS source: {rhs_source_kind!r}.")
 
 
 def run_comparison_batch(

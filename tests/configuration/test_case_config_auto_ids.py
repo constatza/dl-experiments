@@ -151,46 +151,40 @@ def test_experiment_explicit_id_and_display_name_unchanged(
 def test_comparison_auto_id_when_same_datasets(
     minimal_case_raw: dict[str, object],
 ) -> None:
-    """Auto-generate comparison id when matrix_dataset == rhs_dataset."""
+    """Auto-generate comparison id from matrix dataset and RHS source kind."""
     raw = dict(minimal_case_raw)
     raw["comparisons"] = [
         {
             "matrix_dataset": "gaussian-cg1-45x15",
-            "rhs_dataset": "gaussian-cg1-45x15",
+            "rhs_source": {"kind": "gaussian"},
             "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
             # no id, no display_name
         }
     ]
     raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
     config = CaseConfig.model_validate(raw)
-    assert config.comparisons[0].id == "gaussian-cg1-45x15"
-    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15"
+    assert config.comparisons[0].id == "gaussian-cg1-45x15-gaussian"
+    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | gaussian"
     assert config.comparisons[0].matrix_index == 0
-    assert config.comparisons[0].rhs_index == 0
 
 
 def test_comparison_auto_id_when_different_datasets(
     minimal_case_raw: dict[str, object],
-    dataset_entry_solutions: dict[str, object],
 ) -> None:
-    """Auto-generate comparison id with both datasets when matrix_dataset != rhs_dataset."""
+    """Auto-generate comparison id with matrix dataset and dataset RHS source."""
     raw = dict(minimal_case_raw)
-    # Add the second dataset to the registry
-    datasets = raw["datasets"]
-    if isinstance(datasets, list):
-        datasets.append(dataset_entry_solutions)
     raw["comparisons"] = [
         {
             "matrix_dataset": "gaussian-cg1-45x15",
-            "rhs_dataset": "solutions-45x15",
+            "rhs_source": {"kind": "dataset", "path": "/fake/solutions"},
             "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
             # no id, no display_name
         }
     ]
     raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
     config = CaseConfig.model_validate(raw)
-    assert config.comparisons[0].id == "gaussian-cg1-45x15-solutions-45x15"
-    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | Solutions 45x15"
+    assert config.comparisons[0].id == "gaussian-cg1-45x15-dataset"
+    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | dataset"
 
 
 # ============================================================================
@@ -215,7 +209,7 @@ def test_explicit_id_and_display_name_preserved(
         {
             "id": "my-comp",
             "matrix_dataset": "gaussian-cg1-45x15",
-            "rhs_dataset": "gaussian-cg1-45x15",
+            "rhs_source": {"kind": "gaussian"},
             "display_name": "My Comparison",
         }
     ]
@@ -231,20 +225,26 @@ def test_explicit_id_and_display_name_preserved(
 def test_comparison_explicit_indices_are_preserved(
     minimal_case_raw: dict[str, object],
 ) -> None:
-    """Comparison entries keep explicit matrix/rhs sample indices."""
+    """Comparison entries keep explicit matrix and RHS-source sample indices."""
+    from neuralls.platform.config.models.comparison import DatasetRhsSourceModel
+
     raw = dict(minimal_case_raw)
     raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
     raw["comparisons"] = [
         {
             "matrix_dataset": "gaussian-cg1-45x15",
-            "rhs_dataset": "gaussian-cg1-45x15",
             "matrix_index": 3,
-            "rhs_index": 7,
+            "rhs_source": {
+                "kind": "dataset",
+                "path": "/fake/gaussian-cg1-45x15",
+                "sample_index": 7,
+            },
         }
     ]
     config = CaseConfig.model_validate(raw)
     assert config.comparisons[0].matrix_index == 3
-    assert config.comparisons[0].rhs_index == 7
+    assert isinstance(config.comparisons[0].rhs_source, DatasetRhsSourceModel)
+    assert config.comparisons[0].rhs_source.sample_index == 7
 
 
 def test_comparison_rejects_removed_train_run_id(
@@ -256,7 +256,7 @@ def test_comparison_rejects_removed_train_run_id(
     raw["comparisons"] = [
         {
             "matrix_dataset": "gaussian-cg1-45x15",
-            "rhs_dataset": "gaussian-cg1-45x15",
+            "rhs_source": {"kind": "gaussian"},
             "train_run_id": "run-123",
         }
     ]
@@ -333,14 +333,14 @@ def test_comparison_display_name_ignores_experiment_filter_for_parent_name(
     raw["comparisons"] = [
         {
             "matrix_dataset": "gaussian-cg1-45x15",
-            "rhs_dataset": "solutions-45x15",
+            "rhs_source": {"kind": "dataset", "path": "/fake/solutions"},
             "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
         }
     ]
 
     config = CaseConfig.model_validate(raw)
 
-    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | Solutions 45x15"
+    assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | dataset"
 
 
 def test_duplicate_auto_ids_raise_validation_error(

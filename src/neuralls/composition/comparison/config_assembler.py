@@ -25,12 +25,12 @@ from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.registry import resolve_dataset_config_path
 from neuralls.platform.config.resolution import resolve_registry_path
 from neuralls.platform.config.settings import NeurallsSettings
-from neuralls.shared.types import ComparisonRhsGenerationKind
+from neuralls.shared.types import ComparisonRhsSourceKind
 
 
 def _resolve_runtime_index(
     entry: ComparisonRegistryEntry,
-    field_name: Literal["matrix_index", "rhs_index"],
+    field_name: Literal["matrix_index"],
 ) -> int | None:
     """Translate case-config defaults into runtime omission semantics."""
     if field_name not in entry.model_fields_set:
@@ -92,18 +92,6 @@ def resolve_comparison_config(
         if matrix_data_cfg.output.data_dir is not None
         else settings.processed_dir / matrix_data_cfg.id
     )
-    rhs_path = None
-    if entry.rhs_dataset is not None:
-        rhs_data_cfg = load_data_config(
-            resolve_dataset_config_path(case_cfg, config_dir, entry.rhs_dataset),
-            settings,
-        )
-        rhs_path = (
-            Path(rhs_data_cfg.output.data_dir) / rhs_data_cfg.id
-            if rhs_data_cfg.output.data_dir is not None
-            else settings.processed_dir / rhs_data_cfg.id
-        )
-
     base_params: dict[str, Any] = {
         "rtol": defaults.rtol,
         "atol": defaults.atol,
@@ -120,22 +108,13 @@ def resolve_comparison_config(
             params=SolverParams(**base_params),
             data=ComparisonData(
                 matrix_path=matrix_path,
-                rhs_path=rhs_path,
-                rhs_index=_resolve_runtime_index(entry, "rhs_index"),
+                rhs_path=None,
                 matrix_index=_resolve_runtime_index(entry, "matrix_index"),
                 normalize_system=normalize_system,
                 require_non_residual_rhs=entry.require_non_residual_rhs,
                 selection_seed=entry.seed,
-                rhs_generation_kind=(
-                    ComparisonRhsGenerationKind(entry.rhs_generation.kind)
-                    if entry.rhs_generation is not None
-                    else None
-                ),
-                rhs_generation_params=(
-                    entry.rhs_generation.model_dump(exclude={"kind"})
-                    if entry.rhs_generation is not None
-                    else None
-                ),
+                rhs_source_kind=ComparisonRhsSourceKind(entry.rhs_source.kind),
+                rhs_source_params=entry.rhs_source.model_dump(exclude={"kind"}),
             ),
         ),
         preconditioners=tuple(preconditioners),

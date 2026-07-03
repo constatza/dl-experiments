@@ -9,7 +9,7 @@ import numpy as np
 
 from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
-from neuralls.shared.types import ComparisonRhsGenerationKind, RowKind
+from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
 __all__ = [
     "ComparisonResult",
@@ -94,12 +94,22 @@ class ResolvedComparisonInput:
     rhs: np.ndarray
     matrix_dataset_id: str
     matrix_index: int
-    rhs_source_type: str
+    lhs: np.ndarray | None = None
     rhs_dataset_id: str | None = None
-    rhs_index: int | None = None
+    rhs_sample_index: int | None = None
     rhs_kind: RowKind | None = None
-    generator_kind: ComparisonRhsGenerationKind | None = None
-    generator_params: dict[str, object] | None = None
+    rhs_source_kind: ComparisonRhsSourceKind | None = None
+    rhs_source_params: dict[str, object] | None = None
+
+    @property
+    def rhs_source_type(self) -> str:
+        match self.rhs_source_kind:
+            case ComparisonRhsSourceKind.GAUSSIAN | ComparisonRhsSourceKind.SPARSE:
+                return "generated"
+            case None:
+                return "unknown"
+            case _:
+                return str(self.rhs_source_kind)
 
 
 @dataclass(frozen=True)

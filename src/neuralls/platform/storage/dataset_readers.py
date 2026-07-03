@@ -12,7 +12,8 @@ import zarr
 from neuralls.platform.storage.manifest import DatasetArtifact
 from neuralls.platform.storage.manifest_io import read_dataset_manifest
 from neuralls.shared.constants import DATASET_MANIFEST_FILENAME
-from neuralls.shared.types import LayoutType
+from neuralls.shared.enum_codecs import decode_row_kind_array
+from neuralls.shared.types import LayoutType, RowKind
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,19 @@ class DatasetPaths:
     def matrix_zarr_dir(self) -> Path:
         """Compatibility alias for older zarr-specific callers."""
         return self.matrix_path
+
+
+@dataclass(frozen=True)
+class CanonicalTrainingTriplet:
+    """One manifest-backed `(A, b, x)` dataset row with provenance."""
+
+    matrix: np.ndarray
+    rhs: np.ndarray
+    lhs: np.ndarray
+    sample_index: int
+    matrix_index: int
+    row_kind: RowKind | None
+    matrix_binding_enforced: bool
 
 
 def _resolve_artifact(root: Path, artifact: DatasetArtifact) -> ResolvedDatasetArtifact:
@@ -136,6 +150,109 @@ def _load_sample(artifact: ResolvedDatasetArtifact, sample_index: int) -> np.nda
                 return np.asarray(data, dtype=np.float64)
         case _:
             raise ValueError(f"Unsupported format {artifact.format!r} at {artifact.path}")
+
+
+def _select_canonical_row(
+    *,
+    row_kinds: tuple[RowKind, ...] | None,
+    sample_index: int | None,
+    sample_count: int,
+    require_standard: bool,
+    dataset_dir: str | Path,
+) -> tuple[int, RowKind | None]:
+    """Resolve one row index under the active semantic row policy."""
+    if sample_index is not None:
+        if sample_index < 0 or sample_index >= sample_count:
+            raise IndexError(
+                f"sample_index={sample_index} out of range for {dataset_dir} "
+                f"(available rows: 0..{sample_count - 1})."
+            )
+        row_kind = row_kinds[sample_index] if row_kinds is not None else None
+        if require_standard and row_kind is RowKind.CG_INTERNAL:
+            raise ValueError(
+                f"sample_index={sample_index} is CG_INTERNAL and cannot be used "
+                "with standard-row enforcement."
+            )
+        return sample_index, row_kind
+
+    if row_kinds is None:
+        if require_standard:
+            raise ValueError(
+                f"Dataset '{dataset_dir}' does not expose row_kind metadata; "
+                "cannot select a canonical non-residual row."
+            )
+        return 0, None
+
+    for index, row_kind in enumerate(row_kinds):
+        if not require_standard or row_kind is RowKind.STANDARD:
+            return index, row_kind
+    raise ValueError(f"No canonical non-residual rows are available in dataset '{dataset_dir}'.")
+
+
+def _resolve_triplet_matrix_index(
+    *,
+    artifacts: DatasetArtifacts,
+    row_index: int,
+    matrix_index: int | None,
+    dataset_dir: str | Path,
+) -> tuple[int, bool]:
+    """Resolve the physical matrix index for a logical dataset row."""
+    if artifacts.matrix_sample_index is None:
+        if matrix_index is None:
+            raise ValueError(
+                f"Dataset '{dataset_dir}' does not expose matrix_sample_index metadata; "
+                "provide an explicit matrix_index only for legacy single-matrix datasets."
+            )
+        return matrix_index, False
+
+    bindings = _load_resolved_native(artifacts.matrix_sample_index).astype(np.int64, copy=False)
+    bindings = bindings.reshape(-1)
+    if row_index >= bindings.shape[0]:
+        raise IndexError(
+            f"sample_index={row_index} has no matrix_sample_index binding in '{dataset_dir}'."
+        )
+    return int(bindings[row_index]), True
+
+
+def resolve_canonical_training_triplet(
+    dataset_dir: str | Path,
+    sample_index: int | None,
+    *,
+    require_standard: bool = True,
+    matrix_index: int | None = None,
+) -> CanonicalTrainingTriplet:
+    """Load one canonical manifest-backed `(matrix, rhs, lhs)` dataset row.
+
+    When `sample_index` is omitted, the first STANDARD row is selected. Matrix
+    selection follows persisted `matrix_sample_index` bindings; explicit
+    `matrix_index` is only a fallback for datasets that do not expose bindings.
+    """
+    artifacts = resolve_dataset_artifacts(dataset_dir)
+    sample_count = read_training_sample_count(artifacts)
+    row_kind_codes = load_optional_row_kind_codes(dataset_dir)
+    row_kinds = decode_row_kind_array(row_kind_codes) if row_kind_codes is not None else None
+    row_index, row_kind = _select_canonical_row(
+        row_kinds=row_kinds,
+        sample_index=sample_index,
+        sample_count=sample_count,
+        require_standard=require_standard,
+        dataset_dir=dataset_dir,
+    )
+    resolved_matrix_index, matrix_binding_enforced = _resolve_triplet_matrix_index(
+        artifacts=artifacts,
+        row_index=row_index,
+        matrix_index=matrix_index,
+        dataset_dir=dataset_dir,
+    )
+    return CanonicalTrainingTriplet(
+        matrix=_load_sample(artifacts.matrix, resolved_matrix_index),
+        rhs=_load_sample(artifacts.rhs, row_index).reshape(-1),
+        lhs=_load_sample(artifacts.solutions, row_index).reshape(-1),
+        sample_index=row_index,
+        matrix_index=resolved_matrix_index,
+        row_kind=row_kind,
+        matrix_binding_enforced=matrix_binding_enforced,
+    )
 
 
 def _load_resolved(artifact: ResolvedDatasetArtifact) -> np.ndarray:

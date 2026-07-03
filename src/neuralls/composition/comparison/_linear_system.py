@@ -74,7 +74,7 @@ def _normalize_linear_system(
 def _load_linear_system(
     paths: ComparisonPaths,
     *,
-    rhs_index: int,
+    rhs_sample_index: int,
     matrix_index: int,
     normalize_system: str,
     resolved_input: ResolvedComparisonInput | None = None,
@@ -83,7 +83,7 @@ def _load_linear_system(
 
     Args:
         paths: Resolved comparison paths with matrix and rhs file locations.
-        rhs_index: Row index to select from a multi-RHS file; -1 selects row 0.
+        rhs_sample_index: Row index to select from a multi-RHS file; -1 selects row 0.
         matrix_index: Sample index to select from a multi-matrix dataset directory.
         normalize_system: Scaling mode — one of ``"none"``, ``"matrix"``,
             ``"rhs"``, ``"both"``, ``"diagonal"``, ``"spectral"``.
@@ -97,7 +97,7 @@ def _load_linear_system(
     """
     if resolved_input is None:
         A, b = load_system_arrays(
-            paths.matrix, paths.rhs, rhs_index=rhs_index, matrix_index=matrix_index
+            paths.matrix, paths.rhs, rhs_sample_index=rhs_sample_index, matrix_index=matrix_index
         )
     else:
         A, b = resolved_input.matrix, resolved_input.rhs

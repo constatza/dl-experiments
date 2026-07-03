@@ -211,7 +211,7 @@ def test_load_experiments_rejects_unknown_comparison_experiment_filter(
         f.write("[[comparisons]]\n")
         f.write('id = "gaussian"\n')
         f.write('matrix_dataset = "solutions"\n')
-        f.write('rhs_dataset = "gaussian-rhs"\n')
+        f.write('rhs_source = { kind = "gaussian" }\n')
         f.write('experiments = ["missing-exp"]\n')
 
     with pytest.raises(

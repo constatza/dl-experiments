@@ -72,7 +72,7 @@ def test_comparison_run_spec_name_and_tags() -> None:
     entry = ComparisonRegistryEntry(
         id="cmp-1",
         matrix_dataset="solutions",
-        rhs_dataset="gaussian-rhs",
+        rhs_source={"kind": "gaussian"},
         method=Path("configs/compare.toml"),
         display_name="Comparison One",
     )

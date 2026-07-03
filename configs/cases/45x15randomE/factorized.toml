@@ -46,55 +46,55 @@ id           = "sparse-rhs-45x15randomE"
 path         = "../../datasets/test/45x15randomE/sparse-rhs.toml"
 display_name = "Sparse RHS 45x15randomE"
 
-# ── Models (regular factorized variants, including embedded) ──────────────────
+# ── Models (FullyEmbedded factorized variants) ────────────────────────────────
 
 [[jobs]]
-id           = "embedded-factorized"
-path         = "../../jobs/ffnn/embedded-factorized-optuna.toml"
-display_name = "Scale-Equivariant Embedded Factorized FFNN"
+id           = "scale-equivariant-embedded-fully-factorized"
+path         = "../../jobs/ffnn/scale-equivariant-embedded-fully-factorized.toml"
+display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
 
 # ── Comparisons (one per training dataset, filtered to own experiments) ───────
 
 [[comparisons]]
 id             = "gaussian-cg10"
 matrix_dataset = "gaussian-cg10-45x15randomE"
-rhs_generation = { kind = "gaussian" }
+rhs_source = { kind = "gaussian" }
 seed           = 42
 experiments    = [
-  "embedded-factorized-gaussian-cg10-45x15randomE",
+  "scale-equivariant-embedded-fully-factorized-gaussian-cg10-45x15randomE",
 ]
 
 [[comparisons]]
 id             = "gaussian-cg100"
 matrix_dataset = "gaussian-cg100-45x15randomE"
-rhs_generation = { kind = "gaussian" }
+rhs_source = { kind = "gaussian" }
 seed           = 42
 experiments    = [
-  "embedded-factorized-gaussian-cg100-45x15randomE",
+  "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
 ]
 
 [[comparisons]]
 id             = "scaled"
 matrix_dataset = "gaussian-cg100-45x15randomE"
-rhs_dataset    = "scaled-solutions-45x15randomE"
+rhs_source = { kind = "dataset", path = "${NEURALLS_PROCESSED_DIR}/scaled-solutions-45x15randomE" }
 experiments    = [
-  "embedded-factorized-gaussian-cg100-45x15randomE",
+  "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
 ]
 
 [[comparisons]]
 id             = "sparse"
 matrix_dataset = "gaussian-cg100-45x15randomE"
-rhs_generation = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
+rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 experiments    = [
-  "embedded-factorized-gaussian-cg100-45x15randomE",
+  "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
 ]
 
 # ── Experiments (2 models × 2 datasets) ──────────────────────────────────────
 
 [[experiments]]
 dataset = "gaussian-cg10-45x15randomE"
-job = "embedded-factorized"
+job = "scale-equivariant-embedded-fully-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15randomE"
-job = "embedded-factorized"
+job = "scale-equivariant-embedded-fully-factorized"

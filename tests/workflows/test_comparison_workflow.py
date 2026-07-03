@@ -48,7 +48,7 @@ from neuralls.platform.tracking.comparison_tracking import (
     log_comparison_result_metrics,
 )
 from neuralls.platform.tracking.mlflow import sanitize_metric_key_segment
-from neuralls.shared.types import ComparisonRhsGenerationKind
+from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
 
 def test_resolve_comparison_config_importable_from_composition() -> None:
@@ -128,8 +128,8 @@ def _write_experiments_config(
             {"id": "gaussian-rhs", "path": "datasets/gaussian-rhs.toml"},
         ]
         payload["comparisons"] = [
-            {"id": "a", "matrix_dataset": "solutions", "rhs_dataset": "gaussian-rhs"},
-            {"id": "b", "matrix_dataset": "solutions", "rhs_dataset": "gaussian-rhs"},
+            {"id": "a", "matrix_dataset": "solutions", "rhs_source": {"kind": "gaussian"}},
+            {"id": "b", "matrix_dataset": "solutions", "rhs_source": {"kind": "gaussian"}},
         ]
     with path.open("wb") as fh:
         tomli_w.dump(payload, fh)
@@ -167,7 +167,21 @@ def _mock_cfg(
     cfg = MagicMock()
     cfg.general.data.matrix_path = matrix_path
     cfg.general.data.rhs_path = rhs_path
+    cfg.general.data.matrix_index = 0
     cfg.general.data.dataset_alias = None
+    cfg.general.data.normalize_system = "matrix"
+    cfg.general.data.require_non_residual_rhs = True
+    cfg.general.data.selection_seed = None
+    cfg.general.data.rhs_source_kind = (
+        ComparisonRhsSourceKind.RAW_RHS
+        if rhs_path is not None
+        else ComparisonRhsSourceKind.GAUSSIAN
+    )
+    cfg.general.data.rhs_source_params = (
+        {"path": rhs_path, "sample_index": 0, "row_kind": RowKind.STANDARD, "scale": 1.0}
+        if rhs_path is not None
+        else {"mean": 0.0, "std": 1.0}
+    )
     cfg.preconditioners = tuple(preconditioners or [])
     return cfg
 
@@ -255,7 +269,7 @@ def _make_entry(comparison_id: str = "test") -> ComparisonRegistryEntry:
     return ComparisonRegistryEntry(
         id=comparison_id,
         matrix_dataset="solutions",
-        rhs_dataset="gaussian-rhs",
+        rhs_source={"kind": "gaussian"},
     )
 
 
@@ -293,23 +307,29 @@ def test_resolve_comparison_config_recovers_omitted_index_semantics(tmp_path: Pa
     omitted_entry = ComparisonRegistryEntry(
         id="omitted",
         matrix_dataset="matrix",
-        rhs_dataset="rhs",
+        rhs_source={
+            "kind": "dataset",
+            "path": settings.processed_dir / "rhs",
+        },
     )
     explicit_entry = ComparisonRegistryEntry(
         id="explicit",
         matrix_dataset="matrix",
-        rhs_dataset="rhs",
         matrix_index=0,
-        rhs_index=0,
+        rhs_source={
+            "kind": "dataset",
+            "path": settings.processed_dir / "rhs",
+            "sample_index": 0,
+        },
     )
 
     omitted_cfg = resolve_comparison_config(case_cfg, tmp_path, omitted_entry, settings)
     explicit_cfg = resolve_comparison_config(case_cfg, tmp_path, explicit_entry, settings)
 
     assert omitted_cfg.general.data.matrix_index is None
-    assert omitted_cfg.general.data.rhs_index is None
     assert explicit_cfg.general.data.matrix_index == 0
-    assert explicit_cfg.general.data.rhs_index == 0
+    assert explicit_cfg.general.data.rhs_source_params is not None
+    assert explicit_cfg.general.data.rhs_source_params["sample_index"] == 0
 
 
 def test_resolve_comparison_config_carries_generated_rhs_without_rhs_path(
@@ -335,15 +355,101 @@ def test_resolve_comparison_config_carries_generated_rhs_without_rhs_path(
     entry = ComparisonRegistryEntry(
         id="generated",
         matrix_dataset="matrix",
-        rhs_generation={"kind": "gaussian"},
+        rhs_source={"kind": "gaussian"},
         seed=42,
     )
 
     cfg = resolve_comparison_config(case_cfg, tmp_path, entry, settings)
 
     assert cfg.general.data.rhs_path is None
-    assert cfg.general.data.rhs_generation_kind is ComparisonRhsGenerationKind.GAUSSIAN
+    assert cfg.general.data.rhs_source_kind is ComparisonRhsSourceKind.GAUSSIAN
     assert cfg.general.data.selection_seed == 42
+
+
+def test_resolve_comparison_config_carries_raw_rhs_source(
+    tmp_path: Path,
+) -> None:
+    datasets_dir = tmp_path / "datasets"
+    datasets_dir.mkdir()
+    _write_dataset_config(datasets_dir / "matrix.toml", "matrix")
+    rhs_path = tmp_path / "rhs.txt"
+    rhs_path.write_text("1.0\n2.0\n", encoding="utf-8")
+    settings = _make_settings(tmp_path)
+    case_cfg = CaseConfig.model_validate(
+        {
+            "datasets": [{"id": "matrix", "path": "datasets/matrix.toml"}],
+            "comparison_defaults": {
+                "rtol": 1.0e-6,
+                "atol": 1.0e-14,
+                "max_iterations": 10,
+                "stopping_criterion": "residual_norm",
+                "m_max": 20,
+                "preconditioners": [{"name": "none", "type": "identity"}],
+            },
+        }
+    )
+    entry = ComparisonRegistryEntry(
+        id="raw",
+        matrix_dataset="matrix",
+        rhs_source={
+            "kind": "raw_rhs",
+            "path": rhs_path,
+            "sample_index": 0,
+            "row_kind": "standard",
+        },
+    )
+
+    cfg = resolve_comparison_config(case_cfg, tmp_path, entry, settings)
+
+    assert cfg.general.data.rhs_path is None
+    assert cfg.general.data.rhs_source_kind is ComparisonRhsSourceKind.RAW_RHS
+    assert cfg.general.data.rhs_source_params == {
+        "path": rhs_path,
+        "sample_index": 0,
+        "row_kind": RowKind.STANDARD,
+        "scale": 1.0,
+    }
+
+
+def test_resolve_comparison_config_carries_dataset_rhs_source(
+    tmp_path: Path,
+) -> None:
+    datasets_dir = tmp_path / "datasets"
+    datasets_dir.mkdir()
+    _write_dataset_config(datasets_dir / "matrix.toml", "matrix")
+    rhs_dataset_dir = tmp_path / "processed" / "rhs-dataset"
+    settings = _make_settings(tmp_path)
+    case_cfg = CaseConfig.model_validate(
+        {
+            "datasets": [{"id": "matrix", "path": "datasets/matrix.toml"}],
+            "comparison_defaults": {
+                "rtol": 1.0e-6,
+                "atol": 1.0e-14,
+                "max_iterations": 10,
+                "stopping_criterion": "residual_norm",
+                "m_max": 20,
+                "preconditioners": [{"name": "none", "type": "identity"}],
+            },
+        }
+    )
+    entry = ComparisonRegistryEntry(
+        id="dataset",
+        matrix_dataset="matrix",
+        rhs_source={
+            "kind": "dataset",
+            "path": rhs_dataset_dir,
+            "sample_index": 2,
+        },
+    )
+
+    cfg = resolve_comparison_config(case_cfg, tmp_path, entry, settings)
+
+    assert cfg.general.data.rhs_path is None
+    assert cfg.general.data.rhs_source_kind is ComparisonRhsSourceKind.DATASET
+    assert cfg.general.data.rhs_source_params == {
+        "path": rhs_dataset_dir,
+        "sample_index": 2,
+    }
 
 
 def test_comparison_data_model_tracks_explicit_normalize_in_fields_set() -> None:
@@ -464,7 +570,8 @@ def test_run_comparison_uses_explicit_entry_indices(tmp_path: Path) -> None:
         ],
     )
     cfg.general.data.matrix_index = 4
-    cfg.general.data.rhs_index = 9
+    cfg.general.data.rhs_source_params["sample_index"] = 9
+    np.save(rhs_path, np.eye(10, 2, dtype=np.float64))
     payload = MagicMock()
     entry = _make_entry()
     settings = _make_settings(tmp_path)
@@ -480,7 +587,9 @@ def test_run_comparison_uses_explicit_entry_indices(tmp_path: Path) -> None:
         _run_comparison_from_config(cfg, entry, experiments_config, settings)
 
     assert mock_compare.call_args.kwargs["general_params"].data.matrix_index == 4
-    assert mock_compare.call_args.kwargs["general_params"].data.rhs_index == 9
+    assert (
+        mock_compare.call_args.kwargs["general_params"].data.rhs_source_params["sample_index"] == 9
+    )
 
 
 def test_run_comparison_generated_rhs_accepts_matrix_only_input(tmp_path: Path) -> None:
@@ -495,8 +604,8 @@ def test_run_comparison_generated_rhs_accepts_matrix_only_input(tmp_path: Path) 
             StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)
         ],
     )
-    cfg.general.data.rhs_generation_kind = ComparisonRhsGenerationKind.GAUSSIAN
-    cfg.general.data.rhs_generation_params = {"mean": 0.0, "std": 1.0}
+    cfg.general.data.rhs_source_kind = ComparisonRhsSourceKind.GAUSSIAN
+    cfg.general.data.rhs_source_params = {"mean": 0.0, "std": 1.0}
     cfg.general.data.selection_seed = 5
     payload = MagicMock()
     entry = _make_entry()
@@ -525,18 +634,17 @@ def test_resolved_generated_rhs_uses_matrix_source_without_rhs_dataset(tmp_path:
         ],
     )
     cfg.general.data.matrix_index = 0
-    cfg.general.data.rhs_index = None
     cfg.general.data.require_non_residual_rhs = True
     cfg.general.data.selection_seed = None
-    cfg.general.data.rhs_generation_kind = ComparisonRhsGenerationKind.SPARSE
-    cfg.general.data.rhs_generation_params = {
+    cfg.general.data.rhs_source_kind = ComparisonRhsSourceKind.SPARSE
+    cfg.general.data.rhs_source_params = {
         "indices": [0, 1],
         "values": [3.0, -2.0],
     }
     entry = ComparisonRegistryEntry(
         id="generated-sparse",
         matrix_dataset="solutions",
-        rhs_generation={
+        rhs_source={
             "kind": "sparse",
             "indices": [0, 1],
             "values": [3.0, -2.0],
@@ -547,20 +655,17 @@ def test_resolved_generated_rhs_uses_matrix_source_without_rhs_dataset(tmp_path:
         matrix_path=Path(cfg.general.data.matrix_path),
         matrix_dataset_id=entry.matrix_dataset,
         matrix_index=cfg.general.data.matrix_index,
-        rhs_path=cfg.general.data.rhs_path,
-        rhs_dataset_id=entry.rhs_dataset,
-        rhs_index=cfg.general.data.rhs_index,
         require_non_residual_rhs=cfg.general.data.require_non_residual_rhs,
         seed=cfg.general.data.selection_seed,
-        rhs_generation_kind=cfg.general.data.rhs_generation_kind,
-        rhs_generation_params=cfg.general.data.rhs_generation_params,
+        rhs_source_kind=cfg.general.data.rhs_source_kind,
+        rhs_source_params=cfg.general.data.rhs_source_params,
     )
 
     assert resolved.rhs_source_type == "generated"
     assert resolved.rhs_dataset_id is None
-    assert resolved.rhs_index is None
-    assert resolved.generator_kind is ComparisonRhsGenerationKind.SPARSE
-    assert resolved.generator_params == {"indices": [0, 1], "values": [3.0, -2.0]}
+    assert resolved.rhs_sample_index is None
+    assert resolved.rhs_source_kind is ComparisonRhsSourceKind.SPARSE
+    assert resolved.rhs_source_params == {"indices": [0, 1], "values": [3.0, -2.0]}
     np.testing.assert_allclose(resolved.rhs, np.array([3.0, -2.0], dtype=np.float64))
 
 

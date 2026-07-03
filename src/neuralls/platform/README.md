@@ -125,16 +125,17 @@ Readers derive safe RHS candidates from `rhs_kind`; they do not trust ad hoc
 filenames or stored allowlists. Storage owns persistence and artifact
 resolution, while the compact integer encoding/decoding boundary lives in
 shared pure codecs so domain and composition code do not depend on platform.
-When datasets also expose `matrix_sample_index`, platform persists and reads
-that binding as provenance metadata only. Comparison workflows may still mix
-any selected matrix sample with any semantically allowed RHS row unless a
-higher-level workflow adds a stricter pairing policy.
+When datasets expose `matrix_sample_index`, the canonical triplet resolver uses
+that binding to load the matching matrix for a selected `(rhs, solution)` row.
 
 Case-driven comparison sample selection stays explicit and deterministic.
-`ComparisonRegistryEntry.matrix_index` and `rhs_index` default to `0`, and the
-workflow uses those indices directly when selecting one matrix/RHS system from
-the comparison dataset. Platform does not infer held-out semantics from
-training runs or MLflow split artifacts.
+`ComparisonRegistryEntry.matrix_index` applies to generated and raw sources;
+dataset-backed `rhs_source` entries resolve a canonical manifest-backed triplet
+instead. Dataset sources use `sample_index` when provided and otherwise select
+the first STANDARD row. `raw_rhs` sources point at concrete RHS vector files;
+`raw_lhs` sources point at concrete solution-side vector files that comparison
+transforms into an RHS with `A @ vector` and the configured scale. Platform does
+not infer held-out semantics from training runs or MLflow split artifacts.
 
 Training artifact persistence also stays generic: platform storage writes the
 already-normalized numpy payload it receives from composition without

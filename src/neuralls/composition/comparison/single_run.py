@@ -5,22 +5,19 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-import numpy as np
 from neuralls.composition.comparison._linear_system import (
     _load_linear_system,
     _log_matrix_condition_number,
 )
 from neuralls.composition.comparison._plots import _generate_comparison_plots
 from neuralls.composition.comparison._preconditioner_setup import (
-    _SYSTEM_ARRAYS_ALWAYS_AVAILABLE,
     PreconditionerService,
-    _bind_system_inputs,
     _create_scheduled_preconditioners,
+    _load_and_bind_extra_inputs,
 )
 from neuralls.composition.comparison.models import ComparisonPaths
 from neuralls.composition.comparison.models import ResolvedComparisonInput
 from neuralls.domain.analysis.spectra import PreconditionerCallable, compute_condition_numbers
-from neuralls.domain.solver.preconditioners.base import BindableInputs
 from neuralls.domain.solver.comparison import format_results_summary, run_cg_comparison
 from neuralls.domain.solver.models.result import (
     ComparisonRecommendations,
@@ -30,10 +27,6 @@ from neuralls.platform.config.models.comparison import ComparisonGeneral
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.storage.filesystem import ensure_dir
-from neuralls.platform.storage.training_artifacts import (
-    load_array_source_sample,
-    load_training_arrays,
-)
 
 
 def _resolve_comparison_paths(
@@ -138,16 +131,13 @@ def compare_preconditioners(
     )
     _ensure_comparison_directories(paths)
 
-    resolved_rhs_index = (
-        general_params.data.rhs_index if general_params.data.rhs_index is not None else 0
-    )
     resolved_matrix_index = (
         general_params.data.matrix_index if general_params.data.matrix_index is not None else 0
     )
 
     system = _load_linear_system(
         paths,
-        rhs_index=resolved_rhs_index,
+        rhs_sample_index=0,
         matrix_index=resolved_matrix_index,
         normalize_system=general_params.data.normalize_system,
         resolved_input=resolved_input,
@@ -167,27 +157,11 @@ def compare_preconditioners(
         base_preconditioners=preconditioners,
     )
 
-    # Bind extra inputs to scheduled wrappers so ScheduledPreconditioner.bind_inputs()
-    # propagates to the inner preconditioner before condition numbers are computed.
-    needed_extra_names = frozenset(
-        name
-        for p in scheduled_preconditioners.values()
-        if isinstance(p, BindableInputs)
-        for name in p.extra_input_names
-        if name not in _SYSTEM_ARRAYS_ALWAYS_AVAILABLE
-    )
-    extra_data: dict[str, np.ndarray] = {}
-    if needed_extra_names and paths.matrix.is_dir():
-        _arrays = load_training_arrays(paths.matrix)
-        _extra_name_list = sorted(needed_extra_names)
-        extra_data = {
-            name: load_array_source_sample(_arrays.parameter_sources[i], resolved_matrix_index)
-            for i, name in enumerate(_extra_name_list)
-            if i < len(_arrays.parameter_sources)
-        }
-    _bind_system_inputs(
+    _load_and_bind_extra_inputs(
         scheduled_preconditioners,
-        {"matrix": system.matrix, **extra_data},
+        matrix=system.matrix,
+        matrix_path=paths.matrix,
+        matrix_index=resolved_matrix_index,
     )
 
     cond_callables: dict[str, PreconditionerCallable] = {

@@ -6,47 +6,13 @@ from pathlib import Path
 
 from loguru import logger
 import numpy as np
+import zarr
 
 from .datasets import (
     load_dense_training_arrays,
     load_matrix_dense_sample,
     load_dataset_manifest,
 )
-
-
-def load_system_extras(
-    dataset_dir: Path,
-    names: frozenset[str],
-    sample_index: int = 0,
-) -> dict[str, np.ndarray]:
-    """Load named extra arrays from a dataset directory.
-
-    Looks for ``{name}.zarr`` (zarr array, indexed by sample_index on the first
-    axis when ndim > 1) or ``{name}.npy`` (numpy file, loaded as-is). Names
-    not found are silently absent — callers decide how to handle gaps.
-
-    Args:
-        dataset_dir: Root dataset directory.
-        names: Set of array names to load (e.g. frozenset({"coordinates"})).
-        sample_index: Which sample to extract from zarr arrays that have a batch
-            dimension (ndim > 1).
-
-    Returns:
-        Dict mapping found names to float64 numpy arrays.
-    """
-    import zarr as _zarr
-
-    result: dict[str, np.ndarray] = {}
-    for name in names:
-        zarr_path = dataset_dir / f"{name}.zarr"
-        npy_path = dataset_dir / f"{name}.npy"
-        if zarr_path.exists():
-            arr = _zarr.open_array(str(zarr_path), mode="r")
-            data = arr[sample_index] if arr.ndim > 1 else arr[:]
-            result[name] = np.asarray(data, dtype=np.float64)
-        elif npy_path.exists():
-            result[name] = np.load(npy_path).astype(np.float64, copy=False)
-    return result
 
 
 def resolve_system_paths(
@@ -66,13 +32,35 @@ def resolve_system_paths(
     return Path(matrix), Path(rhs)
 
 
+def load_system_extras(
+    dataset_dir: Path,
+    names: frozenset[str],
+    sample_index: int,
+) -> dict[str, np.ndarray]:
+    """Load optional named side-channel arrays from a comparison dataset directory."""
+    extras: dict[str, np.ndarray] = {}
+    for name in names:
+        zarr_path = dataset_dir / f"{name}.zarr"
+        npy_path = dataset_dir / f"{name}.npy"
+        if zarr_path.exists():
+            arr = zarr.open_array(str(zarr_path), mode="r")
+            extras[name] = np.asarray(arr[sample_index] if arr.ndim > 1 else arr[:])
+            continue
+        if npy_path.exists():
+            arr = np.load(npy_path)
+            extras[name] = np.asarray(arr[sample_index] if arr.ndim > 1 else arr)
+    return extras
+
+
 def _flatten_rhs_if_needed(arr: np.ndarray, source_path: Path) -> np.ndarray:
     """Handle 1D/column vectors vs multiple RHS entries."""
     # Treat (N, 1) as a single vector, not multiple problems
     is_column_vector = arr.ndim == 2 and arr.shape[1] == 1
 
     if arr.ndim > 1 and arr.shape[0] > 1 and not is_column_vector:
-        logger.debug(f"{source_path} contains multiple RHS entries; rhs_index will select one row.")
+        logger.debug(
+            f"{source_path} contains multiple RHS entries; rhs_sample_index will select one row."
+        )
 
     # Only extract the first row if it's NOT a column vector
     if arr.ndim > 1 and is_column_vector:
@@ -81,27 +69,27 @@ def _flatten_rhs_if_needed(arr: np.ndarray, source_path: Path) -> np.ndarray:
     return arr
 
 
-def _select_rhs_sample(arr: np.ndarray, rhs_index: int, source_path: Path) -> np.ndarray:
+def _select_rhs_sample(arr: np.ndarray, rhs_sample_index: int, source_path: Path) -> np.ndarray:
     """Select one RHS sample by index from 1D/2D RHS arrays."""
     is_column_vector = arr.ndim == 2 and arr.shape[1] == 1
     if arr.ndim == 1 or is_column_vector:
         return arr.reshape(-1)
 
-    if rhs_index == -1:
+    if rhs_sample_index == -1:
         return arr[0].reshape(-1)
 
-    if rhs_index < -1 or rhs_index >= arr.shape[0]:
+    if rhs_sample_index < -1 or rhs_sample_index >= arr.shape[0]:
         raise IndexError(
-            f"rhs_index={rhs_index} out of range for {source_path} "
+            f"rhs_sample_index={rhs_sample_index} out of range for {source_path} "
             f"(available rows: 0..{arr.shape[0] - 1}, or -1 for first row)."
         )
-    return arr[rhs_index].reshape(-1)
+    return arr[rhs_sample_index].reshape(-1)
 
 
 def load_system_arrays(
     matrix_path: Path,
     rhs_path: Path | None = None,
-    rhs_index: int = 0,
+    rhs_sample_index: int = 0,
     matrix_index: int = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Load matrix and RHS from explicit file paths (dataset dir, npy, txt)."""
@@ -130,6 +118,6 @@ def load_system_arrays(
     A = _load_array(matrix_path, "matrix")
     b_raw = _load_array(rhs_path, "rhs")
     b = _flatten_rhs_if_needed(b_raw, rhs_path)
-    b = _select_rhs_sample(b, rhs_index, rhs_path)
+    b = _select_rhs_sample(b, rhs_sample_index, rhs_path)
 
     return A, b

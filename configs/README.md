@@ -130,12 +130,11 @@ Case configs bind:
 - comparison ids
 - case-level MLflow topology
 
-The 45x15 `scale-equivariant-cg.toml` and
-`scale-equivariant-mixed-cg.toml` cases compare pure CG-N and mixed CG-N
-training datasets for the non-FiLM, non-simple scale-equivariant FFNN variants.
-Those cases use `configs/jobs/scale-equivariant-200/` entrypoints so the sweep
-is capped at 200 training epochs without changing the shared default job
-configs used by other cases.
+The 45x15 `cg.toml` and `mixed-cg.toml` cases compare pure CG-N and mixed CG-N
+training datasets for FullyEmbedded and constant-width factorized FFNN variants.
+Scale-equivariant jobs in those cases use `configs/jobs/scale-equivariant-200/`
+entrypoints so that part of the sweep is capped at 200 training epochs without
+changing the shared default job configs used by other cases.
 
 ## Case Anatomy
 
@@ -151,22 +150,18 @@ comparison = "Comparisons"
 id = "train-dataset"
 path = "../../datasets/train/45x15/gaussian-cg100.toml"
 
-[[datasets]]
-id = "benchmark-dataset"
-path = "../../datasets/test/45x15/scaled-solutions.toml"
-
 [[jobs]]
-id = "factorized"
-path = "../../jobs/ffnn/factorized.toml"
+id = "scale-equivariant-embedded-fully-factorized"
+path = "../../jobs/ffnn/scale-equivariant-embedded-fully-factorized.toml"
 
 [[comparisons]]
 id = "scaled"
 matrix_dataset = "train-dataset"
-rhs_dataset = "benchmark-dataset"
+rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 5.0 }
 
 [[experiments]]
 dataset = "train-dataset"
-job = "factorized"
+job = "scale-equivariant-embedded-fully-factorized"
 ```
 
 `[names].training` controls the MLflow experiment bucket for training runs.
@@ -179,7 +174,7 @@ job = "factorized"
 type = "train"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/factorized.toml"
+model = "../../profiles/model/ffnn/scale-equivariant-embedded-fully-factorized.toml"
 data = "../../profiles/data/array-default.toml"
 training = "../../profiles/training/default.toml"
 ```
@@ -207,7 +202,7 @@ entrypoint, so the inline `[search]` block belongs there.
 
 ```toml
 [model]
-name = "ScaleEquivariantFactorizedFFNN"
+name = "ScaleEquivariantEmbeddedFullyFactorizedFFNN"
 num_layers = 1
 
 [data]

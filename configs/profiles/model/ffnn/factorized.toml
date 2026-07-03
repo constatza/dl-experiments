@@ -1,3 +1,0 @@
-[model]
-name = "ScaleEquivariantFactorizedFFNN"
-num_layers = 1
