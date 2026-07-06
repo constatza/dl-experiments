@@ -14,6 +14,7 @@ from neuralls.composition.comparison.config_assembler import resolve_comparison_
 from neuralls.composition.comparison._input_resolution import resolve_comparison_input
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.composition.experiments.comparison_batch import (
+    _resolve_comparison_topology,
     _resolve_neural_preconditioners,
     _run_comparison_from_config,
     _validate_neural_preconditioner,
@@ -546,15 +547,14 @@ def test_run_comparison_injects_master_topology(tmp_path: Path) -> None:
         patch(_COMPARE_PRECONDITIONERS, return_value=payload),
         patch(_MLFLOW_MODULE) as mock_mlflow,
         patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
-        patch(_SETUP_TRACKING) as mock_setup_tracking,
         patch(_LOG_COMPARISON_ARTIFACTS),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is True
-    mock_setup_tracking.assert_called_once()
-    assert mock_setup_tracking.call_args.kwargs["experiment_name"] == "CustomComparison"
+    assert topology.experiment_name == "CustomComparison"
 
 
 def test_run_comparison_uses_explicit_entry_indices(tmp_path: Path) -> None:
@@ -584,7 +584,8 @@ def test_run_comparison_uses_explicit_entry_indices(tmp_path: Path) -> None:
         patch(_LOG_COMPARISON_ARTIFACTS),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert mock_compare.call_args.kwargs["general_params"].data.matrix_index == 4
     assert (
@@ -619,7 +620,8 @@ def test_run_comparison_generated_rhs_accepts_matrix_only_input(tmp_path: Path) 
         patch(_LOG_COMPARISON_ARTIFACTS),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is True
 
@@ -697,7 +699,8 @@ def test_run_comparison_does_not_require_split_artifacts(tmp_path: Path) -> None
         ),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is True
 
@@ -808,7 +811,8 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
         patch(_LOG_COMPARISON_ARTIFACTS, side_effect=_capture_work_root),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is True
     assert "figures/convergence.png" in logged_files
@@ -858,7 +862,8 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
         ),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is True
     assert len(outcomes[0].warnings) == 1
@@ -900,7 +905,8 @@ def test_run_comparison_fails_if_all_preconditioners_are_skipped(
         ),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is False
     assert "No runnable preconditioners remain" in (outcomes[0].error or "")
@@ -1003,7 +1009,8 @@ job = "valid-job"
         ) as mock_resolve_specs,
     ):
         _configure_mock_mlflow(mock_mlflow)
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is True
     assert mock_resolve_specs.call_args.kwargs["experiment_contexts"] is None
@@ -1031,7 +1038,8 @@ def test_run_comparison_fails_before_tracking_when_matrix_input_is_missing(
         patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING) as mock_setup_tracking,
     ):
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is False
     assert f"Comparison input not found: {missing_matrix}" in (outcomes[0].error or "")
@@ -1057,7 +1065,8 @@ def test_run_comparison_missing_known_dataset_raises_file_not_found(
     entry = _make_entry()
     settings = _make_settings(tmp_path)
 
-    outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+    topology = _resolve_comparison_topology(experiments_config, settings)
+    outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is False
     assert str(missing_dataset) in (outcomes[0].error or "")
@@ -1070,6 +1079,7 @@ def test_run_comparison_batch_preserves_declared_order(tmp_path: Path) -> None:
     def _fake_run_from_config(
         cfg: object,
         entry: ComparisonRegistryEntry,
+        topology: object,
         experiments_config_path: Path,
         settings: NeurallsSettings,
     ) -> list[ComparisonOutcome]:
@@ -1140,7 +1150,8 @@ def test_run_comparison_logs_scalar_metrics_to_mlflow(tmp_path: Path) -> None:
         patch(_LOG_COMPARISON_ARTIFACTS),
     ):
         _configure_mock_mlflow(mock_mlflow)
-        outcomes = _run_comparison_from_config(cfg, entry, experiments_config, settings)
+        topology = _resolve_comparison_topology(experiments_config, settings)
+        outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is True
     logged_metric_names = {call.args[0] for call in mock_mlflow.log_metric.call_args_list}

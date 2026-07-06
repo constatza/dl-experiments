@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -17,12 +16,12 @@ from neuralls.composition.experiments.multi_training import (
     TrainingRunResult,
     _annotate_mlflow_run,
     _collect_batch_metrics,
-    _create_training_session_parent_run,
     _make_label_map,
     _resolve_config_paths,
     _train_single,
     train_batch,
 )
+from neuralls.platform.tracking.mlflow import create_session_parent_run
 
 
 def _write_model_profile(path: Path, model_name: str) -> Path:
@@ -349,11 +348,11 @@ def test_train_batch_returns_local_output_dir(
             "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
         ) as mock_train,
         patch(
-            "neuralls.composition.experiments.multi_training._create_training_session_parent_run",
+            "neuralls.composition.experiments.multi_training.create_session_parent_run",
             return_value="parent-run-1",
         ) as mock_create_parent,
         patch(
-            "neuralls.composition.experiments.multi_training._finalize_training_session_parent_run"
+            "neuralls.composition.experiments.multi_training.finalize_session_parent_run"
         ) as mock_finalize_parent,
     ):
         result = train_batch(
@@ -415,12 +414,10 @@ def test_train_batch_forwards_custom_training_experiment_name(
             "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
         ) as mock_train,
         patch(
-            "neuralls.composition.experiments.multi_training._create_training_session_parent_run",
+            "neuralls.composition.experiments.multi_training.create_session_parent_run",
             return_value="parent-run-1",
         ),
-        patch(
-            "neuralls.composition.experiments.multi_training._finalize_training_session_parent_run"
-        ),
+        patch("neuralls.composition.experiments.multi_training.finalize_session_parent_run"),
     ):
         train_batch(
             cfg=cfg,
@@ -432,40 +429,32 @@ def test_train_batch_forwards_custom_training_experiment_name(
     assert mock_train.call_args.kwargs["mlflow_experiment_name"] == "CustomTrain"
 
 
-def test_create_training_session_parent_run_uses_case_config_identity(tmp_path: Path) -> None:
-    """Training session parents are named from case config stem and timestamp."""
+def test_create_session_parent_run_uses_case_config_identity(tmp_path: Path) -> None:
+    """Session parents are named from case config stem and timestamp."""
     case_config_path = tmp_path / "ffnn.toml"
     tracking_db = tmp_path / "mlflow.db"
     artifact_dir = tmp_path / "mlartifacts"
     with (
         patch(
-            "neuralls.composition.experiments.multi_training._ensure_training_experiment",
+            "neuralls.platform.tracking.mlflow.ensure_experiment",
             return_value="exp-1",
         ),
-        patch("neuralls.composition.experiments.multi_training.MlflowClient") as mock_client_cls,
-        patch(
-            "neuralls.composition.experiments.multi_training.build_training_session_run_spec",
-            return_value=(
-                "ffnn | 2026-03-12T12:00:00",
-                SimpleNamespace(
-                    as_mlflow_tags=lambda: {
-                        "phase": "session_training",
-                        "case_config": "ffnn",
-                        "case_config_path": str(case_config_path),
-                        "started_at": "2026-03-12T12:00:00",
-                        "training_experiment_name": "Train",
-                    }
-                ),
-            ),
-        ),
+        patch("neuralls.platform.tracking.mlflow.MlflowClient") as mock_client_cls,
     ):
         mock_client = mock_client_cls.return_value
         mock_client.create_run.return_value.info.run_id = "parent-123"
-        run_id = _create_training_session_parent_run(
+        run_id = create_session_parent_run(
             tracking_uri=f"sqlite:///{tracking_db.as_posix()}",
             artifact_uri=str(artifact_dir),
-            case_config_path=case_config_path,
-            training_experiment_name="Train",
+            run_name="ffnn | 2026-03-12T12:00:00",
+            tags={
+                "phase": "session_training",
+                "case_config": "ffnn",
+                "case_config_path": str(case_config_path),
+                "started_at": "2026-03-12T12:00:00",
+                "experiment_name": "Train",
+            },
+            experiment_name="Train",
         )
 
     assert run_id == "parent-123"
@@ -477,7 +466,7 @@ def test_create_training_session_parent_run_uses_case_config_identity(tmp_path: 
             "case_config": "ffnn",
             "case_config_path": str(case_config_path),
             "started_at": "2026-03-12T12:00:00",
-            "training_experiment_name": "Train",
+            "experiment_name": "Train",
         },
     )
 

@@ -30,6 +30,7 @@ from neuralls.composition.experiments.assembler import load_experiment
 from neuralls.composition.experiments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
+from neuralls.platform.dlkit.tracking_hooks import build_parent_link_hooks
 from neuralls.platform.config.loaders import load_tracking_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.predictions import write_mlflow_sidecar
@@ -103,8 +104,10 @@ def train_model(
         data_config_path: Path to a dataset configuration TOML (e.g., /path/to/dataset.toml)
         output_root: Root directory for the permanent checkpoint. Defaults to
             ``DEFAULT_OUTPUT_DIR`` from constants.
-        parent_run_id: Optional MLflow parent run UUID. When set, the training run is
-            nested as a child of the given parent via ``MLFLOW_PARENT_RUN_ID``.
+        parent_run_id: Optional MLflow parent run UUID. When set, the run created by
+            dlkit is tagged with ``mlflow.parentRunId`` the instant it's created (via
+            dlkit's ``on_run_created`` lifecycle hook), nesting it under the parent
+            from the start rather than after training completes.
 
     Returns:
         Path to saved model checkpoint (.ckpt file) in the permanent location
@@ -200,6 +203,7 @@ def train_model(
                     run_name=run_config.run_name,
                     tags=dict(run_config.tags),
                 ),
+                hooks=build_parent_link_hooks(parent_run_id),
             )
             training_result = _unwrap_execution_result(execution_result)
 

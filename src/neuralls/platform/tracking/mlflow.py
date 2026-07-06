@@ -11,6 +11,7 @@ from typing import Any
 
 import mlflow
 from mlflow import ActiveRun
+from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.loaders import load_tracking_config
 from neuralls.platform.config.resolution import (
@@ -236,6 +237,48 @@ def ensure_experiment(name: str, paths: MlflowPaths) -> str:
         name=name,
         artifact_location=to_mlflow_artifact_location(paths.artifact_uri),
     )
+
+
+def create_session_parent_run(
+    *,
+    tracking_uri: str,
+    artifact_uri: str | None,
+    run_name: str,
+    tags: Mapping[str, str],
+    experiment_name: str,
+) -> str:
+    """Create a non-active MLflow parent run wrapping one batch session.
+
+    Uses a raw ``MlflowClient.create_run`` rather than ``mlflow.start_run`` so the
+    parent never becomes the process's active run — callers that hand off to
+    out-of-process/independent run creators (e.g. dlkit) rely on the parent
+    staying inactive so their own run creation doesn't conflict with it.
+
+    Args:
+        tracking_uri: MLflow tracking URI.
+        artifact_uri: Optional artifact location for a newly created experiment.
+        run_name: Display name for the session parent run.
+        tags: MLflow tags to attach to the parent run.
+        experiment_name: Experiment to create the run under.
+
+    Returns:
+        The new parent run's UUID.
+    """
+    experiment_id = ensure_experiment(
+        experiment_name,
+        MlflowPaths(tracking_uri=tracking_uri, artifact_uri=artifact_uri or ""),
+    )
+    client = MlflowClient(tracking_uri=tracking_uri)
+    parent_run = client.create_run(
+        experiment_id=experiment_id,
+        tags={"mlflow.runName": run_name, **tags},
+    )
+    return parent_run.info.run_id
+
+
+def finalize_session_parent_run(*, tracking_uri: str, run_id: str, status: str) -> None:
+    """Terminate a session parent run created via ``create_session_parent_run``."""
+    MlflowClient(tracking_uri=tracking_uri).set_terminated(run_id, status=status)
 
 
 def start_run_if_needed(

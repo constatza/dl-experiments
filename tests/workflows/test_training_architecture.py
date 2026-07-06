@@ -38,7 +38,6 @@ from neuralls.platform.storage.training_artifacts import (
     ZarrArraySource,
     matrix_zarr_path,
 )
-from neuralls.platform.tracking.mlflow_client import parent_run_context
 
 
 def _build_training_job(tmp_path: Path) -> TrainingJobConfig:
@@ -132,24 +131,6 @@ def test_create_target_configs_returns_canonical_supervised_target(
     assert isinstance(targets[0], NpyEntry)
     assert targets[0].data_role == DataRole.TARGET
     assert targets[0].path == sample_arrays.solutions_source.path
-
-
-def test_parent_run_context_manager() -> None:
-    import os
-
-    var_name = "MLFLOW_PARENT_RUN_ID"
-    original_val = os.environ.get(var_name)
-
-    try:
-        test_id = "test-parent-id"
-        with parent_run_context(test_id):
-            assert os.environ.get(var_name) == test_id
-        assert os.environ.get(var_name) == original_val
-    finally:
-        if original_val is not None:
-            os.environ[var_name] = original_val
-        elif var_name in os.environ:
-            del os.environ[var_name]
 
 
 def test_patch_runtime_dataset_returns_new_settings(

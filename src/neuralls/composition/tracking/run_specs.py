@@ -101,14 +101,22 @@ class ChildComparisonRunTags:
 
 
 @dataclass(frozen=True)
-class TrainingSessionRunTags:
-    """Structured tags for a batch-training session parent run."""
+class SessionRunTags:
+    """Structured tags for a batch session parent run (training or comparison).
 
-    phase: Literal["session_training"]
+    Attributes:
+        phase: "session_training" or "session_comparison".
+        case_config: Stem of the case config file.
+        case_config_path: Full path string.
+        started_at: ISO timestamp (local).
+        experiment_name: MLflow experiment the session's child runs are grouped under.
+    """
+
+    phase: Literal["session_training", "session_comparison"]
     case_config: str
     case_config_path: str
     started_at: str
-    training_experiment_name: str
+    experiment_name: str
 
     def as_mlflow_tags(self) -> dict[str, str]:
         """Serialize to MLflow-compatible string tag dict."""
@@ -198,20 +206,27 @@ def build_comparison_run_spec(
     *,
     entry: ComparisonRegistryEntry,
     timestamp: str | None = None,
+    include_timestamp: bool = True,
 ) -> tuple[str, ComparisonRunTags]:
     """Build (run_name, ComparisonRunTags) for a comparison outer run.
 
     Returns structured tags — caller calls ``.as_mlflow_tags()`` at the MLflow boundary.
 
+    Run name format: ``{display_name} | {timestamp}`` when ``include_timestamp``
+    is True (standalone runs), or just ``{display_name}`` when False (batch runs
+    where the session parent already carries the timestamp).
+
     Args:
         entry: Comparison registry entry.
         timestamp: Optional fixed timestamp (injectable for tests).
+        include_timestamp: When False, omit the timestamp from the run name.
 
     Returns:
         Tuple of ``(run_name, ComparisonRunTags)``.
     """
     ts = timestamp or iso_timestamp()
-    run_name = f"{entry.effective_display_name} | {ts}"
+    display = entry.effective_display_name
+    run_name = f"{display} | {ts}" if include_timestamp else display
     method_label = entry.method.stem if entry.method is not None else entry.id
     tags = ComparisonRunTags(
         phase="comparison",
@@ -225,21 +240,35 @@ def build_comparison_run_spec(
     return run_name, tags
 
 
-def build_training_session_run_spec(
+def build_session_run_spec(
     *,
     case_config_path: Path,
-    training_experiment_name: str,
+    experiment_name: str,
+    phase: Literal["session_training", "session_comparison"],
     timestamp: str | None = None,
-) -> tuple[str, TrainingSessionRunTags]:
-    """Build (run_name, TrainingSessionRunTags) for one batch-training invocation."""
+) -> tuple[str, SessionRunTags]:
+    """Build (run_name, SessionRunTags) for one batch session invocation.
+
+    Shared by training and comparison batches: both wrap their per-entry runs
+    under one ``"{case_config_path.stem} | {timestamp}"`` parent run.
+
+    Args:
+        case_config_path: Path to the case config driving this batch.
+        experiment_name: MLflow experiment the session's child runs belong to.
+        phase: Which batch kind this session wraps.
+        timestamp: Optional fixed timestamp (injectable for tests).
+
+    Returns:
+        Tuple of ``(run_name, SessionRunTags)``.
+    """
     ts = timestamp or iso_timestamp()
     run_name = f"{case_config_path.stem} | {ts}"
-    tags = TrainingSessionRunTags(
-        phase="session_training",
+    tags = SessionRunTags(
+        phase=phase,
         case_config=case_config_path.stem,
         case_config_path=case_config_path.as_posix(),
         started_at=ts,
-        training_experiment_name=training_experiment_name,
+        experiment_name=experiment_name,
     )
     return run_name, tags
 

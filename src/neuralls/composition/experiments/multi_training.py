@@ -23,14 +23,17 @@ from neuralls.platform.config.registry import (
 from neuralls.platform.config.resolution import (
     derive_output_root_from_tracking_uri,
     is_sqlite_tracking_uri,
-    to_mlflow_artifact_location,
 )
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.plots import plot_metric_comparison
 from neuralls.platform.reporting.predictions import read_mlflow_sidecar
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
-from neuralls.platform.tracking.mlflow import build_workflow_environment
+from neuralls.platform.tracking.mlflow import (
+    build_workflow_environment,
+    create_session_parent_run,
+    finalize_session_parent_run,
+)
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
 from neuralls.platform.tracking.model_registry import (
     build_registered_model_name,
@@ -40,7 +43,7 @@ from neuralls.platform.tracking.model_registry import (
 )
 from neuralls.composition.tracking.run_specs import (
     build_registration_tags,
-    build_training_session_run_spec,
+    build_session_run_spec,
 )
 from neuralls.composition.experiments.training import train_model
 
@@ -288,8 +291,6 @@ def _train_single(
 ) -> TrainingRunResult:
     """Train one experiment, read sidecar, and fetch MLflow metrics.
 
-    dlkit manages its own MLflow run independently — no parent run nesting here.
-
     Args:
         experiment_id: The ``id`` field from the TOML entry.
         job_config_path: Path to job config TOML.
@@ -332,14 +333,6 @@ def _train_single(
     sidecar = read_mlflow_sidecar(checkpoint_path.parent / "mlflow_run.json")
     run_id = sidecar["run_id"] if sidecar else None
     tracking_uri = sidecar.get("tracking_uri") if sidecar else None
-
-    if run_id and tracking_uri and parent_run_id:
-        try:
-            MlflowClient(tracking_uri=tracking_uri).set_tag(
-                run_id, "mlflow.parentRunId", parent_run_id
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[{}] Could not set parent run tag: {}", label, exc)
 
     metrics: dict[str, float] = {}
     if run_id and tracking_uri:
@@ -423,61 +416,6 @@ def _resolve_case_config_path(case_config_path: Path | None, configs_dir: Path) 
     return (configs_dir / "case.toml").resolve()
 
 
-def _ensure_training_experiment(
-    *,
-    tracking_uri: str,
-    artifact_uri: str | None,
-    training_experiment_name: str,
-) -> str:
-    """Create or reuse the training MLflow experiment and return its id."""
-    client = MlflowClient(tracking_uri=tracking_uri)
-    existing = client.get_experiment_by_name(training_experiment_name)
-    if existing is not None:
-        return existing.experiment_id
-
-    return client.create_experiment(
-        training_experiment_name,
-        artifact_location=(
-            to_mlflow_artifact_location(artifact_uri) if artifact_uri is not None else None
-        ),
-    )
-
-
-def _create_training_session_parent_run(
-    *,
-    tracking_uri: str,
-    artifact_uri: str | None,
-    case_config_path: Path,
-    training_experiment_name: str,
-) -> str:
-    """Create a non-active MLflow parent run for one batch-training session."""
-    run_name, tags = build_training_session_run_spec(
-        case_config_path=case_config_path,
-        training_experiment_name=training_experiment_name,
-    )
-    experiment_id = _ensure_training_experiment(
-        tracking_uri=tracking_uri,
-        artifact_uri=artifact_uri,
-        training_experiment_name=training_experiment_name,
-    )
-    client = MlflowClient(tracking_uri=tracking_uri)
-    parent_run = client.create_run(
-        experiment_id=experiment_id,
-        tags={"mlflow.runName": run_name, **tags.as_mlflow_tags()},
-    )
-    return parent_run.info.run_id
-
-
-def _finalize_training_session_parent_run(
-    *,
-    tracking_uri: str,
-    run_id: str,
-    status: str,
-) -> None:
-    """Terminate the training session parent run created via MlflowClient."""
-    MlflowClient(tracking_uri=tracking_uri).set_terminated(run_id, status=status)
-
-
 def train_batch(
     cfg: CaseConfig,
     configs_dir: Path,
@@ -534,11 +472,17 @@ def train_batch(
     results: list[TrainingRunResult] = []
     n = len(experiment_entries)
     with scoped_mlflow_environment(training_mlflow_env.env):
-        parent_run_id = _create_training_session_parent_run(
+        session_run_name, session_tags = build_session_run_spec(
+            case_config_path=resolved_case_config_path,
+            experiment_name=mlflow_experiment_name,
+            phase="session_training",
+        )
+        parent_run_id = create_session_parent_run(
             tracking_uri=training_mlflow_env.tracking_uri,
             artifact_uri=training_mlflow_env.artifact_uri,
-            case_config_path=resolved_case_config_path,
-            training_experiment_name=mlflow_experiment_name,
+            run_name=session_run_name,
+            tags=session_tags.as_mlflow_tags(),
+            experiment_name=mlflow_experiment_name,
         )
         session_status = "FINISHED"
         try:
@@ -578,7 +522,7 @@ def train_batch(
             session_status = "FAILED"
             raise
         finally:
-            _finalize_training_session_parent_run(
+            finalize_session_parent_run(
                 tracking_uri=training_mlflow_env.tracking_uri,
                 run_id=parent_run_id,
                 status=session_status,

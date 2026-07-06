@@ -11,7 +11,7 @@ from neuralls.composition.tracking.run_specs import (
     build_child_comparison_tags,
     build_comparison_run_spec,
     build_registration_tags,
-    build_training_session_run_spec,
+    build_session_run_spec,
     build_training_run_spec,
 )
 
@@ -113,9 +113,10 @@ def test_child_tags_no_timestamp_has_parent_run_name() -> None:
 def test_training_session_run_spec_name_and_tags(tmp_path: Path) -> None:
     """Training session parents carry case identity and launch time."""
     case_config_path = tmp_path / "cases" / "ffnn.toml"
-    run_name, tags = build_training_session_run_spec(
+    run_name, tags = build_session_run_spec(
         case_config_path=case_config_path,
-        training_experiment_name="Train",
+        experiment_name="Train",
+        phase="session_training",
         timestamp="2026-03-12T12:00:00",
     )
 
@@ -125,8 +126,48 @@ def test_training_session_run_spec_name_and_tags(tmp_path: Path) -> None:
         "case_config": "ffnn",
         "case_config_path": case_config_path.as_posix(),
         "started_at": "2026-03-12T12:00:00",
-        "training_experiment_name": "Train",
+        "experiment_name": "Train",
     }
+
+
+def test_comparison_session_run_spec_name_and_tags(tmp_path: Path) -> None:
+    """Comparison session parents mirror training's case identity and launch time."""
+    case_config_path = tmp_path / "cases" / "ffnn.toml"
+    run_name, tags = build_session_run_spec(
+        case_config_path=case_config_path,
+        experiment_name="Compare",
+        phase="session_comparison",
+        timestamp="2026-03-12T12:00:00",
+    )
+
+    assert run_name == "ffnn | 2026-03-12T12:00:00"
+    assert tags.as_mlflow_tags() == {
+        "phase": "session_comparison",
+        "case_config": "ffnn",
+        "case_config_path": case_config_path.as_posix(),
+        "started_at": "2026-03-12T12:00:00",
+        "experiment_name": "Compare",
+    }
+
+
+def test_comparison_run_spec_include_timestamp_false_omits_timestamp() -> None:
+    """Comparison subrun names drop their own timestamp when nested under a session parent."""
+    entry = ComparisonRegistryEntry(
+        id="cmp-1",
+        matrix_dataset="solutions",
+        rhs_source={"kind": "gaussian"},
+        method=Path("configs/compare.toml"),
+        display_name="Comparison One",
+    )
+
+    run_name, tags = build_comparison_run_spec(
+        entry=entry,
+        timestamp="2026-03-12T12:00:00",
+        include_timestamp=False,
+    )
+
+    assert run_name == "Comparison One"
+    assert tags.run_name == "Comparison One"
 
 
 def test_registration_tags_optional_model_class() -> None:

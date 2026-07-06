@@ -7,10 +7,10 @@ stay free of low-level MLflow plumbing.
 
 from __future__ import annotations
 
-import os
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Sequence
 from pathlib import Path
+
+from loguru import logger
 
 
 _WORKSPACE_ARTIFACT_DIRS: tuple[str, ...] = (
@@ -38,6 +38,42 @@ def fetch_mlflow_metrics(run_id: str, tracking_uri: str) -> dict[str, float]:
     return dict(run.data.metrics)
 
 
+def _log_artifact_paths(
+    *,
+    tracking_uri: str,
+    run_id: str,
+    root: Path,
+    dirs: Sequence[str],
+    flat_files: Sequence[str] = (),
+    artifact_path_per_dir: bool = False,
+) -> None:
+    """Upload existing directories/files under root to an MLflow run.
+
+    Args:
+        tracking_uri: MLflow tracking URI.
+        run_id: Existing MLflow run to upload into.
+        root: Local directory the paths are resolved relative to.
+        dirs: Subdirectory names to upload wholesale, when present.
+        flat_files: Individual file names to upload, when present.
+        artifact_path_per_dir: When True, nest each directory's artifacts under
+            an artifact_path matching its own name; when False, upload flat.
+    """
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient(tracking_uri=tracking_uri)
+    for name in dirs:
+        path = root / name
+        if not path.exists():
+            continue
+        artifact_path = name if artifact_path_per_dir else None
+        client.log_artifacts(run_id, str(path), artifact_path=artifact_path)
+    for name in flat_files:
+        path = root / name
+        if not path.exists():
+            continue
+        client.log_artifact(run_id, str(path))
+
+
 def log_artifacts_to_mlflow(
     tracking_uri: str,
     run_id: str,
@@ -50,14 +86,12 @@ def log_artifacts_to_mlflow(
         run_id: Existing MLflow run to upload into.
         workspace_root: Local directory whose contents are uploaded.
     """
-    from mlflow.tracking import MlflowClient
-
-    client = MlflowClient(tracking_uri=tracking_uri)
-    for artifact_dir in _WORKSPACE_ARTIFACT_DIRS:
-        path = workspace_root / artifact_dir
-        if not path.exists():
-            continue
-        client.log_artifacts(run_id, str(path))
+    _log_artifact_paths(
+        tracking_uri=tracking_uri,
+        run_id=run_id,
+        root=workspace_root,
+        dirs=_WORKSPACE_ARTIFACT_DIRS,
+    )
 
 
 _COMPARISON_ARTIFACT_DIRS: tuple[str, ...] = ("arrays", "figures", "config")
@@ -84,19 +118,30 @@ def log_comparison_artifacts_to_mlflow(
         run_id: Existing MLflow run to upload into.
         work_root: Working directory produced by the comparison run.
     """
+    _log_artifact_paths(
+        tracking_uri=tracking_uri,
+        run_id=run_id,
+        root=work_root,
+        dirs=_COMPARISON_ARTIFACT_DIRS,
+        flat_files=_COMPARISON_FLAT_FILES,
+        artifact_path_per_dir=True,
+    )
+
+
+def tag_run_parent(*, run_id: str, tracking_uri: str, parent_run_id: str) -> None:
+    """Set the ``mlflow.parentRunId`` tag linking a child run to its parent.
+
+    Args:
+        run_id: Child run to tag.
+        tracking_uri: MLflow tracking URI.
+        parent_run_id: Parent run UUID to link to.
+    """
     from mlflow.tracking import MlflowClient
 
-    client = MlflowClient(tracking_uri=tracking_uri)
-    for artifact_dir in _COMPARISON_ARTIFACT_DIRS:
-        path = work_root / artifact_dir
-        if not path.exists():
-            continue
-        client.log_artifacts(run_id, str(path), artifact_path=artifact_dir)
-    for filename in _COMPARISON_FLAT_FILES:
-        path = work_root / filename
-        if not path.exists():
-            continue
-        client.log_artifact(run_id, str(path))
+    try:
+        MlflowClient(tracking_uri=tracking_uri).set_tag(run_id, "mlflow.parentRunId", parent_run_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not set parent run tag on {}: {}", run_id, exc)
 
 
 def find_mlflow_run(
@@ -137,35 +182,6 @@ def find_mlflow_run(
         if candidate_name == run_name:
             return experiment.experiment_id, run.info.run_id
     return None
-
-
-@contextmanager
-def parent_run_context(parent_run_id: str | None) -> Iterator[None]:
-    """Temporarily set MLFLOW_PARENT_RUN_ID for nested MLflow runs.
-
-    When ``parent_run_id`` is ``None`` this is a no-op context manager.
-
-    Args:
-        parent_run_id: Optional MLflow parent run UUID. When set, injects
-            ``MLFLOW_PARENT_RUN_ID`` into the environment for the duration
-            of the context and restores the previous value on exit.
-
-    Yields:
-        None
-    """
-    if parent_run_id is None:
-        yield
-        return
-
-    previous = os.environ.get("MLFLOW_PARENT_RUN_ID")
-    os.environ["MLFLOW_PARENT_RUN_ID"] = parent_run_id
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop("MLFLOW_PARENT_RUN_ID", None)
-        else:
-            os.environ["MLFLOW_PARENT_RUN_ID"] = previous
 
 
 def log_diagnostics_to_mlflow(

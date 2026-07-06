@@ -71,6 +71,7 @@ from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.composition.tracking.run_specs import (
     build_comparison_run_spec,
     build_child_comparison_tags,
+    build_session_run_spec,
     ComparisonRunTags,
 )
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
@@ -367,7 +368,9 @@ def _execute_comparison_in_run(
     Returns:
         Single-element list with a successful ComparisonOutcome.
     """
-    with mlflow.start_run(run_name=run_name, tags=comp_tags.as_mlflow_tags()) as comp_run:
+    with mlflow.start_run(
+        run_name=run_name, nested=True, tags=comp_tags.as_mlflow_tags()
+    ) as comp_run:
         comp_run_id = comp_run.info.run_id
         log_comparison_artifact_uri()
 
@@ -419,15 +422,21 @@ def _execute_comparison_in_run(
 def _run_comparison_from_config(
     cfg: ComparisonConfig,
     entry: ComparisonRegistryEntry,
+    topology: ComparisonTopology,
     experiments_config_path: Path,
     settings: NeurallsSettings,
 ) -> list[ComparisonOutcome]:
     """Execute one resolved comparison and log results to MLflow.
 
+    Runs nested under the batch's session parent run (already active), so this
+    becomes the "subrun" level between the case-wide parent and per-preconditioner
+    leaf runs.
+
     Args:
         cfg: Fully resolved ComparisonConfig with injected data paths and preconditioners.
         entry: Registry entry providing display name and method path for artifact logging.
-        experiments_config_path: Path to the case config (used for topology resolution).
+        topology: Resolved MLflow topology for the whole batch (tracking/experiment).
+        experiments_config_path: Case config path forwarded to body execution.
         settings: Resolved runtime settings.
 
     Returns:
@@ -446,13 +455,7 @@ def _run_comparison_from_config(
             )
         ]
 
-    topology = _resolve_comparison_topology(experiments_config_path, settings)
-    setup_comparison_tracking(
-        tracking_uri=topology.tracking_uri,
-        artifact_location=topology.artifact_location,
-        experiment_name=topology.experiment_name,
-    )
-    run_name, comp_tags = build_comparison_run_spec(entry=entry)
+    run_name, comp_tags = build_comparison_run_spec(entry=entry, include_timestamp=False)
 
     try:
         return _execute_comparison_in_run(
@@ -511,6 +514,11 @@ def run_comparison_batch(
 ) -> list[ComparisonOutcome]:
     """Run all configured comparison entries from the case config.
 
+    Opens one MLflow session parent run for the whole batch — named
+    ``"<case-name> | <timestamp>"``, mirroring training's session parent — so
+    every comparison entry's own run nests underneath it as a "subrun", with
+    each entry's per-preconditioner runs nested one level further.
+
     Args:
         experiments_config_path: Path to the case config TOML.
         params: Comparison execution parameters (currently unused, reserved for future use).
@@ -527,20 +535,33 @@ def run_comparison_batch(
 
     topology = _resolve_comparison_topology(experiments_config_path, settings)
     mlflow_client = MlflowClient(tracking_uri=topology.model_store_tracking_uri)
+    setup_comparison_tracking(
+        tracking_uri=topology.tracking_uri,
+        artifact_location=topology.artifact_location,
+        experiment_name=topology.experiment_name,
+    )
+    session_run_name, session_tags = build_session_run_spec(
+        case_config_path=experiments_config_path.resolve(),
+        experiment_name=topology.experiment_name,
+        phase="session_comparison",
+    )
 
     outcomes: list[ComparisonOutcome] = []
-    for entry in master_cfg.comparisons:
-        experiment_entries: list[ExperimentEntry] = (
-            [e for e in master_cfg.experiments if e.id in entry.experiments]
-            if entry.experiments
-            else list(master_cfg.experiments)
-        )
-        cfg = resolve_comparison_config(master_cfg, config_dir, entry, settings)
-        claimed_ids = _existing_experiment_ids(cfg.preconditioners)
-        auto_specs = neural_specs_from_experiments(
-            experiment_entries, claimed_ids, client=mlflow_client
-        )
-        if auto_specs:
-            cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))
-        outcomes.extend(_run_comparison_from_config(cfg, entry, experiments_config_path, settings))
+    with mlflow.start_run(run_name=session_run_name, tags=session_tags.as_mlflow_tags()):
+        for entry in master_cfg.comparisons:
+            experiment_entries: list[ExperimentEntry] = (
+                [e for e in master_cfg.experiments if e.id in entry.experiments]
+                if entry.experiments
+                else list(master_cfg.experiments)
+            )
+            cfg = resolve_comparison_config(master_cfg, config_dir, entry, settings)
+            claimed_ids = _existing_experiment_ids(cfg.preconditioners)
+            auto_specs = neural_specs_from_experiments(
+                experiment_entries, claimed_ids, client=mlflow_client
+            )
+            if auto_specs:
+                cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))
+            outcomes.extend(
+                _run_comparison_from_config(cfg, entry, topology, experiments_config_path, settings)
+            )
     return outcomes

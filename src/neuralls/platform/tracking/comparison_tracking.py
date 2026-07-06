@@ -6,12 +6,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import mlflow
-from mlflow.tracking import MlflowClient
 
 from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.platform.config.models.experiments import ExperimentNamesConfig
-from neuralls.platform.config.resolution import to_mlflow_artifact_location
-from neuralls.platform.tracking.mlflow import sanitize_metric_key_segment
+from neuralls.platform.config.resolution import MlflowPaths
+from neuralls.platform.tracking.mlflow import ensure_experiment, sanitize_metric_key_segment
 
 
 def setup_comparison_tracking(
@@ -21,16 +20,10 @@ def setup_comparison_tracking(
 ) -> None:
     """Configure MLflow tracking for comparison runs."""
     resolved_experiment_name = experiment_name or ExperimentNamesConfig().comparison
-    mlflow.set_tracking_uri(tracking_uri)
-    client = MlflowClient(tracking_uri=tracking_uri)
-    if client.get_experiment_by_name(resolved_experiment_name) is None:
-        resolved_artifact_location = (
-            to_mlflow_artifact_location(artifact_location) if artifact_location else None
-        )
-        client.create_experiment(
-            resolved_experiment_name,
-            artifact_location=resolved_artifact_location,
-        )
+    ensure_experiment(
+        resolved_experiment_name,
+        MlflowPaths(tracking_uri=tracking_uri, artifact_uri=artifact_location or ""),
+    )
     mlflow.set_experiment(resolved_experiment_name)
 
 
