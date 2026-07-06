@@ -1,0 +1,11 @@
+[plots]
+enabled = true
+loss_curve = true
+parity = true
+residual = true
+error_histogram = true
+residual_vs_index = true
+format = "png"
+dpi = 300
+artifact_dir = "plots"
+max_scatter_points = 5000

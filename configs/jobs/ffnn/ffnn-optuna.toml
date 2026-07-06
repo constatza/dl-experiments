@@ -5,6 +5,7 @@ precision = "64"
 model = "../../profiles/model/ffnn/ffnn.toml"
 data = "../../profiles/data/array-default.toml"
 training = "../../profiles/training/default.toml"
+plots = "../../profiles/plots/default.toml"
 
 [search]
 objective = "val_loss"
