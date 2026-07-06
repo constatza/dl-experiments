@@ -25,19 +25,9 @@ name = "ic0"
 type = "ic0"
 
 [[datasets]]
-id = "gaussian-cg10-45x15"
-path = "../../datasets/train/45x15/gaussian-cg10.toml"
-display_name = "Gaussian CG-10 45x15"
-
-[[datasets]]
 id = "gaussian-cg100-45x15"
 path = "../../datasets/train/45x15/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 45x15"
-
-[[jobs]]
-id = "ffnn"
-path = "../../jobs/scale-equivariant-200/ffnn.toml"
-display_name = "Scale-Equivariant FFNN"
 
 [[jobs]]
 id = "scale-equivariant-embedded-fully-factorized"
@@ -45,45 +35,14 @@ path = "../../jobs/scale-equivariant-200/embedded-fully-factorized.toml"
 display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
 
 [[jobs]]
-id = "scale-equivariant-embedded-fully-softplus-factorized"
-path = "../../jobs/scale-equivariant-200/embedded-fully-softplus-factorized.toml"
-display_name = "Scale-Equivariant Embedded Fully Softplus Factorized FFNN"
-
-[[jobs]]
 id = "constant-width-factorized"
 path = "../../jobs/ffnn/constant-width-factorized.toml"
 display_name = "Constant-Width Factorized FFNN"
 
 [[jobs]]
-id = "constant-width-simple-factorized"
-path = "../../jobs/ffnn/constant-width-simple-factorized.toml"
-display_name = "Constant-Width Simple Factorized FFNN"
-
-[[jobs]]
 id = "scale-equivariant-constant-width-factorized"
 path = "../../jobs/scale-equivariant-200/constant-width-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
-
-[[jobs]]
-id = "scale-equivariant-constant-width-softplus-factorized"
-path = "../../jobs/scale-equivariant-200/constant-width-softplus-factorized.toml"
-display_name = "Scale-Equivariant Constant-Width Softplus Factorized FFNN"
-
-[[comparisons]]
-id = "gaussian-cg10"
-matrix_dataset = "gaussian-cg10-45x15"
-rhs_source = { kind = "gaussian" }
-seed = 42
-
-[[comparisons]]
-id = "sparse-cg10"
-matrix_dataset = "gaussian-cg10-45x15"
-rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
-
-[[comparisons]]
-id = "scaled-cg10"
-matrix_dataset = "gaussian-cg10-45x15"
-rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 5.0 }
 
 [[comparisons]]
 id = "gaussian-cg100"
@@ -94,44 +53,20 @@ seed = 42
 [[comparisons]]
 id = "sparse-cg100"
 matrix_dataset = "gaussian-cg100-45x15"
-rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
+rhs_source = { kind = "sparse", indices = [
+    0,
+    1,
+    -1,
+], values = [
+    90.0,
+    100.0,
+    -100.0,
+] }
 
 [[comparisons]]
 id = "scaled-cg100"
 matrix_dataset = "gaussian-cg100-45x15"
-rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 5.0 }
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15"
-job = "ffnn"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15"
-job = "scale-equivariant-embedded-fully-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15"
-job = "scale-equivariant-embedded-fully-softplus-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15"
-job = "constant-width-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15"
-job = "constant-width-simple-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15"
-job = "scale-equivariant-constant-width-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg10-45x15"
-job = "scale-equivariant-constant-width-softplus-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15"
-job = "ffnn"
+rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 1.0 }
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15"
@@ -139,20 +74,8 @@ job = "scale-equivariant-embedded-fully-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-softplus-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15"
 job = "constant-width-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15"
-job = "constant-width-simple-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-constant-width-factorized"
-
-[[experiments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-constant-width-softplus-factorized"
