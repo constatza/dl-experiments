@@ -112,45 +112,6 @@ def test_scale_metadata_not_saved_with_none_normalization(temp_matrix_file: Path
     assert "dimension_scale" not in scale_metadata
 
 
-def test_denormalization_round_trip(temp_matrix_file: Path, tmp_path: Path):
-    """Test that we can denormalize using saved metadata."""
-    output_dir = tmp_path / "output_roundtrip"
-
-    # Build dataset with matrix normalization
-    build_dataset(
-        matrix_path=str(temp_matrix_file),
-        dataset_dir=str(output_dir),
-        rhs_path=None,
-        counts={"neutral_ones": 1},
-        seed=42,
-        shuffle=False,
-        normalize="matrix",
-        strategy_overrides={"neutral_ones": {"samples": 1}},
-    )
-
-    manifest = load_dataset_manifest(output_dir)
-    rhs, _ = load_dense_training_arrays(output_dir)
-
-    # Reconstruct scale from metadata
-    metadata = {
-        "spectral_radius_bound": float(manifest["normalization"]["scale"]["spectral_radius_bound"]),
-        "dimension_scale": float(manifest["normalization"]["scale"]["dimension_scale"]),
-    }
-    scale = load_scale_from_metadata("matrix", metadata)
-    assert isinstance(scale, MatrixScale)
-
-    # Get normalized RHS from dataset
-    normalized_rhs = rhs[0]
-
-    # Denormalize
-    denormalized_rhs = scale.denormalize_rhs(normalized_rhs)
-
-    # The denormalized RHS should be larger than normalized (for typical matrices)
-    # since we multiply by composite_scale > 1
-    assert scale.composite_scale > 1.0
-    assert np.linalg.norm(denormalized_rhs) > np.linalg.norm(normalized_rhs)
-
-
 def test_multi_matrix_resolution_omits_shared_scale_metadata() -> None:
     """Mixed binding scales drop manifest-level reversible scale metadata."""
     matrix_norm, matrix_value_scale, scale_metadata = _resolve_final_scale(

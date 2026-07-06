@@ -197,7 +197,7 @@ class ComparisonDefaults(BaseModel):
     stopping_criterion: Literal["residual_norm", "fixed_iterations"] = "residual_norm"
     m_max: int = Field(default=DEFAULT_M_MAX, ge=-1)
     breakdown_tol: float | None = Field(default=None, ge=0.0)
-    normalize_system: Literal["none", "matrix", "rhs", "both", "diagonal", "spectral"] = "matrix"
+    normalize_system: Literal["none", "matrix", "rhs", "both"] = "matrix"
     preconditioners: list[PreconditionerConfig] = Field(default_factory=list)
     model_config = ConfigDict(extra="forbid", frozen=True)
 

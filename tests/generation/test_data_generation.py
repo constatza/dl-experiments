@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import pytest
@@ -13,100 +12,7 @@ from neuralls.domain.generation.helpers import (
     _generate_eigenvector_combinations,
 )
 from neuralls.domain.generation.orchestration import _shuffle_samples
-from neuralls.domain.normalization import (
-    ErrorTraceSamples,
-    ResidualTraceSamples,
-    apply_normalization,
-)
-
-
-def test_diagonal_normalization_scales_rows(tmp_path: Path) -> None:
-    """Diagonal normalization should apply symmetric diagonal scaling: D^(-1/2) @ A @ D^(-1/2)."""
-    A = np.array([[4.0, 1.0], [2.0, 6.0]], dtype=np.float64)
-    R = np.array([[2.0, 3.0], [1.0, -1.0]], dtype=np.float64)
-    X = np.array([[0.5, 0.25], [0.1, 0.2]], dtype=np.float64)
-
-    residual_traces = ResidualTraceSamples(
-        residuals=np.array([[0.4, 0.2], [0.3, 0.1]], dtype=np.float64),
-        solutions=np.array([[0.05, 0.02], [0.04, 0.01]], dtype=np.float64),
-        sample_indices=np.array([0, 1], dtype=np.int64),
-        iteration_indices=np.array([0, 1], dtype=np.int64),
-        search_directions=np.array([[0.5, 0.4], [0.2, 0.3]], dtype=np.float64),
-        search_direction_products=np.array([[0.8, 0.6], [0.3, 0.2]], dtype=np.float64),
-    )
-    error_traces = ErrorTraceSamples(
-        residuals=np.array([[0.2, -0.1]], dtype=np.float64),
-        solutions_current=np.array([[0.0, 0.0]], dtype=np.float64),
-        errors=np.array([[0.05, -0.02]], dtype=np.float64),
-        true_solutions=np.array([[0.5, 0.4]], dtype=np.float64),
-        sample_indices=np.array([0], dtype=np.int64),
-        iteration_indices=np.array([0], dtype=np.int64),
-    )
-
-    normalized = apply_normalization(
-        normalize="diagonal",
-        A_original=A,
-        R=R,
-        X=X,
-        dataset_dir=tmp_path,
-        residual_traces=residual_traces,
-        error_traces=error_traces,
-    )
-
-    # Compute expected symmetric diagonal scaling
-    diag_sqrt_inv = 1.0 / np.sqrt(np.diag(A))
-    diag_sqrt = 1.0 / diag_sqrt_inv
-    expected_matrix = diag_sqrt_inv[:, None] * A * diag_sqrt_inv[None, :]
-    expected_rhs = R * diag_sqrt_inv
-    expected_solutions = X * diag_sqrt
-
-    np.testing.assert_allclose(normalized.matrix, expected_matrix)
-    np.testing.assert_allclose(normalized.rhs_samples, expected_rhs)
-    np.testing.assert_allclose(normalized.sol_samples, expected_solutions)
-    assert normalized.residual_traces is not None
-    np.testing.assert_allclose(
-        normalized.residual_traces.residuals,
-        residual_traces.residuals * diag_sqrt_inv,
-    )
-    np.testing.assert_allclose(
-        normalized.residual_traces.solutions,
-        residual_traces.solutions * diag_sqrt,
-    )
-    assert normalized.residual_traces.search_directions is not None
-    assert normalized.residual_traces.search_direction_products is not None
-    np.testing.assert_allclose(
-        normalized.residual_traces.search_directions,
-        cast(np.ndarray, residual_traces.search_directions) * diag_sqrt,
-    )
-    np.testing.assert_allclose(
-        normalized.residual_traces.search_direction_products,
-        cast(np.ndarray, residual_traces.search_direction_products) * diag_sqrt_inv,
-    )
-    assert normalized.error_traces is not None
-    np.testing.assert_allclose(
-        normalized.error_traces.residuals,
-        error_traces.residuals * diag_sqrt_inv,
-    )
-    np.testing.assert_allclose(
-        normalized.error_traces.errors,
-        error_traces.errors * diag_sqrt_inv,
-    )
-
-
-def test_diagonal_normalization_rejects_zero_diagonal(tmp_path: Path) -> None:
-    """Diagonal normalization should guard against zero diagonal entries."""
-    A = np.array([[0.0, 1.0], [1.0, 2.0]], dtype=np.float64)
-    R = np.ones((1, 2), dtype=np.float64)
-    X = np.ones((1, 2), dtype=np.float64)
-
-    with pytest.raises(ValueError, match="near-zero diagonal"):
-        apply_normalization(
-            normalize="diagonal",
-            A_original=A,
-            R=R,
-            X=X,
-            dataset_dir=tmp_path,
-        )
+from neuralls.domain.normalization import ErrorTraceSamples
 
 
 # ========================================================================

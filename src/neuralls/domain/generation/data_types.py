@@ -6,4 +6,4 @@ from typing import Literal
 
 
 # Type for normalization methods
-NormalizeType = Literal["none", "matrix", "rhs", "spectral", "diagonal"]
+NormalizeType = Literal["none", "matrix", "rhs"]

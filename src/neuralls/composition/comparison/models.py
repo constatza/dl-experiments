@@ -9,6 +9,7 @@ import numpy as np
 
 from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.storage.manifest import DatasetNormalization
 from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
 __all__ = [
@@ -100,6 +101,11 @@ class ResolvedComparisonInput:
     rhs_kind: RowKind | None = None
     rhs_source_kind: ComparisonRhsSourceKind | None = None
     rhs_source_params: dict[str, object] | None = None
+    matrix_normalization: DatasetNormalization | None = None
+    """Persisted normalization metadata for the dataset the matrix was loaded
+    from, or None when the matrix came from a raw/external file with no
+    manifest. Drives whether comparison-time code treats the matrix as
+    already-normalized (skip/derive) or genuinely raw (compute fresh)."""
 
     @property
     def rhs_source_type(self) -> str:

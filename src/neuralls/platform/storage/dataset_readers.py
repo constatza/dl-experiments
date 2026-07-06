@@ -9,7 +9,8 @@ import h5py
 import numpy as np
 import zarr
 
-from neuralls.platform.storage.manifest import DatasetArtifact
+from neuralls.domain.solver.utils.validation import validate_ax_equals_b
+from neuralls.platform.storage.manifest import DatasetArtifact, DatasetNormalization
 from neuralls.platform.storage.manifest_io import read_dataset_manifest
 from neuralls.shared.constants import DATASET_MANIFEST_FILENAME
 from neuralls.shared.enum_codecs import decode_row_kind_array
@@ -41,6 +42,7 @@ class DatasetArtifacts:
     matrix: ResolvedDatasetArtifact
     rhs: ResolvedDatasetArtifact
     solutions: ResolvedDatasetArtifact
+    normalization: DatasetNormalization
     params: tuple[ResolvedDatasetArtifact, ...] = ()
     row_kind: ResolvedDatasetArtifact | None = None
     matrix_sample_index: ResolvedDatasetArtifact | None = None
@@ -74,6 +76,7 @@ class CanonicalTrainingTriplet:
     matrix_index: int
     row_kind: RowKind | None
     matrix_binding_enforced: bool
+    normalization: DatasetNormalization
 
 
 def _resolve_artifact(root: Path, artifact: DatasetArtifact) -> ResolvedDatasetArtifact:
@@ -107,6 +110,7 @@ def resolve_dataset_artifacts(dataset_dir: str | Path) -> DatasetArtifacts:
         matrix=_resolve_artifact(root, manifest.matrix),
         rhs=_resolve_artifact(root, manifest.rhs),
         solutions=_resolve_artifact(root, manifest.solutions),
+        normalization=manifest.normalization,
         params=tuple(_resolve_artifact(root, artifact) for artifact in manifest.params),
         row_kind=_resolve_artifact(root, manifest.row_kind)
         if manifest.row_kind is not None
@@ -244,15 +248,41 @@ def resolve_canonical_training_triplet(
         matrix_index=matrix_index,
         dataset_dir=dataset_dir,
     )
+    matrix = _load_sample(artifacts.matrix, resolved_matrix_index)
+    rhs = _load_sample(artifacts.rhs, row_index).reshape(-1)
+    lhs = _load_sample(artifacts.solutions, row_index).reshape(-1)
+    # STANDARD rows are genuine Ax=b pairs; CG_INTERNAL rows are CG
+    # residual/correction pairs with no such relationship — only validate
+    # the former. Checked here, on the raw dataset, before any comparison
+    # logic runs, so generation-time corruption is caught at its source.
+    if row_kind is None or row_kind is RowKind.STANDARD:
+        validate_ax_equals_b(matrix, rhs, lhs)
     return CanonicalTrainingTriplet(
-        matrix=_load_sample(artifacts.matrix, resolved_matrix_index),
-        rhs=_load_sample(artifacts.rhs, row_index).reshape(-1),
-        lhs=_load_sample(artifacts.solutions, row_index).reshape(-1),
+        matrix=matrix,
+        rhs=rhs,
+        lhs=lhs,
         sample_index=row_index,
         matrix_index=resolved_matrix_index,
         row_kind=row_kind,
         matrix_binding_enforced=matrix_binding_enforced,
+        normalization=artifacts.normalization,
     )
+
+
+def try_read_dataset_normalization(path: str | Path) -> DatasetNormalization | None:
+    """Return persisted normalization metadata iff `path` is a manifest-backed dataset dir.
+
+    Args:
+        path: Candidate dataset directory or raw file path.
+
+    Returns:
+        The dataset's persisted `DatasetNormalization`, or `None` when `path`
+        is not a directory (i.e. a raw/external file with no manifest).
+    """
+    candidate = Path(path)
+    if not candidate.is_dir():
+        return None
+    return resolve_dataset_artifacts(candidate).normalization
 
 
 def _load_resolved(artifact: ResolvedDatasetArtifact) -> np.ndarray:

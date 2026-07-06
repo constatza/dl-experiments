@@ -117,8 +117,7 @@ def _build_context(
     if isinstance(normalize_value, bool):
         raise ValueError(
             f"Invalid normalize value in config: {normalize_value} (bool). "
-            "The 'normalize' parameter expects one of "
-            "'spectral', 'matrix', 'rhs', 'diagonal', or 'none'."
+            "The 'normalize' parameter expects one of 'matrix', 'rhs', or 'none'."
         )
     normalize = cast(NormalizeType, str(normalize_value))
 

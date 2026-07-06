@@ -110,20 +110,14 @@ def _calculate_normalization_scale(
 
 def _normalize_matrix_for_generation(
     matrix: np.ndarray,
-    normalize_type: Literal["none", "matrix", "diagonal", "spectral", "rhs"],
+    normalize_type: Literal["none", "matrix", "rhs"],
     spectral_radius_bound: float | None,
 ) -> tuple[np.ndarray, Any, float]:
     """Normalize matrix for synthetic generation (pure function).
 
-    This function prepares a matrix for synthetic data generation by applying
-    the appropriate normalization strategy. For most strategies (matrix, diagonal),
-    it returns a complete scale object. For spectral normalization, it normalizes
-    the matrix but defers per-sample RHS norm computations until after generation.
-
     CONTRACT:
         - Input: Raw matrix A
         - Output: Normalized matrix A_norm and optional scale metadata
-        - For spectral: Only matrix is normalized; RHS norms computed later
         - Strategies receive normalized matrix and compute b_norm = A_norm @ x
 
     Args:
@@ -131,37 +125,21 @@ def _normalize_matrix_for_generation(
         normalize_type: Normalization strategy
             - "none": No normalization (identity)
             - "matrix": Scale by spectral_radius_bound * sqrt(d)
-            - "diagonal": Jacobi-style normalization (diagonal scaling)
-            - "spectral": Scale matrix by spectral norm (RHS norms deferred)
             - "rhs": Legacy, treated as "none" (RHS matching handled by caller)
         spectral_radius_bound: For matrix normalization (computed if None)
 
     Returns:
         Tuple of (normalized_matrix, scale_or_none, matrix_value_scale):
             - normalized_matrix: Matrix in normalized space
-            - scale_or_none: IScale object for matrix/diagonal, None for spectral/none/rhs
+            - scale_or_none: MatrixScale object for "matrix", None for "none"/"rhs"
             - matrix_value_scale: Scalar that maps stored matrix values back to raw values
-              (A_raw = A_stored * matrix_value_scale). For non-scalar transforms this is 1.0.
-
-    Notes:
-        - For "none" or "rhs": Returns defensive copy and None
-        - For "matrix": Returns normalized matrix and MatrixScale object
-        - For "diagonal": Returns normalized matrix and DiagonalScale object
-        - For "spectral": Returns normalized matrix ONLY (scale created later)
-        - Spectral strategy: Matrix normalized by spectral_norm * sqrt(d),
-          but per-sample scales (with individual rhs_norm) created after generation
+              (A_raw = A_stored * matrix_value_scale). 1.0 for "none"/"rhs".
 
     Examples:
-        >>> # Matrix normalization
         >>> A_norm, scale, value_scale = _normalize_matrix_for_generation(A, "matrix", None)
         >>> isinstance(scale, MatrixScale)
         True
         >>> value_scale > 0
-        True
-
-        >>> # Spectral normalization (deferred RHS norms)
-        >>> A_norm, scale, value_scale = _normalize_matrix_for_generation(A, "spectral", None)
-        >>> scale is None  # RHS norms not yet available
         True
     """
     from neuralls.domain.normalization import create_scale_from_config
@@ -170,39 +148,22 @@ def _normalize_matrix_for_generation(
     if normalize_type in ("none", "rhs"):
         return matrix.copy(), None, 1.0
 
-    # Spectral: Normalize matrix only (defer per-sample RHS norms)
-    if normalize_type == "spectral":
-        # Use matrix normalization to get A_norm, but don't return scale yet
-        # (we need RHS samples to compute per-sample rhs_norm values)
-        dimension = matrix.shape[0]
-        from neuralls.domain.linalg import calculate_spectral_norm, compute_dim_scale
-
-        spectral_norm = calculate_spectral_norm(matrix)
-        dimension_scale = compute_dim_scale(dimension)
-        composite_scale = spectral_norm * dimension_scale
-        matrix_norm = matrix / composite_scale
-        return matrix_norm, None, float(composite_scale)
-
-    # Matrix or Diagonal: Create full scale and normalize matrix
     scale = create_scale_from_config(
         normalize_type=normalize_type,
         matrix=matrix,
         spectral_radius_bound=spectral_radius_bound,
     )
     assert scale is not None, f"Expected scale for {normalize_type}"
-    assert not isinstance(scale, list), f"Expected single scale for {normalize_type}, got list"
     matrix_norm = scale.scale_matrix(matrix)
-    if normalize_type == "matrix":
-        scale_params = serialize_scale_metadata(scale)
-        if scale_params is None:
-            raise TypeError(f"Expected scale metadata for {normalize_type}")
-        spectral_radius = scale_params.get("spectral_radius_bound")
-        dimension_scale = scale_params.get("dimension_scale")
-        if not isinstance(spectral_radius, float) or not isinstance(dimension_scale, float):
-            raise TypeError("Matrix normalization scale metadata must be scalar floats.")
-        matrix_value_scale = spectral_radius * dimension_scale
-        return matrix_norm, scale, matrix_value_scale
-    return matrix_norm, scale, 1.0
+    scale_params = serialize_scale_metadata(scale)
+    if scale_params is None:
+        raise TypeError(f"Expected scale metadata for {normalize_type}")
+    spectral_radius = scale_params.get("spectral_radius_bound")
+    dimension_scale = scale_params.get("dimension_scale")
+    if not isinstance(spectral_radius, float) or not isinstance(dimension_scale, float):
+        raise TypeError("Matrix normalization scale metadata must be scalar floats.")
+    matrix_value_scale = spectral_radius * dimension_scale
+    return matrix_norm, scale, matrix_value_scale
 
 
 def serialize_scale_metadata(scale: Any | None) -> ScaleMetadata | None:
@@ -220,16 +181,6 @@ def serialize_scale_metadata(scale: Any | None) -> ScaleMetadata | None:
     dimension_scale = payload.get("dimension_scale")
     if isinstance(dimension_scale, float):
         metadata["dimension_scale"] = dimension_scale
-
-    rhs_norm = payload.get("rhs_norm")
-    if isinstance(rhs_norm, float):
-        metadata["rhs_norm"] = rhs_norm
-
-    diagonal_sqrt_inv = payload.get("diagonal_sqrt_inv")
-    if isinstance(diagonal_sqrt_inv, list) and all(
-        isinstance(value, float) for value in diagonal_sqrt_inv
-    ):
-        metadata["diagonal_sqrt_inv"] = diagonal_sqrt_inv
 
     return metadata or None
 

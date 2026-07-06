@@ -24,6 +24,7 @@ from neuralls.platform.storage.comparison import load_system_arrays
 from neuralls.platform.storage.dataset_readers import (
     list_available_matrix_indices,
     resolve_canonical_training_triplet,
+    try_read_dataset_normalization,
 )
 from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
@@ -126,6 +127,7 @@ class GeneratedSourceHandler:
             matrix_index=matrix_index,
             rhs_source_kind=ctx.rhs_source_kind,
             rhs_source_params=ctx.rhs_source_params,
+            matrix_normalization=try_read_dataset_normalization(ctx.matrix_path),
         )
 
 
@@ -161,6 +163,7 @@ class RawLhsSourceHandler:
             rhs_kind=cfg.row_kind,
             rhs_source_kind=ctx.rhs_source_kind,
             rhs_source_params=ctx.rhs_source_params,
+            matrix_normalization=try_read_dataset_normalization(ctx.matrix_path),
         )
 
 
@@ -195,6 +198,7 @@ class RawRhsSourceHandler:
             rhs_kind=cfg.row_kind,
             rhs_source_kind=ctx.rhs_source_kind,
             rhs_source_params=ctx.rhs_source_params,
+            matrix_normalization=try_read_dataset_normalization(ctx.matrix_path),
         )
 
 
@@ -225,6 +229,7 @@ class DatasetSourceHandler:
             rhs_kind=triplet.row_kind,
             rhs_source_kind=ctx.rhs_source_kind,
             rhs_source_params=ctx.rhs_source_params,
+            matrix_normalization=triplet.normalization,
         )
 
 

@@ -87,5 +87,3 @@ class ScaleMetadata(TypedDict, total=False):
 
     spectral_radius_bound: float
     dimension_scale: float
-    rhs_norm: float
-    diagonal_sqrt_inv: list[float]

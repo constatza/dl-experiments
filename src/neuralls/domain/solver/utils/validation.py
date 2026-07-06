@@ -56,6 +56,38 @@ def validate_rhs_vector(b: np.ndarray | None, A: np.ndarray | None = None) -> No
         raise ValueError(f"RHS length {len(b.flatten())} doesn't match matrix size {A.shape[0]}")
 
 
+def validate_ax_equals_b(matrix: np.ndarray, rhs: np.ndarray, lhs: np.ndarray) -> None:
+    """Verify ``matrix @ lhs`` and ``rhs`` are consistent up to a positive scalar.
+
+    Scale-agnostic (doesn't assume any particular multiplier baked into rhs):
+    checks the two vectors are parallel via cosine similarity. Intended as a
+    direct runtime proof that a loaded/normalized linear system is internally
+    consistent whenever a known true solution (``lhs``) is available — a
+    structural safety net against double-normalization or mismatched-scale
+    bugs, not just careful-by-construction code.
+
+    Args:
+        matrix: System matrix A.
+        rhs: Right-hand side vector b.
+        lhs: Known true solution x.
+
+    Raises:
+        ValueError: If the Ax=b invariant is violated beyond floating tolerance.
+    """
+    predicted = matrix @ lhs
+    predicted_norm = float(np.linalg.norm(predicted))
+    rhs_norm = float(np.linalg.norm(rhs))
+    if predicted_norm == 0.0 or rhs_norm == 0.0:
+        return
+    cosine = float(np.dot(predicted, rhs) / (predicted_norm * rhs_norm))
+    if cosine < 1.0 - 1e-6:
+        raise ValueError(
+            "Ax=b invariant violated: cosine similarity between (matrix @ lhs) "
+            f"and rhs is {cosine:.10f} (expected ~1.0). This indicates a "
+            "double-normalization or mismatched-scale bug in the linear system."
+        )
+
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 

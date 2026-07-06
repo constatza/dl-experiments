@@ -222,7 +222,7 @@ class GenerationConfig(BaseModel):
 
     normalize: str | bool = Field(
         default="matrix",
-        description="Normalization strategy (matrix, rhs, both, none, or False)",
+        description="Normalization strategy (matrix, rhs, or none)",
     )
     shuffle: bool = Field(
         default=True,

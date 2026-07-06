@@ -27,7 +27,7 @@ from neuralls.platform.config.models.preconditioner import (
     RegisteredModelRefConfig,
 )
 
-type NormalizeSystem = Literal["none", "matrix", "rhs", "both", "diagonal", "spectral"]
+type NormalizeSystem = Literal["none", "matrix", "rhs", "both"]
 
 
 @dataclass(frozen=True)
