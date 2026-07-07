@@ -10,6 +10,7 @@ import tomli_w
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from neuralls.composition.experiments.training_batch import run_experiment_matrix
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 import os
 
 
@@ -162,7 +163,10 @@ def test_run_experiments_full_flow(
 
     # 5. Create master config using [[experiments]] registry entries.
     master_config_path = configs_dir / "experiments.toml"
+    tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")
     with open(master_config_path, "w") as f:
+        f.write("[mlflow]\n")
+        f.write(f'tracking_uri = "{tracking_uri}"\n\n')
         f.write("[[datasets]]\n")
         f.write('id = "test_data_gen"\n')
         f.write('path = "datasets/test_data_gen.toml"\n\n')
@@ -261,7 +265,10 @@ def test_run_experiment_matrix_with_mlflow(
 
     # 4. Create Master Experiment Config
     master_config_path = configs_dir / "experiments.toml"
+    tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")
     with open(master_config_path, "w") as f:
+        f.write("[mlflow]\n")
+        f.write(f'tracking_uri = "{tracking_uri}"\n\n')
         f.write("[[datasets]]\n")
         f.write('id = "mlflow_test_data"\n')
         f.write('path = "datasets/mlflow_test_data.toml"\n\n')

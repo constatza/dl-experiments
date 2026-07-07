@@ -21,7 +21,8 @@ from pathlib import Path
 from loguru import logger
 
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
-from neuralls.composition.experiments.assembler import load_batch
+from neuralls.composition.experiments.assembler import load_batch, load_validated_case_config
+from neuralls.composition.tracking.run_specs import build_session_run_spec
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.storage.base import load_matrix
@@ -32,6 +33,12 @@ from neuralls.platform.storage.filesystem import extract_model_name
 from neuralls.composition.experiments.training import train_model
 from neuralls.platform.storage.dataset_readers import resolve_dataset_artifacts
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
+from neuralls.platform.tracking.environment import scoped_mlflow_environment
+from neuralls.platform.tracking.mlflow import (
+    build_workflow_environment,
+    create_session_parent_run,
+    finalize_session_parent_run,
+)
 
 
 def run_experiment(
@@ -49,6 +56,8 @@ def run_experiment(
     dataset_display_name: str | None = None,
     job_registry_id: str | None = None,
     job_display_name: str | None = None,
+    parent_run_id: str | None = None,
+    mlflow_experiment_name: str | None = None,
 ) -> ExperimentResult:
     """Run data generation and model training for a single experiment.
 
@@ -134,6 +143,8 @@ def run_experiment(
                 experiment_display_name=experiment_display_name,
                 dataset_registry_id=dataset_registry_id,
                 dataset_display_name=dataset_display_name,
+                parent_run_id=parent_run_id,
+                mlflow_experiment_name=mlflow_experiment_name,
             )
             logger.info(f"Training complete: {checkpoint}")
         else:
@@ -213,33 +224,69 @@ def run_experiment_matrix(
 
     logger.info(f"Training {len(experiments)} experiments from {experiments_config_path}")
 
-    # Run each experiment sequentially
-    # Sequential execution avoids GPU/memory contention and makes logs clearer
-    results: list[ExperimentResult] = []
-    for exp in experiments:
-        # Log experiment details for progress tracking
-        logger.info(f"\n{'=' * 60}")
-        logger.info(f"Experiment: {exp.spec.experiment_display_name}")
-        logger.info(f"  Job: {exp.spec.job_display_name or exp.spec.job_config_path.stem}")
-        logger.info(f"  Dataset: {exp.spec.dataset_display_name or exp.workspace.dataset_id}")
-        logger.info(f"{'=' * 60}")
+    # Open one case-level MLflow parent run so every training/search run below
+    # (including dlkit's own nested Optuna trial runs) nests under it, and so
+    # the experiment gets its artifact_location pinned before dlkit auto-creates it.
+    cfg, _ = load_validated_case_config(experiments_config_path, settings)
+    training_mlflow_env = build_workflow_environment(
+        tracking_uri=cfg.mlflow.tracking_uri,
+        artifact_location=cfg.mlflow.artifacts_destination,
+        default_output_root=batch.output_root,
+    )
+    mlflow_experiment_name = cfg.names.training
 
-        # Run single experiment (catches exceptions internally)
-        result = run_experiment(
-            settings=settings,
-            job_config_path=exp.spec.job_config_path,
-            data_config_path=exp.spec.data_config_path,
-            output_root=batch.output_root,
-            force=force,
-            src_hash=src_hash,
-            max_epochs=max_epochs,
-            experiment_id=exp.spec.experiment_id,
-            experiment_display_name=exp.spec.experiment_display_name,
-            dataset_registry_id=exp.spec.dataset_registry_id,
-            dataset_display_name=exp.spec.dataset_display_name,
-            job_registry_id=exp.spec.job_registry_id,
-            job_display_name=exp.spec.job_display_name,
+    results: list[ExperimentResult] = []
+    with scoped_mlflow_environment(training_mlflow_env.env):
+        session_run_name, session_tags = build_session_run_spec(
+            case_config_path=experiments_config_path.resolve(),
+            experiment_name=mlflow_experiment_name,
+            phase="session_training",
         )
-        results.append(result)
+        parent_run_id = create_session_parent_run(
+            tracking_uri=training_mlflow_env.tracking_uri,
+            artifact_uri=training_mlflow_env.artifact_uri,
+            run_name=session_run_name,
+            tags=session_tags.as_mlflow_tags(),
+            experiment_name=mlflow_experiment_name,
+        )
+        try:
+            # Run each experiment sequentially
+            # Sequential execution avoids GPU/memory contention and makes logs clearer
+            for exp in experiments:
+                # Log experiment details for progress tracking
+                logger.info(f"\n{'=' * 60}")
+                logger.info(f"Experiment: {exp.spec.experiment_display_name}")
+                logger.info(f"  Job: {exp.spec.job_display_name or exp.spec.job_config_path.stem}")
+                logger.info(
+                    f"  Dataset: {exp.spec.dataset_display_name or exp.workspace.dataset_id}"
+                )
+                logger.info(f"{'=' * 60}")
+
+                # Run single experiment (catches exceptions internally)
+                result = run_experiment(
+                    settings=settings,
+                    job_config_path=exp.spec.job_config_path,
+                    data_config_path=exp.spec.data_config_path,
+                    output_root=batch.output_root,
+                    force=force,
+                    src_hash=src_hash,
+                    max_epochs=max_epochs,
+                    experiment_id=exp.spec.experiment_id,
+                    experiment_display_name=exp.spec.experiment_display_name,
+                    dataset_registry_id=exp.spec.dataset_registry_id,
+                    dataset_display_name=exp.spec.dataset_display_name,
+                    job_registry_id=exp.spec.job_registry_id,
+                    job_display_name=exp.spec.job_display_name,
+                    parent_run_id=parent_run_id,
+                    mlflow_experiment_name=mlflow_experiment_name,
+                )
+                results.append(result)
+        finally:
+            session_status = "FAILED" if any(not r.is_success for r in results) else "FINISHED"
+            finalize_session_parent_run(
+                tracking_uri=training_mlflow_env.tracking_uri,
+                run_id=parent_run_id,
+                status=session_status,
+            )
 
     return results
