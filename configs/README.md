@@ -131,15 +131,16 @@ Case configs bind:
 
 - dataset ids
 - job ids
-- experiment ids
-- comparison ids
+- experiment ids, inferred when omitted
+- comparison ids, inferred when omitted
 - case-level MLflow topology
 
-The 45x15 `cg.toml` and `mixed-cg.toml` cases compare pure CG-N and mixed CG-N
-training datasets for FullyEmbedded and constant-width factorized FFNN variants.
-Scale-equivariant jobs in those cases use `configs/jobs/scale-equivariant-200/`
-entrypoints so that part of the sweep is capped at 200 training epochs without
-changing the shared default job configs used by other cases.
+The 45x15 `cg.toml` case compares the pure CG-N training dataset across Scale
+Equivariant Embedded Fully FFNN, Scale Equivariant Constant Width FFNN, and
+Scale Equivariant Constant Width Softplus FFNN variants. The companion
+`cg-search.toml` case binds one Optuna search job per network variant. Those
+search jobs tune learning rate, layer count, activation, bias, dropout, and
+scale-equivariant initialization/gain parameters.
 
 ## Case Anatomy
 

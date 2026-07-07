@@ -32,26 +32,24 @@ display_name = "Gaussian CG-100 45x15"
 [[jobs]]
 id = "scale-equivariant-embedded-fully-factorized"
 path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
-display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
+display_name = "Scale Equivariant Embedded Fully FFNN"
 
 [[jobs]]
 id = "scale-equivariant-constant-width-factorized"
 path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
-display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
+display_name = "Scale Equivariant Constant Width FFNN"
 
 [[jobs]]
 id = "scale-equivariant-constant-width-softplus-factorized"
 path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized.toml"
-display_name = "Scale-Equivariant Constant-Width Softplus-Factorized FFNN"
+display_name = "Scale Equivariant Constant Width Softplus FFNN"
 
 [[comparisons]]
-id = "gaussian-cg100"
 matrix_dataset = "gaussian-cg100-45x15"
 rhs_source = { kind = "gaussian" }
 seed = 42
 
 [[comparisons]]
-id = "sparse-cg100"
 matrix_dataset = "gaussian-cg100-45x15"
 rhs_source = { kind = "sparse", indices = [
     0,
@@ -64,7 +62,6 @@ rhs_source = { kind = "sparse", indices = [
 ] }
 
 [[comparisons]]
-id = "scaled-cg100"
 matrix_dataset = "gaussian-cg100-45x15"
 rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 1.0 }
 

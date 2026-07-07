@@ -40,18 +40,15 @@ path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
 
 [[comparisons]]
-id = "gaussian-mixed-cg100"
 matrix_dataset = "gaussian-mixed-cg100-45x15"
 rhs_source = { kind = "gaussian" }
 seed = 42
 
 [[comparisons]]
-id = "sparse-mixed-cg100"
 matrix_dataset = "gaussian-mixed-cg100-45x15"
 rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 
 [[comparisons]]
-id = "scaled-mixed-cg100"
 matrix_dataset = "gaussian-mixed-cg100-45x15"
 rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 5.0 }
 

@@ -53,13 +53,11 @@ display_name = "FFNN Standard"
 # ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
-id             = "gaussian"
 matrix_dataset = "gaussian-cg10-93x31"
 rhs_source = { kind = "gaussian" }
 seed           = 42
 
 [[comparisons]]
-id             = "sparse"
 matrix_dataset = "gaussian-cg10-93x31"
 rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 

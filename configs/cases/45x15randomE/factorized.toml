@@ -56,7 +56,6 @@ display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
 # ── Comparisons (one per training dataset, filtered to own experiments) ───────
 
 [[comparisons]]
-id             = "gaussian-cg10"
 matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
@@ -65,7 +64,6 @@ experiments    = [
 ]
 
 [[comparisons]]
-id             = "gaussian-cg100"
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
@@ -74,7 +72,6 @@ experiments    = [
 ]
 
 [[comparisons]]
-id             = "scaled"
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "dataset", path = "${NEURALLS_PROCESSED_DIR}/scaled-solutions-45x15randomE" }
 experiments    = [
@@ -82,7 +79,6 @@ experiments    = [
 ]
 
 [[comparisons]]
-id             = "sparse"
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 experiments    = [

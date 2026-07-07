@@ -60,7 +60,6 @@ path = "../../jobs/ffnn/scale-equivariant-constant-width-simple-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Simple Factorized FFNN"
 
 [[comparisons]]
-id = "gaussian-cg100-single-matrix"
 matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_source = { kind = "gaussian" }
 seed = 42
@@ -72,7 +71,6 @@ experiments = [
 ]
 
 [[comparisons]]
-id = "scaled"
 matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_source = { kind = "dataset", path = "${NEURALLS_PROCESSED_DIR}/scaled-solutions-45x15randomE-single-matrix" }
 experiments = [
@@ -83,7 +81,6 @@ experiments = [
 ]
 
 [[comparisons]]
-id = "sparse"
 matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 experiments = [

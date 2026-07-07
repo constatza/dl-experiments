@@ -51,7 +51,6 @@ display_name = "Embedded DeepONet"
 # ── Comparisons ───────────────────────────────────────────────────────────────
 
 [[comparisons]]
-id             = "gaussian-cg10"
 matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
@@ -61,7 +60,6 @@ experiments    = [
 ]
 
 [[comparisons]]
-id             = "gaussian-cg100"
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42

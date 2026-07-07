@@ -3,8 +3,8 @@ type = "search"
 seed = 42
 precision = "64"
 model = "../../profiles/model/ffnn/scale-equivariant-constant-width-factorized.toml"
-data = "../../profiles/data/array-default.toml"
-training = "../../profiles/training/default.toml"
+data = "../../profiles/data/array-small-batch.toml"
+training = "../../profiles/training/batched-muon-conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"
 
 [search]
@@ -12,6 +12,6 @@ objective = "val_loss"
 n_trials = 40
 space."training.optimizer.default_optimizer.lr" = { type = "log_float", low = 1e-5, high = 1e-1 }
 space."model.num_layers" = { type = "int", low = 1, high = 6 }
-space."model.activation" = { type = "categorical", choices = ["relu", "gelu", "silu", "tanh", "leaky_relu"] }
-space."model.dropout" = { type = "float", low = 0.0, high = 0.2 }
+space."model.activation" = { type = "categorical", choices = ["relu", "gelu", "silu", "tanh", "sigmoid", "leaky_relu", "none", "identity"] }
 space."model.bias" = { type = "categorical", choices = [true, false] }
+space."model.dropout" = { type = "float", low = 0.0, high = 0.5 }
