@@ -35,14 +35,14 @@ path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
 display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
 
 [[jobs]]
-id = "constant-width-factorized"
-path = "../../jobs/45x15/constant-width-factorized.toml"
-display_name = "Constant-Width Factorized FFNN"
-
-[[jobs]]
 id = "scale-equivariant-constant-width-factorized"
 path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
+
+[[jobs]]
+id = "scale-equivariant-constant-width-softplus-factorized"
+path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized.toml"
+display_name = "Scale-Equivariant Constant-Width Softplus-Factorized FFNN"
 
 [[comparisons]]
 id = "gaussian-cg100"
@@ -74,8 +74,8 @@ job = "scale-equivariant-embedded-fully-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15"
-job = "constant-width-factorized"
+job = "scale-equivariant-constant-width-factorized"
 
 [[experiments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-constant-width-factorized"
+job = "scale-equivariant-constant-width-softplus-factorized"

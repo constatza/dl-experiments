@@ -35,11 +35,6 @@ path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
 display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
 
 [[jobs]]
-id = "constant-width-factorized"
-path = "../../jobs/45x15/constant-width-factorized.toml"
-display_name = "Constant-Width Factorized FFNN"
-
-[[jobs]]
 id = "scale-equivariant-constant-width-factorized"
 path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
@@ -63,10 +58,6 @@ rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-
 [[experiments]]
 dataset = "gaussian-mixed-cg100-45x15"
 job = "scale-equivariant-embedded-fully-factorized"
-
-[[experiments]]
-dataset = "gaussian-mixed-cg100-45x15"
-job = "constant-width-factorized"
 
 [[experiments]]
 dataset = "gaussian-mixed-cg100-45x15"
