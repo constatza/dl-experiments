@@ -31,17 +31,17 @@ display_name = "Gaussian Mixed CG-100 45x15"
 
 [[jobs]]
 id = "scale-equivariant-embedded-fully-factorized"
-path = "../../jobs/scale-equivariant-200/embedded-fully-factorized.toml"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
 display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
 
 [[jobs]]
 id = "constant-width-factorized"
-path = "../../jobs/ffnn/constant-width-factorized.toml"
+path = "../../jobs/45x15/constant-width-factorized.toml"
 display_name = "Constant-Width Factorized FFNN"
 
 [[jobs]]
 id = "scale-equivariant-constant-width-factorized"
-path = "../../jobs/scale-equivariant-200/constant-width-factorized.toml"
+path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
 
 [[comparisons]]

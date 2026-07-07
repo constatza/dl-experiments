@@ -82,6 +82,7 @@ Current checked-in example:
 
 - `array-default.toml` — the default `FlexibleDataset` + `ArrayDataModule`
   shape with no custom features/targets
+- `array-small-batch.toml` — the same array data shape with `batch_size = 32`
 
 ### `configs/profiles/training/**/*.toml`
 
@@ -99,8 +100,12 @@ They may contain:
 Current checked-in examples:
 
 - `default.toml` — baseline: 300 epochs, `max_lr = 1e-3`, early stopping
-  patience 30 / min_delta 1e-4
-- `extended.toml` — deviates by epoch count: 600 epochs
+  patience 30 / min_delta 1e-4, LR plateau patience 7 / threshold 1e-3
+- `batched-muon-conservative-plateau.toml` — BatchedMuon plus AdamW with
+  batch size 32 jobs and LR plateau patience 10 / cooldown 5 / threshold 1e-4
+- `extended.toml` — deviates by epoch count: 400 epochs
+- `extended-conservative-plateau.toml` — 400 epochs with LR plateau patience
+  10 / cooldown 5 / threshold 1e-4
 - `limited-200.toml` — deviates by epoch count: 200 epochs
 - `high-max-lr.toml` — deviates by LR tuner ceiling: `max_lr = 1e-2`
 - `strict-early-stopping.toml` — deviates by early stopping: patience 10,

@@ -1,0 +1,8 @@
+[data]
+name = "FlexibleDataset"
+batch_size = 32
+pin_memory = true
+shuffle = true
+
+[data.module]
+name = "ArrayDataModule"

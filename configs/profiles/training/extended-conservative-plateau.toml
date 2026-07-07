@@ -5,17 +5,9 @@ num_training = 100
 mode = "linear"
 
 [training.trainer]
-max_epochs = 200
+max_epochs = 400
 accelerator = "auto"
 enable_checkpointing = true
-
-[[training.trainer.callbacks]]
-name = "EarlyStopping"
-monitor = "val_loss"
-min_delta = 0.0001
-patience = 30
-mode = "min"
-check_finite = true
 
 [training.optimizer.default_optimizer]
 name = "AdamW"
@@ -26,9 +18,9 @@ weight_decay = 0.01
 name = "ReduceLROnPlateau"
 mode = "min"
 factor = 0.5
-patience = 7
-cooldown = 3
-threshold = 0.001
+patience = 10
+cooldown = 5
+threshold = 0.0001
 min_lr = 1e-06
 
 [training.loss]
