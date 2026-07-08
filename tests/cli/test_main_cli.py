@@ -13,7 +13,7 @@ from typer.models import ArgumentInfo
 from typer.main import get_command
 from typer.testing import CliRunner
 
-from neuralls.application.models import ExperimentResult
+from neuralls.application.models import AssignmentResult
 from neuralls.cli.compare import compare_case
 from neuralls.cli.generate import generate_case
 from neuralls.cli.generate_single import _resolve_case_config, generate_single
@@ -388,28 +388,28 @@ def test_run_signature_uses_batch_case_argument() -> None:
     assert config.default is ...
 
 
-@patch("neuralls.cli.run.run_experiment_matrix")
+@patch("neuralls.cli.run.run_assignment_matrix")
 @patch("neuralls.cli.run.load_case_settings")
 def test_run_invokes_batch_workflow(
     mock_load_settings: MagicMock,
-    mock_run_experiment_matrix: MagicMock,
+    mock_run_assignment_matrix: MagicMock,
     tmp_path: Path,
 ) -> None:
     config = tmp_path / "case.toml"
     config.write_text("", encoding="utf-8")
     settings = MagicMock()
     mock_load_settings.return_value = settings
-    mock_run_experiment_matrix.return_value = [
-        ExperimentResult(experiment_id="exp-1", experiment_display_name="exp-1", status="Success"),
+    mock_run_assignment_matrix.return_value = [
+        AssignmentResult(assignment_id="exp-1", assignment_display_name="exp-1", status="Success"),
     ]
 
     result = runner.invoke(app, ["run", str(config)])
 
     assert result.exit_code == 0
     mock_load_settings.assert_called_once_with(config, None, profile=None)
-    mock_run_experiment_matrix.assert_called_once()
-    call_kwargs = mock_run_experiment_matrix.call_args.kwargs
-    assert call_kwargs["experiments_config_path"] == config
+    mock_run_assignment_matrix.assert_called_once()
+    call_kwargs = mock_run_assignment_matrix.call_args.kwargs
+    assert call_kwargs["case_config_path"] == config
     assert call_kwargs["settings"] == settings
     assert call_kwargs["force"] is False
     assert call_kwargs["max_epochs"] is None

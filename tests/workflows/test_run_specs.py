@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from neuralls.platform.config.resolution import MlflowPaths, build_sqlite_tracking_uri
-from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, ExperimentEntry
+from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, AssignmentEntry
 from neuralls.composition.tracking.run_specs import (
     TrainingRunTags,
     build_child_comparison_tags,
@@ -20,24 +20,24 @@ def test_training_tags_contains_all_fields() -> None:
     """Training tags serialize all expected fields."""
     tags = TrainingRunTags(
         phase="training",
-        experiment_id="exp-1",
+        assignment_id="exp-1",
         dataset_id="dataset-1",
         job_id="job-1",
-        experiment_display_name="Experiment One",
+        assignment_display_name="Experiment One",
     )
 
     assert tags.as_mlflow_tags() == {
         "phase": "training",
-        "experiment_id": "exp-1",
+        "assignment_id": "exp-1",
         "dataset_id": "dataset-1",
         "job_id": "job-1",
-        "experiment_display_name": "Experiment One",
+        "assignment_display_name": "Experiment One",
     }
 
 
 def test_training_run_spec_name_has_readable_timestamp() -> None:
     """Training run specs use the experiment display name plus a readable timestamp."""
-    entry = ExperimentEntry(
+    entry = AssignmentEntry(
         id="exp-1",
         dataset="dataset-1",
         job="job-1",
@@ -60,10 +60,10 @@ def test_training_run_spec_name_has_readable_timestamp() -> None:
     assert spec.run_name == "Experiment One | Thu 12 Mar 2026 - 12:00:00"
     assert dict(spec.tags) == {
         "phase": "training",
-        "experiment_id": "exp-1",
+        "assignment_id": "exp-1",
         "dataset_id": "dataset-1",
         "job_id": "job-1",
-        "experiment_display_name": "Experiment One",
+        "assignment_display_name": "Experiment One",
     }
 
 
@@ -172,7 +172,7 @@ def test_comparison_run_spec_include_timestamp_false_omits_timestamp() -> None:
 
 def test_registration_tags_optional_model_class() -> None:
     """Registration tags include model_class only when provided."""
-    entry = ExperimentEntry(
+    entry = AssignmentEntry(
         id="exp-1",
         dataset="dataset-1",
         job="job-1",
@@ -186,7 +186,7 @@ def test_registration_tags_optional_model_class() -> None:
 
 def test_registration_tags_as_dict_excludes_none() -> None:
     """Registration tags omit None values from the MLflow payload."""
-    entry = ExperimentEntry(
+    entry = AssignmentEntry(
         id="exp-1",
         dataset="dataset-1",
         job="job-1",
@@ -196,8 +196,8 @@ def test_registration_tags_as_dict_excludes_none() -> None:
     tags = build_registration_tags(entry=entry, model_class=None)
 
     assert tags.as_mlflow_tags() == {
-        "experiment_id": "exp-1",
+        "assignment_id": "exp-1",
         "dataset_id": "dataset-1",
         "job_id": "job-1",
-        "experiment_display_name": "Experiment One",
+        "assignment_display_name": "Experiment One",
     }

@@ -56,7 +56,7 @@ display_name = "Scale-Equivariant FiLM Embedded FFNN"
 matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
-experiments    = [
+assignments    = [
   "film-ffnn-gaussian-cg10-45x15randomE",
   "film-ffnn-embedded-gaussian-cg10-45x15randomE",
 ]
@@ -65,25 +65,25 @@ experiments    = [
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
-experiments    = [
+assignments    = [
   "film-ffnn-gaussian-cg100-45x15randomE",
   "film-ffnn-embedded-gaussian-cg100-45x15randomE",
 ]
 
-# ── Experiments (2 models × 2 datasets) ──────────────────────────────────────
+# ── Assignments (2 models × 2 datasets) ──────────────────────────────────────
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg10-45x15randomE"
 job = "film-ffnn"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg10-45x15randomE"
 job = "film-ffnn-embedded"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15randomE"
 job = "film-ffnn"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15randomE"
 job = "film-ffnn-embedded"

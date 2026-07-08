@@ -8,7 +8,7 @@ import shutil
 
 import tomli_w
 
-from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.composition.assignments.assembler import load_assignment
 
 
 def _write_configs(root: Path) -> tuple[Path, Path]:
@@ -68,7 +68,7 @@ def main() -> None:
     root.mkdir(parents=True, exist_ok=True)
     try:
         model_config, data_config = _write_configs(root)
-        experiment = load_experiment(
+        experiment = load_assignment(
             model_config,
             data_config,
             output_root=root / "output",

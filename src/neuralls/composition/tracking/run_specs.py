@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, ExperimentEntry
+from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, AssignmentEntry
 from neuralls.platform.config.resolution import MlflowPaths
 from neuralls.platform.tracking.mlflow import MlflowRunConfig
 
@@ -35,17 +35,17 @@ class TrainingRunTags:
 
     Attributes:
         phase: Always "training".
-        experiment_id: Stable experiment identifier.
+        assignment_id: Stable assignment identifier.
         dataset_id: Dataset registry id.
         job_id: Job registry id.
-        experiment_display_name: Human-facing experiment label.
+        assignment_display_name: Human-facing assignment label.
     """
 
     phase: Literal["training"]
-    experiment_id: str
+    assignment_id: str
     dataset_id: str
     job_id: str
-    experiment_display_name: str
+    assignment_display_name: str
 
     def as_mlflow_tags(self) -> dict[str, str]:
         """Serialize to MLflow-compatible string tag dict."""
@@ -131,26 +131,26 @@ class RegistrationTags:
     register_logged_model() — not here — so callers cannot accidentally omit it.
 
     Attributes:
-        experiment_id: Stable experiment identifier.
+        assignment_id: Stable assignment identifier.
         dataset_id: Dataset registry id.
         job_id: Job registry id.
-        experiment_display_name: Human-facing experiment label.
+        assignment_display_name: Human-facing assignment label.
         model_class: Optional model class name from [MODEL].name.
     """
 
-    experiment_id: str
+    assignment_id: str
     dataset_id: str
     job_id: str
-    experiment_display_name: str
+    assignment_display_name: str
     model_class: str | None = None
 
     def as_mlflow_tags(self) -> dict[str, str]:
         """Serialize to MLflow-compatible string tag dict, omitting None values."""
         tags: dict[str, str] = {
-            "experiment_id": self.experiment_id,
+            "assignment_id": self.assignment_id,
             "dataset_id": self.dataset_id,
             "job_id": self.job_id,
-            "experiment_display_name": self.experiment_display_name,
+            "assignment_display_name": self.assignment_display_name,
         }
         if self.model_class is not None:
             tags["model_class"] = self.model_class
@@ -159,7 +159,7 @@ class RegistrationTags:
 
 def build_training_run_spec(
     *,
-    entry: ExperimentEntry,
+    entry: AssignmentEntry,
     experiment_name: str,
     paths: MlflowPaths,
     workspace_root: Path,
@@ -173,7 +173,7 @@ def build_training_run_spec(
     when False (batch runs where the session parent already carries the timestamp).
 
     Args:
-        entry: Experiment registry entry.
+        entry: Assignment registry entry.
         experiment_name: MLflow experiment name to group runs under.
         paths: Resolved MLflow tracking/artifact URIs.
         workspace_root: Workspace root directory.
@@ -186,10 +186,10 @@ def build_training_run_spec(
     ts = timestamp or format_run_timestamp()
     tags = TrainingRunTags(
         phase="training",
-        experiment_id=entry.id,
+        assignment_id=entry.id,
         dataset_id=entry.dataset_id,
         job_id=entry.job_id,
-        experiment_display_name=entry.effective_display_name,
+        assignment_display_name=entry.effective_display_name,
     )
     display = entry.effective_display_name
     run_name = f"{display} | {ts}" if include_timestamp else display
@@ -299,22 +299,22 @@ def build_child_comparison_tags(
 
 def build_registration_tags(
     *,
-    entry: ExperimentEntry,
+    entry: AssignmentEntry,
     model_class: str | None,
 ) -> RegistrationTags:
     """Build structured registration tags for a model version.
 
     Args:
-        entry: Experiment registry entry.
+        entry: Assignment registry entry.
         model_class: Optional model class name from [MODEL].name.
 
     Returns:
         RegistrationTags with all available fields populated.
     """
     return RegistrationTags(
-        experiment_id=entry.id,
+        assignment_id=entry.id,
         dataset_id=entry.dataset_id,
         job_id=entry.job_id,
-        experiment_display_name=entry.effective_display_name,
+        assignment_display_name=entry.effective_display_name,
         model_class=model_class,
     )

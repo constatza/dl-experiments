@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from neuralls.platform.config.job_metadata import read_job_metadata
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
 
 def sanitize_identifier(value: str, default: str = "run") -> str:
@@ -53,7 +53,7 @@ def extract_model_name(job_config_path: Path | str) -> str:
 
 def derive_model_identifier(
     settings: Any,
-    context: ExperimentWorkspace,
+    context: AssignmentWorkspace,
     config_path: str | Path,
 ) -> str:
     """Derive a stable model identifier for artifact naming.
@@ -68,7 +68,7 @@ def derive_model_identifier(
 
     Args:
         settings: DLKit workflow settings
-        context: Experiment workspace
+        context: Assignment workspace
         config_path: Path to config file
 
     Returns:
@@ -148,33 +148,6 @@ def parse_data_dir_name(dir_name: str) -> dict[str, Any]:
                 pass
 
     return result
-
-
-def prepare_experiment_outputs(
-    model_name: str,
-    data_config_name: str,
-    output_root: Path,
-) -> dict[str, Path]:
-    """Create the standard experiment directory layout."""
-    output_root.mkdir(parents=True, exist_ok=True)
-    experiment_dir = output_root / data_config_name / model_name
-    experiment_dir.mkdir(parents=True, exist_ok=True)
-
-    checkpoints_dir = experiment_dir / "checkpoints"
-    figures_dir = experiment_dir / "figures"
-    metrics_dir = experiment_dir / "metrics"
-    predictions_dir = experiment_dir / "predictions"
-
-    for directory in (checkpoints_dir, figures_dir, metrics_dir, predictions_dir):
-        directory.mkdir(parents=True, exist_ok=True)
-
-    return {
-        "experiment_dir": experiment_dir,
-        "checkpoints_dir": checkpoints_dir,
-        "figures_dir": figures_dir,
-        "metrics_dir": metrics_dir,
-        "predictions_dir": predictions_dir,
-    }
 
 
 def ensure_dir(path: str | Path) -> Path:

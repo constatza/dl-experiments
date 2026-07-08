@@ -14,7 +14,7 @@ from neuralls.platform.config.models.dataset import (
     create_targets_from_array,
     with_dataset_arrays,
 )
-from neuralls.composition.experiments.runtime_dataset_contract import (
+from neuralls.composition.assignments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
 

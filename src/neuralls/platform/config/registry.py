@@ -8,23 +8,23 @@ from pathlib import Path
 
 from neuralls.platform.config.resolution import resolve_registry_path
 from neuralls.platform.config.models.experiments import (
+    AssignmentEntry,
     CaseConfig,
-    ExperimentEntry,
     RegistryEntry,
 )
 
 
 @dataclass(frozen=True)
-class ResolvedExperimentBinding:
-    """Resolved experiment registry entry with concrete config paths."""
+class ResolvedAssignmentBinding:
+    """Resolved assignment registry entry with concrete config paths."""
 
-    experiment_id: str
-    dataset_registry_id: str
-    job_registry_id: str
+    assignment_id: str
+    dataset_id: str
+    job_id: str
     data_config_path: Path
     job_config_path: Path
     checkpoint_path: Path | None = None
-    experiment_display_name: str = ""
+    assignment_display_name: str = ""
     dataset_display_name: str = ""
     job_display_name: str = ""
 
@@ -68,15 +68,15 @@ def resolve_dataset_config_path(
     config_dir: Path,
     dataset_id: str,
     *,
-    experiment_id: str | None = None,
+    assignment_id: str | None = None,
 ) -> Path:
     """Resolve a dataset config path from the case registry."""
     entry = _require_registry_entry(
         cfg.datasets,
         registry_id=dataset_id,
         registry_section="datasets",
-        owner_kind="Experiment" if experiment_id is not None else None,
-        owner_id=experiment_id,
+        owner_kind="Assignment" if assignment_id is not None else None,
+        owner_id=assignment_id,
     )
     return resolve_registry_path(config_dir, entry.path)
 
@@ -86,81 +86,81 @@ def resolve_job_config_path(
     config_dir: Path,
     job_id: str,
     *,
-    experiment_id: str | None = None,
+    assignment_id: str | None = None,
 ) -> Path:
     """Resolve a job config path from the case registry."""
     entry = _require_registry_entry(
         cfg.jobs,
         registry_id=job_id,
         registry_section="jobs",
-        owner_kind="Experiment" if experiment_id is not None else None,
-        owner_id=experiment_id,
+        owner_kind="Assignment" if assignment_id is not None else None,
+        owner_id=assignment_id,
     )
     return resolve_registry_path(config_dir, entry.path)
 
 
-def resolve_experiment_binding(
+def resolve_assignment_binding(
     cfg: CaseConfig,
     config_dir: Path,
-    entry: ExperimentEntry,
-) -> ResolvedExperimentBinding:
-    """Resolve a single experiment entry into concrete config paths."""
+    entry: AssignmentEntry,
+) -> ResolvedAssignmentBinding:
+    """Resolve a single assignment entry into concrete config paths."""
     dataset_entry = _require_registry_entry(
         cfg.datasets,
         registry_id=entry.dataset_id,
         registry_section="datasets",
-        owner_kind="Experiment",
+        owner_kind="Assignment",
         owner_id=entry.id,
     )
     job_entry = _require_registry_entry(
         cfg.jobs,
         registry_id=entry.job_id,
         registry_section="jobs",
-        owner_kind="Experiment",
+        owner_kind="Assignment",
         owner_id=entry.id,
     )
-    return ResolvedExperimentBinding(
-        experiment_id=entry.id,
-        dataset_registry_id=entry.dataset_id,
-        job_registry_id=entry.job_id,
+    return ResolvedAssignmentBinding(
+        assignment_id=entry.id,
+        dataset_id=entry.dataset_id,
+        job_id=entry.job_id,
         data_config_path=resolve_dataset_config_path(
             cfg,
             config_dir,
             entry.dataset_id,
-            experiment_id=entry.id,
+            assignment_id=entry.id,
         ),
         job_config_path=resolve_job_config_path(
             cfg,
             config_dir,
             entry.job_id,
-            experiment_id=entry.id,
+            assignment_id=entry.id,
         ),
         checkpoint_path=(
             resolve_registry_path(config_dir, entry.checkpoint_path)
             if entry.checkpoint_path is not None
             else None
         ),
-        experiment_display_name=entry.effective_display_name,
+        assignment_display_name=entry.effective_display_name,
         dataset_display_name=dataset_entry.effective_display_name,
         job_display_name=job_entry.effective_display_name,
     )
 
 
-def get_experiment_binding(
+def get_assignment_binding(
     cfg: CaseConfig,
     config_dir: Path,
-    experiment_id: str,
-) -> ResolvedExperimentBinding:
-    """Resolve one experiment by id."""
-    for entry in cfg.experiments:
-        if entry.id == experiment_id:
-            return resolve_experiment_binding(cfg, config_dir, entry)
-    raise KeyError(f"Experiment '{experiment_id}' not found in case config registry.")
+    assignment_id: str,
+) -> ResolvedAssignmentBinding:
+    """Resolve one assignment by id."""
+    for entry in cfg.assignments:
+        if entry.id == assignment_id:
+            return resolve_assignment_binding(cfg, config_dir, entry)
+    raise KeyError(f"Assignment '{assignment_id}' not found in case config registry.")
 
 
-def list_experiment_bindings(
+def list_assignment_bindings(
     cfg: CaseConfig,
     config_dir: Path,
-) -> list[ResolvedExperimentBinding]:
-    """Resolve all experiment entries with concrete config paths."""
-    return [resolve_experiment_binding(cfg, config_dir, entry) for entry in cfg.experiments]
+) -> list[ResolvedAssignmentBinding]:
+    """Resolve all assignment entries with concrete config paths."""
+    return [resolve_assignment_binding(cfg, config_dir, entry) for entry in cfg.assignments]

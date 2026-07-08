@@ -8,11 +8,11 @@ import pytest
 from dlkit.common.errors import ConfigValidationError
 from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
 
-from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.composition.assignments.assembler import load_assignment
 from neuralls.platform.config.models.workspace import (
-    ExperimentSpec,
-    ExperimentWorkspace,
-    RunnableExperiment,
+    AssignmentSpec,
+    AssignmentWorkspace,
+    RunnableAssignment,
 )
 from neuralls.platform.config.dlkit_bridge import load_job_config
 
@@ -169,7 +169,7 @@ max_epochs = 1
 
 
 class TestLoadExperiment:
-    """Integration tests for load_experiment."""
+    """Integration tests for load_assignment."""
 
     def test_load_experiment_success(
         self,
@@ -182,7 +182,7 @@ class TestLoadExperiment:
         output_root = tmp_path / "output"
         output_root.mkdir()
 
-        experiment = load_experiment(
+        experiment = load_assignment(
             job_config_path=sample_model_config,
             data_config_path=sample_data_config,
             neuralls_settings=neuralls_settings,
@@ -190,9 +190,9 @@ class TestLoadExperiment:
             dataset_registry_id=sample_data_config.stem,
         )
 
-        assert isinstance(experiment, RunnableExperiment)
-        assert isinstance(experiment.spec, ExperimentSpec)
-        assert isinstance(experiment.workspace, ExperimentWorkspace)
+        assert isinstance(experiment, RunnableAssignment)
+        assert isinstance(experiment.spec, AssignmentSpec)
+        assert isinstance(experiment.workspace, AssignmentWorkspace)
 
     def test_experiment_spec_fields(
         self,
@@ -202,7 +202,7 @@ class TestLoadExperiment:
         neuralls_settings,
     ) -> None:
         """Experiment spec stores the resolved ids and paths."""
-        experiment = load_experiment(
+        experiment = load_assignment(
             sample_model_config,
             sample_data_config,
             neuralls_settings=neuralls_settings,
@@ -210,7 +210,7 @@ class TestLoadExperiment:
             dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.spec.experiment_id == "test-model"
+        assert experiment.spec.assignment_id == "test-model"
         assert experiment.spec.job_config_path == sample_model_config
         assert experiment.spec.data_config_path == sample_data_config
         assert experiment.spec.checkpoint_path is None
@@ -226,7 +226,7 @@ class TestLoadExperiment:
         output_root = tmp_path / "output"
         output_root.mkdir()
 
-        experiment = load_experiment(
+        experiment = load_assignment(
             sample_model_config,
             sample_data_config,
             neuralls_settings=neuralls_settings,
@@ -253,7 +253,7 @@ class TestLoadExperiment:
         output_root = tmp_path / "output"
         output_root.mkdir()
 
-        experiment = load_experiment(
+        experiment = load_assignment(
             sample_model_config,
             sample_data_config,
             neuralls_settings=neuralls_settings,
@@ -283,7 +283,7 @@ class TestLoadExperiment:
             experiment_name=None,
         )
 
-        experiment = load_experiment(
+        experiment = load_assignment(
             job,
             sample_data_config,
             neuralls_settings=neuralls_settings,
@@ -291,5 +291,5 @@ class TestLoadExperiment:
             dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.spec.experiment_id == "OnlyModelName"
+        assert experiment.spec.assignment_id == "OnlyModelName"
         assert experiment.workspace.run_id == "OnlyModelName"

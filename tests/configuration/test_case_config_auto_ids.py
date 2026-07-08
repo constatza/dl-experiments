@@ -1,11 +1,11 @@
 """Integration tests for CaseConfig auto-id and display-name filling.
 
 These tests verify that the CaseConfig validator correctly infers missing id and
-display_name fields in ExperimentEntry and ComparisonRegistryEntry, using the
+display_name fields in AssignmentEntry and ComparisonRegistryEntry, using the
 registry entries (datasets and jobs) to fill in labels.
 
 Note: These tests are expected to FAIL before the validator is added to CaseConfig.
-They should raise pydantic.ValidationError when ExperimentEntry.id or
+They should raise pydantic.ValidationError when AssignmentEntry.id or
 ComparisonRegistryEntry.id are required but missing.
 """
 
@@ -54,30 +54,30 @@ def minimal_case_raw(
     dataset_entry_gaussian: dict[str, object],
     job_entry_ffnn: dict[str, object],
 ) -> dict[str, object]:
-    """Minimal valid case config with registry entries but empty experiments/comparisons."""
+    """Minimal valid case config with registry entries but empty assignments/comparisons."""
     return {
         "datasets": [dataset_entry_gaussian],
         "jobs": [job_entry_ffnn],
-        "experiments": [],
+        "assignments": [],
         "comparisons": [],
     }
 
 
 # ============================================================================
-# Experiments — auto-fill tests
+# Assignments — auto-fill tests
 # ============================================================================
 
 
-def test_experiment_auto_id_is_job_first(
+def test_assignment_auto_id_is_job_first(
     minimal_case_raw: dict[str, object],
 ) -> None:
-    """Auto-generate experiment id from job and dataset when no id or display_name given.
+    """Auto-generate assignment id from job and dataset when no id or display_name given.
 
     The id should be "{job_id}-{dataset_id}" (job first).
     Display name should be "{job_label} | {dataset_label}".
     """
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [
+    raw["assignments"] = [
         {
             "dataset": "gaussian-cg1-45x15",
             "job": "ffnn-standard",
@@ -85,16 +85,16 @@ def test_experiment_auto_id_is_job_first(
         }
     ]
     config = CaseConfig.model_validate(raw)
-    assert config.experiments[0].id == "ffnn-standard-gaussian-cg1-45x15"
-    assert config.experiments[0].display_name == "FFNN Standard | Gaussian CG-1 45x15"
+    assert config.assignments[0].id == "ffnn-standard-gaussian-cg1-45x15"
+    assert config.assignments[0].display_name == "FFNN Standard | Gaussian CG-1 45x15"
 
 
-def test_experiment_id_derived_from_display_name(
+def test_assignment_id_derived_from_display_name(
     minimal_case_raw: dict[str, object],
 ) -> None:
-    """Auto-generate experiment id from display_name via slugification when no id given."""
+    """Auto-generate assignment id from display_name via slugification when no id given."""
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [
+    raw["assignments"] = [
         {
             "dataset": "gaussian-cg1-45x15",
             "job": "ffnn-standard",
@@ -103,16 +103,16 @@ def test_experiment_id_derived_from_display_name(
         }
     ]
     config = CaseConfig.model_validate(raw)
-    assert config.experiments[0].id == "my-run"
-    assert config.experiments[0].display_name == "My Run"
+    assert config.assignments[0].id == "my-run"
+    assert config.assignments[0].display_name == "My Run"
 
 
-def test_experiment_display_name_auto_filled_when_only_id_given(
+def test_assignment_display_name_auto_filled_when_only_id_given(
     minimal_case_raw: dict[str, object],
 ) -> None:
     """Auto-fill display_name from dataset and model labels when only id is given."""
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [
+    raw["assignments"] = [
         {
             "id": "my-id",
             "dataset": "gaussian-cg1-45x15",
@@ -121,16 +121,16 @@ def test_experiment_display_name_auto_filled_when_only_id_given(
         }
     ]
     config = CaseConfig.model_validate(raw)
-    assert config.experiments[0].id == "my-id"
-    assert config.experiments[0].display_name == "FFNN Standard | Gaussian CG-1 45x15"
+    assert config.assignments[0].id == "my-id"
+    assert config.assignments[0].display_name == "FFNN Standard | Gaussian CG-1 45x15"
 
 
-def test_experiment_explicit_id_and_display_name_unchanged(
+def test_assignment_explicit_id_and_display_name_unchanged(
     minimal_case_raw: dict[str, object],
 ) -> None:
     """Explicit id and display_name should remain unchanged."""
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [
+    raw["assignments"] = [
         {
             "id": "my-id",
             "dataset": "gaussian-cg1-45x15",
@@ -139,8 +139,8 @@ def test_experiment_explicit_id_and_display_name_unchanged(
         }
     ]
     config = CaseConfig.model_validate(raw)
-    assert config.experiments[0].id == "my-id"
-    assert config.experiments[0].display_name == "My Label"
+    assert config.assignments[0].id == "my-id"
+    assert config.assignments[0].display_name == "My Label"
 
 
 # ============================================================================
@@ -157,11 +157,11 @@ def test_comparison_auto_id_when_same_datasets(
         {
             "matrix_dataset": "gaussian-cg1-45x15",
             "rhs_source": {"kind": "gaussian"},
-            "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
+            "assignments": ["ffnn-standard-gaussian-cg1-45x15"],
             # no id, no display_name
         }
     ]
-    raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
+    raw["assignments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
     config = CaseConfig.model_validate(raw)
     assert config.comparisons[0].id == "gaussian-cg1-45x15-gaussian"
     assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | gaussian"
@@ -177,11 +177,11 @@ def test_comparison_auto_id_when_different_datasets(
         {
             "matrix_dataset": "gaussian-cg1-45x15",
             "rhs_source": {"kind": "dataset", "path": "/fake/solutions"},
-            "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
+            "assignments": ["ffnn-standard-gaussian-cg1-45x15"],
             # no id, no display_name
         }
     ]
-    raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
+    raw["assignments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
     config = CaseConfig.model_validate(raw)
     assert config.comparisons[0].id == "gaussian-cg1-45x15-dataset"
     assert config.comparisons[0].display_name == "Gaussian CG-1 45x15 | dataset"
@@ -195,14 +195,14 @@ def test_comparison_auto_id_when_different_datasets(
 def test_explicit_id_and_display_name_preserved(
     minimal_case_raw: dict[str, object],
 ) -> None:
-    """Explicit id and display_name in both experiments and comparisons are preserved."""
+    """Explicit id and display_name in both assignments and comparisons are preserved."""
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [
+    raw["assignments"] = [
         {
             "id": "my-exp",
             "dataset": "gaussian-cg1-45x15",
             "job": "ffnn-standard",
-            "display_name": "My Experiment",
+            "display_name": "My Assignment",
         }
     ]
     raw["comparisons"] = [
@@ -215,8 +215,8 @@ def test_explicit_id_and_display_name_preserved(
     ]
     config = CaseConfig.model_validate(raw)
 
-    assert config.experiments[0].id == "my-exp"
-    assert config.experiments[0].display_name == "My Experiment"
+    assert config.assignments[0].id == "my-exp"
+    assert config.assignments[0].display_name == "My Assignment"
 
     assert config.comparisons[0].id == "my-comp"
     assert config.comparisons[0].display_name == "My Comparison"
@@ -229,7 +229,7 @@ def test_comparison_explicit_indices_are_preserved(
     from neuralls.platform.config.models.comparison import DatasetRhsSourceModel
 
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
+    raw["assignments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
     raw["comparisons"] = [
         {
             "matrix_dataset": "gaussian-cg1-45x15",
@@ -252,7 +252,7 @@ def test_comparison_rejects_removed_train_run_id(
 ) -> None:
     """Case comparisons no longer accept split-driven train_run_id metadata."""
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
+    raw["assignments"] = [{"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"}]
     raw["comparisons"] = [
         {
             "matrix_dataset": "gaussian-cg1-45x15",
@@ -272,9 +272,9 @@ def test_comparison_rejects_removed_train_run_id(
 def test_invalid_id_chars_raise_validation_error(
     minimal_case_raw: dict[str, object],
 ) -> None:
-    """Reject experiment entries with invalid characters in auto-generated id."""
+    """Reject assignment entries with invalid characters in auto-generated id."""
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [
+    raw["assignments"] = [
         {
             "id": "bad id!",
             "dataset": "gaussian-cg1-45x15",
@@ -285,37 +285,37 @@ def test_invalid_id_chars_raise_validation_error(
         CaseConfig.model_validate(raw)
 
 
-def test_multi_experiment_auto_ids_all_job_first(
+def test_multi_assignment_auto_ids_all_job_first(
     minimal_case_raw: dict[str, object],
     dataset_entry_solutions: dict[str, object],
 ) -> None:
     """All auto-generated ids across multiple datasets are job-first.
 
     Mirrors the production config pattern: datasets with display_names, one job,
-    multiple experiments with only dataset + job (no id or display_name).
+    multiple assignments with only dataset + job (no id or display_name).
     """
     raw = dict(minimal_case_raw)
     raw["datasets"] = [*list(raw["datasets"]), dataset_entry_solutions]  # type: ignore[arg-type]
-    raw["experiments"] = [
+    raw["assignments"] = [
         {"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"},
         {"dataset": "solutions-45x15", "job": "ffnn-standard"},
     ]
     config = CaseConfig.model_validate(raw)
-    assert [e.id for e in config.experiments] == [
+    assert [e.id for e in config.assignments] == [
         "ffnn-standard-gaussian-cg1-45x15",
         "ffnn-standard-solutions-45x15",
     ]
-    assert [e.display_name for e in config.experiments] == [
+    assert [e.display_name for e in config.assignments] == [
         "FFNN Standard | Gaussian CG-1 45x15",
         "FFNN Standard | Solutions 45x15",
     ]
 
 
-def test_comparison_display_name_ignores_experiment_filter_for_parent_name(
+def test_comparison_display_name_ignores_assignment_filter_for_parent_name(
     minimal_case_raw: dict[str, object],
     dataset_entry_solutions: dict[str, object],
 ) -> None:
-    """Comparison parent names stay dataset-defined even with filtered experiments."""
+    """Comparison parent names stay dataset-defined even with filtered assignments."""
     raw = dict(minimal_case_raw)
     raw["datasets"] = [*list(raw["datasets"]), dataset_entry_solutions]  # type: ignore[arg-type]
     raw["jobs"] = [
@@ -326,7 +326,7 @@ def test_comparison_display_name_ignores_experiment_filter_for_parent_name(
             "display_name": "FFNN Large",
         },
     ]
-    raw["experiments"] = [
+    raw["assignments"] = [
         {"dataset": "gaussian-cg1-45x15", "job": "ffnn-standard"},
         {"dataset": "solutions-45x15", "job": "ffnn-large"},
     ]
@@ -334,7 +334,7 @@ def test_comparison_display_name_ignores_experiment_filter_for_parent_name(
         {
             "matrix_dataset": "gaussian-cg1-45x15",
             "rhs_source": {"kind": "dataset", "path": "/fake/solutions"},
-            "experiments": ["ffnn-standard-gaussian-cg1-45x15"],
+            "assignments": ["ffnn-standard-gaussian-cg1-45x15"],
         }
     ]
 
@@ -346,13 +346,13 @@ def test_comparison_display_name_ignores_experiment_filter_for_parent_name(
 def test_duplicate_auto_ids_raise_validation_error(
     minimal_case_raw: dict[str, object],
 ) -> None:
-    """Reject experiment entries when auto-id generation results in duplicates.
+    """Reject assignment entries when auto-id generation results in duplicates.
 
-    Two experiments with the same dataset and job but no explicit id will
+    Two assignments with the same dataset and job but no explicit id will
     both auto-generate the same id, which should be rejected.
     """
     raw = dict(minimal_case_raw)
-    raw["experiments"] = [
+    raw["assignments"] = [
         {
             "dataset": "gaussian-cg1-45x15",
             "job": "ffnn-standard",

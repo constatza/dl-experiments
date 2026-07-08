@@ -47,10 +47,10 @@ def log_extra_feature_names_tag(
 
 
 def _lookup_run_id_for_model(entry_id: str, client: MlflowClient) -> str | None:
-    """Look up the latest registered model version run ID for an experiment entry.
+    """Look up the latest registered model version run ID for an assignment entry.
 
     Args:
-        entry_id: Experiment registry ID used as the registered model name.
+        entry_id: Assignment registry ID used as the registered model name.
         client: Configured MLflow client.
 
     Returns:
@@ -67,13 +67,13 @@ def _lookup_run_id_for_model(entry_id: str, client: MlflowClient) -> str | None:
 
 
 def fetch_extra_input_names_for_model(entry_id: str, client: MlflowClient) -> tuple[str, ...]:
-    """Fetch extra input names from the training run tag for an experiment entry.
+    """Fetch extra input names from the training run tag for an assignment entry.
 
     Looks up the latest registered model version for ``entry_id``, then reads
     the ``neuralls.extra_feature_names`` tag from the associated training run.
 
     Args:
-        entry_id: Experiment registry ID used as the registered model name.
+        entry_id: Assignment registry ID used as the registered model name.
         client: Configured MLflow client.
 
     Returns:

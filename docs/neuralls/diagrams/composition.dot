@@ -2,7 +2,7 @@ digraph {
 "neuralls.application" [label="application"];
 "neuralls.composition" [label="composition" style="bold"];
 "neuralls.composition.comparison" [label="comparison"];
-"neuralls.composition.experiments" [label="experiments"];
+"neuralls.composition.assignments" [label="assignments"];
 "neuralls.composition.generation" [label="generation"];
 "neuralls.composition.inference" [label="inference"];
 "neuralls.composition.preconditioners" [label="preconditioners"];
@@ -11,7 +11,7 @@ digraph {
 "neuralls.platform" [label="platform"];
 "neuralls.shared" [label="shared"];
 "neuralls.composition" -> "neuralls.composition.comparison" [style="dashed" color="gray50" arrowhead="none"];
-"neuralls.composition" -> "neuralls.composition.experiments" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.composition" -> "neuralls.composition.assignments" [style="dashed" color="gray50" arrowhead="none"];
 "neuralls.composition" -> "neuralls.composition.generation" [style="dashed" color="gray50" arrowhead="none"];
 "neuralls.composition" -> "neuralls.composition.inference" [style="dashed" color="gray50" arrowhead="none"];
 "neuralls.composition" -> "neuralls.composition.preconditioners" [style="dashed" color="gray50" arrowhead="none"];
@@ -23,13 +23,13 @@ digraph {
 "neuralls.composition.comparison" -> "neuralls.domain";
 "neuralls.composition.comparison" -> "neuralls.platform";
 "neuralls.composition.comparison" -> "neuralls.shared";
-"neuralls.composition.experiments" -> "neuralls.application";
-"neuralls.composition.experiments" -> "neuralls.composition.comparison";
-"neuralls.composition.experiments" -> "neuralls.composition.generation";
-"neuralls.composition.experiments" -> "neuralls.composition.inference";
-"neuralls.composition.experiments" -> "neuralls.composition.tracking";
-"neuralls.composition.experiments" -> "neuralls.platform";
-"neuralls.composition.experiments" -> "neuralls.shared";
+"neuralls.composition.assignments" -> "neuralls.application";
+"neuralls.composition.assignments" -> "neuralls.composition.comparison";
+"neuralls.composition.assignments" -> "neuralls.composition.generation";
+"neuralls.composition.assignments" -> "neuralls.composition.inference";
+"neuralls.composition.assignments" -> "neuralls.composition.tracking";
+"neuralls.composition.assignments" -> "neuralls.platform";
+"neuralls.composition.assignments" -> "neuralls.shared";
 "neuralls.composition.generation" -> "neuralls.domain";
 "neuralls.composition.generation" -> "neuralls.platform";
 "neuralls.composition.generation" -> "neuralls.shared";

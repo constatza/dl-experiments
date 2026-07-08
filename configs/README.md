@@ -1,7 +1,7 @@
 # Configuration Guide
 
 The public CLI is case-oriented. One case config binds datasets, jobs,
-comparisons, and experiment batches.
+comparisons, and assignment batches.
 
 ## Warning
 
@@ -131,7 +131,7 @@ Case configs bind:
 
 - dataset ids
 - job ids
-- experiment ids, inferred when omitted
+- assignment ids, inferred when omitted
 - comparison ids, inferred when omitted
 - case-level MLflow topology
 
@@ -165,7 +165,7 @@ id = "scaled"
 matrix_dataset = "train-dataset"
 rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 5.0 }
 
-[[experiments]]
+[[assignments]]
 dataset = "train-dataset"
 job = "scale-equivariant-embedded-fully-factorized"
 ```

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.storage.workspaces import WorkspaceFactory
 
 
@@ -47,7 +47,7 @@ class TestWorkspaceFactory:
 
         workspace = factory.create(dataset_id, run_id)
 
-        assert isinstance(workspace, ExperimentWorkspace)
+        assert isinstance(workspace, AssignmentWorkspace)
         assert workspace.dataset_id == dataset_id
         assert workspace.run_id == run_id
 
@@ -139,7 +139,7 @@ class TestWorkspaceFactory:
         assert workspace1.root_dir.parent.name == dataset_id
 
     def test_workspace_frozen(self, factory: WorkspaceFactory):
-        """Test that ExperimentWorkspace is frozen (immutable)."""
+        """Test that AssignmentWorkspace is frozen (immutable)."""
         workspace = factory.create("test", "test")
 
         with pytest.raises(AttributeError):

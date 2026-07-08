@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from neuralls.domain.solver.models.result import ComparisonResult
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.storage.manifest import DatasetNormalization
 from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
@@ -36,7 +36,7 @@ class ComparisonSpec:
         model_config: Path to model configuration TOML.
         data_config: Path to data configuration TOML.
         comparison_config: Path to comparison configuration TOML.
-        workspace: Resolved experiment workspace.
+        workspace: Resolved assignment workspace.
         checkpoint: Path to model checkpoint.
         matrix_override: Optional matrix file override.
         rhs_override: Optional rhs file override.
@@ -49,7 +49,7 @@ class ComparisonSpec:
     model_config: Path
     data_config: Path
     comparison_config: Path
-    workspace: ExperimentWorkspace
+    workspace: AssignmentWorkspace
     checkpoint: Path
     matrix_override: Path | None = None
     rhs_override: Path | None = None

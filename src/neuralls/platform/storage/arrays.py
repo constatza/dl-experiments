@@ -23,43 +23,6 @@ from neuralls.platform.storage.datasets import (
 )
 
 
-def derive_checkpoint_path(
-    model_template: str | Path,
-    data_config: str | Path,
-    output_root: str | Path,
-) -> Path:
-    """Derive checkpoint path from experiment configuration.
-
-    Follows convention: {output_root}/{data_config_stem}/{model_name}/checkpoints/{model_name}.ckpt
-
-    I/O action - reads job config to extract lower-case experiment/model identity.
-
-    Args:
-        model_template: Path to job config (extracts experiment/model identity)
-        data_config: Path to data config (extracts stem)
-        output_root: Base output directory
-
-    Returns:
-        Expected checkpoint path following convention
-
-    Example:
-        >>> derive_checkpoint_path(
-        ...     "/tmp/model.toml",
-        ...     "/tmp/dataset.toml",
-        ...     "/data/output",
-        ... )
-        PosixPath('/data/projects/graph-cg/data/output/test-solutions/ffnn/checkpoints/ffnn.ckpt')
-    """
-    from neuralls.platform.storage.filesystem import extract_model_name
-
-    model_name = extract_model_name(model_template)
-    data_config_name = Path(data_config).stem
-    output_root_path = Path(output_root)
-
-    checkpoint_dir = output_root_path / data_config_name / model_name / "checkpoints"
-    return checkpoint_dir / f"{model_name}.ckpt"
-
-
 def _load_matrix_file(matrix_path: str | Path) -> np.ndarray:
     """Load matrix from dataset directory or file.
 

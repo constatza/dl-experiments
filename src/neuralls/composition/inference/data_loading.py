@@ -14,10 +14,10 @@ from loguru import logger
 
 from dlkit.io import load_array
 
-from neuralls.composition.experiments.runtime_dataset_contract import (
+from neuralls.composition.assignments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.reporting.synthetic import generate_synthetic_test_case
 from neuralls.platform.config.loaders import load_comparison_config
 from neuralls.platform.config.settings import NeurallsSettings
@@ -46,14 +46,14 @@ def validate_data_availability(
 
 
 def resolve_standard_data_paths(
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     features_path: Path | None,
     targets_path: Path | None,
 ) -> tuple[Path, Path]:
     """Resolve paths for standard feature and target files.
 
     Args:
-        workspace: Experiment workspace with default data directory
+        workspace: Assignment workspace with default data directory
         features_path: Explicit features path (optional)
         targets_path: Explicit targets path (optional)
 
@@ -66,14 +66,14 @@ def resolve_standard_data_paths(
 
 
 def load_standard_data(
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     features_path: Path | None,
     targets_path: Path | None,
 ) -> InferenceData | None:
     """Load standard inference data from feature and target files.
 
     Args:
-        workspace: Experiment workspace with default data directory
+        workspace: Assignment workspace with default data directory
         features_path: Path to features file (optional)
         targets_path: Path to targets file (optional)
 
@@ -123,7 +123,7 @@ def load_standard_data(
 
 def load_synthetic_data(
     comparison_config_path: Path,
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     settings: NeurallsSettings,
 ) -> InferenceData:
     """Generate synthetic benchmark data from comparison configuration.
@@ -133,7 +133,7 @@ def load_synthetic_data(
 
     Args:
         comparison_config_path: Path to comparison configuration file
-        workspace: Experiment workspace (for metadata)
+        workspace: Assignment workspace (for metadata)
 
     Returns:
         InferenceData object with synthetic features and targets
@@ -176,7 +176,7 @@ def load_synthetic_data(
 
 
 def load_inference_data(
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     settings: NeurallsSettings,
     features_path: Path | None = None,
     targets_path: Path | None = None,
@@ -195,7 +195,7 @@ def load_inference_data(
     - Falls back to other source if primary fails
 
     Args:
-        workspace: Experiment workspace
+        workspace: Assignment workspace
         features_path: Path to features file (for standard)
         targets_path: Path to targets file (for standard)
         synthetic_benchmark: Whether to use synthetic data

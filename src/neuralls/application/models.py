@@ -1,4 +1,4 @@
-"""Application-layer reporting models for experiment execution results."""
+"""Application-layer reporting models for assignment execution results."""
 
 from __future__ import annotations
 
@@ -26,24 +26,24 @@ class TaskResult:
 
 
 @dataclass(frozen=True)
-class ExperimentResult:
-    """Final comprehensive report for a single experiment.
+class AssignmentResult:
+    """Final comprehensive report for a single assignment.
 
     Args:
-        experiment_id: Stable experiment identifier.
-        experiment_display_name: Human-readable label.
+        assignment_id: Stable assignment identifier.
+        assignment_display_name: Human-readable label.
         status: "Success" or "Failed".
         tasks: Individual task outcomes.
         error: Top-level error message if failed.
     """
 
-    experiment_id: str
-    experiment_display_name: str
+    assignment_id: str
+    assignment_display_name: str
     status: str
     tasks: list[TaskResult] = field(default_factory=list)
     error: str | None = None
 
     @property
     def is_success(self) -> bool:
-        """Whether the experiment succeeded."""
+        """Whether the assignment succeeded."""
         return self.status == "Success"

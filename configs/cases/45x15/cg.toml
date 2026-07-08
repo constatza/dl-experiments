@@ -65,14 +65,14 @@ rhs_source = { kind = "sparse", indices = [
 matrix_dataset = "gaussian-cg100-45x15"
 rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 1.0 }
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-embedded-fully-factorized"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-constant-width-factorized"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-constant-width-softplus-factorized"

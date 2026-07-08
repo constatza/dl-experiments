@@ -44,6 +44,11 @@ id = "scale-equivariant-constant-width-softplus-factorized-search"
 path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized-optuna.toml"
 display_name = "Scale Equivariant Constant Width Softplus FFNN Optuna Search"
 
+[[jobs]]
+id = "scale-equivariant-embedded-fully-softplus-factorized-search"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized-optuna.toml"
+display_name = "Scale Equivariant Embedded Fully Softplus FFNN Optuna Search"
+
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15"
 rhs_source = { kind = "gaussian" }
@@ -65,14 +70,18 @@ rhs_source = { kind = "sparse", indices = [
 matrix_dataset = "gaussian-cg100-45x15"
 rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 1.0 }
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-embedded-fully-factorized-search"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-constant-width-factorized-search"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-constant-width-softplus-factorized-search"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-softplus-factorized-search"

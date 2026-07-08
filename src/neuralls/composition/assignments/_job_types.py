@@ -1,4 +1,4 @@
-"""Shared lower-case DLKit job types for experiment composition."""
+"""Shared lower-case DLKit job types for assignment composition."""
 
 from __future__ import annotations
 

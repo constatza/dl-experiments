@@ -40,7 +40,7 @@ depends_on = [
 paths = [
     "neuralls.composition.comparison",
     "neuralls.composition.config",
-    "neuralls.composition.experiments",
+    "neuralls.composition.assignments",
     "neuralls.composition.generation",
     "neuralls.composition.inference",
     "neuralls.composition.preconditioners",

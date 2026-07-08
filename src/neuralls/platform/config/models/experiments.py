@@ -13,10 +13,10 @@ from neuralls.platform.config.models.comparison import ComparisonRhsSourceModel
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.models.id_generation import (
     _build_display_lookup,
+    _infer_assignment_display_name,
+    _infer_assignment_id,
     _infer_comparison_display_name,
     _infer_comparison_id,
-    _infer_experiment_display_name,
-    _infer_experiment_id,
 )
 
 
@@ -134,11 +134,15 @@ class RegistryEntry(BaseModel):
         return resolve_display_name(self.id, self.display_name)
 
 
-class ExperimentEntry(BaseModel):
-    """Single experiment entry from the ``[[experiments]]`` case table.
+class AssignmentEntry(BaseModel):
+    """Single assignment entry from the ``[[assignments]]`` case table.
+
+    An assignment pairs one job with one dataset — the intent "run this job
+    on this dataset." Not to be confused with an MLflow Experiment (a bucket
+    grouping many runs) — see ``ExperimentNamesConfig`` for that concept.
 
     Attributes:
-        id: Stable experiment identifier.
+        id: Stable assignment identifier.
         dataset_id: Dataset registry id.
         job_id: Job registry id.
         display_name: Optional human-facing label.
@@ -188,7 +192,7 @@ class ComparisonDefaults(BaseModel):
         breakdown_tol: Breakdown detection threshold.
         normalize_system: Normalization applied to the test system.
         preconditioners: Classical preconditioner list (neural preconditioners are
-            auto-generated from case experiments at runtime).
+            auto-generated from case assignments at runtime).
     """
 
     rtol: float = Field(default=DEFAULT_RTOL, gt=0.0)
@@ -217,7 +221,7 @@ class ComparisonRegistryEntry(BaseModel):
             Defaults to 0.
         method: Optional path to a comparison TOML that overrides defaults.
         rhs_source: RHS source specification (`gaussian`, `sparse`, raw file, or `dataset`).
-        experiments: Optional experiment id filter; empty means all experiments.
+        assignments: Optional assignment id filter; empty means all assignments.
         display_name: Optional human-facing label.
     """
 
@@ -228,7 +232,7 @@ class ComparisonRegistryEntry(BaseModel):
     rhs_source: ComparisonRhsSourceModel
     require_non_residual_rhs: bool = True
     seed: int | None = None
-    experiments: list[str] = Field(default_factory=list)
+    assignments: list[str] = Field(default_factory=list)
     display_name: str | None = None
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -272,13 +276,13 @@ def _dedupe_ids(kind: str, entries: Sequence[RegistryEntry | ComparisonRegistryE
         raise ValueError(f"Duplicate {kind} ids in case config: {joined}.")
 
 
-def _dedupe_experiment_ids(entries: list[ExperimentEntry]) -> None:
-    """Reject duplicate experiment ids with a focused error."""
+def _dedupe_assignment_ids(entries: list[AssignmentEntry]) -> None:
+    """Reject duplicate assignment ids with a focused error."""
     seen: set[str] = set()
     duplicates = sorted({entry.id for entry in entries if entry.id in seen or seen.add(entry.id)})
     if duplicates:
         joined = ", ".join(duplicates)
-        raise ValueError(f"Duplicate experiment ids in case config: {joined}.")
+        raise ValueError(f"Duplicate assignment ids in case config: {joined}.")
 
 
 def _registry_ids(entries: list[RegistryEntry]) -> set[str]:
@@ -286,18 +290,18 @@ def _registry_ids(entries: list[RegistryEntry]) -> set[str]:
     return {entry.id for entry in entries}
 
 
-def _validate_comparison_experiment_filter_refs(
+def _validate_comparison_assignment_filter_refs(
     comparisons: list[ComparisonRegistryEntry],
-    experiment_ids: set[str],
+    assignment_ids: set[str],
 ) -> None:
-    """Reject comparison experiment filter refs that reference unknown experiment ids."""
+    """Reject comparison assignment filter refs that reference unknown assignment ids."""
     for entry in comparisons:
-        unknown = [eid for eid in entry.experiments if eid not in experiment_ids]
+        unknown = [aid for aid in entry.assignments if aid not in assignment_ids]
         if unknown:
             joined = ", ".join(unknown)
             raise ValueError(
-                f"Comparison '{entry.id}' experiments filter references unknown "
-                f"experiment ids: {joined}."
+                f"Comparison '{entry.id}' assignments filter references unknown "
+                f"assignment ids: {joined}."
             )
 
 
@@ -315,22 +319,22 @@ def _validate_comparison_dataset_refs(
             )
 
 
-def _validate_experiment_registry_refs(
-    experiments: list[ExperimentEntry],
+def _validate_assignment_registry_refs(
+    assignments: list[AssignmentEntry],
     *,
     dataset_ids: set[str],
     job_ids: set[str],
 ) -> None:
-    """Reject experiments that reference undefined dataset/job registry ids."""
-    for entry in experiments:
+    """Reject assignments that reference undefined dataset/job registry ids."""
+    for entry in assignments:
         if entry.dataset_id not in dataset_ids:
             raise ValueError(
-                f"Experiment '{entry.id}' references dataset id "
+                f"Assignment '{entry.id}' references dataset id "
                 f"'{entry.dataset_id}', but [[datasets]] does not define it."
             )
         if entry.job_id not in job_ids:
             raise ValueError(
-                f"Experiment '{entry.id}' references job id "
+                f"Assignment '{entry.id}' references job id "
                 f"'{entry.job_id}', but [[jobs]] does not define it."
             )
 
@@ -342,7 +346,7 @@ class CaseConfig(BaseModel):
         datasets: Dataset registry entries (training data + comparison reference data).
         jobs: Job registry entries.
         comparisons: Comparison registry entries with data binding.
-        experiments: Experiment entries referencing registry ids.
+        assignments: Assignment entries referencing registry ids.
         mlflow: MLflow topology config (tracking URI, etc.).
         names: MLflow experiment names for training and comparison.
         comparison_defaults: Shared solver params and preconditioner list applied to
@@ -352,7 +356,7 @@ class CaseConfig(BaseModel):
     datasets: list[RegistryEntry] = Field(default_factory=list)
     jobs: list[RegistryEntry] = Field(default_factory=list)
     comparisons: list[ComparisonRegistryEntry] = Field(default_factory=list)
-    experiments: list[ExperimentEntry] = Field(default_factory=list)
+    assignments: list[AssignmentEntry] = Field(default_factory=list)
     mlflow: MlflowTopologyConfig = Field(default_factory=MlflowTopologyConfig)
     names: ExperimentNamesConfig = Field(default_factory=ExperimentNamesConfig)
     comparison_defaults: ComparisonDefaults | None = None
@@ -381,29 +385,29 @@ class CaseConfig(BaseModel):
 
         datasets: list[object] = cast("list[object]", raw.get("datasets", []))
         jobs: list[object] = cast("list[object]", raw.get("jobs", []))
-        experiments: list[object] = cast("list[object]", raw.get("experiments", []))
+        assignments: list[object] = cast("list[object]", raw.get("assignments", []))
         comparisons: list[object] = cast("list[object]", raw.get("comparisons", []))
 
         dataset_display = _build_display_lookup(datasets)
         model_display = _build_display_lookup(jobs)
 
-        for exp in experiments:
-            if not isinstance(exp, dict):
+        for assignment in assignments:
+            if not isinstance(assignment, dict):
                 continue
-            exp_dict = cast("dict[str, object]", exp)
-            dataset_id = str(exp_dict.get("dataset") or "")
-            job_id = str(exp_dict.get("job") or "")
-            raw_id = exp_dict.get("id")
-            raw_dn = exp_dict.get("display_name")
+            assignment_dict = cast("dict[str, object]", assignment)
+            dataset_id = str(assignment_dict.get("dataset") or "")
+            job_id = str(assignment_dict.get("job") or "")
+            raw_id = assignment_dict.get("id")
+            raw_dn = assignment_dict.get("display_name")
             user_id = str(raw_id).strip() if isinstance(raw_id, str) else None
             user_id = user_id or None
             user_dn = str(raw_dn).strip() if isinstance(raw_dn, str) else None
             user_dn = user_dn or None
 
-            exp_dict["id"] = _infer_experiment_id(dataset_id, job_id, user_id, user_dn)
+            assignment_dict["id"] = _infer_assignment_id(dataset_id, job_id, user_id, user_dn)
 
             if not user_dn:
-                exp_dict["display_name"] = _infer_experiment_display_name(
+                assignment_dict["display_name"] = _infer_assignment_display_name(
                     dataset_id, job_id, user_dn, dataset_display, model_display
                 )
 
@@ -443,7 +447,11 @@ class CaseConfig(BaseModel):
         raw = dict(data)
         if "experiment" in raw:
             raise ValueError(
-                "Unsupported '[[experiment]]' table. Use '[[experiments]]' entries in case config."
+                "Unsupported '[[experiment]]' table. Use '[[assignments]]' entries in case config."
+            )
+        if "experiments" in raw:
+            raise ValueError(
+                "Unsupported '[[experiments]]' table. Use '[[assignments]]' entries in case config."
             )
         if "models" in raw:
             raise ValueError(
@@ -462,16 +470,16 @@ class CaseConfig(BaseModel):
         _dedupe_ids("dataset registry", self.datasets)
         _dedupe_ids("job registry", self.jobs)
         _dedupe_ids("comparison registry", self.comparisons)
-        _dedupe_experiment_ids(self.experiments)
+        _dedupe_assignment_ids(self.assignments)
         dataset_ids = _registry_ids(self.datasets)
-        _validate_experiment_registry_refs(
-            self.experiments,
+        _validate_assignment_registry_refs(
+            self.assignments,
             dataset_ids=dataset_ids,
             job_ids=_registry_ids(self.jobs),
         )
-        _validate_comparison_experiment_filter_refs(
+        _validate_comparison_assignment_filter_refs(
             self.comparisons,
-            experiment_ids={e.id for e in self.experiments},
+            assignment_ids={a.id for a in self.assignments},
         )
         _validate_comparison_dataset_refs(self.comparisons, dataset_ids=dataset_ids)
         return self

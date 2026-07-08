@@ -6,9 +6,9 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-from neuralls.composition.experiments.assembler import load_experiment
-from neuralls.platform.config.registry import list_experiment_bindings
-from neuralls.composition.experiments.assembler import load_validated_case_config
+from neuralls.composition.assignments.assembler import load_assignment
+from neuralls.platform.config.registry import list_assignment_bindings
+from neuralls.composition.assignments.assembler import load_validated_case_config
 from neuralls.platform.config.dlkit_bridge import load_job_config
 
 pytestmark = pytest.mark.skipif(
@@ -99,7 +99,7 @@ def _write_master_registry(
     for experiment_id, dataset_id, job_id in experiments:
         lines.extend(
             [
-                "[[experiments]]",
+                "[[assignments]]",
                 f'id = "{experiment_id}"',
                 f'dataset = "{dataset_id}"',
                 f'job = "{job_id}"',
@@ -198,7 +198,7 @@ def test_default_structured_linear_registry_has_expected_models_and_experiments(
     )
 
     cfg, config_dir = load_validated_case_config(config_path)
-    bindings = list_experiment_bindings(cfg, config_dir)
+    bindings = list_assignment_bindings(cfg, config_dir)
 
     assert [entry.id for entry in cfg.jobs] == ["symmetric", "spd", "factorized"]
     assert [entry.id for entry in cfg.datasets] == [
@@ -206,7 +206,7 @@ def test_default_structured_linear_registry_has_expected_models_and_experiments(
         "eig-rhs-smallest",
         "eig-solutions-smallest",
     ]
-    assert [binding.experiment_id for binding in bindings] == [
+    assert [binding.assignment_id for binding in bindings] == [
         "eig-rhs-smallest-symmetric",
         "eig-rhs-smallest-spd",
         "eig-rhs-smallest-factorized",
@@ -245,10 +245,10 @@ def test_linear_registry_uses_single_normalized_model(tmp_path: Path) -> None:
     )
 
     cfg, config_dir = load_validated_case_config(config_path)
-    bindings = list_experiment_bindings(cfg, config_dir)
+    bindings = list_assignment_bindings(cfg, config_dir)
 
     assert [entry.id for entry in cfg.jobs] == ["linear"]
-    assert [binding.experiment_id for binding in bindings] == [
+    assert [binding.assignment_id for binding in bindings] == [
         "spectral",
         "eig-rhs-largest",
         "eig-rhs-smallest",
@@ -270,7 +270,7 @@ def test_load_experiment_supports_structured_linear_job(tmp_path: Path) -> None:
         checkpoint_name="symmetric",
     )
 
-    experiment = load_experiment(
+    experiment = load_assignment(
         job_config_path=job_config_path,
         data_config_path=data_config_path,
         output_root=output_root,
@@ -278,5 +278,5 @@ def test_load_experiment_supports_structured_linear_job(tmp_path: Path) -> None:
     )
 
     assert experiment.spec.job_config_path.name == "symmetric.toml"
-    assert experiment.spec.dataset_registry_id == "dummy-dataset"
+    assert experiment.spec.dataset_id == "dummy-dataset"
     assert experiment.settings.model.name == "NormScaledSymmetricLinear"

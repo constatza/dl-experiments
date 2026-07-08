@@ -11,7 +11,7 @@ from neuralls.platform.config.models.preconditioner import (
     PreconditionerType,
     StandardPreconditionerConfig,
 )
-from neuralls.composition.experiments.multi_training import TrainingRunResult
+from neuralls.composition.assignments.multi_training import TrainingRunResult
 
 # ---------------------------------------------------------------------------
 # Named constants
@@ -40,40 +40,32 @@ def checkpoint_beta(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def result_alpha(checkpoint_alpha: Path) -> TrainingRunResult:
-    """TrainingRunResult for the alpha experiment.
-
-    Args:
-        checkpoint_alpha: Path to the alpha checkpoint.
+def result_alpha() -> TrainingRunResult:
+    """TrainingRunResult for the alpha assignment.
 
     Returns:
         Immutable TrainingRunResult.
     """
     return TrainingRunResult(
         label="1",
-        experiment_id=EXP_ID_ALPHA,
-        experiment_display_name=EXP_ID_ALPHA,
-        checkpoint_path=checkpoint_alpha,
+        assignment_id=EXP_ID_ALPHA,
+        assignment_display_name=EXP_ID_ALPHA,
         mlflow_run_id="run-alpha-0001",
         metrics={"eval/loss": 0.12},
     )
 
 
 @pytest.fixture
-def result_beta(checkpoint_beta: Path) -> TrainingRunResult:
-    """TrainingRunResult for the beta experiment.
-
-    Args:
-        checkpoint_beta: Path to the beta checkpoint.
+def result_beta() -> TrainingRunResult:
+    """TrainingRunResult for the beta assignment.
 
     Returns:
         Immutable TrainingRunResult.
     """
     return TrainingRunResult(
         label="2",
-        experiment_id=EXP_ID_BETA,
-        experiment_display_name=EXP_ID_BETA,
-        checkpoint_path=checkpoint_beta,
+        assignment_id=EXP_ID_BETA,
+        assignment_display_name=EXP_ID_BETA,
         mlflow_run_id="run-beta-0002",
         metrics={"eval/loss": 0.08},
     )
@@ -125,21 +117,21 @@ def neural_spec_with_checkpoint(checkpoint_alpha: Path) -> NeuralPreconditionerC
 
 @pytest.fixture
 def neural_spec_with_experiment() -> NeuralPreconditionerConfig:
-    """Neural preconditioner spec with an experiment reference (no checkpoint).
+    """Neural preconditioner spec with an assignment reference (no checkpoint).
 
     Returns:
-        NeuralPreconditionerConfig with experiment set but checkpoint_path=None.
+        NeuralPreconditionerConfig with assignment set but checkpoint_path=None.
     """
     return NeuralPreconditionerConfig(
         name="neural-by-experiment",
         type=PreconditionerType.NEURAL,
-        experiment=EXP_ID_ALPHA,
+        assignment=EXP_ID_ALPHA,
     )
 
 
 @pytest.fixture
 def neural_spec_invalid() -> NeuralPreconditionerConfig:
-    """Neural preconditioner spec missing both checkpoint_path and experiment.
+    """Neural preconditioner spec missing both checkpoint_path and assignment.
 
     Returns:
         NeuralPreconditionerConfig that should fail validation.

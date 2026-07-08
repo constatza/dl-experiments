@@ -1,7 +1,9 @@
-"""Domain models for the experiment configuration system.
+"""Domain models for the assignment configuration system.
 
-These classes define the core data structures for experiments, strictly separating
-inputs (Specifications) from outputs (Workspaces) and execution contexts.
+An assignment pairs one job with one dataset — the intent "run this job on
+this dataset." These classes define the core data structures for assignments,
+strictly separating inputs (Specifications) from outputs (Workspaces) and
+execution contexts.
 """
 
 from __future__ import annotations
@@ -13,22 +15,22 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class ExperimentSpec(BaseModel):
-    """Static definition of an experiment's inputs (Immutable).
+class AssignmentSpec(BaseModel):
+    """Static definition of an assignment's inputs (Immutable).
 
     Attributes:
-        experiment_id: Stable experiment identifier.
-        experiment_display_name: Human-facing experiment label.
+        assignment_id: Stable assignment identifier.
+        assignment_display_name: Human-facing assignment label.
         job_config_path: Path to job config TOML.
         data_config_path: Path to data config TOML.
         checkpoint_path: Optional explicit checkpoint path.
     """
 
-    experiment_id: str = Field(..., description="Stable experiment identifier")
-    experiment_display_name: str = Field(..., description="Human-facing experiment label")
-    dataset_registry_id: str | None = Field(default=None, description="Registry dataset identifier")
+    assignment_id: str = Field(..., description="Stable assignment identifier")
+    assignment_display_name: str = Field(..., description="Human-facing assignment label")
+    dataset_id: str | None = Field(default=None, description="Registry dataset identifier")
     dataset_display_name: str | None = Field(default=None, description="Human-facing dataset label")
-    job_registry_id: str | None = Field(default=None, description="Registry job identifier")
+    job_id: str | None = Field(default=None, description="Registry job identifier")
     job_display_name: str | None = Field(default=None, description="Human-facing job label")
     job_config_path: Path = Field(..., description="Path to job config")
     data_config_path: Path = Field(..., description="Path to data config")
@@ -41,13 +43,13 @@ class ExperimentSpec(BaseModel):
 
 
 @dataclass(frozen=True)
-class ExperimentWorkspace:
-    """Resolved filesystem layout for experiment artifacts.
+class AssignmentWorkspace:
+    """Resolved filesystem layout for assignment artifacts.
 
     Attributes:
-        dataset_id: Dataset identifier (for organizing experiments).
+        dataset_id: Dataset identifier (for organizing assignments).
         run_id: Model/run identifier (for organizing within dataset).
-        root_dir: Experiment root directory (for this specific run).
+        root_dir: Assignment root directory (for this specific run).
         data_dir: Directory containing input data artifacts (manifest + arrays).
     """
 
@@ -73,31 +75,31 @@ class ExperimentWorkspace:
 
 
 @dataclass(frozen=True)
-class RunnableExperiment:
-    """Fully resolved experiment ready for execution.
+class RunnableAssignment:
+    """Fully resolved assignment ready for execution.
 
     Combines the 'what' (Spec), the 'where' (Workspace), and the
     'how' (Settings).
 
     Attributes:
-        spec: Experiment specification.
+        spec: Assignment specification.
         workspace: Filesystem workspace.
         settings: DLKit workflow settings with injected paths.
     """
 
-    spec: ExperimentSpec
-    workspace: ExperimentWorkspace
+    spec: AssignmentSpec
+    workspace: AssignmentWorkspace
     settings: Any  # DLKit workflow settings (avoid import)
 
 
 @dataclass(frozen=True)
-class ExperimentBatch:
+class AssignmentBatch:
     """Complete definition of a batch workload.
 
     Attributes:
-        output_root: Master output root for all experiments.
-        experiments: List of runnable experiments.
+        output_root: Master output root for all assignments.
+        assignments: List of runnable assignments.
     """
 
     output_root: Path
-    experiments: list[RunnableExperiment]
+    assignments: list[RunnableAssignment]

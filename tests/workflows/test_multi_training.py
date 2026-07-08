@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -12,7 +11,7 @@ import pytest
 from neuralls.platform.config.models.experiments import CaseConfig, ExperimentNamesConfig
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 from neuralls.platform.config.loaders import load_case_config, load_raw_toml
-from neuralls.composition.experiments.multi_training import (
+from neuralls.composition.assignments.multi_training import (
     TrainingRunResult,
     _annotate_mlflow_run,
     _collect_batch_metrics,
@@ -75,26 +74,23 @@ def training_run_results(tmp_path: Path) -> list[TrainingRunResult]:
     return [
         TrainingRunResult(
             label="1",
-            experiment_id="ffnn_solutions",
-            experiment_display_name="ffnn_solutions",
-            checkpoint_path=tmp_path / "a" / "model.ckpt",
+            assignment_id="ffnn_solutions",
+            assignment_display_name="ffnn_solutions",
             mlflow_run_id="aaa111",
             metrics={"eval/rel_error": 0.05, "val_loss": 0.01},
         ),
         TrainingRunResult(
             label="2",
-            experiment_id="ffnn_eigenvectors",
-            experiment_display_name="ffnn_eigenvectors",
-            checkpoint_path=tmp_path / "b" / "model.ckpt",
+            assignment_id="ffnn_eigenvectors",
+            assignment_display_name="ffnn_eigenvectors",
             mlflow_run_id="bbb222",
             metrics={"eval/rel_error": 0.03},
         ),
         TrainingRunResult(
             label="3",
-            experiment_id="ffnn_rhs_largest",
-            experiment_display_name="ffnn_rhs_largest",
-            checkpoint_path=tmp_path / "c" / "model.ckpt",
-            mlflow_run_id=None,
+            assignment_id="ffnn_rhs_largest",
+            assignment_display_name="ffnn_rhs_largest",
+            mlflow_run_id="ccc333",
             metrics={},
         ),
     ]
@@ -141,7 +137,7 @@ def valid_experiments_toml(
                 'id = "test-solutions"',
                 'path = "datasets/test-solutions.toml"',
                 "",
-                "[[experiments]]",
+                "[[assignments]]",
                 'id = "ffnn_test"',
                 'job = "ffnn"',
                 'dataset = "test-solutions"',
@@ -155,9 +151,9 @@ def valid_experiments_toml(
 def test_make_label_map(training_run_results: list[TrainingRunResult]) -> None:
     """Short labels map back to the full training identity."""
     result = _make_label_map(training_run_results)
-    assert result["1"]["experiment_id"] == "ffnn_solutions"
+    assert result["1"]["assignment_id"] == "ffnn_solutions"
     assert result["2"]["mlflow_run_id"] == "bbb222"
-    assert result["3"]["mlflow_run_id"] is None
+    assert result["3"]["mlflow_run_id"] == "ccc333"
 
 
 def test_collect_batch_metrics(training_run_results: list[TrainingRunResult]) -> None:
@@ -177,7 +173,7 @@ def test_resolve_config_paths(
     """Registry-backed entries resolve into concrete config files."""
     cfg = load_case_config(valid_experiments_toml, neuralls_settings)
     job_path, data_path = _resolve_config_paths(
-        cfg.experiments[0],
+        cfg.assignments[0],
         tmp_path,
         cfg,
     )
@@ -185,38 +181,30 @@ def test_resolve_config_paths(
     assert data_path == dataset_config_file
 
 
-def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_settings) -> None:
-    """Single training run returns the training checkpoint and MLflow metadata."""
+def test_train_single_returns_run_id_and_metrics(tmp_path: Path, neuralls_settings) -> None:
+    """Single training run returns the MLflow run id and fetched metrics."""
     model_profile = _write_model_profile(tmp_path / "model.toml", "NormScaledLinearFFNN")
     job_cfg = _write_job_config(tmp_path / "job.toml", model_profile)
     data_cfg = tmp_path / "dataset.toml"
     data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
-    ckpt_dir = tmp_path / "ckpt"
-    ckpt_dir.mkdir()
-    ckpt = ckpt_dir / "model.ckpt"
-    ckpt.touch()
-    (ckpt_dir / "mlflow_run.json").write_text(
-        json.dumps(
-            {
-                "run_id": "run-123",
-                "tracking_uri": build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-            }
-        )
-    )
+    tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlflow.db")
 
     with (
-        patch("neuralls.composition.experiments.multi_training.train_model", return_value=ckpt),
-        patch("neuralls.composition.experiments.multi_training.register_logged_model"),
         patch(
-            "neuralls.composition.experiments.multi_training.fetch_mlflow_metrics",
+            "neuralls.composition.assignments.multi_training.train_model",
+            return_value=("run-123", tracking_uri),
+        ),
+        patch("neuralls.composition.assignments.multi_training.register_logged_model"),
+        patch(
+            "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics",
             return_value={"eval/rel_error": 0.1},
         ),
-        patch("neuralls.composition.experiments.multi_training.MlflowClient"),
+        patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
         result = _train_single(
             settings=neuralls_settings,
-            experiment_id="exp-1",
-            experiment_display_name="exp-1",
+            assignment_id="exp-1",
+            assignment_display_name="exp-1",
             job_config_path=job_cfg,
             data_config_path=data_cfg,
             label="1",
@@ -224,7 +212,6 @@ def test_train_single_reads_sidecar_and_metrics(tmp_path: Path, neuralls_setting
             mlflow_experiment_name="Train",
         )
 
-    assert result.checkpoint_path == ckpt
     assert result.mlflow_run_id == "run-123"
     assert result.metrics["eval/rel_error"] == pytest.approx(0.1)
 
@@ -242,22 +229,25 @@ def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) 
 
     with (
         patch(
-            "neuralls.composition.experiments.multi_training.train_model", return_value=ckpt
+            "neuralls.composition.assignments.multi_training.train_model",
+            return_value=("run-123", build_sqlite_tracking_uri(tmp_path / "mlflow.db")),
         ) as mock_train,
-        patch("neuralls.composition.experiments.multi_training.load_data_config"),
+        patch("neuralls.composition.assignments.multi_training.load_data_config"),
         patch(
-            "neuralls.composition.experiments.multi_training.resolve_dataset_identity"
+            "neuralls.composition.assignments.multi_training.resolve_dataset_identity"
         ) as mock_identity,
-        patch("neuralls.composition.experiments.multi_training.read_model_class_name"),
+        patch("neuralls.composition.assignments.multi_training.read_model_class_name"),
         patch(
-            "neuralls.composition.experiments.multi_training.read_mlflow_sidecar", return_value=None
+            "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
         ),
+        patch("neuralls.composition.assignments.multi_training.register_logged_model"),
+        patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
         mock_identity.return_value.name = "dataset-id"
         _train_single(
             settings=neuralls_settings,
-            experiment_id="exp-1",
-            experiment_display_name="exp-1",
+            assignment_id="exp-1",
+            assignment_display_name="exp-1",
             job_config_path=job_cfg,
             data_config_path=data_cfg,
             label="1",
@@ -276,26 +266,25 @@ def job_config_with_model_name(tmp_path: Path) -> Path:
     return _write_job_config(tmp_path / "job.toml", model_profile)
 
 
-def test_annotate_mlflow_run_registers_under_experiment_id(
+def test_annotate_mlflow_run_registers_under_assignment_id(
     tmp_path: Path,
     job_config_with_model_name: Path,
 ) -> None:
-    """After training, model is registered under experiment_id with model_class tag."""
+    """After training, model is registered under assignment_id with model_class tag."""
     with (
         patch(
-            "neuralls.composition.experiments.multi_training.register_logged_model"
+            "neuralls.composition.assignments.multi_training.register_logged_model"
         ) as mock_register,
-        patch("neuralls.composition.experiments.multi_training.MlflowClient"),
+        patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
         _annotate_mlflow_run(
             label="1",
             run_id="run-abc",
             tracking_uri=build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-            checkpoint_path=tmp_path / "model.ckpt",
             job_config_path=job_config_with_model_name,
-            experiment_id="spectral-energy",
-            experiment_display_name="Spectral Energy",
-            dataset_id="solutions",
+            assignment_id="spectral-energy",
+            assignment_display_name="Spectral Energy",
+            resolved_dataset_id="solutions",
             dataset_display_name="Solutions",
             dataset_registry_id="solutions",
             job_registry_id="ffnn",
@@ -307,10 +296,10 @@ def test_annotate_mlflow_run_registers_under_experiment_id(
         registered_model_name="spectral-energy",
         tracking_uri=build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
         tags={
-            "experiment_id": "spectral-energy",
+            "assignment_id": "spectral-energy",
             "dataset_id": "solutions",
             "job_id": "ffnn",
-            "experiment_display_name": "Spectral Energy",
+            "assignment_display_name": "Spectral Energy",
             "model_class": "NormScaledLinearFFNN",
         },
     )
@@ -338,22 +327,26 @@ def test_train_batch_returns_local_output_dir(
     neuralls_settings,
 ) -> None:
     """Batch output is a local training directory and no batch comparison run is opened."""
-    fake_ckpt = tmp_path / "ckpt" / "model.ckpt"
-    fake_ckpt.parent.mkdir()
-    fake_ckpt.touch()
+    tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlflow.db")
     cfg = load_case_config(valid_experiments_toml, neuralls_settings)
 
     with (
         patch(
-            "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
+            "neuralls.composition.assignments.multi_training.train_model",
+            return_value=("run-123", tracking_uri),
         ) as mock_train,
         patch(
-            "neuralls.composition.experiments.multi_training.create_session_parent_run",
+            "neuralls.composition.assignments.multi_training.create_session_parent_run",
             return_value="parent-run-1",
         ) as mock_create_parent,
         patch(
-            "neuralls.composition.experiments.multi_training.finalize_session_parent_run"
+            "neuralls.composition.assignments.multi_training.finalize_session_parent_run"
         ) as mock_finalize_parent,
+        patch(
+            "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
+        ),
+        patch("neuralls.composition.assignments.multi_training.register_logged_model"),
+        patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
         result = train_batch(
             cfg=cfg,
@@ -368,7 +361,7 @@ def test_train_batch_returns_local_output_dir(
     mock_create_parent.assert_called_once()
     mock_finalize_parent.assert_called_once()
     assert result.output_dir == (tmp_path / "training")
-    assert result.label_map["1"]["experiment_id"] == "ffnn_test"
+    assert result.label_map["1"]["assignment_id"] == "ffnn_test"
 
 
 def test_train_batch_forwards_custom_training_experiment_name(
@@ -377,9 +370,6 @@ def test_train_batch_forwards_custom_training_experiment_name(
     neuralls_settings,
 ) -> None:
     """Batch training forwards the case-configured training experiment name."""
-    fake_ckpt = tmp_path / "ckpt" / "model.ckpt"
-    fake_ckpt.parent.mkdir()
-    fake_ckpt.touch()
     valid_experiments_toml.write_text(
         "\n".join(
             [
@@ -398,7 +388,7 @@ def test_train_batch_forwards_custom_training_experiment_name(
                 'id = "test-solutions"',
                 'path = "datasets/test-solutions.toml"',
                 "",
-                "[[experiments]]",
+                "[[assignments]]",
                 'id = "ffnn_test"',
                 'job = "ffnn"',
                 'dataset = "test-solutions"',
@@ -408,16 +398,23 @@ def test_train_batch_forwards_custom_training_experiment_name(
         encoding="utf-8",
     )
     cfg = load_case_config(valid_experiments_toml, neuralls_settings)
+    tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlflow.db")
 
     with (
         patch(
-            "neuralls.composition.experiments.multi_training.train_model", return_value=fake_ckpt
+            "neuralls.composition.assignments.multi_training.train_model",
+            return_value=("run-123", tracking_uri),
         ) as mock_train,
         patch(
-            "neuralls.composition.experiments.multi_training.create_session_parent_run",
+            "neuralls.composition.assignments.multi_training.create_session_parent_run",
             return_value="parent-run-1",
         ),
-        patch("neuralls.composition.experiments.multi_training.finalize_session_parent_run"),
+        patch("neuralls.composition.assignments.multi_training.finalize_session_parent_run"),
+        patch(
+            "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
+        ),
+        patch("neuralls.composition.assignments.multi_training.register_logged_model"),
+        patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
         train_batch(
             cfg=cfg,
@@ -494,7 +491,7 @@ def test_experiments_config_rejects_legacy_comparison_profiles(tmp_path: Path) -
 def test_experiments_config_rejects_legacy_singular_experiment_table(
     tmp_path: Path, neuralls_settings
 ) -> None:
-    """Master configs must use only [[experiments]]."""
+    """Master configs must use only [[assignments]]."""
     config = tmp_path / "experiments.toml"
     config.write_text(
         "\n".join(
@@ -529,7 +526,7 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
                 'id = "ffnn"',
                 'path = "jobs/ffnn.toml"',
                 "",
-                "[[experiments]]",
+                "[[assignments]]",
                 'id = "ffnn_test"',
                 'job = "ffnn"',
                 'dataset = "missing-dataset"',
@@ -538,7 +535,7 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
     )
 
     with pytest.raises(
-        ValueError, match="Experiment 'ffnn_test' references dataset id 'missing-dataset'"
+        ValueError, match="Assignment 'ffnn_test' references dataset id 'missing-dataset'"
     ):
         CaseConfig.model_validate(load_raw_toml(config))
 
@@ -553,7 +550,7 @@ def test_experiments_config_rejects_missing_job_id(tmp_path: Path) -> None:
                 'id = "test-solutions"',
                 'path = "datasets/test-solutions.toml"',
                 "",
-                "[[experiments]]",
+                "[[assignments]]",
                 'id = "ffnn_test"',
                 'job = "missing-job"',
                 'dataset = "test-solutions"',
@@ -561,5 +558,5 @@ def test_experiments_config_rejects_missing_job_id(tmp_path: Path) -> None:
         )
     )
 
-    with pytest.raises(ValueError, match="Experiment 'ffnn_test' references job id 'missing-job'"):
+    with pytest.raises(ValueError, match="Assignment 'ffnn_test' references job id 'missing-job'"):
         CaseConfig.model_validate(load_raw_toml(config))

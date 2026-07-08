@@ -22,7 +22,7 @@ from neuralls.platform.tracking.model_registry import (
     register_logged_model,
 )
 from neuralls.platform.config.resolution import resolve_local_path
-from neuralls.composition.experiments.model_resolution import resolve_model_ref
+from neuralls.composition.assignments.model_resolution import resolve_model_ref
 
 
 pytestmark = [

@@ -7,7 +7,7 @@ The CLI package defines one public executable: `neuralls`.
 - `neuralls config ...`: manage machine-specific profiles
 - `neuralls generate <case.toml>`: build every dataset declared in one case
 - `neuralls generate-single <dataset.toml> --case-config <case.toml>`: build one dataset config
-- `neuralls train <case.toml>`: train every experiment declared in one case
+- `neuralls train <case.toml>`: train every assignment declared in one case
 - `neuralls run <case.toml>`: generate datasets and train the full case matrix
 - `neuralls compare <case.toml>`: run every comparison profile declared in one case after their benchmark datasets exist
 

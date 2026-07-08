@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from neuralls.composition.experiments._job_types import AnyJobConfig, TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import AnyJobConfig, TrainLikeJobConfig
 
 
 def ensure_runtime_tracking(settings: AnyJobConfig) -> AnyJobConfig:

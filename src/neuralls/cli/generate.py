@@ -9,7 +9,7 @@ import typer
 
 from neuralls.cli.error_messages import format_cli_error
 from neuralls.cli.options import EnvFileOption, ProfileOption
-from neuralls.composition.experiments.assembler import load_validated_case_config
+from neuralls.composition.assignments.assembler import load_validated_case_config
 from neuralls.composition.generation.multi_generation import generate_batch
 from neuralls.composition.config import load_case_settings, load_raw_toml
 from neuralls.shared.constants import EXIT_FAILURE

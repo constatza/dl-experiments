@@ -26,8 +26,8 @@ _DATASET_ALIAS_PLACEHOLDER = "@dataset"
 
 
 @dataclass(frozen=True)
-class ExperimentModelContext:
-    """Per-experiment lookup context for comparison model resolution."""
+class AssignmentModelContext:
+    """Per-assignment lookup context for comparison model resolution."""
 
     dataset_alias: str | None = None
     model_name: str | None = None
@@ -65,8 +65,8 @@ def _sanitize_download_dirname(value: str) -> str:
 
 def build_neural_download_dirname(spec: NeuralPreconditionerConfig) -> str:
     """Build a stable local artifact directory name for one neural spec."""
-    if spec.experiment is not None:
-        return _sanitize_download_dirname(spec.experiment)
+    if spec.assignment is not None:
+        return _sanitize_download_dirname(spec.assignment)
     return _sanitize_download_dirname(spec.name)
 
 
@@ -288,7 +288,7 @@ def _resolve_registered_ref(
     resolved_model_name = ref.name or model_name
     if resolved_model_name is None:
         raise ValueError(
-            "Registered model_ref.name is required unless supplied by an experiment binding."
+            "Registered model_ref.name is required unless supplied by an assignment binding."
         )
     matches = search_registered_models(model_name=resolved_model_name, tracking_uri=tracking_uri)
     if not matches:
@@ -343,7 +343,7 @@ def _resolve_registered_alias(alias: str, dataset_alias: str | None) -> str:
         if dataset_alias is None:
             raise ValueError(
                 "model_ref alias '@dataset' requires general.data.dataset_alias "
-                "or a neural experiment binding."
+                "or a neural assignment binding."
             )
         return normalize_registry_id(dataset_alias)
     return normalize_registry_id(stripped)
@@ -431,7 +431,7 @@ def resolve_preconditioner_models(
     tracking_uri: str,
     download_root: Path,
     dataset_alias: str | None = None,
-    experiment_contexts: dict[str, ExperimentModelContext] | None = None,
+    assignment_contexts: dict[str, AssignmentModelContext] | None = None,
 ) -> list[PreconditionerConfig]:
     """Resolve all neural preconditioners to concrete checkpoint paths."""
     return resolve_preconditioner_models_with_warnings(
@@ -439,7 +439,7 @@ def resolve_preconditioner_models(
         tracking_uri=tracking_uri,
         download_root=download_root,
         dataset_alias=dataset_alias,
-        experiment_contexts=experiment_contexts,
+        assignment_contexts=assignment_contexts,
     ).specs
 
 
@@ -449,7 +449,7 @@ def resolve_preconditioner_models_with_warnings(
     tracking_uri: str,
     download_root: Path,
     dataset_alias: str | None = None,
-    experiment_contexts: dict[str, ExperimentModelContext] | None = None,
+    assignment_contexts: dict[str, AssignmentModelContext] | None = None,
     skip_unresolved: bool = False,
 ) -> PreconditionerResolutionResult:
     """Resolve neural preconditioners and optionally skip unresolved ones."""
@@ -472,8 +472,8 @@ def resolve_preconditioner_models_with_warnings(
                 f"Neural solver '{neural_spec.name}' requires either checkpoint_path or model_ref."
             )
         context = (
-            experiment_contexts.get(neural_spec.experiment)
-            if experiment_contexts is not None and neural_spec.experiment is not None
+            assignment_contexts.get(neural_spec.assignment)
+            if assignment_contexts is not None and neural_spec.assignment is not None
             else None
         )
         try:

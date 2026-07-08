@@ -9,7 +9,7 @@ import tomllib
 
 import pytest
 
-from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.composition.assignments.assembler import load_assignment
 
 
 MINIMAL_FFNN_CONFIG = """
@@ -61,7 +61,7 @@ max_epochs = 1
     ],
 )
 def test_training_sections_round_trip(tmp_path: Path, config_content_template: str) -> None:
-    """Ensure load_experiment preserves trainer callbacks/metrics from a temporary file."""
+    """Ensure load_assignment preserves trainer callbacks/metrics from a temporary file."""
     # Create necessary directories that dlkit expects
     (tmp_path / "output").mkdir()
 
@@ -123,7 +123,7 @@ name = "ArrayDataModule"
     data_path = tmp_path / "data.toml"
     data_path.write_text('id="dummy_dataset"\n[source]\nmatrix_path="matrix.txt"\n')
 
-    experiment = load_experiment(
+    experiment = load_assignment(
         config_path,
         data_config_path=data_path,
         output_root=tmp_path / "output",

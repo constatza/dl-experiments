@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.composition.experiments._job_types import TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import TrainLikeJobConfig
 
 
 def _retained_checkpoint_callback(output_dir: Path) -> dict[str, str]:

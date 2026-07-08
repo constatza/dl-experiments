@@ -53,13 +53,13 @@ id           = "scale-equivariant-embedded-fully-factorized"
 path         = "../../jobs/ffnn/scale-equivariant-embedded-fully-factorized.toml"
 display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
 
-# ── Comparisons (one per training dataset, filtered to own experiments) ───────
+# ── Comparisons (one per training dataset, filtered to own assignments) ───────
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
-experiments    = [
+assignments    = [
   "scale-equivariant-embedded-fully-factorized-gaussian-cg10-45x15randomE",
 ]
 
@@ -67,30 +67,30 @@ experiments    = [
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
-experiments    = [
+assignments    = [
   "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
 ]
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "dataset", path = "${NEURALLS_PROCESSED_DIR}/scaled-solutions-45x15randomE" }
-experiments    = [
+assignments    = [
   "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
 ]
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
-experiments    = [
+assignments    = [
   "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
 ]
 
-# ── Experiments (2 models × 2 datasets) ──────────────────────────────────────
+# ── Assignments (2 models × 2 datasets) ──────────────────────────────────────
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg10-45x15randomE"
 job = "scale-equivariant-embedded-fully-factorized"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15randomE"
 job = "scale-equivariant-embedded-fully-factorized"

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.composition.assignments.assembler import load_assignment
 
 
 def _write_model_profile(
@@ -110,7 +110,7 @@ class TestRunNaming:
         tmp_path: Path,
         neuralls_settings,
     ) -> None:
-        experiment = load_experiment(
+        experiment = load_assignment(
             job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
@@ -127,7 +127,7 @@ class TestRunNaming:
         tmp_path: Path,
         neuralls_settings,
     ) -> None:
-        experiment = load_experiment(
+        experiment = load_assignment(
             job_config_with_experiment_name,
             sample_data_config,
             neuralls_settings,
@@ -144,14 +144,14 @@ class TestRunNaming:
         tmp_path: Path,
         neuralls_settings,
     ) -> None:
-        exp1 = load_experiment(
+        exp1 = load_assignment(
             job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
             output_root=tmp_path / "output1",
             dataset_registry_id=sample_data_config.stem,
         )
-        exp2 = load_experiment(
+        exp2 = load_assignment(
             job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
@@ -168,7 +168,7 @@ class TestRunNaming:
         tmp_path: Path,
         neuralls_settings,
     ) -> None:
-        experiment = load_experiment(
+        experiment = load_assignment(
             job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
@@ -176,7 +176,7 @@ class TestRunNaming:
             dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.spec.experiment_id == "NormScaledLinearFFNN"
+        assert experiment.spec.assignment_id == "NormScaledLinearFFNN"
         assert experiment.workspace.run_id == "NormScaledLinearFFNN"
 
     def test_workspace_directories_use_run_id(
@@ -187,7 +187,7 @@ class TestRunNaming:
         neuralls_settings,
     ) -> None:
         output_root = tmp_path / "output"
-        experiment = load_experiment(
+        experiment = load_assignment(
             job_config_without_experiment_name,
             sample_data_config,
             neuralls_settings,
@@ -229,7 +229,7 @@ name = "ArrayDataModule"
             experiment_name=None,
         )
 
-        experiment = load_experiment(
+        experiment = load_assignment(
             bad_config,
             sample_data_config,
             neuralls_settings,
@@ -254,7 +254,7 @@ name = "ArrayDataModule"
             experiment_name="Model_release-alpha",
         )
 
-        experiment = load_experiment(
+        experiment = load_assignment(
             special_config,
             sample_data_config,
             neuralls_settings,

@@ -4,28 +4,28 @@ from __future__ import annotations
 
 from dlkit.infrastructure.config.data_entries import DataEntry
 
-from neuralls.composition.experiments._job_types import AnyJobConfig, TrainLikeJobConfig
-from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
-from neuralls.composition.experiments.runtime_dataset_patcher import patch_runtime_dataset
-from neuralls.composition.experiments.runtime_tracking_patcher import (
+from neuralls.composition.assignments._job_types import AnyJobConfig, TrainLikeJobConfig
+from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
+from neuralls.composition.assignments.runtime_dataset_patcher import patch_runtime_dataset
+from neuralls.composition.assignments.runtime_tracking_patcher import (
     ensure_runtime_tracking,
     patch_training_tracking,
 )
-from neuralls.composition.experiments.runtime_workspace_patcher import (
+from neuralls.composition.assignments.runtime_workspace_patcher import (
     patch_dataloader_runtime,
     patch_runtime_workspace,
 )
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
 
 def materialize_training_job(
     settings: TrainLikeJobConfig,
     *,
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     features: list[DataEntry],
     targets: list[DataEntry],
     contract: RuntimeDatasetContract,
-) -> tuple[TrainLikeJobConfig, ExperimentWorkspace]:
+) -> tuple[TrainLikeJobConfig, AssignmentWorkspace]:
     """Apply runtime dataset, workspace, and tracking stages in order."""
     settings = patch_runtime_dataset(
         settings,

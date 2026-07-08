@@ -123,7 +123,7 @@ class TestTrainingPipelineWithMLflow:
         neuralls_settings,
     ) -> None:
         """MLflow-enabled jobs load with runtime tracking and workspace roots."""
-        from neuralls.composition.experiments.assembler import load_experiment
+        from neuralls.composition.assignments.assembler import load_assignment
 
         data_dir = training_setup["data_dir"]
         datasets_dir = training_setup["datasets_dir"]
@@ -160,7 +160,7 @@ class TestTrainingPipelineWithMLflow:
             enable_tracking=True,
         )
 
-        experiment = load_experiment(
+        experiment = load_assignment(
             job_config_path=job_config_path,
             data_config_path=data_config_path,
             neuralls_settings=neuralls_settings,
@@ -183,7 +183,7 @@ class TestTrainingPipelineWithMLflow:
         neuralls_settings,
     ) -> None:
         """Case-config MLflow topology still controls derived output placement."""
-        from neuralls.composition.experiments.assembler import load_experiment
+        from neuralls.composition.assignments.assembler import load_assignment
 
         tmp_path = training_setup["tmp_path"]
         data_dir = training_setup["data_dir"]
@@ -228,7 +228,7 @@ class TestTrainingPipelineWithMLflow:
                     },
                     "datasets": [{"id": "injection_test", "path": "datasets/injection_test.toml"}],
                     "jobs": [{"id": "injection_job", "path": "jobs/injection_job.toml"}],
-                    "experiments": [
+                    "assignments": [
                         {
                             "id": "ignored",
                             "dataset": "injection_test",
@@ -239,7 +239,7 @@ class TestTrainingPipelineWithMLflow:
                 f,
             )
 
-        experiment = load_experiment(
+        experiment = load_assignment(
             job_config_path=job_config_path,
             data_config_path=data_config_path,
             neuralls_settings=neuralls_settings,

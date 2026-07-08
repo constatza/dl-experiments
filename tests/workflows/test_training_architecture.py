@@ -10,28 +10,28 @@ import pytest
 from dlkit.infrastructure.config.data_entries import DataRole, NpyEntry, ValueEntry, ZarrEntry
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
-from neuralls.composition.experiments._dataset_assembly import (
+from neuralls.composition.assignments._dataset_assembly import (
     _create_feature_entries,
     _create_target_entries,
     validate_runtime_dataset_contract,
 )
-from neuralls.composition.experiments._settings_pipeline import _configure_training_pipeline
-from neuralls.composition.experiments.runtime_dataset_contract import (
+from neuralls.composition.assignments._settings_pipeline import _configure_training_pipeline
+from neuralls.composition.assignments.runtime_dataset_contract import (
     RuntimeDatasetContract,
     default_training_dataset_contract,
 )
-from neuralls.composition.experiments.runtime_dataset_patcher import patch_runtime_dataset
-from neuralls.composition.experiments.runtime_tracking_patcher import patch_training_tracking
-from neuralls.composition.experiments.runtime_workspace_patcher import (
+from neuralls.composition.assignments.runtime_dataset_patcher import patch_runtime_dataset
+from neuralls.composition.assignments.runtime_tracking_patcher import patch_training_tracking
+from neuralls.composition.assignments.runtime_workspace_patcher import (
     patch_dataloader_runtime,
     patch_runtime_workspace,
 )
-from neuralls.composition.experiments._training_artifacts import (
+from neuralls.composition.assignments._training_artifacts import (
     _extract_evaluation_arrays,
     _normalize_training_numpy_payload,
 )
 from neuralls.platform.config.dataset_entries import apply_placeholder_metadata
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.storage.training_artifacts import (
     NpyArraySource,
     TrainingArrays,
@@ -94,9 +94,9 @@ def training_settings(tmp_path: Path) -> TrainingJobConfig:
 
 
 @pytest.fixture
-def workspace(tmp_path: Path) -> ExperimentWorkspace:
+def workspace(tmp_path: Path) -> AssignmentWorkspace:
     root = tmp_path / "output" / "dataset" / "run"
-    return ExperimentWorkspace(
+    return AssignmentWorkspace(
         dataset_id="dataset",
         run_id="run",
         root_dir=root,
@@ -282,7 +282,7 @@ def test_contract_override_drives_injection_and_validation(
     runtime_root.mkdir(parents=True, exist_ok=True)
     updated, _ = _configure_training_pipeline(
         settings,
-        workspace=ExperimentWorkspace(
+        workspace=AssignmentWorkspace(
             dataset_id="dataset",
             run_id="run",
             root_dir=runtime_root,
@@ -298,16 +298,16 @@ def test_contract_override_drives_injection_and_validation(
     assert [target.name for target in updated.data.targets] == ["rhs"]
 
 
-@patch("neuralls.composition.experiments._training_artifacts.compute_diagnostics")
-@patch("neuralls.composition.experiments._training_artifacts.write_diagnostics_figure")
-@patch("neuralls.composition.experiments._training_artifacts.log_diagnostics_to_mlflow")
+@patch("neuralls.composition.assignments._training_artifacts.compute_diagnostics")
+@patch("neuralls.composition.assignments._training_artifacts.write_diagnostics_figure")
+@patch("neuralls.composition.assignments._training_artifacts.log_diagnostics_to_mlflow")
 def test_log_training_evaluation_orchestration(
     mock_mlflow_log: MagicMock,
     mock_write: MagicMock,
     mock_compute: MagicMock,
     tmp_path: Path,
 ) -> None:
-    from neuralls.composition.experiments._training_artifacts import _log_training_evaluation
+    from neuralls.composition.assignments._training_artifacts import _log_training_evaluation
 
     contract = default_training_dataset_contract()
     normalized_payload = {

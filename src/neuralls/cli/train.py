@@ -1,4 +1,4 @@
-"""Train every experiment declared in one case config."""
+"""Train every assignment declared in one case config."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 import typer
 
 from neuralls.cli.options import EnvFileOption, ProfileOption
-from neuralls.composition.experiments.assembler import load_validated_case_config
-from neuralls.composition.experiments.multi_training import train_batch, write_metric_report
+from neuralls.composition.assignments.assembler import load_validated_case_config
+from neuralls.composition.assignments.multi_training import train_batch, write_metric_report
 from neuralls.composition.config import load_case_settings
 from neuralls.shared.constants import EXIT_FAILURE
 
@@ -20,7 +20,7 @@ def train_case_batch(
     ),
     metric: str = typer.Option(
         "eval/rel_error",
-        help="MLflow metric key to plot across experiments.",
+        help="MLflow metric key to plot across assignments.",
     ),
     output_dir: Path | None = typer.Option(
         None,
@@ -29,7 +29,7 @@ def train_case_batch(
     env_file: EnvFileOption = None,
     profile: ProfileOption = None,
 ) -> None:
-    """Train the registry-defined experiment batch and emit aggregate reporting."""
+    """Train the registry-defined assignment batch and emit aggregate reporting."""
     try:
         settings = load_case_settings(config, env_file, profile=profile)
         cfg, _ = load_validated_case_config(config, settings)

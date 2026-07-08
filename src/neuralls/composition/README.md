@@ -4,7 +4,7 @@ The composition package owns wiring and config-driven assembly.
 
 ## Package Map
 
-- `experiments/`: registry loading, experiment wiring, training, comparison, inference
+- `assignments/`: registry loading, assignment wiring, training, comparison, inference
 - `comparison/`: single-run comparison assembly around application/domain logic
 - `generation/`: config-driven dataset orchestration, dataset persistence wiring, and default tracing services
 - `inference/`: inference data-loading composition helpers
@@ -45,7 +45,7 @@ top of the validated job object.
 That materialization is split on purpose. `job_loader.py` is the only local
 boundary that asks platform to load one typed DLKit job. `assembler.py` then
 applies only the minimal mode-specific startup patching needed to create a
-runnable experiment workspace, while `job_materializer.py` owns the later
+runnable assignment workspace, while `job_materializer.py` owns the later
 training-only runtime patch sequence for dataset entries, dataloader defaults,
 workspace callback wiring, and tracking enablement. Composition no longer
 duplicates that patch policy by re-parsing TOML or by open-coding workspace
@@ -101,7 +101,7 @@ constants.
 
 Batch training adds one session-scoped parent run per case-config invocation.
 That parent is identified by case-config path plus launch time and exists only
-to group the per-experiment child runs. Comparison workflows do not add an
+to group the per-assignment child runs. Comparison workflows do not add an
 equivalent wrapper: their parent run identity stays defined by the dataset
 selection encoded in each comparison entry.
 

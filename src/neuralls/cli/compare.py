@@ -14,7 +14,7 @@ from neuralls.composition.comparison.models import (
     ComparisonParams,
     ComparisonResult,
 )
-from neuralls.composition.experiments.comparison_batch import run_comparison_batch
+from neuralls.composition.assignments.comparison_batch import run_comparison_batch
 from neuralls.composition.config import load_case_settings
 from neuralls.shared.constants import EXIT_FAILURE, SYMBOL_CHECKMARK
 

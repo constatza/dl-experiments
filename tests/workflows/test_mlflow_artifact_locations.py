@@ -13,14 +13,14 @@ from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
 from neuralls.composition.generation.dataset_builder import build_dataset
-from neuralls.composition.experiments.comparison_batch import run_comparison_batch
-from neuralls.composition.experiments.runtime_dataset_contract import (
+from neuralls.composition.assignments.comparison_batch import run_comparison_batch
+from neuralls.composition.assignments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
 from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
 from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
 from neuralls.composition.comparison.models import ComparisonParams
-from neuralls.composition.experiments._training_artifacts import (
+from neuralls.composition.assignments._training_artifacts import (
     _log_training_evaluation,
     _normalize_training_numpy_payload,
 )
@@ -283,11 +283,11 @@ def test_comparison_logs_artifacts_to_mlflow_with_sqlite(tmp_path: Path) -> None
         )
 
     with patch(
-        "neuralls.composition.experiments.comparison_batch.compare_preconditioners",
+        "neuralls.composition.assignments.comparison_batch.compare_preconditioners",
         side_effect=_fake_compare_preconditioners,
     ):
         outcomes = run_comparison_batch(
-            experiments_config_path=experiments_config,
+            case_config_path=experiments_config,
             params=ComparisonParams(),
         )
 

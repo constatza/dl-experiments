@@ -1,4 +1,4 @@
-"""Case-config loading and experiment assembly helpers."""
+"""Case-config loading and assignment assembly helpers."""
 
 from __future__ import annotations
 
@@ -8,19 +8,19 @@ from pathlib import Path
 from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
 from loguru import logger
 
-from neuralls.composition.experiments._job_types import AnyJobConfig, TrainLikeJobConfig
-from neuralls.composition.experiments.job_loader import load_experiment_job
-from neuralls.composition.experiments.job_materializer import materialize_inference_job
-from neuralls.composition.experiments.runtime_tracking_patcher import patch_training_tracking
-from neuralls.composition.experiments.runtime_workspace_patcher import patch_runtime_workspace
+from neuralls.composition.assignments._job_types import AnyJobConfig, TrainLikeJobConfig
+from neuralls.composition.assignments.job_loader import load_experiment_job
+from neuralls.composition.assignments.job_materializer import materialize_inference_job
+from neuralls.composition.assignments.runtime_tracking_patcher import patch_training_tracking
+from neuralls.composition.assignments.runtime_workspace_patcher import patch_runtime_workspace
 from neuralls.platform.config.loaders import load_case_config, load_data_config
 from neuralls.platform.config.models.experiments import CaseConfig, resolve_display_name
 from neuralls.platform.config.models.workspace import (
-    ExperimentBatch,
-    ExperimentSpec,
-    RunnableExperiment,
+    AssignmentBatch,
+    AssignmentSpec,
+    RunnableAssignment,
 )
-from neuralls.platform.config.registry import list_experiment_bindings
+from neuralls.platform.config.registry import list_assignment_bindings
 from neuralls.platform.config.resolution import (
     derive_output_root_from_tracking_uri,
     resolve_case_config_path,
@@ -34,10 +34,12 @@ from neuralls.platform.tracking.mlflow import build_workflow_environment
 
 def _base_name_from_settings(settings: AnyJobConfig, job_config_path: Path) -> str:
     """Resolve a stable run/base name from one lower-case DLKit job."""
-    experiment = settings.experiment
-    experiment_name = getattr(experiment, "name", None) if experiment is not None else None
-    if isinstance(experiment_name, str) and experiment_name.strip():
-        return experiment_name.strip()
+    job_experiment = settings.experiment
+    job_experiment_name = (
+        getattr(job_experiment, "name", None) if job_experiment is not None else None
+    )
+    if isinstance(job_experiment_name, str) and job_experiment_name.strip():
+        return job_experiment_name.strip()
 
     model = settings.model
     model_name = getattr(model, "name", None) if model is not None else None
@@ -137,21 +139,21 @@ def _build_case_mlflow_topology(
     )
 
 
-def load_experiment(
+def load_assignment(
     job_config_path: Path | None = None,
     data_config_path: Path | None = None,
     neuralls_settings: NeurallsSettings | None = None,
     output_root: Path | None = None,
     mode: str = "training",
     case_config_path: Path | None = None,
-    experiment_id: str | None = None,
-    experiment_display_name: str | None = None,
+    assignment_id: str | None = None,
+    assignment_display_name: str | None = None,
     dataset_registry_id: str | None = None,
     dataset_display_name: str | None = None,
     job_registry_id: str | None = None,
     job_display_name: str | None = None,
-) -> RunnableExperiment:
-    """Load a single experiment configuration."""
+) -> RunnableAssignment:
+    """Load a single assignment configuration."""
     if job_config_path is None:
         raise ValueError("job_config_path is required.")
     if data_config_path is None:
@@ -193,19 +195,19 @@ def load_experiment(
 
     if dataset_registry_id is None:
         raise ValueError(
-            "dataset_registry_id is required. Pass it from the case config via load_batch()."
+            "dataset_registry_id is required. Pass it from the case config via load_assignment_batch()."
         )
     dataset_id = dataset_registry_id
     base_name = _base_name_from_settings(job_cfg, job_config_path)
-    spec = ExperimentSpec(
-        experiment_id=experiment_id or base_name,
-        experiment_display_name=resolve_display_name(
-            experiment_id or base_name,
-            experiment_display_name,
+    spec = AssignmentSpec(
+        assignment_id=assignment_id or base_name,
+        assignment_display_name=resolve_display_name(
+            assignment_id or base_name,
+            assignment_display_name,
         ),
-        dataset_registry_id=dataset_registry_id,
+        dataset_id=dataset_registry_id,
         dataset_display_name=dataset_display_name,
-        job_registry_id=job_registry_id,
+        job_id=job_registry_id,
         job_display_name=job_display_name,
         job_config_path=job_config_path,
         data_config_path=data_config_path,
@@ -225,14 +227,14 @@ def load_experiment(
         settings = patch_training_tracking(settings)
         logger.debug("Loaded training settings")
 
-    return RunnableExperiment(spec=spec, workspace=workspace, settings=settings)
+    return RunnableAssignment(spec=spec, workspace=workspace, settings=settings)
 
 
-def load_batch(
+def load_assignment_batch(
     case_config_path: Path,
     neuralls_settings: NeurallsSettings | None = None,
-) -> ExperimentBatch:
-    """Load all experiments from one case config file."""
+) -> AssignmentBatch:
+    """Load all assignments from one case config file."""
     neuralls_settings = require_settings(
         neuralls_settings,
         case_config_path=case_config_path,
@@ -242,63 +244,63 @@ def load_batch(
 
     cfg, config_dir = load_validated_case_config(case_config_path, neuralls_settings)
     output_root = neuralls_settings.output_dir
-    bindings = list_experiment_bindings(cfg, config_dir)
+    bindings = list_assignment_bindings(cfg, config_dir)
     if not bindings:
         raise ValueError(
-            "No experiments defined. Expected [[experiments]] entries with id, dataset, job fields."
+            "No assignments defined. Expected [[assignments]] entries with id, dataset, job fields."
         )
 
-    resolved_experiments: list[RunnableExperiment] = []
+    resolved_assignments: list[RunnableAssignment] = []
     for binding in bindings:
         if not binding.data_config_path.exists():
             raise FileNotFoundError(
-                f"Experiment '{binding.experiment_id}': Dataset config not found: {binding.data_config_path}"
+                f"Assignment '{binding.assignment_id}': Dataset config not found: {binding.data_config_path}"
             )
         if not binding.job_config_path.exists():
             raise FileNotFoundError(
-                f"Experiment '{binding.experiment_id}': Job config not found: {binding.job_config_path}"
+                f"Assignment '{binding.assignment_id}': Job config not found: {binding.job_config_path}"
             )
 
-        experiment = load_experiment(
+        assignment = load_assignment(
             job_config_path=binding.job_config_path,
             data_config_path=binding.data_config_path,
             neuralls_settings=neuralls_settings,
             output_root=output_root,
             case_config_path=case_config_path,
-            experiment_id=binding.experiment_id,
-            experiment_display_name=binding.experiment_display_name,
-            dataset_registry_id=binding.dataset_registry_id,
+            assignment_id=binding.assignment_id,
+            assignment_display_name=binding.assignment_display_name,
+            dataset_registry_id=binding.dataset_id,
             dataset_display_name=binding.dataset_display_name,
-            job_registry_id=binding.job_registry_id,
+            job_registry_id=binding.job_id,
             job_display_name=binding.job_display_name,
         )
 
         if binding.checkpoint_path is not None:
             if not binding.checkpoint_path.exists():
                 logger.warning(
-                    "Experiment '{}': Checkpoint not found: {}",
-                    binding.experiment_id,
+                    "Assignment '{}': Checkpoint not found: {}",
+                    binding.assignment_id,
                     binding.checkpoint_path,
                 )
-            experiment = RunnableExperiment(
-                spec=ExperimentSpec(
-                    experiment_id=experiment.spec.experiment_id,
-                    experiment_display_name=experiment.spec.experiment_display_name,
-                    dataset_registry_id=experiment.spec.dataset_registry_id,
-                    dataset_display_name=experiment.spec.dataset_display_name,
-                    job_registry_id=experiment.spec.job_registry_id,
-                    job_display_name=experiment.spec.job_display_name,
-                    job_config_path=experiment.spec.job_config_path,
-                    data_config_path=experiment.spec.data_config_path,
+            assignment = RunnableAssignment(
+                spec=AssignmentSpec(
+                    assignment_id=assignment.spec.assignment_id,
+                    assignment_display_name=assignment.spec.assignment_display_name,
+                    dataset_id=assignment.spec.dataset_id,
+                    dataset_display_name=assignment.spec.dataset_display_name,
+                    job_id=assignment.spec.job_id,
+                    job_display_name=assignment.spec.job_display_name,
+                    job_config_path=assignment.spec.job_config_path,
+                    data_config_path=assignment.spec.data_config_path,
                     checkpoint_path=binding.checkpoint_path,
                 ),
-                workspace=experiment.workspace,
-                settings=experiment.settings,
+                workspace=assignment.workspace,
+                settings=assignment.settings,
             )
 
-        resolved_experiments.append(experiment)
+        resolved_assignments.append(assignment)
 
-    return ExperimentBatch(
+    return AssignmentBatch(
         output_root=output_root,
-        experiments=resolved_experiments,
+        assignments=resolved_assignments,
     )

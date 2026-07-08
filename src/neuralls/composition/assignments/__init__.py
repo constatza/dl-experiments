@@ -1,0 +1,1 @@
+"""Assignment assembly and wiring."""

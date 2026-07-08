@@ -184,6 +184,45 @@ def find_mlflow_run(
     return None
 
 
+def find_successful_run(
+    *,
+    tracking_uri: str,
+    mlflow_experiment_name: str,
+    assignment_id: str,
+) -> str | None:
+    """Return the run_id of the most recent FINISHED run tagged with this assignment_id.
+
+    Used to decide whether an assignment (one job run on one dataset) has
+    already completed successfully, so a batch rerun can skip retraining it.
+    Only a FINISHED run counts — a crashed or still-running prior attempt
+    never blocks a retry.
+
+    Args:
+        tracking_uri: MLflow tracking URI.
+        mlflow_experiment_name: MLflow experiment (bucket) to search in.
+        assignment_id: The assignment's stable id (tagged on its training run).
+
+    Returns:
+        The matching run's run_id, or None if no FINISHED run exists yet.
+    """
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient(tracking_uri=tracking_uri)
+    experiment = client.get_experiment_by_name(mlflow_experiment_name)
+    if experiment is None:
+        return None
+
+    runs = client.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        filter_string=(
+            f"tags.assignment_id = '{assignment_id}' and attributes.status = 'FINISHED'"
+        ),
+        max_results=1,
+        order_by=["attributes.start_time DESC"],
+    )
+    return runs[0].info.run_id if runs else None
+
+
 def log_diagnostics_to_mlflow(
     tracking_uri: str,
     run_id: str,

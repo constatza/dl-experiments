@@ -205,7 +205,7 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
 
     type: Literal[PreconditionerType.NEURAL] = PreconditionerType.NEURAL
     checkpoint_path: Path | None = None
-    experiment: str | None = None
+    assignment: str | None = None
     config_path: Path | None = None
     data_config_path: Path | None = None
     model_ref: ModelRefConfig | None = None

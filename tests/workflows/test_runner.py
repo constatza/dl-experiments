@@ -1,6 +1,6 @@
 """Tests for the experiment runner workflow.
 
-This module tests the `run_experiment_matrix()` workflow function directly,
+This module tests the `run_assignment_matrix()` workflow function directly,
 without involving the CLI layer. These are integration tests that verify
 the full workflow logic.
 """
@@ -9,7 +9,7 @@ import numpy as np
 import tomli_w
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from neuralls.composition.experiments.training_batch import run_experiment_matrix
+from neuralls.composition.assignments.training_batch import run_assignment_matrix
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 import os
 
@@ -81,8 +81,8 @@ def _write_training_job_config(path: Path, *, experiment_name: str) -> None:
         tomli_w.dump(job_config, f)
 
 
-@patch("neuralls.composition.experiments.training_batch.train_model")
-def test_run_experiments_full_flow(
+@patch("neuralls.composition.assignments.training_batch.train_model")
+def test_run_assignments_full_flow(
     mock_train: MagicMock,
     tmp_path: Path,
     neuralls_settings,
@@ -161,7 +161,7 @@ def test_run_experiments_full_flow(
     job_config_path = jobs_dir / f"{exp_name}_job.toml"
     _write_training_job_config(job_config_path, experiment_name="test_job")
 
-    # 5. Create master config using [[experiments]] registry entries.
+    # 5. Create master config using [[assignments]] registry entries.
     master_config_path = configs_dir / "experiments.toml"
     tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlruns" / "mlflow.db")
     with open(master_config_path, "w") as f:
@@ -173,7 +173,7 @@ def test_run_experiments_full_flow(
         f.write("[[jobs]]\n")
         f.write(f'id = "{exp_name}_job"\n')
         f.write(f'path = "jobs/{exp_name}_job.toml"\n\n')
-        f.write("[[experiments]]\n")
+        f.write("[[assignments]]\n")
         f.write(f'id = "{exp_name}"\n')
         f.write('dataset = "test_data_gen"\n')
         f.write(f'job = "{exp_name}_job"\n')
@@ -181,12 +181,12 @@ def test_run_experiments_full_flow(
     # Set NEURALLS_OUTPUT_DIR to ensure no contamination (although we passed project_root)
     os.environ["NEURALLS_OUTPUT_DIR"] = str(data_dir / "output")
 
-    # Mock training to return success
-    mock_train.return_value = MagicMock(experiment_id="test_model", status="Success")
+    # Mock training to return a (run_id, tracking_uri) pair
+    mock_train.return_value = ("test-run-id", tracking_uri)
 
     # 6. Run the flow
-    results = run_experiment_matrix(
-        experiments_config_path=master_config_path,
+    results = run_assignment_matrix(
+        case_config_path=master_config_path,
         settings=neuralls_settings,
         force=True,
         project_root=tmp_path,
@@ -194,13 +194,13 @@ def test_run_experiments_full_flow(
 
     # Verify workflow behavior
     assert len(results) == 1
-    assert results[0].experiment_id == exp_name
+    assert results[0].assignment_id == exp_name
     assert results[0].status == "Success"
     assert mock_train.called
 
 
-@patch("neuralls.composition.experiments.training_batch.train_model")
-def test_run_experiment_matrix_with_mlflow(
+@patch("neuralls.composition.assignments.training_batch.train_model")
+def test_run_assignment_matrix_with_mlflow(
     mock_train: MagicMock,
     tmp_path: Path,
     neuralls_settings,
@@ -275,7 +275,7 @@ def test_run_experiment_matrix_with_mlflow(
         f.write("[[jobs]]\n")
         f.write(f'id = "{exp_name}_job"\n')
         f.write(f'path = "jobs/{exp_name}_job.toml"\n\n')
-        f.write("[[experiments]]\n")
+        f.write("[[assignments]]\n")
         f.write(f'id = "{exp_name}"\n')
         f.write('dataset = "mlflow_test_data"\n')
         f.write(f'job = "{exp_name}_job"\n')
@@ -283,12 +283,12 @@ def test_run_experiment_matrix_with_mlflow(
     # Set NEURALLS_OUTPUT_DIR
     os.environ["NEURALLS_OUTPUT_DIR"] = str(data_dir / "output")
 
-    # Mock training to return success
-    mock_train.return_value = MagicMock(experiment_id="mlflow_test_model", status="Success")
+    # Mock training to return a (run_id, tracking_uri) pair
+    mock_train.return_value = ("mlflow-test-run-id", tracking_uri)
 
     # 5. Run the flow with MLflow enabled
-    results = run_experiment_matrix(
-        experiments_config_path=master_config_path,
+    results = run_assignment_matrix(
+        case_config_path=master_config_path,
         settings=neuralls_settings,
         force=True,
         project_root=tmp_path,
@@ -296,6 +296,6 @@ def test_run_experiment_matrix_with_mlflow(
 
     # Verify workflow behavior
     assert len(results) == 1
-    assert results[0].experiment_id == exp_name
+    assert results[0].assignment_id == exp_name
     assert results[0].status == "Success"
     assert mock_train.called

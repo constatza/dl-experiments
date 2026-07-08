@@ -6,7 +6,7 @@ from pathlib import Path
 
 import tomli_w
 
-from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.composition.assignments.assembler import load_assignment
 
 
 def test_load_experiment_injects_mlflow_from_case_config(
@@ -71,7 +71,7 @@ def test_load_experiment_injects_mlflow_from_case_config(
     with open(experiments_path, "wb") as fh:
         tomli_w.dump(experiments_config, fh)
 
-    experiment = load_experiment(
+    experiment = load_assignment(
         job_config_path=job_config_path,
         data_config_path=data_path,
         neuralls_settings=neuralls_settings,

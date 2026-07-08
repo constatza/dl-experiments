@@ -54,7 +54,7 @@ display_name = "Embedded DeepONet"
 matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
-experiments    = [
+assignments    = [
   "ffnn-deeponet-gaussian-cg10-45x15randomE",
   "embedded-deeponet-gaussian-cg10-45x15randomE",
 ]
@@ -63,25 +63,25 @@ experiments    = [
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
-experiments    = [
+assignments    = [
   "ffnn-deeponet-gaussian-cg100-45x15randomE",
   "embedded-deeponet-gaussian-cg100-45x15randomE",
 ]
 
-# ── Experiments (2 models × 2 datasets) ──────────────────────────────────────
+# ── Assignments (2 models × 2 datasets) ──────────────────────────────────────
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg10-45x15randomE"
 job = "ffnn-deeponet"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg10-45x15randomE"
 job = "embedded-deeponet"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15randomE"
 job = "ffnn-deeponet"
 
-[[experiments]]
+[[assignments]]
 dataset = "gaussian-cg100-45x15randomE"
 job = "embedded-deeponet"

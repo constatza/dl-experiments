@@ -6,8 +6,8 @@ from pathlib import Path
 import importlib.util
 
 import pytest
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
-from neuralls.composition.experiments.assembler import load_batch
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
+from neuralls.composition.assignments.assembler import load_assignment_batch
 
 # Skip all tests if dlkit has circular import issue
 pytestmark = pytest.mark.skipif(
@@ -30,7 +30,7 @@ def temp_config_structure(tmp_path: Path) -> Path:
     matrix2_path = project_root / "data" / "matrix2.txt"
     matrix2_path.write_text("2.0\n")
 
-    # Case config uses [[experiments]] registry entries.
+    # Case config uses [[assignments]] registry entries.
     with open(project_root / "configs" / "experiments.toml", "w") as f:
         f.write("[[datasets]]\n")
         f.write('id = "exp1_data"\n')
@@ -44,16 +44,16 @@ def temp_config_structure(tmp_path: Path) -> Path:
         f.write("[[jobs]]\n")
         f.write('id = "exp2_job"\n')
         f.write('path = "jobs/exp2_job.toml"\n\n')
-        f.write("# Experiment 1: Full config with explicit checkpoint\n")
-        f.write("[[experiments]]\n")
+        f.write("# Assignment 1: Full config with explicit checkpoint\n")
+        f.write("[[assignments]]\n")
         f.write('id = "exp1"\n')
         f.write('dataset = "exp1_data"\n')
         f.write('job = "exp1_job"\n')
         f.write(
             f'checkpoint_path = "{(project_root / "checkpoints" / "exp1.ckpt").as_posix()}"\n\n'
         )
-        f.write("# Experiment 2: Config without checkpoint (will warn)\n")
-        f.write("[[experiments]]\n")
+        f.write("# Assignment 2: Config without checkpoint (will warn)\n")
+        f.write("[[assignments]]\n")
         f.write('id = "exp2"\n')
         f.write('dataset = "exp2_data"\n')
         f.write('job = "exp2_job"\n')
@@ -129,24 +129,24 @@ def temp_config_structure(tmp_path: Path) -> Path:
     return project_root
 
 
-def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
-    """Test that load_batch correctly loads experiments with NEW format."""
+def test_load_assignments_success(temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch):
+    """Test that load_assignment_batch correctly loads assignments with NEW format."""
     monkeypatch.chdir(temp_config_structure)
 
-    batch = load_batch(
+    batch = load_assignment_batch(
         case_config_path=temp_config_structure / "configs" / "experiments.toml",
     )
 
-    assert len(batch.experiments) == 2
+    assert len(batch.assignments) == 2
 
-    exp1 = batch.experiments[0]
-    exp2 = batch.experiments[1]
+    exp1 = batch.assignments[0]
+    exp2 = batch.assignments[1]
 
-    # --- Check Experiment 1 (with checkpoint) ---
-    # spec.experiment_id preserves the master registry experiment id.
-    assert exp1.spec.experiment_id == "exp1"
+    # --- Check Assignment 1 (with checkpoint) ---
+    # spec.assignment_id preserves the master registry assignment id.
+    assert exp1.spec.assignment_id == "exp1"
     assert exp1.settings is not None
-    assert isinstance(exp1.workspace, ExperimentWorkspace)
+    assert isinstance(exp1.workspace, AssignmentWorkspace)
 
     # Check paths resolve to shared directories
     assert exp1.spec.job_config_path.name == "exp1_job.toml"
@@ -158,8 +158,8 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     assert exp1.spec.checkpoint_path is not None
     assert "exp1.ckpt" in str(exp1.spec.checkpoint_path)
 
-    # --- Check Experiment 2 (without checkpoint) ---
-    assert exp2.spec.experiment_id == "exp2"
+    # --- Check Assignment 2 (without checkpoint) ---
+    assert exp2.spec.assignment_id == "exp2"
 
     # Check paths resolve to shared directories
     assert exp2.spec.job_config_path.name == "exp2_job.toml"
@@ -171,7 +171,7 @@ def test_load_experiments_success(temp_config_structure: Path, monkeypatch: pyte
     assert exp2.spec.checkpoint_path is None
 
 
-def test_load_experiments_missing_registry_id(
+def test_load_assignments_missing_registry_id(
     temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """Missing registry ids fail before any guessed-path lookup."""
@@ -182,24 +182,24 @@ def test_load_experiments_missing_registry_id(
         f.write("[[jobs]]\n")
         f.write('id = "exp1_job"\n')
         f.write('path = "jobs/exp1_job.toml"\n\n')
-        f.write("[[experiments]]\n")
+        f.write("[[assignments]]\n")
         f.write('id = "exp_missing"\n')
         f.write('dataset = "missing_dataset"\n')
         f.write('job = "exp1_job"\n')
 
     with pytest.raises(
-        ValueError, match="Experiment 'exp_missing' references dataset id 'missing_dataset'"
+        ValueError, match="Assignment 'exp_missing' references dataset id 'missing_dataset'"
     ):
-        load_batch(
+        load_assignment_batch(
             case_config_path=temp_config_structure / "configs" / "experiments.toml",
         )
 
 
-def test_load_experiments_rejects_unknown_comparison_experiment_filter(
+def test_load_assignments_rejects_unknown_comparison_assignment_filter(
     temp_config_structure: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Comparison experiments filter cannot reference ids missing from [[experiments]]."""
+    """Comparison assignments filter cannot reference ids missing from [[assignments]]."""
     monkeypatch.chdir(temp_config_structure)
     with open(temp_config_structure / "configs" / "experiments.toml", "a") as f:
         f.write("\n[[datasets]]\n")
@@ -212,29 +212,29 @@ def test_load_experiments_rejects_unknown_comparison_experiment_filter(
         f.write('id = "gaussian"\n')
         f.write('matrix_dataset = "solutions"\n')
         f.write('rhs_source = { kind = "gaussian" }\n')
-        f.write('experiments = ["missing-exp"]\n')
+        f.write('assignments = ["missing-exp"]\n')
 
     with pytest.raises(
         ValueError,
-        match="Comparison 'gaussian' experiments filter references unknown experiment ids: missing-exp",
+        match="Comparison 'gaussian' assignments filter references unknown assignment ids: missing-exp",
     ):
-        load_batch(
+        load_assignment_batch(
             case_config_path=temp_config_structure / "configs" / "experiments.toml",
         )
 
 
-def test_load_experiments_no_experiments(
+def test_load_assignments_no_assignments(
     temp_config_structure: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Test that ValueError is raised when no experiments defined."""
+    """Test that ValueError is raised when no assignments defined."""
     monkeypatch.chdir(temp_config_structure)
 
     # Create empty experiments.toml
     with open(temp_config_structure / "configs" / "experiments.toml", "w") as f:
         f.write("")
 
-    with pytest.raises(ValueError, match="No experiments defined"):
-        load_batch(
+    with pytest.raises(ValueError, match="No assignments defined"):
+        load_assignment_batch(
             case_config_path=temp_config_structure / "configs" / "experiments.toml",
         )
 
@@ -251,6 +251,6 @@ def test_case_config_rejects_legacy_models_table(
         f.write('path = "models/legacy.toml"\n')
 
     with pytest.raises(ValueError, match=r"\[\[jobs\]\]"):
-        load_batch(
+        load_assignment_batch(
             case_config_path=temp_config_structure / "configs" / "experiments.toml",
         )

@@ -1,6 +1,6 @@
-"""Services for creating experiment workspaces.
+"""Services for creating assignment workspaces.
 
-WorkspaceFactory creates directory structures for experiments.
+WorkspaceFactory creates directory structures for assignments.
 MLflow lifecycle is handled by dlkit, not here.
 """
 
@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
 
 class WorkspaceFactory:
-    """Factory for creating experiment workspaces."""
+    """Factory for creating assignment workspaces."""
 
     def __init__(
         self,
@@ -32,7 +32,7 @@ class WorkspaceFactory:
         self,
         dataset_id: str,
         run_id: str,
-    ) -> ExperimentWorkspace:
+    ) -> AssignmentWorkspace:
         """Create workspace directory structure.
 
         Structure created:
@@ -48,16 +48,16 @@ class WorkspaceFactory:
             run_id: Model/run identifier (e.g., 'NormScaledLinearFFNN').
 
         Returns:
-            ExperimentWorkspace with all paths resolved.
+            AssignmentWorkspace with all paths resolved.
         """
-        # Experiment root: output_root / dataset_id / run_id
+        # Assignment root: output_root / dataset_id / run_id
         root_dir = self.output_root / dataset_id / run_id
 
         # Data directory: processed_root / dataset_id
         data_dir = self.processed_root / dataset_id
 
         # Create workspace
-        workspace = ExperimentWorkspace(
+        workspace = AssignmentWorkspace(
             dataset_id=dataset_id,
             run_id=run_id,
             root_dir=root_dir,

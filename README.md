@@ -5,12 +5,12 @@ preconditioners for Conjugate Gradient on graph-structured linear systems.
 It supports three common workflows:
 
 - build processed datasets from raw matrices and archives
-- train one model or a full case-defined batch of experiments
+- train one model or a full case-defined batch of assignments
 - compare neural and classical preconditioners under a shared benchmark setup
 
 The project is organized around a **case config**: one top-level TOML file that
-declares the datasets, models, comparisons, and experiment registrations for a
-single experiment family. Machine-specific roots live outside the repo in the
+declares the datasets, models, comparisons, and assignment registrations for a
+single assignment family. Machine-specific roots live outside the repo in the
 user config directory.
 
 This checkout is pinned to CUDA 13.0. To change backends later, edit
@@ -171,7 +171,7 @@ when you want to validate one dataset config in isolation.
 uv run neuralls train configs/case-<name>.toml --env-file .env.windows
 ```
 
-This trains every experiment declared in the case config and writes aggregate
+This trains every assignment declared in the case config and writes aggregate
 training outputs under the resolved output root.
 
 ### 5. Run or compare a full case
@@ -181,7 +181,7 @@ uv run neuralls run configs/case-<name>.toml --env-file .env.windows
 uv run neuralls compare configs/case-<name>.toml --env-file .env.windows
 ```
 
-`neuralls run` generates datasets as needed and trains the full experiment
+`neuralls run` generates datasets as needed and trains the full assignment
 matrix. `neuralls compare` benchmarks the configured solver setups for the same
 case.
 
@@ -191,9 +191,9 @@ A case config is the authoritative persisted config source for a run family.
 It can contain:
 
 - dataset registry entries under `[[datasets]]`
-- model registry entries under `[[models]]`
+- job registry entries under `[[jobs]]`
 - comparison registry entries under `[[comparisons]]`
-- experiment registrations under `[[experiments]]`
+- assignment registrations under `[[assignments]]`
 - optional `[mlflow]` topology
 - optional display names under `[names]`
 
@@ -204,23 +204,23 @@ Minimal example:
 id = "my-dataset"
 path = "datasets/my-dataset.toml"
 
-[[models]]
-id = "my-model"
-path = "models/<family>/my-model.toml"
+[[jobs]]
+id = "my-job"
+path = "jobs/<family>/my-job.toml"
 
 [[comparisons]]
 id = "my-solver"
 path = "comparison/my-solver.toml"
 
-[[experiments]]
-id = "my-dataset-my-model"
+[[assignments]]
+id = "my-dataset-my-job"
 dataset = "my-dataset"
-model = "my-model"
+job = "my-job"
 ```
 
 Important behavior:
 
-- `[[experiments]]` remains the table name for per-run registrations
+- `[[assignments]]` is the table name for per-run registrations — pairing one job with one dataset
 - relative paths inside the case config resolve against the case file location
 - `${NEURALLS_*}` placeholders are expanded from resolved settings
 - if `[mlflow]` is omitted, local SQLite tracking and local artifact paths are
@@ -233,7 +233,7 @@ Important behavior:
 | Manage machine profiles | `uv run neuralls config ...` |
 | Generate all datasets in one case | `uv run neuralls generate <case.toml>` |
 | Generate one dataset config | `uv run neuralls generate-single <dataset.toml> --case-config <case.toml>` |
-| Train all experiments in one case | `uv run neuralls train <case.toml>` |
+| Train all assignments in one case | `uv run neuralls train <case.toml>` |
 | Generate datasets and train the full case | `uv run neuralls run <case.toml>` |
 | Compare solver setups for one case | `uv run neuralls compare <case.toml>` |
 
@@ -260,7 +260,7 @@ Use the narrowest config that matches the task:
 
 - debugging data generation: start with a dataset config
 - validating one architecture: add one model config
-- running repeatable experiment batches: move to a case config
+- running repeatable assignment batches: move to a case config
 
 Additional guidance:
 

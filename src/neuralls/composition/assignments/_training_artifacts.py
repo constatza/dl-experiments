@@ -11,10 +11,10 @@ import numpy as np
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
-from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
-from neuralls.composition.experiments.model_resolution import _find_single_checkpoint
+from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
+from neuralls.composition.assignments.model_resolution import _find_single_checkpoint
 from neuralls.composition.tracking.run_specs import build_training_run_spec, format_run_timestamp
-from neuralls.platform.config.models.experiments import ExperimentEntry, ExperimentNamesConfig
+from neuralls.platform.config.models.experiments import AssignmentEntry, ExperimentNamesConfig
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
 from neuralls.platform.storage.training_artifacts import (
     coerce_jsonable,
@@ -48,8 +48,8 @@ def _resolve_training_experiment_name(mlflow_experiment_name: str | None) -> str
 
 def _build_training_run_config(
     *,
-    experiment_id: str | None,
-    experiment_display_name: str,
+    assignment_id: str | None,
+    assignment_display_name: str,
     dataset_registry_id: str | None,
     job_registry_id: str | None,
     dataset_display_name: str,
@@ -61,8 +61,8 @@ def _build_training_run_config(
     """Build the execute()-time MLflow run config for training.
 
     Args:
-        experiment_id: Registry experiment ID, or None for ad-hoc runs.
-        experiment_display_name: Human-readable experiment name.
+        assignment_id: Registry assignment ID, or None for ad-hoc runs.
+        assignment_display_name: Human-readable assignment name.
         dataset_registry_id: Registry dataset ID, or None.
         job_registry_id: Registry job ID, or None.
         dataset_display_name: Human-readable dataset name (unused in run name).
@@ -77,12 +77,12 @@ def _build_training_run_config(
     _ = dataset_display_name
     experiment_name = _resolve_training_experiment_name(mlflow_experiment_name)
     paths = runtime_paths_from_env(runtime_mlflow_env)
-    if experiment_id and dataset_registry_id and job_registry_id:
-        entry = ExperimentEntry(
-            id=experiment_id,
+    if assignment_id and dataset_registry_id and job_registry_id:
+        entry = AssignmentEntry(
+            id=assignment_id,
             dataset=dataset_registry_id,
             job=job_registry_id,
-            display_name=experiment_display_name,
+            display_name=assignment_display_name,
         )
         return build_training_run_spec(
             entry=entry,
@@ -94,7 +94,7 @@ def _build_training_run_config(
     ts = f" | {format_run_timestamp()}" if parent_run_id is None else ""
     return MlflowRunConfig(
         experiment_name=experiment_name,
-        run_name=f"{experiment_display_name}{ts}",
+        run_name=f"{assignment_display_name}{ts}",
         tags={},
         paths=paths,
         workspace_root=workspace_root,
@@ -180,9 +180,9 @@ def _log_training_context(
     *,
     tracking_uri: str,
     run_id: str,
-    experiment_id: str | None,
-    experiment_display_name: str | None,
-    dataset_id: str,
+    assignment_id: str | None,
+    assignment_display_name: str | None,
+    resolved_dataset_id: str,
     dataset_display_name: str,
     dataset_registry_id: str | None,
     job_registry_id: str | None,
@@ -193,9 +193,11 @@ def _log_training_context(
     Args:
         tracking_uri: MLflow tracking URI.
         run_id: Target MLflow run ID.
-        experiment_id: Registry experiment ID, or None.
-        experiment_display_name: Human-readable experiment name, or None.
-        dataset_id: Dataset workspace ID.
+        assignment_id: Registry assignment ID, or None.
+        assignment_display_name: Human-readable assignment name, or None.
+        resolved_dataset_id: Dataset identity resolved from the dataset config's own
+            content — not necessarily equal to dataset_registry_id (the [[datasets]]
+            lookup key). Logged under the stable "dataset_id" MLflow param key.
         dataset_display_name: Human-readable dataset name.
         dataset_registry_id: Registry dataset ID, or None.
         job_registry_id: Registry job ID, or None.
@@ -203,14 +205,14 @@ def _log_training_context(
     """
     client = MlflowClient(tracking_uri=tracking_uri)
     params: dict[str, str] = {
-        "dataset_id": dataset_id,
+        "dataset_id": resolved_dataset_id,
         "dataset_display_name": dataset_display_name,
         "job_display_name": job_display_name,
     }
-    if experiment_id is not None:
-        params["experiment_id"] = experiment_id
-    if experiment_display_name is not None:
-        params["experiment_display_name"] = experiment_display_name
+    if assignment_id is not None:
+        params["assignment_id"] = assignment_id
+    if assignment_display_name is not None:
+        params["assignment_display_name"] = assignment_display_name
     if dataset_registry_id is not None:
         params["dataset_registry_id"] = dataset_registry_id
     if job_registry_id is not None:
@@ -369,7 +371,7 @@ def _stage_training_artifacts(
     """Stage full training artifacts into the workspace for MLflow upload.
 
     Args:
-        workspace: Experiment workspace (provides root_dir, predictions_dir).
+        workspace: Assignment workspace (provides root_dir, predictions_dir).
         training_result: DLKit training result object.
         numpy_payload: Normalized prediction/target payload.
         job_config_path: Path to the job TOML config.
@@ -448,7 +450,7 @@ def _resolve_training_checkpoint(
 
     Args:
         training_result: DLKit training result object.
-        workspace: Experiment workspace (provides checkpoint_dir, root_dir).
+        workspace: Assignment workspace (provides checkpoint_dir, root_dir).
         tracking_uri: MLflow tracking URI for remote download fallback.
         run_id: MLflow run ID for remote download fallback.
 

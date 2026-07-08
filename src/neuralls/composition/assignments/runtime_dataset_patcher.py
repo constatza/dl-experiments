@@ -5,9 +5,9 @@ from __future__ import annotations
 from dlkit.config import DataSettings
 from dlkit.infrastructure.config.data_entries import DataEntry
 
-from neuralls.composition.experiments._dataset_assembly import validate_runtime_dataset_contract
-from neuralls.composition.experiments._job_types import TrainLikeJobConfig
-from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
+from neuralls.composition.assignments._dataset_assembly import validate_runtime_dataset_contract
+from neuralls.composition.assignments._job_types import TrainLikeJobConfig
+from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
 from neuralls.platform.config.dataset_entries import apply_placeholder_metadata
 
 

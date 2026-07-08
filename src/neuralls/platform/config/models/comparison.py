@@ -222,10 +222,10 @@ class _ComparisonConfigModel(BaseModel):
             if (
                 isinstance(spec.model_ref, RegisteredModelRefConfig)
                 and spec.model_ref.name is None
-                and spec.experiment is None
+                and spec.assignment is None
             ):
                 raise ValueError(
-                    f"Neural preconditioner '{spec.name}' must define experiment when "
+                    f"Neural preconditioner '{spec.name}' must define assignment when "
                     "registered model_ref.name is omitted."
                 )
 
@@ -233,13 +233,13 @@ class _ComparisonConfigModel(BaseModel):
             isinstance(spec.model_ref, RegisteredModelRefConfig)
             and spec.model_ref.alias is not None
             and spec.model_ref.alias.strip() == "@dataset"
-            and spec.experiment is None
+            and spec.assignment is None
             for spec in neural_specs
         )
         if requires_dataset_alias and self.general.data.dataset_alias is None:
             raise ValueError(
                 "general.data.dataset_alias is required when model_ref alias is '@dataset' "
-                "and no neural preconditioner experiment binding is provided."
+                "and no neural preconditioner assignment binding is provided."
             )
         return self
 

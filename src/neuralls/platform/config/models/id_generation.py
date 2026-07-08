@@ -1,7 +1,7 @@
 """Pure helpers for auto-id and display-name generation in case configs.
 
 This module provides functions to infer missing 'id' and 'display_name' fields
-in experiment and comparison entries, with sensible fallback logic and validation.
+in assignment and comparison entries, with sensible fallback logic and validation.
 No Pydantic imports — only plain Python and regex.
 """
 
@@ -90,13 +90,13 @@ def _build_display_lookup(entries: list[object]) -> dict[str, str]:
     return result
 
 
-def _infer_experiment_id(
+def _infer_assignment_id(
     dataset_id: str,
     job_id: str,
     user_id: str | None,
     user_dn: str | None,
 ) -> str:
-    """Return the resolved experiment id.
+    """Return the resolved assignment id.
 
     Priority:
       1. user_id (stripped, if non-blank)
@@ -112,7 +112,7 @@ def _infer_experiment_id(
         user_dn: Explicit user-supplied display_name (may be None or blank).
 
     Returns:
-        The resolved experiment id string.
+        The resolved assignment id string.
 
     Raises:
         ValueError: If the resolved id contains invalid characters.
@@ -128,14 +128,14 @@ def _infer_experiment_id(
     return final_id
 
 
-def _infer_experiment_display_name(
+def _infer_assignment_display_name(
     dataset_id: str,
     job_id: str,
     user_dn: str | None,
     dataset_display: dict[str, str],
     model_display: dict[str, str],
 ) -> str:
-    """Return the resolved experiment display name.
+    """Return the resolved assignment display name.
 
     Priority:
       1. user_dn (stripped, if non-blank)
@@ -150,7 +150,7 @@ def _infer_experiment_display_name(
         model_display: Lookup from job id to display label.
 
     Returns:
-        The resolved experiment display name string.
+        The resolved assignment display name string.
     """
     if user_dn and user_dn.strip():
         return user_dn.strip()

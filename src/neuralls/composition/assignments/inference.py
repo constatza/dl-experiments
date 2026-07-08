@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from neuralls.application.inference.models import InferenceConfig
-from neuralls.composition.experiments.assembler import load_experiment
+from neuralls.composition.assignments.assembler import load_assignment
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 
 
@@ -53,12 +53,12 @@ def _validate_inference_config(config: InferenceConfig) -> None:
         raise ValueError("No checkpoint path specified")
 
 
-def _load_experiment_settings(
+def _load_assignment_settings(
     config: InferenceConfig,
     settings: NeurallsSettings,
     case_config_path: Path | None = None,
 ) -> tuple[Any, Any, str]:
-    """Load experiment configuration in inference mode.
+    """Load assignment configuration in inference mode.
 
     Args:
         config: Inference configuration
@@ -74,7 +74,7 @@ def _load_experiment_settings(
         raise ValueError("data_config_path is required for inference")
 
     dataset_registry_id = Path(config.data_config_path).stem
-    experiment = load_experiment(
+    assignment = load_assignment(
         config.config_path,
         config.data_config_path,
         settings,
@@ -83,8 +83,8 @@ def _load_experiment_settings(
         mode="inference",
         dataset_registry_id=dataset_registry_id,
     )
-    settings = experiment.settings
-    workspace = experiment.workspace
+    settings = assignment.settings
+    workspace = assignment.workspace
     dataset_id = workspace.dataset_id
     return settings, workspace, dataset_id
 
@@ -100,7 +100,7 @@ def _execute_inference_pipeline(
 
     Args:
         config: Inference configuration
-        settings: Experiment settings
+        settings: Assignment settings
         workspace: Workspace paths
         dataset_id: Dataset identifier
 
@@ -250,8 +250,8 @@ def run_inference(
     # 1. Validate configuration
     _validate_inference_config(config)
 
-    # 2. Load experiment settings
-    experiment_settings, workspace, dataset_id = _load_experiment_settings(
+    # 2. Load assignment settings
+    assignment_settings, workspace, dataset_id = _load_assignment_settings(
         config,
         settings,
         case_config_path=resolved_case_config_path,
@@ -259,7 +259,7 @@ def run_inference(
 
     # 3. Start MLflow run (if enabled)
     mlflow_state = start_mlflow_run(
-        experiment_settings,
+        assignment_settings,
         workspace,
         dataset_id,
         config.enable_mlflow,
@@ -271,7 +271,7 @@ def run_inference(
     try:
         # 4. Execute inference pipeline
         predictions, metrics, plot_paths = _execute_inference_pipeline(
-            config, settings, experiment_settings, workspace, dataset_id
+            config, settings, assignment_settings, workspace, dataset_id
         )
 
         # 5. Build typed result

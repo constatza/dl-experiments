@@ -14,7 +14,7 @@ from neuralls.platform.config.models.preconditioner import (
     RegisteredModelRefConfig,
     StandardPreconditionerConfig,
 )
-from neuralls.composition.experiments.model_resolution import (
+from neuralls.composition.assignments.model_resolution import (
     ModelResolution,
     PreconditionerResolutionResult,
     _download_checkpoint_for_run,
@@ -42,12 +42,12 @@ def test_resolve_preconditioner_models_keeps_non_neural_specs(tmp_path: Path) ->
     assert resolved == [jacobi]
 
 
-def test_build_neural_download_dirname_prefers_experiment_id() -> None:
-    """Stable experiment ids should drive local artifact directory naming."""
+def test_build_neural_download_dirname_prefers_assignment_id() -> None:
+    """Stable assignment ids should drive local artifact directory naming."""
     neural = NeuralPreconditionerConfig(
         name="Residual-Error 100 | Embedded SPD",
         type=PreconditionerType.NEURAL,
-        experiment="residuals-100-embedded-spd",
+        assignment="residuals-100-embedded-spd",
         model_ref=LoggedModelRefConfig(run_id="run-1"),
     )
     assert build_neural_download_dirname(neural) == "residuals-100-embedded-spd"
@@ -67,7 +67,7 @@ def test_build_neural_download_dirname_sanitizes_display_name_when_needed() -> N
     assert '"' not in dirname
 
 
-@patch("neuralls.composition.experiments.model_resolution.resolve_model_ref")
+@patch("neuralls.composition.assignments.model_resolution.resolve_model_ref")
 def test_resolve_preconditioner_models_sets_resolved_checkpoint(
     mock_resolve_model_ref,
     tmp_path: Path,
@@ -100,7 +100,7 @@ def test_resolve_preconditioner_models_sets_resolved_checkpoint(
     assert resolved_neural.resolved_checkpoint_path == checkpoint
 
 
-@patch("neuralls.composition.experiments.model_resolution.resolve_model_ref")
+@patch("neuralls.composition.assignments.model_resolution.resolve_model_ref")
 def test_resolve_preconditioner_models_keeps_explicit_checkpoint(
     mock_resolve_model_ref,
     tmp_path: Path,
@@ -143,7 +143,7 @@ def test_resolve_preconditioner_models_requires_model_source(tmp_path: Path) -> 
         )
 
 
-@patch("neuralls.composition.experiments.model_resolution.resolve_model_ref")
+@patch("neuralls.composition.assignments.model_resolution.resolve_model_ref")
 def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
     mock_resolve_model_ref,
     tmp_path: Path,
@@ -170,8 +170,8 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
     assert "Skipping neural preconditioner 'missing-neural'" in resolved.warnings[0]
 
 
-@patch("neuralls.composition.experiments.model_resolution.MlflowClient")
-@patch("neuralls.composition.experiments.model_resolution.search_registered_models")
+@patch("neuralls.composition.assignments.model_resolution.MlflowClient")
+@patch("neuralls.composition.assignments.model_resolution.search_registered_models")
 def test_resolve_model_ref_dataset_placeholder_requires_dataset_alias(
     mock_client_cls,
     mock_search_registered_models,
@@ -196,9 +196,9 @@ def test_resolve_model_ref_dataset_placeholder_requires_dataset_alias(
         )
 
 
-@patch("neuralls.composition.experiments.model_resolution._download_checkpoint_for_run")
-@patch("neuralls.composition.experiments.model_resolution.search_registered_models")
-@patch("neuralls.composition.experiments.model_resolution.MlflowClient")
+@patch("neuralls.composition.assignments.model_resolution._download_checkpoint_for_run")
+@patch("neuralls.composition.assignments.model_resolution.search_registered_models")
+@patch("neuralls.composition.assignments.model_resolution.MlflowClient")
 def test_resolve_model_ref_normalizes_explicit_at_alias(
     mock_client_cls,
     mock_search_registered_models,
@@ -273,7 +273,7 @@ def test_find_single_checkpoint_stays_within_provided_root(tmp_path: Path) -> No
     assert resolved == expected
 
 
-@patch("neuralls.composition.experiments.model_resolution.MlflowClient")
+@patch("neuralls.composition.assignments.model_resolution.MlflowClient")
 def test_download_checkpoint_for_run_collapses_nested_duplicate_artifacts(
     mock_client_cls,
     tmp_path: Path,
@@ -299,7 +299,7 @@ def test_download_checkpoint_for_run_collapses_nested_duplicate_artifacts(
     assert resolved == primary
 
 
-@patch("neuralls.composition.experiments.model_resolution.MlflowClient")
+@patch("neuralls.composition.assignments.model_resolution.MlflowClient")
 def test_download_checkpoint_for_run_raises_on_ambiguous_distinct_artifacts(
     mock_client_cls,
     tmp_path: Path,

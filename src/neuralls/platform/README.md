@@ -31,13 +31,13 @@ neuralls job manifests and forwards lower-case job TOMLs to DLKit's native
 re-implement that merge policy.
 
 Lower-case job identity lookup is also centralized here. Platform config
-helpers read experiment/model metadata from one job plus its referenced model
+helpers read job/model metadata from one job plus its referenced model
 profile, and storage/tracking code reuse that single reader instead of
 duplicating TOML traversal logic in multiple modules.
 
-Case-config auto naming also lives at this boundary. Auto-generated experiment
-ids are model-first (`{model_id}-{dataset_id}`), and auto-generated experiment
-display names follow the same order (`{model_label} | {dataset_label}`).
+Case-config auto naming also lives at this boundary. Auto-generated assignment
+ids are job-first (`{job_id}-{dataset_id}`), and auto-generated assignment
+display names follow the same order (`{job_label} | {dataset_label}`).
 Auto-generated comparison display names stay dataset-defined: they resolve to
 the matrix dataset label alone when matrix and RHS come from the same dataset,
 or to `{matrix_label} | {rhs_label}` when they differ. Explicitly configured
@@ -81,7 +81,7 @@ kept for backward compatibility.
 ## Boundary
 
 Platform code may depend on domain protocols and domain data structures, but it
-should not own business rules or experiment orchestration.
+should not own business rules or assignment orchestration.
 
 Tracking helpers treat DLKit as the authoritative checkpoint artifact logger.
 Workspace uploads therefore exclude the local `checkpoints/` tree and only

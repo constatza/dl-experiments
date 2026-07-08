@@ -61,8 +61,8 @@ seed           = 42
 matrix_dataset = "gaussian-cg10-93x31"
 rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 
-# ── Experiments (ffnn-standard × gaussian-cg100-93x31) ───────────────────────
+# ── Assignments (ffnn-standard × gaussian-cg100-93x31) ───────────────────────
 
-[[experiments]]
+[[assignments]]
 dataset      = "gaussian-cg100-93x31"
 job = "ffnn-standard"

@@ -6,15 +6,14 @@ optionally logging them to MLflow for experiment tracking.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 from loguru import logger
 
 from neuralls.domain.inference import InferenceOutputs, InferencePredictions
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.reporting.prediction_csv import save_prediction_samples_to_csv
 from neuralls.platform.reporting.synthetic import save_synthetic_results
 from neuralls.platform.reporting.plots import plot_parity_and_residuals, plot_prediction_diagnostics
@@ -41,7 +40,7 @@ def get_session_name(settings: Any) -> str | None:
 
 def derive_run_identifier(
     settings: Any,
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     checkpoint_path: Path,
     config_path: Path,
 ) -> str:
@@ -55,7 +54,7 @@ def derive_run_identifier(
 
     Args:
         settings: DLKit workflow settings object
-        workspace: Experiment workspace
+        workspace: Assignment workspace
         checkpoint_path: Path to model checkpoint
         config_path: Path to config file
 
@@ -81,7 +80,7 @@ def derive_run_identifier(
 
 def start_mlflow_run(
     settings: Any,
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     dataset_id: str,
     enable_mlflow: bool,
 ) -> Any:
@@ -89,7 +88,7 @@ def start_mlflow_run(
 
     Args:
         settings: DLKit workflow settings object
-        workspace: Experiment workspace
+        workspace: Assignment workspace
         dataset_id: Dataset identifier
         enable_mlflow: Whether to enable MLflow logging
 
@@ -210,7 +209,7 @@ def create_diagnostic_plots(
 
 def save_inference_outputs(
     predictions: InferencePredictions,
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     settings: Any,
     checkpoint_path: Path,
     config_path: Path,
@@ -222,7 +221,7 @@ def save_inference_outputs(
 
     Args:
         predictions: Inference predictions with targets
-        workspace: Experiment workspace
+        workspace: Assignment workspace
         settings: DLKit workflow settings object
         checkpoint_path: Path to model checkpoint
         config_path: Path to config file
@@ -260,62 +259,17 @@ def save_inference_outputs(
     )
 
 
-def write_mlflow_sidecar(
-    path: Path,
-    *,
-    run_id: str,
-    experiment_id: str,
-    tracking_uri: str,
-    artifacts_destination: str,
-) -> None:
-    """Write MLflow run metadata sidecar JSON next to checkpoint.
-
-    Args:
-        path: Destination path (e.g. checkpoint_dir / "mlflow_run.json")
-        run_id: MLflow run ID
-        experiment_id: MLflow experiment ID
-        tracking_uri: SQLite or HTTP tracking URI
-        artifacts_destination: Local filesystem path for MLflow artifacts
-    """
-    data = {
-        "run_id": run_id,
-        "experiment_id": experiment_id,
-        "tracking_uri": tracking_uri,
-        "artifacts_destination": artifacts_destination,
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2))
-    logger.debug(f"Wrote MLflow sidecar: {path}")
-
-
-def read_mlflow_sidecar(path: Path) -> dict[str, str] | None:
-    """Read MLflow run metadata sidecar JSON.
-
-    Args:
-        path: Path to mlflow_run.json sidecar
-
-    Returns:
-        Parsed sidecar dict, or None if file not found
-    """
-    if not path.exists():
-        return None
-    data = json.loads(path.read_text())
-    if not isinstance(data, dict):
-        raise ValueError(f"Invalid MLflow sidecar payload at {path}: expected object")
-    return {str(key): str(value) for key, value in cast(dict[object, object], data).items()}
-
-
 def finalize_mlflow_run(
     mlflow_state: Any,
     metrics: dict[str, float],
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
 ) -> None:
     """Finalize MLflow run with metrics and artifacts.
 
     Args:
         mlflow_state: MLflow run state
         metrics: Metrics to log
-        workspace: Experiment workspace for artifacts
+        workspace: Assignment workspace for artifacts
     """
     if mlflow_state is None:
         return

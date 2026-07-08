@@ -1,4 +1,4 @@
-"""Tests for neuralls.composition.experiments.comparison_batch."""
+"""Tests for neuralls.composition.assignments.comparison_batch."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import tomli_w
 from neuralls.composition.comparison.config_assembler import resolve_comparison_config
 from neuralls.composition.comparison._input_resolution import resolve_comparison_input
 from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
-from neuralls.composition.experiments.comparison_batch import (
+from neuralls.composition.assignments.comparison_batch import (
     _resolve_comparison_topology,
     _resolve_neural_preconditioners,
     _run_comparison_from_config,
@@ -61,13 +61,13 @@ _RESOLVE_COMPARISON_CONFIG = (
     "neuralls.composition.comparison.config_assembler.resolve_comparison_config"
 )
 _COMPARE_PRECONDITIONERS = (
-    "neuralls.composition.experiments.comparison_batch.compare_preconditioners"
+    "neuralls.composition.assignments.comparison_batch.compare_preconditioners"
 )
-_MLFLOW_MODULE = "neuralls.composition.experiments.comparison_batch.mlflow"
+_MLFLOW_MODULE = "neuralls.composition.assignments.comparison_batch.mlflow"
 _COMPARISON_TRACKING_MLFLOW_MODULE = "neuralls.platform.tracking.comparison_tracking.mlflow"
-_SETUP_TRACKING = "neuralls.composition.experiments.comparison_batch.setup_comparison_tracking"
+_SETUP_TRACKING = "neuralls.composition.assignments.comparison_batch.setup_comparison_tracking"
 _LOG_COMPARISON_ARTIFACTS = (
-    "neuralls.composition.experiments.comparison_batch.log_comparison_artifacts_to_mlflow"
+    "neuralls.composition.assignments.comparison_batch.log_comparison_artifacts_to_mlflow"
 )
 
 
@@ -484,7 +484,7 @@ def test_validate_neural_preconditioner_rejects_checkpoint_path(tmp_path: Path) 
     try:
         _validate_neural_preconditioner(spec)
     except ValueError as exc:
-        assert "checkpoint_path/experiment" in str(exc)
+        assert "checkpoint_path/assignment" in str(exc)
     else:
         raise AssertionError("Expected ValueError")
 
@@ -852,7 +852,7 @@ def test_run_comparison_warns_and_continues_when_neural_resolution_fails(
         patch(_SETUP_TRACKING),
         patch(_LOG_COMPARISON_ARTIFACTS),
         patch(
-            "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
+            "neuralls.composition.assignments.comparison_batch.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(
                 specs=[StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY)],
                 warnings=(
@@ -895,7 +895,7 @@ def test_run_comparison_fails_if_all_preconditioners_are_skipped(
         patch(_COMPARISON_TRACKING_MLFLOW_MODULE, mock_mlflow),
         patch(_SETUP_TRACKING),
         patch(
-            "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
+            "neuralls.composition.assignments.comparison_batch.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(
                 specs=[],
                 warnings=(
@@ -971,7 +971,7 @@ path = "datasets/valid-dataset.toml"
 id = "valid-job"
 path = "jobs/valid-job.toml"
 
-[[experiments]]
+[[assignments]]
 id = "valid-exp"
 dataset = "valid-dataset"
 job = "valid-job"
@@ -1004,7 +1004,7 @@ job = "valid-job"
         patch(_SETUP_TRACKING),
         patch(_LOG_COMPARISON_ARTIFACTS),
         patch(
-            "neuralls.composition.experiments.comparison_batch.resolve_preconditioner_models_with_warnings",
+            "neuralls.composition.assignments.comparison_batch.resolve_preconditioner_models_with_warnings",
             return_value=MagicMock(specs=cfg.preconditioners, warnings=()),
         ) as mock_resolve_specs,
     ):
@@ -1013,7 +1013,7 @@ job = "valid-job"
         outcomes = _run_comparison_from_config(cfg, entry, topology, experiments_config, settings)
 
     assert outcomes[0].success is True
-    assert mock_resolve_specs.call_args.kwargs["experiment_contexts"] is None
+    assert mock_resolve_specs.call_args.kwargs["assignment_contexts"] is None
 
 
 def test_run_comparison_fails_before_tracking_when_matrix_input_is_missing(
@@ -1093,11 +1093,11 @@ def test_run_comparison_batch_preserves_declared_order(tmp_path: Path) -> None:
 
     with (
         patch(
-            "neuralls.composition.experiments.comparison_batch._run_comparison_from_config",
+            "neuralls.composition.assignments.comparison_batch._run_comparison_from_config",
             side_effect=_fake_run_from_config,
         ) as mock_run,
         patch(
-            "neuralls.composition.experiments.comparison_batch.resolve_comparison_config",
+            "neuralls.composition.assignments.comparison_batch.resolve_comparison_config",
             return_value=_mock_cfg(),
         ),
     ):

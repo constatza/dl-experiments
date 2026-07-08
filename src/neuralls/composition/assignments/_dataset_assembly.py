@@ -10,10 +10,10 @@ from __future__ import annotations
 from dlkit.infrastructure.config.data_entries import DataEntry
 from loguru import logger
 
-from neuralls.composition.experiments._job_types import TrainLikeJobConfig
-from neuralls.composition.experiments.runtime_dataset_contract import RuntimeDatasetContract
+from neuralls.composition.assignments._job_types import TrainLikeJobConfig
+from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
 from neuralls.platform.config.dataset_entries import entry_from_path
-from neuralls.platform.config.models.workspace import ExperimentWorkspace
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.storage.training_artifacts import (
     ArraySource,
     TrainingArrays,
@@ -145,7 +145,7 @@ def _create_target_entries(
 
 def _load_and_prepare_data(
     settings: TrainLikeJobConfig,
-    workspace: ExperimentWorkspace,
+    workspace: AssignmentWorkspace,
     contract: RuntimeDatasetContract,
 ) -> tuple[TrainingArrays, list[DataEntry], list[DataEntry]]:
     """Resolve training data artifacts and build DLKit entries."""
