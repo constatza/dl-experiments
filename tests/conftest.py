@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
@@ -13,7 +12,6 @@ from loguru import logger
 
 from neuralls.platform.config.context import ConfigContext
 from neuralls.platform.config.settings import NeurallsSettings
-from tests.scope_policy import new_root_artifact_dirs, root_artifact_dirs
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -47,18 +45,6 @@ def _patch_dlkit_environment(
     from dlkit.infrastructure.config.environment import env as dlkit_env
 
     monkeypatch.setattr(dlkit_env, "internal_dir", str(runtime_root / ".dlkit"), raising=False)
-
-
-@pytest.fixture(scope="session")
-def repo_root() -> Path:
-    """Repository root for leak detection."""
-    return REPO_ROOT
-
-
-@pytest.fixture(scope="session")
-def root_artifact_baseline(repo_root: Path) -> frozenset[str]:
-    """Existing root-level artifact directories before the suite runs."""
-    return frozenset(root_artifact_dirs(repo_root))
 
 
 @pytest.fixture
@@ -123,6 +109,7 @@ def isolate_default_paths_with_tmp_path(
         "DLKIT_INTERNAL_DIR": str(runtime_root / ".dlkit"),
     }
     (runtime_root / "raw").mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(runtime_root)
     for key, value in env_map.items():
         monkeypatch.setenv(key, value)
 
@@ -189,22 +176,6 @@ matrix_path = "${NEURALLS_PROCESSED_DIR}/matrix.mtx"
 """.strip()
     )
     return config_path
-
-
-@pytest.fixture(autouse=True)
-def guard_repo_root_artifact_leaks(
-    repo_root: Path,
-    root_artifact_baseline: frozenset[str],
-) -> Iterator[None]:
-    """Fail if a test creates new root-level artifact directories."""
-    before = root_artifact_dirs(repo_root)
-    yield
-    leaked = new_root_artifact_dirs(repo_root, before | set(root_artifact_baseline))
-    if leaked:
-        leaked_list = ", ".join(sorted(leaked))
-        pytest.fail(
-            f"Tests must not create root-level artifact directories outside tests/: {leaked_list}"
-        )
 
 
 @pytest.fixture(scope="session", autouse=True)

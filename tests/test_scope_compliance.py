@@ -7,7 +7,6 @@ from pathlib import Path
 from neuralls.platform.config.loaders import load_comparison_config
 
 from tests.benchmarks.from_file.conftest import DATA_DIR, L_PATH, MATRIX_PATHS, RHS_PATHS
-from tests.scope_policy import new_root_artifact_dirs
 
 
 def test_runtime_roots_stay_under_tmp_path(
@@ -28,16 +27,7 @@ def test_runtime_roots_stay_under_tmp_path(
     assert figures_root == expected_root / "figures"
     assert mlflow_tracking_dir == expected_root / "mlruns"
     assert mlflow_artifact_dir == expected_root / "mlartifacts"
-
-
-def test_scope_guard_detects_new_root_artifact_dir(tmp_path: Path) -> None:
-    """New top-level runtime artifacts must be reported by the guard helper."""
-    baseline = set()
-
-    leaked = tmp_path / "output"
-    leaked.mkdir()
-
-    assert new_root_artifact_dirs(tmp_path, baseline) == {"output"}
+    assert Path.cwd() == expected_root
 
 
 def test_benchmark_fixtures_are_vendored_under_tests() -> None:

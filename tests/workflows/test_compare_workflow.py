@@ -14,6 +14,10 @@ from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccu
 from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 
 
+def _assert_under(path: Path, root: Path) -> None:
+    assert path.resolve().is_relative_to(root.resolve())
+
+
 def _write_dataset(root: Path, A: np.ndarray, b: np.ndarray) -> None:
     solutions = np.linalg.solve(A, b)
     rhs = b.reshape(1, -1)
@@ -141,9 +145,11 @@ def test_compare_preconditioners_workflow(tmp_path: Path, neuralls_settings) -> 
     _write_model_config(model_cfg, checkpoint_dir)
 
     comparison_cfg_model = load_comparison_config(comparison_cfg, neuralls_settings)
+    output_root = tmp_path / "comparison-output"
     results = compare_preconditioners(
         general_params=comparison_cfg_model.general,
         preconditioner_configs=comparison_cfg_model.preconditioners,
+        output_root=output_root,
     )
 
     # Access typed solver results from ComparisonResult
@@ -151,6 +157,10 @@ def test_compare_preconditioners_workflow(tmp_path: Path, neuralls_settings) -> 
     assert set(comparison_results.keys()) == {"none", "jacobi"}
     for name, info in comparison_results.items():
         assert info.iterations > 0, f"{name} did not run"
+    _assert_under(results.output_dir, tmp_path)
+    for plot_path in results.plot_paths.to_mapping().values():
+        assert plot_path.is_file()
+        _assert_under(plot_path, tmp_path)
 
 
 def test_resolve_comparison_paths_expands_tilde_output_root(

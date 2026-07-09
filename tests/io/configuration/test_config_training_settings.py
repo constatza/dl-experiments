@@ -12,6 +12,13 @@ import pytest
 from neuralls.composition.assignments.assembler import load_assignment
 
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _repo_relative_id(path: Path) -> str:
+    return path.relative_to(REPO_ROOT).as_posix()
+
+
 MINIMAL_FFNN_CONFIG = """
 [run]
 type = "train"
@@ -147,8 +154,8 @@ name = "ArrayDataModule"
 
 @pytest.mark.parametrize(
     "config_path",
-    tuple(Path("configs/profiles/training").rglob("*.toml")),
-    ids=str,
+    tuple((REPO_ROOT / "configs/profiles/training").rglob("*.toml")),
+    ids=_repo_relative_id,
 )
 def test_training_profiles_reference_existing_dlkit_exports(config_path: Path) -> None:
     """Training profiles must only point at DLKit names that exist in the installed package."""
@@ -173,8 +180,8 @@ def test_training_profiles_reference_existing_dlkit_exports(config_path: Path) -
 
 @pytest.mark.parametrize(
     "config_path",
-    tuple(Path("configs/jobs").rglob("*.toml")),
-    ids=str,
+    tuple((REPO_ROOT / "configs/jobs").rglob("*.toml")),
+    ids=_repo_relative_id,
 )
 def test_checked_in_jobs_load_through_dlkit(config_path: Path) -> None:
     """Every checked-in job config must validate against the installed DLKit schema.
