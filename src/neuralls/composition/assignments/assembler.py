@@ -224,10 +224,18 @@ def load_assignment(
     else:
         training_job = _require_train_like_job(job_cfg)
         settings = patch_runtime_workspace(training_job, output_dir=workspace.root_dir)
-        settings = patch_training_tracking(settings)
+        settings = patch_training_tracking(
+            settings,
+            uri=mlflow_topology.env.get("MLFLOW_TRACKING_URI"),
+        )
         logger.debug("Loaded training settings")
 
-    return RunnableAssignment(spec=spec, workspace=workspace, settings=settings)
+    return RunnableAssignment(
+        spec=spec,
+        workspace=workspace,
+        settings=settings,
+        mlflow_env=mlflow_topology.env,
+    )
 
 
 def load_assignment_batch(
@@ -296,6 +304,7 @@ def load_assignment_batch(
                 ),
                 workspace=assignment.workspace,
                 settings=assignment.settings,
+                mlflow_env=assignment.mlflow_env,
             )
 
         resolved_assignments.append(assignment)

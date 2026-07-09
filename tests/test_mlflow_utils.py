@@ -143,6 +143,7 @@ def test_build_workflow_environment_uses_default_output_root(
 
     assert runtime.tracking_uri.endswith("/mlruns/mlflow.db")
     assert runtime.artifact_uri == str((tmp_path / "mlartifacts").resolve())
+    assert runtime.is_explicit is False
 
 
 def test_build_workflow_environment_uses_tracking_toml_when_no_case_uri(
@@ -159,6 +160,7 @@ def test_build_workflow_environment_uses_tracking_toml_when_no_case_uri(
     )
 
     assert runtime.tracking_uri == "http://tracking.test:5000"
+    assert runtime.is_explicit is True
 
 
 def test_build_workflow_environment_case_uri_overrides_tracking_toml(
@@ -175,6 +177,7 @@ def test_build_workflow_environment_case_uri_overrides_tracking_toml(
     )
 
     assert runtime.tracking_uri == "http://case-override:5000"
+    assert runtime.is_explicit is True
 
 
 def test_runtime_paths_from_env_reads_tracking_values(tmp_path: Path) -> None:
@@ -219,6 +222,7 @@ def test_build_runtime_environment_prefers_existing_tracking_uri(
 
     assert runtime.tracking_uri == f"sqlite:///{tracking_db.as_posix()}"
     assert runtime.artifact_uri is None
+    assert runtime.is_explicit is True
 
 
 def test_build_runtime_environment_preserves_existing_artifact_uri(
@@ -238,6 +242,38 @@ def test_build_runtime_environment_preserves_existing_artifact_uri(
     }
     assert runtime.tracking_uri == f"sqlite:///{tracking_db.as_posix()}"
     assert runtime.artifact_uri == str(artifact_dir)
+    assert runtime.is_explicit is True
+
+
+def test_build_runtime_environment_uses_shared_tracking_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from neuralls.platform.config.models.experiments import SharedTrackingSettings
+
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
+    shared = SharedTrackingSettings(uri="http://tracking.test:5000")
+    monkeypatch.setattr(tracking_mlflow, "load_tracking_config", lambda: shared)
+
+    runtime = build_runtime_environment(tmp_path / "unused", default_output_root=tmp_path)
+
+    assert runtime.tracking_uri == "http://tracking.test:5000"
+    assert runtime.is_explicit is True
+
+
+def test_build_runtime_environment_falls_back_to_local_sqlite(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.delenv("MLFLOW_ARTIFACT_URI", raising=False)
+    monkeypatch.setattr(tracking_mlflow, "load_tracking_config", lambda: None)
+
+    runtime = build_runtime_environment(tmp_path / "fallback", default_output_root=tmp_path)
+
+    assert runtime.tracking_uri.endswith("/mlruns/mlflow.db")
+    assert runtime.is_explicit is False
 
 
 def test_start_run_and_logging(dummy_mlflow: DummyMlflow, tmp_path: Path) -> None:
@@ -274,6 +310,43 @@ def test_ensure_experiment_uses_file_uri_for_local_artifact_root(
     assert dummy_mlflow.experiments["demo-file-uri"].artifact_location == (
         url_resolver.build_uri((tmp_path / "mlartifacts").resolve(), scheme="file")
     )
+
+
+def test_ensure_experiment_omits_artifact_location_for_remote_tracking_when_unconfigured(
+    dummy_mlflow: DummyMlflow,
+) -> None:
+    """Regression: a new experiment on remote tracking must not get a CWD-derived
+
+    local ``file://`` artifact_location when no artifact destination was
+    configured — that's what silently created hashed run-id directories in
+    the project root. ``artifact_location`` must be omitted so the tracking
+    server picks its own default.
+    """
+    paths = MlflowPaths(tracking_uri="http://localhost:5000", artifact_uri=None)
+
+    exp_id = ensure_experiment("demo-remote", paths)
+
+    assert exp_id == "exp-0"
+    assert dummy_mlflow.experiments["demo-remote"].artifact_location is None
+
+
+def test_ensure_experiment_raises_for_preexisting_local_artifact_location_under_remote_tracking(
+    dummy_mlflow: DummyMlflow,
+) -> None:
+    """Regression: an experiment already poisoned with a local artifact_location
+
+    (e.g. by the bug above, before this fix) must fail loudly on reuse rather
+    than silently keep writing local files — ``artifact_location`` is
+    immutable after creation, so this can't be fixed in place.
+    """
+    dummy_mlflow.experiments["poisoned"] = SimpleNamespace(
+        experiment_id="exp-poisoned",
+        artifact_location="file:///home/archer/projects/dl-experiments",
+    )
+    paths = MlflowPaths(tracking_uri="http://localhost:5000", artifact_uri=None)
+
+    with pytest.raises(RuntimeError, match="local artifact_location"):
+        ensure_experiment("poisoned", paths)
 
 
 def test_finalize_run_ends_started_run(

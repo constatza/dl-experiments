@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import mlflow
+from dlkit.infrastructure.io import url_resolver
 from mlflow import ActiveRun
 from mlflow.tracking import MlflowClient
 
@@ -45,11 +46,22 @@ class MlflowRunState:
 
 @dataclass(frozen=True)
 class MlflowRuntimeEnvironment:
-    """Resolved MLflow environment values for one workflow."""
+    """Resolved MLflow environment values for one workflow.
+
+    Attributes:
+        env: Environment variables to export for the workflow process.
+        tracking_uri: Resolved MLflow tracking URI.
+        artifact_uri: Resolved MLflow artifact URI, if any.
+        is_explicit: Whether ``tracking_uri`` came from an explicit source
+            (the ``MLFLOW_TRACKING_URI`` env var, a case config, or
+            ``configs/tracking.toml``) rather than the local sqlite fallback
+            derived from an output directory.
+    """
 
     env: dict[str, str]
     tracking_uri: str
     artifact_uri: str | None
+    is_explicit: bool
 
 
 DEFAULT_ARTIFACT_SUBDIRS: tuple[str, ...] = (
@@ -60,6 +72,8 @@ DEFAULT_ARTIFACT_SUBDIRS: tuple[str, ...] = (
     "metrics",
 )
 _MLFLOW_METRIC_SEGMENT_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
+_REMOTE_TRACKING_SCHEMES = frozenset({"http", "https"})
+_LOCAL_ARTIFACT_SCHEME = "file"
 
 
 def build_run_config(
@@ -132,7 +146,7 @@ def runtime_paths_from_env(runtime_mlflow_env: Mapping[str, str]) -> MlflowPaths
     """Build resolved MLflow paths from an active MLflow environment."""
     return MlflowPaths(
         tracking_uri=runtime_mlflow_env["MLFLOW_TRACKING_URI"],
-        artifact_uri=runtime_mlflow_env.get("MLFLOW_ARTIFACT_URI", ""),
+        artifact_uri=runtime_mlflow_env.get("MLFLOW_ARTIFACT_URI"),
     )
 
 
@@ -163,6 +177,7 @@ def build_runtime_environment(
             env=env,
             tracking_uri=existing_uri,
             artifact_uri=existing_artifact_uri,
+            is_explicit=True,
         )
 
     shared = load_tracking_config()
@@ -175,6 +190,7 @@ def build_runtime_environment(
             env=env,
             tracking_uri=env["MLFLOW_TRACKING_URI"],
             artifact_uri=env.get("MLFLOW_ARTIFACT_URI"),
+            is_explicit=True,
         )
 
     permanent_root = Path(output_root).resolve() if output_root else default_output_root
@@ -186,6 +202,7 @@ def build_runtime_environment(
         env=env,
         tracking_uri=env["MLFLOW_TRACKING_URI"],
         artifact_uri=env.get("MLFLOW_ARTIFACT_URI"),
+        is_explicit=False,
     )
 
 
@@ -209,6 +226,7 @@ def build_workflow_environment(
         if shared is not None:
             resolved_uri = shared.uri
             resolved_artifacts = resolved_artifacts or shared.artifacts_destination
+    is_explicit = resolved_uri is not None
     if resolved_uri is None:
         env = build_mlflow_environment(
             tracking_uri=build_sqlite_tracking_uri(default_output_root / "mlruns" / "mlflow.db"),
@@ -224,18 +242,67 @@ def build_workflow_environment(
         env=env,
         tracking_uri=env["MLFLOW_TRACKING_URI"],
         artifact_uri=env.get("MLFLOW_ARTIFACT_URI"),
+        is_explicit=is_explicit,
     )
 
 
+def _assert_remote_artifact_location(
+    *,
+    tracking_uri: str,
+    experiment_name: str,
+    artifact_location: str,
+) -> None:
+    """Fail loudly if a remote-tracked experiment's artifacts resolve to a local path.
+
+    An experiment's ``artifact_location`` is fixed at creation time and MLflow
+    provides no API to change it afterward. If an experiment was ever created
+    with a local ``file://`` location (e.g. by the CWD-fallback bug this
+    guards against), every future run into it keeps writing local files no
+    matter how correctly tracking is configured — silently. Catch that here,
+    before any run/upload happens, instead of letting it recreate hashed
+    local directories.
+    """
+    if url_resolver.scheme(tracking_uri) not in _REMOTE_TRACKING_SCHEMES:
+        return
+    if url_resolver.scheme(artifact_location) != _LOCAL_ARTIFACT_SCHEME:
+        return
+    raise RuntimeError(
+        f"MLflow experiment {experiment_name!r} has a local artifact_location "
+        f"({artifact_location!r}) despite using remote tracking at {tracking_uri!r}. "
+        "This is permanent — MLflow experiments' artifact_location cannot be "
+        "changed after creation. Delete and recreate the experiment on the "
+        "server (mlflow.delete_experiment + a fresh mlflow.create_experiment "
+        "with no local artifact_location), or rename it in the case config's "
+        "[names] section to start a fresh, correctly-configured experiment."
+    )
+
+
+def _optional_artifact_location(artifact_uri: str | None) -> str | None:
+    """Convert an optional local artifact root into an MLflow-compatible location."""
+    if artifact_uri is None:
+        return None
+    return to_mlflow_artifact_location(artifact_uri)
+
+
 def ensure_experiment(name: str, paths: MlflowPaths) -> str:
-    """Create or reuse an experiment and return its id."""
+    """Create or reuse an experiment and return its id.
+
+    When no artifact destination was explicitly configured, omits
+    ``artifact_location`` entirely rather than defaulting it to the client's
+    CWD — the tracking server picks its own default artifact root instead.
+    """
     mlflow.set_tracking_uri(paths.tracking_uri)
     existing = mlflow.get_experiment_by_name(name)
     if existing:
+        _assert_remote_artifact_location(
+            tracking_uri=paths.tracking_uri,
+            experiment_name=name,
+            artifact_location=existing.artifact_location,
+        )
         return existing.experiment_id
     return mlflow.create_experiment(
         name=name,
-        artifact_location=to_mlflow_artifact_location(paths.artifact_uri),
+        artifact_location=_optional_artifact_location(paths.artifact_uri),
     )
 
 
@@ -266,7 +333,7 @@ def create_session_parent_run(
     """
     experiment_id = ensure_experiment(
         experiment_name,
-        MlflowPaths(tracking_uri=tracking_uri, artifact_uri=artifact_uri or ""),
+        MlflowPaths(tracking_uri=tracking_uri, artifact_uri=artifact_uri),
     )
     client = MlflowClient(tracking_uri=tracking_uri)
     parent_run = client.create_run(

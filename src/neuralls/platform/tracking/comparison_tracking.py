@@ -22,7 +22,7 @@ def setup_comparison_tracking(
     resolved_experiment_name = experiment_name or ExperimentNamesConfig().comparison
     ensure_experiment(
         resolved_experiment_name,
-        MlflowPaths(tracking_uri=tracking_uri, artifact_uri=artifact_location or ""),
+        MlflowPaths(tracking_uri=tracking_uri, artifact_uri=artifact_location),
     )
     mlflow.set_experiment(resolved_experiment_name)
 

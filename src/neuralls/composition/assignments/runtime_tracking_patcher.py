@@ -14,6 +14,8 @@ def ensure_runtime_tracking(settings: AnyJobConfig) -> AnyJobConfig:
 
 def patch_training_tracking(
     settings: TrainLikeJobConfig,
+    *,
+    uri: str | None,
 ) -> TrainLikeJobConfig:
-    """Enable MLflow tracking for training jobs without storing run naming state."""
-    return settings.patch({"tracking": {"backend": "mlflow"}})
+    """Enable MLflow tracking with the resolved tracking URI for training jobs."""
+    return settings.patch({"tracking": {"backend": "mlflow", "uri": uri}})

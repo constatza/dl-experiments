@@ -45,7 +45,7 @@ class MlflowPaths:
     """Resolved MLflow URIs."""
 
     tracking_uri: str
-    artifact_uri: str
+    artifact_uri: str | None
 
 
 def _is_windows_absolute_path(value: Path | str) -> bool:

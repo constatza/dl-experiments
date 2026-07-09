@@ -379,6 +379,51 @@ def test_resolve_training_checkpoint_downloads_into_scratch_dir(
     assert download_destination.name != "checkpoints"
 
 
+def test_resolve_tracking_backend_returns_configured_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Backend comes from tracking.toml, and an explicit URI passes the guard."""
+    import neuralls.composition.assignments.training as training_module
+    from neuralls.platform.tracking.mlflow import MlflowRuntimeEnvironment
+
+    monkeypatch.setattr(
+        training_module,
+        "load_tracking_config",
+        lambda: SimpleNamespace(backend="mlflow"),
+    )
+    runtime_environment = MlflowRuntimeEnvironment(
+        env={"MLFLOW_TRACKING_URI": "http://tracking.test:5000"},
+        tracking_uri="http://tracking.test:5000",
+        artifact_uri=None,
+        is_explicit=True,
+    )
+
+    assert training_module._resolve_tracking_backend(runtime_environment) == "mlflow"
+
+
+def test_resolve_tracking_backend_rejects_implicit_local_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Refuses to silently train against the local sqlite fallback URI."""
+    import neuralls.composition.assignments.training as training_module
+    from neuralls.platform.tracking.mlflow import MlflowRuntimeEnvironment
+
+    monkeypatch.setattr(
+        training_module,
+        "load_tracking_config",
+        lambda: SimpleNamespace(backend="mlflow"),
+    )
+    runtime_environment = MlflowRuntimeEnvironment(
+        env={"MLFLOW_TRACKING_URI": "sqlite:////fallback/mlruns/mlflow.db"},
+        tracking_uri="sqlite:////fallback/mlruns/mlflow.db",
+        artifact_uri=None,
+        is_explicit=False,
+    )
+
+    with pytest.raises(RuntimeError, match="no explicit tracking URI"):
+        training_module._resolve_tracking_backend(runtime_environment)
+
+
 def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path) -> None:
     """Registry-backed training passes explicit experiment/run names and structured tags."""
     from neuralls.platform.config.models.workspace import AssignmentWorkspace

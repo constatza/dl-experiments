@@ -85,11 +85,14 @@ class RunnableAssignment:
         spec: Assignment specification.
         workspace: Filesystem workspace.
         settings: DLKit workflow settings with injected paths.
+        mlflow_env: Resolved MLflow environment (tracking/artifact URIs) for
+            this assignment's case, already reflected in ``settings.tracking``.
     """
 
     spec: AssignmentSpec
     workspace: AssignmentWorkspace
     settings: Any  # DLKit workflow settings (avoid import)
+    mlflow_env: dict[str, str]
 
 
 @dataclass(frozen=True)

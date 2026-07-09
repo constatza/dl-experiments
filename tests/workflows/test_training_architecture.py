@@ -240,11 +240,12 @@ def test_patch_dataloader_runtime_forces_single_process(
 def test_patch_training_tracking_returns_new_settings(
     training_settings: TrainingJobConfig,
 ) -> None:
-    updated = patch_training_tracking(training_settings)
+    updated = patch_training_tracking(training_settings, uri="http://localhost:5000")
 
     assert updated is not training_settings
     assert updated.tracking is not None
     assert updated.tracking.backend == "mlflow"
+    assert updated.tracking.uri == "http://localhost:5000"
 
 
 def test_contract_override_drives_injection_and_validation(

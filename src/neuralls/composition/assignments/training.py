@@ -35,6 +35,7 @@ from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
 from neuralls.platform.tracking.extra_features import log_extra_feature_names_tag
 from neuralls.platform.tracking.mlflow import (
+    MlflowRuntimeEnvironment,
     build_runtime_environment,
     resolve_runtime_tracking_config,
 )
@@ -62,6 +63,38 @@ class TrainingResult:
 def _unwrap_execution_result(result: object) -> object:
     """Normalize DLKit execute() results to the underlying training result."""
     return getattr(result, "training_result", result)
+
+
+def _resolve_tracking_backend(runtime_environment: MlflowRuntimeEnvironment) -> str:
+    """Resolve the dlkit tracking backend, guarding against an implicit local fallback.
+
+    Reads the backend from ``configs/tracking.toml`` so it comes from config, not
+    code. When MLflow tracking is enabled, refuses to proceed if *runtime_environment*
+    resolved to the local sqlite fallback rather than an explicit source
+    (``MLFLOW_TRACKING_URI`` env var or ``configs/tracking.toml``'s ``uri``) —
+    silently writing runs to local storage is worse than failing loudly.
+
+    Args:
+        runtime_environment: The resolved MLflow runtime environment for this run.
+
+    Returns:
+        The dlkit tracking backend identifier (e.g. ``"mlflow"`` or ``"none"``).
+
+    Raises:
+        RuntimeError: If MLflow tracking is enabled but no explicit tracking URI
+            was ever configured.
+    """
+    shared_tracking = load_tracking_config()
+    backend = shared_tracking.backend if shared_tracking else "mlflow"
+    if backend == "mlflow" and not runtime_environment.is_explicit:
+        raise RuntimeError(
+            "MLflow tracking is enabled but no explicit tracking URI was "
+            "configured (checked MLFLOW_TRACKING_URI env var and "
+            "configs/tracking.toml's [tracking] uri). Refusing to silently "
+            f"fall back to local storage at '{runtime_environment.tracking_uri}' — set "
+            "the URI explicitly if this is intentional."
+        )
+    return backend
 
 
 def train_model(
@@ -118,10 +151,11 @@ def train_model(
     """
     resolved_case_config_path = Path(case_config_path) if case_config_path else None
     settings = require_settings(settings, case_config_path=resolved_case_config_path)
-    runtime_mlflow_env = build_runtime_environment(
+    runtime_environment = build_runtime_environment(
         output_root,
         default_output_root=settings.output_dir,
-    ).env
+    )
+    runtime_mlflow_env = runtime_environment.env
     if data_config_path is None:
         raise ValueError("data_config_path is required for training.")
 
@@ -181,15 +215,13 @@ def train_model(
                 workflow_settings,
                 {"training": {"trainer": {"max_epochs": max_epochs}}},
             )
-        # Read backend and uri from tracking.toml so both come from config, not code.
-        _shared_tracking = load_tracking_config()
-        _tracking_backend = _shared_tracking.backend if _shared_tracking else "mlflow"
+        tracking_backend = _resolve_tracking_backend(runtime_environment)
         workflow_settings = patch_model(
             workflow_settings,
             {
                 "tracking": {
-                    "backend": _tracking_backend,
-                    "uri": runtime_mlflow_env["MLFLOW_TRACKING_URI"],
+                    "backend": tracking_backend,
+                    "uri": runtime_environment.tracking_uri,
                 }
             },
         )
