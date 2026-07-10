@@ -1,0 +1,46 @@
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training = "Overfit-45x15-Scale-Equivariant-CG"
+
+[[datasets]]
+id = "gaussian-cg100-45x15"
+path = "../../datasets/train/45x15/gaussian-cg100.toml"
+display_name = "Gaussian CG-100 45x15"
+
+[[jobs]]
+id = "scale-equivariant-constant-width-factorized"
+path = "../../jobs/45x15/scale-equivariant-constant-width-factorized-overfit.toml"
+display_name = "Scale Equivariant Constant Width FFNN"
+
+[[jobs]]
+id = "scale-equivariant-constant-width-softplus-factorized"
+path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized-overfit.toml"
+display_name = "Scale Equivariant Constant Width Softplus FFNN"
+
+[[jobs]]
+id = "scale-equivariant-embedded-fully-factorized"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-overfit.toml"
+display_name = "Scale Equivariant Embedded Fully FFNN"
+
+[[jobs]]
+id = "scale-equivariant-embedded-fully-softplus-factorized"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized-overfit.toml"
+display_name = "Scale Equivariant Embedded Fully Softplus FFNN"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-constant-width-factorized"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-constant-width-softplus-factorized"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-factorized"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-softplus-factorized"

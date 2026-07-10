@@ -1,0 +1,18 @@
+[run]
+type = "search"
+seed = 42
+precision = "64"
+model = "../../profiles/model/ffnn/scale-equivariant-embedded-fully-factorized.toml"
+data = "../../profiles/data/array-default.toml"
+training = "../../profiles/training/debug-overfit.toml"
+plots = "../../profiles/plots/default.toml"
+
+[search]
+objective = "val_loss"
+n_trials = 40
+
+[search.space]
+"model.num_layers" = { type = "int", low = 1, high = 6 }
+"model.activation" = { type = "categorical", choices = ["relu", "gelu", "silu", "tanh", "sigmoid", "leaky_relu", "identity"] }
+"model.bias" = { type = "categorical", choices = [true, false] }
+"model.dropout" = { type = "float", low = 0.0, high = 0.5 }
