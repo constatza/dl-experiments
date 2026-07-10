@@ -30,11 +30,6 @@ path = "../../datasets/train/45x15/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 45x15"
 
 [[jobs]]
-id = "scale-equivariant-embedded-fully-factorized"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN"
-
-[[jobs]]
 id = "scale-equivariant-constant-width-factorized"
 path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
 display_name = "Scale Equivariant Constant Width FFNN"
@@ -43,6 +38,16 @@ display_name = "Scale Equivariant Constant Width FFNN"
 id = "scale-equivariant-constant-width-softplus-factorized"
 path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized.toml"
 display_name = "Scale Equivariant Constant Width Softplus FFNN"
+
+[[jobs]]
+id = "scale-equivariant-embedded-fully-factorized"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
+display_name = "Scale Equivariant Embedded Fully FFNN"
+
+[[jobs]]
+id = "scale-equivariant-embedded-fully-softplus-factorized"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized.toml"
+display_name = "Scale Equivariant Embedded Fully Softplus FFNN"
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15"
@@ -67,12 +72,16 @@ rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-factorized"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-constant-width-factorized"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-constant-width-softplus-factorized"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-factorized"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-softplus-factorized"

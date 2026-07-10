@@ -1,3 +1,5 @@
 [model]
 name = "ScaleEquivariantEmbeddedFullySoftplusFactorizedFFNN"
 num_layers = 1
+activation = "identity"
+bias = false

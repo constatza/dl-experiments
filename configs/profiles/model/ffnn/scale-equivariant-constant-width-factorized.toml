@@ -1,6 +1,7 @@
 [model]
 name = "ScaleEquivariantConstantWidthFactorizedFFNN"
-activation = "gelu"
+activation = "identity"
 dropout = 0.0
 norm = "l2"
-num_layers = 3
+num_layers = 1
+bias = false
