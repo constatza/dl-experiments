@@ -4,5 +4,5 @@ seed = 42
 precision = "64"
 model = "../../profiles/model/ffnn/scale-equivariant-constant-width-softplus-factorized.toml"
 data = "../../profiles/data/array-small-batch.toml"
-training = "../../profiles/training/batched-muon-conservative-plateau.toml"
+training = "../../profiles/training/conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"

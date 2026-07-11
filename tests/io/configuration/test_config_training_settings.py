@@ -210,6 +210,7 @@ def test_45x15_cg_overfit_jobs_do_not_early_stop() -> None:
         assert job.training is not None
         callback_names = tuple(callback.name for callback in job.training.trainer.callbacks)
 
+        assert job.training.trainer.max_epochs == 500
         assert "EarlyStopping" not in callback_names
         assert job.search is not None
         assert job.search.pruner is not None
