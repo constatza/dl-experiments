@@ -8,7 +8,7 @@ training = "../../profiles/training/default.toml"
 plots = "../../profiles/plots/default.toml"
 
 [search]
-objective = "val_loss"
+objective = "val/loss"
 
 [search.space]
 "training.optimizer.default_optimizer.lr" = { type = "log_float", low = 1e-5, high = 1e-2 }

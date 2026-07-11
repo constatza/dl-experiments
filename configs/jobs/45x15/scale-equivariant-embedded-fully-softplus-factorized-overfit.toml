@@ -8,8 +8,12 @@ training = "../../profiles/training/debug-overfit.toml"
 plots = "../../profiles/plots/default.toml"
 
 [search]
-objective = "val_loss"
+objective = "val/loss"
 n_trials = 40
+
+[search.pruner]
+name = "NopPruner"
+module_path = "optuna.pruners"
 
 [search.space]
 "model.num_layers" = { type = "int", low = 1, high = 6 }

@@ -82,7 +82,7 @@ def test_data_test_config_defaults() -> None:
 def test_data_config_file_requires_id() -> None:
     """Dataset configs require a stable id."""
     with pytest.raises(ValidationError, match="id"):
-        DataConfigFile()
+        DataConfigFile()  # ty: ignore[missing-argument]
 
 
 def test_data_config_file_round_trip() -> None:

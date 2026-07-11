@@ -5,7 +5,7 @@ enable_checkpointing = true
 
 [[training.trainer.callbacks]]
 name = "EarlyStopping"
-monitor = "val_loss"
+monitor = "val/loss"
 min_delta = 0.0001
 patience = 30
 mode = "min"

@@ -108,6 +108,8 @@ Current checked-in examples:
   10 / cooldown 5 / threshold 1e-4
 - `limited-200.toml` — deviates by epoch count: 200 epochs
 - `high-max-lr.toml` — deviates by LR tuner ceiling: `max_lr = 1e-2`
+- `debug-overfit.toml` — 100 epochs, checkpointing disabled, `overfit_batches = 1`,
+  and no early-stopping callback for expected validation divergence
 - `strict-early-stopping.toml` — deviates by early stopping: patience 10,
   min_delta 1e-3
 
@@ -197,7 +199,7 @@ data = "../../profiles/data/array-default.toml"
 training = "../../profiles/training/default.toml"
 
 [search]
-objective = "val_loss"
+objective = "val/loss"
 space."training.optimizer.default_optimizer.lr" = { type = "log_float", low = 1e-5, high = 1e-2 }
 ```
 
