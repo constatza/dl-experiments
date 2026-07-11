@@ -92,6 +92,33 @@ def test_force_always_retrains_even_with_a_finished_run(
     run_assignment_dependencies["find_successful_run"].assert_not_called()
 
 
+def test_run_assignment_returns_failed_result_on_unexpected_exception(
+    run_assignment_dependencies: dict[str, MagicMock], tmp_path: Path
+) -> None:
+    """An unexpected exception (e.g. dlkit's leaked-MLflow-run error on a search job)
+    must be recorded as a Failed result, not raised — run_assignment_matrix's
+    "failed assignments don't stop the batch" guarantee depends on this.
+    """
+    run_assignment_dependencies["find_successful_run"].return_value = None
+    run_assignment_dependencies["train_model"].side_effect = Exception(
+        "Run with UUID abc123 is already active."
+    )
+    result = training_batch.run_assignment(
+        settings=MagicMock(),
+        job_config_path=tmp_path / "job.toml",
+        data_config_path=tmp_path / "data.toml",
+        output_root=tmp_path,
+        force=False,
+        src_hash="hash",
+        assignment_id="search-job-2",
+        assignment_display_name="Assignment 2",
+        mlflow_experiment_name="Train",
+        tracking_uri="sqlite:///tracking.db",
+    )
+    assert result.status == "Failed"
+    assert "already active" in (result.error or "")
+
+
 def test_two_assignments_never_share_a_lookup_key(
     run_assignment_dependencies: dict[str, MagicMock], tmp_path: Path
 ) -> None:

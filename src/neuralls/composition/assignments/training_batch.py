@@ -170,8 +170,10 @@ def run_assignment(
             assignment_display_name=assignment_display_name,
             status="Success",
         )
-    except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
-        # Catch expected exceptions to ensure batch runs continue even if one assignment fails
+    except Exception as exc:  # noqa: BLE001
+        # Broad by design: one assignment's failure (including dlkit-internal
+        # errors, e.g. a leaked MLflow run from a prior search job) must never
+        # abort the rest of the batch.
         logger.error(f"Assignment {assignment_id} failed: {exc}")
         return AssignmentResult(
             assignment_id=assignment_id,

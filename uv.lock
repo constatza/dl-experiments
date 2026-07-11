@@ -573,7 +573,7 @@ wheels = [
 [[package]]
 name = "dlkit"
 version = "0.1.0a0"
-source = { git = "https://github.com/constatza/dlkit.git?branch=develop#f8f2f6ee00aaf289e0e15985d14728010a0cde18" }
+source = { git = "https://github.com/constatza/dlkit.git?branch=develop#2fa0517a023d06d3b36a5422e7635a52065ad82e" }
 dependencies = [
     { name = "h5py" },
     { name = "lightning" },
