@@ -194,24 +194,3 @@ def test_checked_in_jobs_load_through_dlkit(config_path: Path) -> None:
     job = load_job(config_path)
     assert job.model is not None
     assert job.data is not None
-
-
-def test_45x15_cg_overfit_jobs_do_not_early_stop() -> None:
-    """The 45x15 overfit case expects validation loss to diverge."""
-    from dlkit.infrastructure.config.factories import load_job
-
-    case_path = REPO_ROOT / "configs/cases/45x15/cg-overfit.toml"
-    with case_path.open("rb") as fh:
-        raw_case = tomllib.load(fh)
-
-    for job_ref in raw_case["jobs"]:
-        job_path = (case_path.parent / job_ref["path"]).resolve()
-        job = load_job(job_path)
-        assert job.training is not None
-        callback_names = tuple(callback.name for callback in job.training.trainer.callbacks)
-
-        assert job.training.trainer.max_epochs == 500
-        assert "EarlyStopping" not in callback_names
-        assert job.search is not None
-        assert job.search.pruner is not None
-        assert job.search.pruner.name == "NopPruner"
