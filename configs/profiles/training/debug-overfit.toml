@@ -4,8 +4,17 @@ accelerator = "auto"
 enable_checkpointing = false
 overfit_batches = 1
 
+[[training.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "train/loss"
+min_delta = 0.0001
+patience = 30
+mode = "min"
+check_finite = true
+
 [training.optimizer.default_optimizer]
 name = "AdamW"
+lr = 0.01
 
 [training.optimizer.default_scheduler]
 name = "ReduceLROnPlateau"
@@ -14,7 +23,7 @@ mode = "min"
 factor = 0.5
 patience = 10
 cooldown = 5
-threshold = 0.001
+threshold = 0.0001
 min_lr = 1e-06
 
 [training.loss]

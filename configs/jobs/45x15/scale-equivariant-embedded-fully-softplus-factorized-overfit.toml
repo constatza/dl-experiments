@@ -8,7 +8,7 @@ training = "../../profiles/training/debug-overfit.toml"
 plots = "../../profiles/plots/default.toml"
 
 [search]
-objective = "val/loss"
+objective = "train/loss"
 n_trials = 40
 
 [search.pruner]
