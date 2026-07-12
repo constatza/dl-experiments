@@ -9,6 +9,7 @@ name = "AdamW"
 
 [training.optimizer.default_scheduler]
 name = "ReduceLROnPlateau"
+monitor = "train/loss"
 mode = "min"
 factor = 0.5
 patience = 10
