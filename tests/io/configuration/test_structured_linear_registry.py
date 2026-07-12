@@ -49,7 +49,7 @@ enable_checkpointing = true
 [[training.trainer.callbacks]]
 name = "ModelCheckpoint"
 filename = "{checkpoint_name}"
-monitor = "val_loss"
+monitor = "val/loss"
 
 [training.optimizer]
 default_optimizer = {{ name = "AdamW", lr = 1e-3 }}

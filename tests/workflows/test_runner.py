@@ -51,7 +51,7 @@ def _write_training_job_config(path: Path, *, experiment_name: str) -> None:
                     {
                         "name": "ModelCheckpoint",
                         "filename": "test_ckpt",
-                        "monitor": "val_loss",
+                        "monitor": "val/loss",
                         "save_top_k": 1,
                         "every_n_epochs": 1,
                         "enable_version_counter": False,

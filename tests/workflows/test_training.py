@@ -765,7 +765,7 @@ def test_execute_result_unwraps_optimization_result() -> None:
 
     training_result = TrainingResult(
         model_state=None,
-        metrics={"val_loss": 0.1},
+        metrics={"val/loss": 0.1},
         artifacts={},
         duration_seconds=1.0,
     )
