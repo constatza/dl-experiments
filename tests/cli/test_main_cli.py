@@ -375,9 +375,7 @@ def test_train_invokes_batch_workflow(
         output_root=None,
         case_config_path=config.resolve(),
     )
-    mock_write_metric_report.assert_called_once_with(
-        batch, metric="eval/rel_error", output_dir=None
-    )
+    mock_write_metric_report.assert_called_once_with(batch, metric="eval/mae", output_dir=None)
 
 
 def test_run_signature_uses_batch_case_argument() -> None:

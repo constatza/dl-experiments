@@ -22,7 +22,6 @@ def plot_parity_and_residuals(
     sample: int = 0,
     save_path: str | Path | None = None,
     show: bool = False,
-    rel_l2_error: float | None = None,
 ) -> None:
     """Create parity and residuals plots.
 
@@ -32,7 +31,6 @@ def plot_parity_and_residuals(
         sample: Sample number for title
         save_path: Path to save plot
         show: Whether to show plot
-        rel_l2_error: Optional RVN (RelativeVectorNorm) error to display as suptitle
     """
     y_true = np.asarray(y_true).ravel()
     y_pred = np.asarray(y_pred).ravel()
@@ -87,9 +85,6 @@ def plot_parity_and_residuals(
     ax.set_title("Residuals vs Predicted")
     ax.grid(True, alpha=0.3)
     ax.legend(loc="upper left")
-
-    if rel_l2_error is not None:
-        fig.suptitle(f"RVN (RelativeVectorNorm): {rel_l2_error:.4f}", fontsize=12, y=1.02)
 
     fig.tight_layout()
 
@@ -768,7 +763,7 @@ def plot_metric_comparison(
         labels: Short axis labels for each bar (e.g. ``["1", "2", "3"]``).
         values: Metric value for each corresponding label.
         metric_name: Human-readable metric description used as y-axis label
-            and figure title (e.g. ``"Relative Error (eval/rel_error)"``).
+            and figure title (e.g. ``"Mean Absolute Error (eval/mae)"``).
         legend: Optional mapping from label to full experiment description
             (e.g. ``{"1": "ffnn_test_solutions (run: abc123…)"}``) embedded
             below the chart.

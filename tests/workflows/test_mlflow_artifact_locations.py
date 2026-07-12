@@ -92,7 +92,6 @@ def test_training_logs_diagnostics_artifact_to_mlflow_with_sqlite(tmp_path: Path
     )
 
     run_data = client.get_run(run_id).data
-    assert "eval/rel_error" in run_data.metrics
     assert "eval/mae" in run_data.metrics
     assert "eval/mse" in run_data.metrics
 
@@ -130,7 +129,6 @@ def test_log_diagnostics_to_mlflow_reopens_sqlite_run_without_active_context(
     log_diagnostics_to_mlflow(tracking_uri, run_id, diagnostics, figure_path)
 
     run_data = client.get_run(run_id).data
-    assert "eval/rel_error" in run_data.metrics
     assert "eval/mae" in run_data.metrics
     assert "eval/mse" in run_data.metrics
 

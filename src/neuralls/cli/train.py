@@ -19,7 +19,7 @@ def train_case_batch(
         help="Path to a case config TOML.",
     ),
     metric: str = typer.Option(
-        "eval/rel_error",
+        "eval/mae",
         help="MLflow metric key to plot across assignments.",
     ),
     output_dir: Path | None = typer.Option(

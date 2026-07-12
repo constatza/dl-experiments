@@ -344,7 +344,7 @@ def _log_training_evaluation(
     y_pred, y_true = selected
     try:
         diagnostics = compute_diagnostics(y_pred, y_true)
-        figure_path = write_diagnostics_figure(y_true, y_pred, diagnostics, figures_dir)
+        figure_path = write_diagnostics_figure(y_true, y_pred, figures_dir)
         log_diagnostics_to_mlflow(tracking_uri, run_id, diagnostics, figure_path)
         metrics_dir = figures_dir.parent / "metrics"
         metrics_dir.mkdir(parents=True, exist_ok=True)

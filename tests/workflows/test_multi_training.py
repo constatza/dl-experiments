@@ -77,14 +77,14 @@ def training_run_results(tmp_path: Path) -> list[TrainingRunResult]:
             assignment_id="ffnn_solutions",
             assignment_display_name="ffnn_solutions",
             mlflow_run_id="aaa111",
-            metrics={"eval/rel_error": 0.05, "val_loss": 0.01},
+            metrics={"eval/mae": 0.05, "val_loss": 0.01},
         ),
         TrainingRunResult(
             label="2",
             assignment_id="ffnn_eigenvectors",
             assignment_display_name="ffnn_eigenvectors",
             mlflow_run_id="bbb222",
-            metrics={"eval/rel_error": 0.03},
+            metrics={"eval/mae": 0.03},
         ),
         TrainingRunResult(
             label="3",
@@ -159,7 +159,7 @@ def test_make_label_map(training_run_results: list[TrainingRunResult]) -> None:
 def test_collect_batch_metrics(training_run_results: list[TrainingRunResult]) -> None:
     """Batch metrics average matching eval or val keys."""
     result = _collect_batch_metrics(training_run_results)
-    assert result["avg_eval/rel_error"] == pytest.approx(0.04)
+    assert result["avg_eval/mae"] == pytest.approx(0.04)
     assert "avg_val_loss" not in result
 
 
@@ -197,7 +197,7 @@ def test_train_single_returns_run_id_and_metrics(tmp_path: Path, neuralls_settin
         patch("neuralls.composition.assignments.multi_training.register_logged_model"),
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics",
-            return_value={"eval/rel_error": 0.1},
+            return_value={"eval/mae": 0.1},
         ),
         patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
@@ -213,7 +213,7 @@ def test_train_single_returns_run_id_and_metrics(tmp_path: Path, neuralls_settin
         )
 
     assert result.mlflow_run_id == "run-123"
-    assert result.metrics["eval/rel_error"] == pytest.approx(0.1)
+    assert result.metrics["eval/mae"] == pytest.approx(0.1)
 
 
 def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) -> None:
