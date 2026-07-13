@@ -48,6 +48,9 @@ class DummyMlflow:
     def get_experiment_by_name(self, name: str) -> SimpleNamespace | None:
         return self.experiments.get(name)
 
+    def get_experiment(self, experiment_id: str) -> SimpleNamespace:
+        return next(exp for exp in self.experiments.values() if exp.experiment_id == experiment_id)
+
     def create_experiment(self, name: str, artifact_location: str) -> str:
         exp_id = f"exp-{len(self.experiments)}"
         self.experiments[name] = SimpleNamespace(

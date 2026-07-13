@@ -250,7 +250,7 @@ def _assert_remote_artifact_location(
     *,
     tracking_uri: str,
     experiment_name: str,
-    artifact_location: str,
+    artifact_location: str | None,
 ) -> None:
     """Fail loudly if a remote-tracked experiment's artifacts resolve to a local path.
 
@@ -264,7 +264,10 @@ def _assert_remote_artifact_location(
     """
     if url_resolver.scheme(tracking_uri) not in _REMOTE_TRACKING_SCHEMES:
         return
-    if url_resolver.scheme(artifact_location) != _LOCAL_ARTIFACT_SCHEME:
+    if (
+        artifact_location is None
+        or url_resolver.scheme(artifact_location) != _LOCAL_ARTIFACT_SCHEME
+    ):
         return
     raise RuntimeError(
         f"MLflow experiment {experiment_name!r} has a local artifact_location "
@@ -300,10 +303,17 @@ def ensure_experiment(name: str, paths: MlflowPaths) -> str:
             artifact_location=existing.artifact_location,
         )
         return existing.experiment_id
-    return mlflow.create_experiment(
+    experiment_id = mlflow.create_experiment(
         name=name,
         artifact_location=_optional_artifact_location(paths.artifact_uri),
     )
+    created = mlflow.get_experiment(experiment_id)
+    _assert_remote_artifact_location(
+        tracking_uri=paths.tracking_uri,
+        experiment_name=name,
+        artifact_location=created.artifact_location,
+    )
+    return experiment_id
 
 
 def create_session_parent_run(
