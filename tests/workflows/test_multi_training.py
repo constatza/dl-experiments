@@ -336,11 +336,11 @@ def test_train_batch_returns_local_output_dir(
             return_value=("run-123", tracking_uri),
         ) as mock_train,
         patch(
-            "neuralls.composition.assignments.multi_training.create_session_parent_run",
+            "neuralls.composition.tracking.session.create_session_parent_run",
             return_value="parent-run-1",
         ) as mock_create_parent,
         patch(
-            "neuralls.composition.assignments.multi_training.finalize_session_parent_run"
+            "neuralls.composition.tracking.session.finalize_session_parent_run"
         ) as mock_finalize_parent,
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
@@ -406,10 +406,10 @@ def test_train_batch_forwards_custom_training_experiment_name(
             return_value=("run-123", tracking_uri),
         ) as mock_train,
         patch(
-            "neuralls.composition.assignments.multi_training.create_session_parent_run",
+            "neuralls.composition.tracking.session.create_session_parent_run",
             return_value="parent-run-1",
         ),
-        patch("neuralls.composition.assignments.multi_training.finalize_session_parent_run"),
+        patch("neuralls.composition.tracking.session.finalize_session_parent_run"),
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
         ),

@@ -28,11 +28,7 @@ from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.plots import plot_metric_comparison
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
-from neuralls.platform.tracking.mlflow import (
-    build_workflow_environment,
-    create_session_parent_run,
-    finalize_session_parent_run,
-)
+from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
 from neuralls.platform.tracking.model_registry import (
     build_registered_model_name,
@@ -43,6 +39,7 @@ from neuralls.composition.tracking.run_specs import (
     build_registration_tags,
     build_session_run_spec,
 )
+from neuralls.composition.tracking.session import session_parent_run
 from neuralls.composition.assignments.training import train_model
 
 
@@ -456,15 +453,13 @@ def train_batch(
             experiment_name=mlflow_experiment_name,
             phase="session_training",
         )
-        parent_run_id = create_session_parent_run(
+        with session_parent_run(
             tracking_uri=training_mlflow_env.tracking_uri,
             artifact_uri=training_mlflow_env.artifact_uri,
             run_name=session_run_name,
             tags=session_tags.as_mlflow_tags(),
             experiment_name=mlflow_experiment_name,
-        )
-        session_status = "FINISHED"
-        try:
+        ) as handle:
             for i, entry in enumerate(assignment_entries, start=1):
                 label = str(i)
                 try:
@@ -490,7 +485,7 @@ def train_batch(
                         label=label,
                         output_root=base_output,
                         mlflow_experiment_name=mlflow_experiment_name,
-                        parent_run_id=parent_run_id,
+                        parent_run_id=handle.parent_run_id,
                         dataset_registry_id=dataset_registry_id,
                         dataset_display_name=dataset_display_name,
                         job_registry_id=job_registry_id,
@@ -501,14 +496,8 @@ def train_batch(
                 except Exception as exc:  # noqa: BLE001
                     # Mirror run_assignment()'s resilience: one assignment's
                     # failure must never abort the rest of the batch.
-                    session_status = "FAILED"
+                    handle.mark_failed()
                     logger.error(f"[{label}] Assignment '{entry.id}' failed: {exc}")
-        finally:
-            finalize_session_parent_run(
-                tracking_uri=training_mlflow_env.tracking_uri,
-                run_id=parent_run_id,
-                status=session_status,
-            )
 
     label_map = _make_label_map(results)
     output_dir = base_output / "training"

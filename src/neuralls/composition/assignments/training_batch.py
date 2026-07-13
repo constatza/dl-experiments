@@ -36,12 +36,9 @@ from neuralls.composition.generation.processing import process_config
 from neuralls.composition.assignments.training import train_model
 from neuralls.platform.storage.dataset_readers import resolve_dataset_artifacts
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
-from neuralls.platform.tracking.mlflow import (
-    build_workflow_environment,
-    create_session_parent_run,
-    finalize_session_parent_run,
-)
+from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import find_successful_run
+from neuralls.composition.tracking.session import session_parent_run
 
 
 def run_assignment(
@@ -258,14 +255,13 @@ def run_assignment_matrix(
             experiment_name=mlflow_experiment_name,
             phase="session_training",
         )
-        parent_run_id = create_session_parent_run(
+        with session_parent_run(
             tracking_uri=training_mlflow_env.tracking_uri,
             artifact_uri=training_mlflow_env.artifact_uri,
             run_name=session_run_name,
             tags=session_tags.as_mlflow_tags(),
             experiment_name=mlflow_experiment_name,
-        )
-        try:
+        ) as handle:
             # Run each assignment sequentially
             # Sequential execution avoids GPU/memory contention and makes logs clearer
             for assignment in assignments:
@@ -295,17 +291,12 @@ def run_assignment_matrix(
                     dataset_display_name=assignment.spec.dataset_display_name,
                     job_registry_id=assignment.spec.job_id,
                     job_display_name=assignment.spec.job_display_name,
-                    parent_run_id=parent_run_id,
+                    parent_run_id=handle.parent_run_id,
                     mlflow_experiment_name=mlflow_experiment_name,
                     tracking_uri=training_mlflow_env.tracking_uri,
                 )
                 results.append(result)
-        finally:
-            session_status = "FAILED" if any(not r.is_success for r in results) else "FINISHED"
-            finalize_session_parent_run(
-                tracking_uri=training_mlflow_env.tracking_uri,
-                run_id=parent_run_id,
-                status=session_status,
-            )
+                if not result.is_success:
+                    handle.mark_failed()
 
     return results
