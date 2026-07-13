@@ -467,39 +467,42 @@ def train_batch(
         try:
             for i, entry in enumerate(assignment_entries, start=1):
                 label = str(i)
-                assignment_id = entry.id
-                assignment_display_name = entry.effective_display_name
-                job_config_path, data_config = _resolve_config_paths(entry, configs_dir, cfg)
-                (
-                    dataset_registry_id,
-                    dataset_display_name,
-                    job_registry_id,
-                    job_display_name,
-                ) = _resolve_training_entry_metadata(
-                    entry=entry,
-                    cfg=cfg,
-                )
+                try:
+                    assignment_id = entry.id
+                    assignment_display_name = entry.effective_display_name
+                    job_config_path, data_config = _resolve_config_paths(entry, configs_dir, cfg)
+                    (
+                        dataset_registry_id,
+                        dataset_display_name,
+                        job_registry_id,
+                        job_display_name,
+                    ) = _resolve_training_entry_metadata(
+                        entry=entry,
+                        cfg=cfg,
+                    )
 
-                result = _train_single(
-                    settings=settings,
-                    assignment_id=assignment_id,
-                    assignment_display_name=assignment_display_name,
-                    job_config_path=job_config_path,
-                    data_config_path=data_config,
-                    label=label,
-                    output_root=base_output,
-                    mlflow_experiment_name=mlflow_experiment_name,
-                    parent_run_id=parent_run_id,
-                    dataset_registry_id=dataset_registry_id,
-                    dataset_display_name=dataset_display_name,
-                    job_registry_id=job_registry_id,
-                    job_display_name=job_display_name,
-                )
-                results.append(result)
-                logger.info(f"Completed {i}/{n} assignments")
-        except Exception:
-            session_status = "FAILED"
-            raise
+                    result = _train_single(
+                        settings=settings,
+                        assignment_id=assignment_id,
+                        assignment_display_name=assignment_display_name,
+                        job_config_path=job_config_path,
+                        data_config_path=data_config,
+                        label=label,
+                        output_root=base_output,
+                        mlflow_experiment_name=mlflow_experiment_name,
+                        parent_run_id=parent_run_id,
+                        dataset_registry_id=dataset_registry_id,
+                        dataset_display_name=dataset_display_name,
+                        job_registry_id=job_registry_id,
+                        job_display_name=job_display_name,
+                    )
+                    results.append(result)
+                    logger.info(f"Completed {i}/{n} assignments")
+                except Exception as exc:  # noqa: BLE001
+                    # Mirror run_assignment()'s resilience: one assignment's
+                    # failure must never abort the rest of the batch.
+                    session_status = "FAILED"
+                    logger.error(f"[{label}] Assignment '{entry.id}' failed: {exc}")
         finally:
             finalize_session_parent_run(
                 tracking_uri=training_mlflow_env.tracking_uri,

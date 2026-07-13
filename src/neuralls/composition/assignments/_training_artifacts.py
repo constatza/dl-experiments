@@ -431,7 +431,7 @@ def _download_training_checkpoint(
         )
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(
-            f"Could not download checkpoints for run '{run_id}' from MLflow."
+            f"Could not download checkpoints for run '{run_id}' from MLflow: {exc}"
         ) from exc
     return _find_single_checkpoint(downloaded_root)
 
