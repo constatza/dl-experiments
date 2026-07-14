@@ -149,6 +149,10 @@ def test_save_profile_with_overwrite_replaces_existing(tmp_path: Path) -> None:
     assert load_profile(_config_file=config_file) == replacement
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="stdlib expanduser prefers USERPROFILE over HOME on Windows",
+)
 def test_profile_config_expands_tilde_and_resolves_absolute(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -193,6 +197,10 @@ def test_profile_config_rejects_windows_mapped_drive_paths_on_posix() -> None:
         )
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="stdlib expanduser prefers USERPROFILE over HOME on Windows",
+)
 def test_neuralls_settings_expands_tilde_with_home_precedence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

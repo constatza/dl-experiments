@@ -72,8 +72,12 @@ def test_absolute_path_unchanged(config_context, tmp_path: Path) -> None:
     assert value == str(absolute.resolve())
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="stdlib expanduser prefers USERPROFILE over HOME on Windows",
+)
 def test_tilde_expansion(config_context, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Tilde expansion prefers HOME for consistent cross-platform behavior."""
+    """Tilde expansion follows stdlib expanduser precedence (HOME on POSIX)."""
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
