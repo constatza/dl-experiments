@@ -10,19 +10,19 @@ before `_collect_metrics()` ever runs. Reproduced directly against this repo's p
 dlkit (`develop` @ `5fb93f7`) with a minimal plain training job: `callback_metrics` was
 already `{}` before `trainer.test()` even started.
 
-This is an upstream dlkit bug, not something fixable from neuralls. The test below is
-expected to fail (`xfail`) until dlkit's `VanillaExecutor` stops losing `train/*`/`val/*`
-metrics after `predict()`/`test()`. Once it's fixed upstream and this repo bumps dlkit,
-this test should start passing (XPASS) — `strict=True` turns that into a visible failure
-so the `xfail` marker gets removed and this becomes a permanent regression guard instead.
+This was an upstream dlkit bug, not something fixable from neuralls. The test was
+`xfail(strict=True)` until dlkit's `VanillaExecutor` stopped losing `train/*`/`val/*`
+metrics after `predict()`/`test()`.
 
 Update (dlkit @ `11398ae`): dlkit fixed two related, narrower issues we also reported —
 `on_run_created` now carries an explicit `is_outermost` signal (no more inferring it from
 call order), and `extract_objective_value` now raises instead of silently returning `0.0`
-for a missing objective key. Item 0 itself (the actual metric loss) is *not* yet fixed, so
-`execute()` below now raises a loud `WorkflowError` ("Objective metric 'train/loss' not
-found...") instead of silently completing with wrong metrics — a strictly better failure
-mode, but still a failure, so this test still (correctly) xfails.
+for a missing objective key.
+
+Update (dlkit @ `4466bcd`): item 0 itself is now fixed — `VanillaExecutor.execute()`
+snapshots `callback_metrics` immediately after `trainer.fit()` returns and merges it with
+whatever `predict()`/`test()` populate afterward, so `train/*`/`val/*` metrics survive.
+The `xfail` marker is removed; this is now a permanent regression guard.
 """
 
 from __future__ import annotations
@@ -104,14 +104,6 @@ def _build_search_settings(tmp_path: Path, X: np.ndarray, Y: np.ndarray):
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "dlkit bug (confirmed): VanillaExecutor's trainer.predict()/trainer.test() clear "
-        "Trainer.callback_metrics from the preceding trainer.fit(), so train/*|val/* metrics "
-        "never survive to _collect_metrics(). See ~/projects/dlkit/docs/requests-from-neuralls.md."
-    ),
-    strict=True,
-)
 def test_search_objective_reads_configured_train_loss_key(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
