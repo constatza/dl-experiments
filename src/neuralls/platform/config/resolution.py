@@ -10,13 +10,11 @@ from pathlib import PureWindowsPath
 from urllib.parse import urlparse
 
 from dlkit.infrastructure.io import url_resolver
-from dlkit.infrastructure.io.resolution import create_resolver_context, create_resolver_registry
 
 from neuralls.shared.constants import DEFAULT_PROJECT_ROOT
 
 CASE_CONFIG_ENV_VAR = "NEURALLS_CASE_CONFIG"
 ENV_FILE_ENV_VAR = "NEURALLS_ENV_FILE"
-_RESOLVER_REGISTRY = create_resolver_registry()
 _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 _WINDOWS_UNC_RE = re.compile(r"^(?:\\\\|//)[^\\/]+[\\/][^\\/]+")
 
@@ -103,16 +101,8 @@ def is_sqlite_tracking_uri(uri: str) -> bool:
 
 
 def expand_user_path(value: Path | str) -> Path:
-    """Expand ``~`` through DLKit's resolver while preferring HOME when set."""
-    path = Path(value)
-    text = str(value)
-    if not text.startswith("~"):
-        return path
-    if text == "~\\" or text.startswith("~\\"):
-        text = "~/" + text.removeprefix("~\\").replace("\\", "/")
-    home_path = Path(os.environ.get("HOME") or os.path.expanduser("~"))
-    context = create_resolver_context(root_path=Path.cwd(), home_path=home_path)
-    return Path(_RESOLVER_REGISTRY.resolve_path(text, context))
+    """Expand ``~`` using the platform's home-directory resolution."""
+    return Path(value).expanduser()
 
 
 def resolve_user_path(value: Path | str) -> Path:

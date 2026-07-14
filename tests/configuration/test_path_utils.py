@@ -8,11 +8,7 @@ from pathlib import Path
 from dlkit.infrastructure.io import url_resolver
 import pytest
 
-from neuralls.platform.config.resolution import (
-    resolve_case_config_path,
-    resolve_env_file_path,
-    resolve_local_path,
-)
+from neuralls.platform.config.resolution import resolve_local_path
 
 
 def test_resolve_local_path_accepts_file_uri(tmp_path: Path) -> None:
@@ -23,36 +19,6 @@ def test_resolve_local_path_accepts_file_uri(tmp_path: Path) -> None:
     resolved = resolve_local_path(uri, base_dir=Path.cwd())
 
     assert resolved == expected
-
-
-def test_resolve_case_config_path_expands_tilde_from_env(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path / "windows-home"))
-    monkeypatch.setenv("NEURALLS_CASE_CONFIG", r"~\configs\case.toml")
-
-    resolved = resolve_case_config_path(None)
-
-    assert resolved == (home / "configs" / "case.toml").resolve()
-
-
-def test_resolve_env_file_path_expands_tilde_from_env(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path / "windows-home"))
-    monkeypatch.setenv("NEURALLS_ENV_FILE", r"~\.config\neuralls\.env")
-
-    resolved = resolve_env_file_path(None)
-
-    assert resolved == (home / ".config" / "neuralls" / ".env").resolve()
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only path semantics")

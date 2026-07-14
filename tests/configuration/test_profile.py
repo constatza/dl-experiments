@@ -168,25 +168,6 @@ def test_profile_config_expands_tilde_and_resolves_absolute(
     assert config.output_dir == (home / "output").resolve()
 
 
-def test_profile_config_expands_windows_style_tilde_paths(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-
-    config = ProfileConfig(
-        raw_dir=r"~\raw",
-        processed_dir=r"~\processed",
-        output_dir=r"~\output",
-    )
-
-    assert config.raw_dir == (home / "raw").resolve()
-    assert config.processed_dir == (home / "processed").resolve()
-    assert config.output_dir == (home / "output").resolve()
-
-
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only path semantics")
 def test_profile_config_preserves_windows_mapped_drive_paths() -> None:
     """Mapped-drive roots should stay drive-letter-based on Windows."""

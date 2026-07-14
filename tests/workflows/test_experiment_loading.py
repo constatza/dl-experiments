@@ -8,8 +8,6 @@ import numpy as np
 import pytest
 import tomli_w
 
-from neuralls.platform.config.resolution import resolve_case_config_path
-
 
 @pytest.fixture
 def training_setup(tmp_path: Path) -> dict:
@@ -249,18 +247,3 @@ class TestTrainingPipelineWithMLflow:
 
         assert experiment.settings.tracking.backend == "mlflow"
         assert custom_output_root in experiment.workspace.root_dir.parents
-
-
-def test_resolve_case_config_path_expands_tilde_from_env(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path / "windows-home"))
-    monkeypatch.setenv("NEURALLS_CASE_CONFIG", r"~\configs\case.toml")
-
-    resolved = resolve_case_config_path(None)
-
-    assert resolved == (home / "configs" / "case.toml").resolve()

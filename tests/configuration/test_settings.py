@@ -11,7 +11,6 @@ from neuralls.platform.config.settings import (
     ENV_FILE_ENV_VAR,
     NeurallsSettings,
     get_settings,
-    require_settings,
 )
 
 
@@ -114,22 +113,3 @@ def test_settings_paths_resolved_absolute(neuralls_settings: NeurallsSettings) -
 def test_mlflow_artifact_location_uses_str_not_posix(neuralls_settings: NeurallsSettings) -> None:
     """mlflow_artifact_location uses str(), not as_posix(), so UNC paths on Windows keep backslashes."""
     assert neuralls_settings.mlflow_artifact_location == str(neuralls_settings.mlartifacts_dir)
-
-
-def test_require_settings_reads_case_config_env_with_home_precedence(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """NEURALLS_CASE_CONFIG should follow the shared HOME-first path policy."""
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path / "windows-home"))
-    monkeypatch.setenv("NEURALLS_CASE_CONFIG", r"~\configs\case.toml")
-    monkeypatch.setenv("NEURALLS_PROCESSED_DIR", str(tmp_path / "processed"))
-    monkeypatch.setenv("NEURALLS_OUTPUT_DIR", str(tmp_path / "output"))
-
-    settings = require_settings(None)
-
-    assert settings.processed_dir == (tmp_path / "processed").resolve()
-    assert settings.output_dir == (tmp_path / "output").resolve()

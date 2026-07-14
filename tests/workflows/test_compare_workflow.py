@@ -3,10 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from neuralls.composition.comparison.single_run import (
-    _resolve_comparison_paths,
     compare_preconditioners,
 )
 from neuralls.platform.config.loaders import load_comparison_config
@@ -161,27 +159,3 @@ def test_compare_preconditioners_workflow(tmp_path: Path, neuralls_settings) -> 
     for plot_path in results.plot_paths.to_mapping().values():
         assert plot_path.is_file()
         _assert_under(plot_path, tmp_path)
-
-
-def test_resolve_comparison_paths_expands_tilde_output_root(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    neuralls_settings,
-) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path / "windows-home"))
-
-    comparison_cfg = tmp_path / "comparison_config.toml"
-    _write_comparison_config(comparison_cfg, tmp_path)
-    comparison_cfg_model = load_comparison_config(comparison_cfg, neuralls_settings)
-
-    paths = _resolve_comparison_paths(
-        general_params=comparison_cfg_model.general,
-        output_root=Path(r"~\comparison-output"),
-        figures_root=None,
-    )
-
-    assert paths.output == (home / "comparison-output").resolve()
-    assert paths.figures == (home / "comparison-output" / "figures").resolve()
