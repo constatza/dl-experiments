@@ -98,9 +98,12 @@ def create_preconditioner(
         IC0PreconditionerConfig,
         NeuralAMGPreconditionerConfig,
         NeuralPreconditionerConfig,
+        PODCoarseningConfig,
     )
 
-    # AMG (classical smoothed aggregation)
+    # AMG family: config.coarsening selects the strategy that builds the
+    # prolongation/restriction operator (aggregation vs. POD-2G); everything
+    # else (cycle, smoothing, n_levels) is shared.
     if config.type == PreconditionerType.AMG:
         if not isinstance(config, AMGPreconditionerConfig):
             raise TypeError(f"AMG type requires AMGPreconditionerConfig, got {type(config)}")
@@ -111,8 +114,23 @@ def create_preconditioner(
             VCycle,
         )
 
+        if isinstance(config.coarsening, PODCoarseningConfig):
+            import numpy as np
+
+            from neuralls.domain.generation.providers import FileInputProvider
+            from neuralls.domain.solver.preconditioners.implementations.pod import (
+                PODCoarseningStrategy,
+            )
+
+            provider = FileInputProvider(glob_pattern=config.coarsening.snapshots_glob)
+            snapshots = provider.provide(
+                matrix, count=config.coarsening.n_snapshots, rng=np.random.default_rng()
+            )
+            coarsening = PODCoarseningStrategy(snapshots=snapshots, rank=config.coarsening.rank)
+        else:
+            coarsening = SparseAggregationCoarsening(omega=config.coarsening.omega)
+
         smoother = JacobiSmoother(omega=config.smoother_omega)
-        coarsening = SparseAggregationCoarsening(omega=config.aggregation_omega)
         cycle = VCycle(
             smoother=smoother,
             n_pre=config.pre_smoothing_steps,

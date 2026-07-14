@@ -18,6 +18,7 @@ from .icholesky import ICholeskyPreconditioner
 from .identity import Identity
 from .ilu import ILUPreconditioner
 from .jacobi import JacobiPreconditioner
+from .pod import POD2GPreconditioner
 from .scheduled import ScheduledPreconditioner
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "IC0Preconditioner",
     "ICholeskyPreconditioner",
     "AMGPreconditioner",
+    "POD2GPreconditioner",
     "ScheduledPreconditioner",
 ]

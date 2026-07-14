@@ -253,17 +253,83 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
         return v
 
 
+class AggregationCoarseningConfig(BaseModel):
+    """Classical smoothed-aggregation coarsening (SA-AMG)."""
+
+    method: Literal["aggregation"] = "aggregation"
+    omega: float = Field(default=0.67, gt=0.0, description="Prolongation Jacobi-smoothing damping.")
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class PODCoarseningConfig(BaseModel):
+    """POD-2G coarsening (Nikolopoulos et al. 2022, §3.3-3.4).
+
+    The prolongation/restriction operator is a POD basis fit to a snapshot
+    ensemble of high-fidelity solutions, instead of algebraic aggregation.
+    """
+
+    method: Literal["pod"] = "pod"
+    snapshots_glob: str = Field(..., description="Glob pattern for solution snapshot files.")
+    n_snapshots: int = Field(
+        default=-1, description="Number of snapshot files to load; -1 means all matched."
+    )
+    rank: int | float = Field(
+        default=8,
+        description=(
+            "Fixed number of POD modes to retain (int), or minimum cumulative "
+            "captured energy to retain (float in (0, 1] — e.g. 0.9999)."
+        ),
+    )
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator("rank")
+    @classmethod
+    def _validate_rank(cls, v: int | float) -> int | float:
+        """Enforce the per-mode constraint matching whichever branch was matched.
+
+        Args:
+            v: The parsed ``rank`` value — an int (mode count) or float
+                (energy threshold).
+
+        Returns:
+            The validated value, unchanged.
+
+        Raises:
+            ValueError: If an int rank is < 1, or a float rank is outside (0, 1].
+        """
+        if isinstance(v, float):
+            if not (0.0 < v <= 1.0):
+                raise ValueError(f"rank as an energy threshold must be in (0, 1], got {v}")
+        elif v < 1:
+            raise ValueError(f"rank as a mode count must be >= 1, got {v}")
+        return v
+
+
+CoarseningConfig = Annotated[
+    AggregationCoarseningConfig | PODCoarseningConfig,
+    Field(discriminator="method"),
+]
+
+
 class AMGPreconditionerConfig(BasePreconditionerConfig):
-    """Classical AMG preconditioner configuration (smoothed aggregation)."""
+    """AMG-family preconditioner configuration (multigrid coarsening + cycle).
+
+    ``coarsening`` selects the strategy that builds the prolongation/
+    restriction operator — ``AggregationCoarseningConfig`` (classical SA-AMG)
+    or ``PODCoarseningConfig`` (POD-2G). Required, no default: the caller must
+    state which coarsening strategy an AMG config means. A future coarsening
+    strategy (e.g. a hierarchical multi-level POD) is added the same way: one
+    more class in the ``CoarseningConfig`` union, not a new
+    ``PreconditionerType`` and not new fields on this class — the underlying
+    ``AMGPreconditioner`` is already generic over any ``CoarseningStrategy``.
+    """
 
     type: Literal[PreconditionerType.AMG] = PreconditionerType.AMG
     n_levels: int = Field(default=2, ge=2, description="Total number of grid levels.")
     pre_smoothing_steps: int = Field(default=2, ge=0, description="Pre-smoothing iterations.")
     post_smoothing_steps: int = Field(default=2, ge=0, description="Post-smoothing iterations.")
     smoother_omega: float = Field(default=0.67, gt=0.0, description="Weighted Jacobi damping.")
-    aggregation_omega: float = Field(
-        default=0.67, gt=0.0, description="Prolongation Jacobi-smoothing damping."
-    )
+    coarsening: CoarseningConfig
 
 
 class NeuralTransferConfig(BaseModel):

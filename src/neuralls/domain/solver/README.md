@@ -113,3 +113,65 @@ fallback preconditioner is used.
 for which arrays a neural predictor needs. `NeuralPreconditionerConfig` still
 accepts an override in the comparison TOML for backward compatibility, but new
 configs should omit it and let the model config declare its own inputs.
+
+## POD-2G Preconditioner
+
+`POD2GPreconditioner` lives under
+`neuralls.domain.solver.preconditioners.implementations.pod` and reuses the
+same `AMGPreconditioner` engine as classical AMG, swapping in
+`PODCoarseningStrategy` for `SparseAggregationCoarsening`. Instead of
+algebraic aggregation, the prolongation/restriction operator is a POD basis
+Φ_r fit to an ensemble of high-fidelity solution snapshots (Nikolopoulos et
+al. 2022, §3.3-3.4, arXiv:2207.02543):
+
+- `compute_pod_basis`: pure function computing Φ_r from a snapshot ensemble
+  via the snapshot method (thin SVD of the N×d snapshot matrix, N≪d — never
+  forms the d×d correlation matrix, nor even an N×N Gram matrix, since
+  squaring the snapshot matrix would square its condition number and hurt
+  precision exactly when POD is most useful). Runs on `torch.linalg.svd`
+  internally (GPU-ready, differentiable) but takes/returns plain NDArrays,
+  preserving the input array's dtype unless an explicit override is passed —
+  it never silently forces float64. `rank` accepts either a fixed mode count
+  (int) or a minimum cumulative captured-energy threshold (float in (0, 1],
+  e.g. `0.9999` — matching how the paper itself picks r: "over 99.99% of the
+  variance"); both cost the same thin SVD, since it already computes all N
+  singular triplets regardless of how many are kept afterward.
+- `DenseTransferOperator`: `TransferOperator` implementation backed by the
+  dense Φ_r (POD modes have no sparsity structure to exploit, unlike SA-AMG's
+  aggregation matrix).
+- `PODCoarseningStrategy`: `CoarseningStrategy` implementation; takes the
+  snapshot ensemble directly as a plain array — sourcing it (FEM archive
+  files today, a future neural snapshot generator) is a composition-layer
+  concern.
+
+There is no separate `PreconditionerType.POD_2G`. `AMGPreconditioner` is
+already generic over any `CoarseningStrategy`, so `AMGPreconditionerConfig`
+gained a required `coarsening: AggregationCoarseningConfig | PODCoarseningConfig`
+field (Pydantic discriminated union on `method`, no default — every AMG config
+must state its coarsening strategy explicitly) instead of a new
+`PreconditionerType`. Each coarsening config only carries its own fields
+(`AggregationCoarseningConfig.omega` vs `PODCoarseningConfig.snapshots_glob`/
+`n_snapshots`/`rank`) — mirrors this module's existing `ModelRefConfig`
+pattern (`platform/config/models/preconditioner.py`) rather than cramming both
+variants' fields onto one flat class. `composition/preconditioners/factory.py`'s
+single `PreconditionerType.AMG` branch narrows on
+`isinstance(config.coarsening, PODCoarseningConfig)` to build either
+`SparseAggregationCoarsening` or `PODCoarseningStrategy` (loading snapshots via
+`FileInputProvider` for POD). A future coarsening strategy (e.g. hierarchical
+multi-level POD) is added the same way — one more class in the discriminated
+union, not a new `PreconditionerType` and not new fields on the shared config.
+
+An externally supplied initial guess (e.g. a future surrogate model's
+prediction) needs no special wiring — it is already the `x0` parameter of
+`IterativeSolverBase.solve()`, independent of preconditioner choice.
+
+Two future extensions are already accommodated by the existing protocols
+without further changes here:
+
+- A neural network generating the snapshot ensemble itself, still followed by
+  classical POD — only the composition-layer branch that produces the
+  snapshot array changes; `PODCoarseningStrategy` stays untouched.
+- A neural network predicting P/R directly, bypassing POD — this is the
+  already-scaffolded `NeuralCoarseningStrategy`/`NeuralTransferOperator` pair
+  in `implementations.amg`, a sibling under the same `CoarseningStrategy`/
+  `TransferOperator` protocols.

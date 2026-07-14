@@ -473,13 +473,16 @@ class TestUniformContextInterface:
 
 class TestAMGConfigParsing:
     def test_parse_amg_config(self) -> None:
-        """AMGPreconditionerConfig must parse from dict with type='amg'."""
+        """AMGPreconditionerConfig must parse from dict with type='amg' and an
+        explicit coarsening strategy (coarsening has no default — required)."""
         from neuralls.platform.config.models.preconditioner import (
             AMGPreconditionerConfig,
             parse_preconditioner_config,
         )
 
-        cfg = parse_preconditioner_config({"name": "amg", "type": "amg"})
+        cfg = parse_preconditioner_config(
+            {"name": "amg", "type": "amg", "coarsening": {"method": "aggregation"}}
+        )
         assert isinstance(cfg, AMGPreconditionerConfig)
         assert cfg.n_levels == 2
         assert cfg.smoother_omega == pytest.approx(0.67)
@@ -491,9 +494,25 @@ class TestAMGConfigParsing:
             parse_preconditioner_config,
         )
 
-        cfg = parse_preconditioner_config({"name": "amg", "type": "amg", "n_levels": 3})
+        cfg = parse_preconditioner_config(
+            {
+                "name": "amg",
+                "type": "amg",
+                "n_levels": 3,
+                "coarsening": {"method": "aggregation"},
+            }
+        )
         assert isinstance(cfg, AMGPreconditionerConfig)
         assert cfg.n_levels == 3
+
+    def test_coarsening_is_required(self) -> None:
+        """Omitting coarsening must fail validation — no implicit default."""
+        from pydantic import ValidationError
+
+        from neuralls.platform.config.models.preconditioner import parse_preconditioner_config
+
+        with pytest.raises(ValidationError, match="coarsening"):
+            parse_preconditioner_config({"name": "amg", "type": "amg"})
 
 
 # ---------------------------------------------------------------------------

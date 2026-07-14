@@ -21,6 +21,13 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+# TODO: add a convergence-vs-unpreconditioned baseline test for ILU, mirroring
+# test_jacobi_improves_convergence (test_jacobi.py), test_ic0_improves_convergence
+# (test_ic0.py), and test_amg_fewer_iters_than_unpreconditioned (test_amg.py).
+# test_ilu_improves_over_jacobi below only compares ILU against Jacobi, not
+# against the identity/no-preconditioning baseline those other files check.
+
+
 def test_ilu_factorization_correctness(
     tridiagonal_spd_small: NDArray,
     ilu_preconditioner_factory: Callable[[NDArray], Callable[[NDArray], NDArray]],
