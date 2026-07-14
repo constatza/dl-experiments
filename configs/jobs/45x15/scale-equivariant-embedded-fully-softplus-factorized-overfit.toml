@@ -9,7 +9,7 @@ plots = "../../profiles/plots/default.toml"
 
 [search]
 objective = "train/loss"
-n_trials = 40
+n_trials = 100
 
 [search.pruner]
 name = "NopPruner"

@@ -9,6 +9,7 @@ plots = "../../profiles/plots/default.toml"
 
 [search]
 objective = "val/loss"
+n_trials = 100
 
 [search.space]
 "training.optimizer.default_optimizer.lr" = { type = "log_float", low = 1e-5, high = 1e-2 }
