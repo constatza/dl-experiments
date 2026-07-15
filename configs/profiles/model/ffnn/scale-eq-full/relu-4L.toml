@@ -1,0 +1,6 @@
+[model]
+name = "ScaleEquivariantEmbeddedFullyFactorizedFFNN"
+num_layers = 4
+activation = "relu"
+bias = false
+dropout = 0.0

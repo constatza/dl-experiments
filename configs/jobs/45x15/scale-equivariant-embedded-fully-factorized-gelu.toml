@@ -2,7 +2,7 @@
 type = "train"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/scale-eq-full-softplus/gelu-4L-b.toml"
+model = "../../profiles/model/ffnn/scale-eq-full/gelu-4L.toml"
 data = "../../profiles/data/array-default.toml"
-training = "../../profiles/training/limited-200.toml"
+training = "../../profiles/training/extended-conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"

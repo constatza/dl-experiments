@@ -2,7 +2,7 @@
 type = "train"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/scale-eq-full/identity-4L.toml"
+model = "../../profiles/model/ffnn/scale-eq-full-softplus/relu-3L.toml"
 data = "../../profiles/data/array-default.toml"
 training = "../../profiles/training/extended-conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"

@@ -60,9 +60,34 @@ path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
 display_name = "Scale Equivariant Embedded Fully FFNN"
 
 [[jobs]]
+id = "scale-equivariant-embedded-fully-factorized-gelu"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-gelu.toml"
+display_name = "Scale Equivariant Embedded Fully FFNN (GELU, 4L)"
+
+[[jobs]]
+id = "scale-equivariant-embedded-fully-factorized-silu"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-silu.toml"
+display_name = "Scale Equivariant Embedded Fully FFNN (SiLU, 4L)"
+
+[[jobs]]
+id = "scale-equivariant-embedded-fully-factorized-relu"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-relu.toml"
+display_name = "Scale Equivariant Embedded Fully FFNN (ReLU, 4L)"
+
+[[jobs]]
+id = "scale-equivariant-embedded-fully-factorized-gelu-2l"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-gelu-2l.toml"
+display_name = "Scale Equivariant Embedded Fully FFNN (GELU, 2L)"
+
+[[jobs]]
 id = "scale-equivariant-embedded-fully-softplus-factorized"
 path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized.toml"
 display_name = "Scale Equivariant Embedded Fully Softplus FFNN"
+
+[[jobs]]
+id = "scale-equivariant-embedded-fully-softplus-factorized-relu-3l"
+path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized-relu-3l.toml"
+display_name = "Scale Equivariant Embedded Fully Softplus FFNN (ReLU, 3L)"
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15"
@@ -99,4 +124,24 @@ job = "scale-equivariant-embedded-fully-factorized"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-factorized-gelu"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-factorized-silu"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-factorized-relu"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-factorized-gelu-2l"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-embedded-fully-softplus-factorized"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-fully-softplus-factorized-relu-3l"

@@ -1,5 +1,6 @@
 [model]
 name = "ScaleEquivariantEmbeddedFullySoftplusFactorizedFFNN"
-num_layers = 1
-activation = "identity"
+num_layers = 3
+activation = "relu"
 bias = false
+dropout = 0.0

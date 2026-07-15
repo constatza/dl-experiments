@@ -182,7 +182,7 @@ job = "scale-equivariant-embedded-fully-factorized"
 type = "train"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/scale-equivariant-embedded-fully-factorized.toml"
+model = "../../profiles/model/ffnn/scale-eq-full/identity-4L.toml"
 data = "../../profiles/data/array-default.toml"
 training = "../../profiles/training/default.toml"
 ```
