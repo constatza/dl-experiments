@@ -29,6 +29,7 @@ from neuralls.composition.tracking.run_specs import (
     build_session_run_spec,
 )
 from neuralls.composition.tracking.session import session_parent_run
+from neuralls.platform.dlkit.tracking_hooks import build_parent_link_hooks
 from neuralls.platform.config.models.experiments import (
     AssignmentEntry,
     CaseConfig,
@@ -368,8 +369,14 @@ def _tag_evaluation_run(
     assignment_display_name: str,
     training_run_id: str,
     split_file: Path,
-    parent_run_id: str | None,
 ) -> None:
+    """Set bookkeeping tags/params on a completed eval run.
+
+    Parent-run linkage is handled separately and atomically at run-creation
+    time via ``build_parent_link_hooks`` (mirroring ``train_model()``'s
+    ``_annotate_mlflow_run`` split: hooks own parent nesting, this function
+    owns retroactive bookkeeping only).
+    """
     if run_id is None:
         return
     tags = build_evaluation_tags(
@@ -378,8 +385,6 @@ def _tag_evaluation_run(
         source_training_run_id=training_run_id,
         split_artifact=split_file.name,
     ).as_mlflow_tags()
-    if parent_run_id is not None:
-        tags["mlflow.parentRunId"] = parent_run_id
     for key, value in tags.items():
         client.set_tag(run_id, key, value)
     client.log_param(run_id, "source_training_run_id", training_run_id)
@@ -426,6 +431,7 @@ def eval_assignment(
         split="test",
         log_to_mlflow=True,
         run_name=assignment.effective_display_name,
+        hooks=build_parent_link_hooks(parent_run_id),
         batch_size=batch_size or 32,
     )
     assignment_dir = output_root / "eval" / _sanitize_path_part(assignment.id)
@@ -437,7 +443,6 @@ def eval_assignment(
         assignment_display_name=assignment.effective_display_name,
         training_run_id=context.training_run_id,
         split_file=context.artifacts.split_file,
-        parent_run_id=parent_run_id,
     )
     return EvaluationRunResult(
         label=label,
@@ -500,7 +505,6 @@ def eval_batch(
     )
 
     results: list[EvaluationRunResult] = []
-    failures: list[str] = []
     with scoped_mlflow_environment(eval_mlflow_env.env):
         session_run_name, session_tags = build_session_run_spec(
             case_config_path=resolved_case_config_path,
@@ -530,16 +534,10 @@ def eval_batch(
                     )
                     results.append(result)
                 except Exception as exc:  # noqa: BLE001
+                    # Mirror train_batch()'s resilience: one assignment's
+                    # failure must never abort the rest of the batch.
                     handle.mark_failed()
                     logger.error("Eval assignment '{}' failed: {}", assignment.id, exc)
-                    failures.append(f"{assignment.id}: {exc}")
-
-    if not results:
-        raise RuntimeError("No assignments completed eval successfully.")
-    if failures:
-        raise RuntimeError(
-            "Some eval assignments failed after completing the rest: " + "; ".join(failures)
-        )
 
     return EvaluationBatchResult(
         results=results,
