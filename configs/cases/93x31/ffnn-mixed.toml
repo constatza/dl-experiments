@@ -24,6 +24,11 @@ type = "jacobi"
 name = "ic0"
 type = "ic0"
 
+[[comparison_defaults.preconditioners]]
+name = "amg"
+type = "amg"
+coarsening = { method = "aggregation" }
+
 # ── Training datasets (all CG-iter variants) ──────────────────────────────────
 
 [[datasets]]

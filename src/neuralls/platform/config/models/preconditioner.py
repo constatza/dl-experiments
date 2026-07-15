@@ -262,14 +262,22 @@ class AggregationCoarseningConfig(BaseModel):
 
 
 class PODCoarseningConfig(BaseModel):
-    """POD-2G coarsening (Nikolopoulos et al. 2022, §3.3-3.4).
+    """POD-2G coarsening (Nikolopoulos et al. 2022, §3.3-3.5).
 
     The prolongation/restriction operator is a POD basis fit to a snapshot
-    ensemble of high-fidelity solutions, instead of algebraic aggregation.
+    ensemble of high-fidelity solutions (or, for a sharper coarse space,
+    CG error traces e_k = x* - x_k, which are richer than plain solutions
+    since e_0 == x* and later k emphasize slow-converging directions) —
+    read from an already-generated dataset directory, not raw files, so the
+    same validation/normalization/manifest guarantees as every other
+    dataset in this repo apply.
     """
 
     method: Literal["pod"] = "pod"
-    snapshots_glob: str = Field(..., description="Glob pattern for solution snapshot files.")
+    dataset_dir: Path = Field(
+        ...,
+        description="Generated dataset directory whose `solutions` array supplies POD snapshots.",
+    )
     n_snapshots: int = Field(
         default=-1, description="Number of snapshot files to load; -1 means all matched."
     )
@@ -281,6 +289,22 @@ class PODCoarseningConfig(BaseModel):
         ),
     )
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator("dataset_dir", mode="before")
+    @classmethod
+    def _expand_dataset_dir(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ``${NEURALLS_*}`` placeholders and anchor the dataset directory.
+
+        Args:
+            v: Raw field value.
+            info: Pydantic validation context.
+
+        Returns:
+            Resolved path string, or original value if not a string.
+        """
+        from neuralls.platform.config.context import expand_path_field
+
+        return expand_path_field(v, info)
 
     @field_validator("rank")
     @classmethod

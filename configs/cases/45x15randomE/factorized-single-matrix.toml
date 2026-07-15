@@ -24,6 +24,11 @@ type = "jacobi"
 name = "ic0"
 type = "ic0"
 
+[[comparison_defaults.preconditioners]]
+name = "amg"
+type = "amg"
+coarsening = { method = "aggregation" }
+
 [[datasets]]
 id = "gaussian-cg100-45x15randomE-single-matrix"
 path = "../../datasets/train/45x15randomE/gaussian-cg100-single-matrix.toml"

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 from torch.testing import assert_close
@@ -23,6 +24,7 @@ from torchalg.preconditioners.implementations import (
     NeuralPreconditioner,
     ScheduledPreconditioner,
 )
+from torchalg.preconditioners.implementations.amg import AMGPreconditioner
 from torchalg.preconditioners.ports import ExtraInputPredictorPort, PredictorAdapter
 
 from neuralls.composition.preconditioners.factory import (
@@ -31,7 +33,10 @@ from neuralls.composition.preconditioners.factory import (
     PreconditionerScheduleConfig,
 )
 from neuralls.platform.config.models.preconditioner import (
+    AggregationCoarseningConfig,
+    AMGPreconditionerConfig,
     NeuralPreconditionerConfig,
+    PODCoarseningConfig,
     PreconditionerType,
     StandardPreconditionerConfig,
 )
@@ -125,6 +130,43 @@ def mock_checkpoint(tmp_path: Path) -> Path:
     checkpoint = tmp_path / "mock_checkpoint.ckpt"
     checkpoint.write_text("mock checkpoint data")
     return checkpoint
+
+
+@pytest.fixture
+def pod_snapshot_dataset_dir(tmp_path: Path, well_conditioned_matrix: torch.Tensor) -> Path:
+    """Minimal generated dataset directory supplying POD snapshot solutions.
+
+    Builds a manifest-backed dataset (matching the repo's canonical
+    generation pipeline) with a handful of solution rows shaped to the 4x4
+    `well_conditioned_matrix`, so `PODCoarseningConfig.dataset_dir` can be
+    read through `load_dense_training_arrays` exactly like a real dataset.
+    """
+    from neuralls.domain.generation.payloads import GeneratedDatasetPayload
+    from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
+
+    matrix_np = well_conditioned_matrix.numpy()
+    rng = np.random.default_rng(0)
+    solutions = rng.standard_normal((4, matrix_np.shape[0]))
+    rhs = solutions @ matrix_np.T
+
+    dataset_dir = tmp_path / "pod-dataset"
+    dataset_dir.mkdir()
+    acc = DenseZarrAccumulator(dataset_dir / "matrix.zarr")
+    acc.append_dense_matrix(matrix_np, repeats=1)
+    zarr_path = acc.finalize()
+    DenseDatasetWriter().write_dataset(
+        dataset_dir,
+        GeneratedDatasetPayload(
+            rhs=rhs,
+            solutions=solutions,
+            matrix_artifact_path=zarr_path,
+            matrix_size=(int(matrix_np.shape[0]), int(matrix_np.shape[1])),
+            normalization_type="matrix",
+            matrix_norm=float(np.linalg.norm(matrix_np, ord=2)),
+            matrix_norm_type="spectral",
+        ),
+    )
+    return dataset_dir
 
 
 # ==============================================================================
@@ -320,6 +362,53 @@ def test_neural_preconditioner_cleanup_on_delete(
     precond.cleanup()
 
     assert predictor.cleaned_up
+
+
+# ==============================================================================
+# Factory Tests - AMG
+# ==============================================================================
+
+
+def test_factory_creates_amg_preconditioner_with_aggregation_coarsening(
+    well_conditioned_matrix: torch.Tensor, residual_vector: torch.Tensor
+) -> None:
+    """Factory creates AMGPreconditioner for AMG type with aggregation coarsening."""
+    config = AMGPreconditionerConfig(name="amg", coarsening=AggregationCoarseningConfig())
+
+    precond = create_preconditioner(well_conditioned_matrix, config)
+
+    assert isinstance(precond, AMGPreconditioner)
+    result = precond.apply(residual_vector)
+    assert result.shape == residual_vector.shape
+
+
+def test_factory_creates_amg_preconditioner_with_pod_coarsening(
+    well_conditioned_matrix: torch.Tensor,
+    residual_vector: torch.Tensor,
+    pod_snapshot_dataset_dir: Path,
+) -> None:
+    """Factory creates AMGPreconditioner for AMG type with POD-2G coarsening.
+
+    The snapshot ensemble is read from a generated dataset directory (via
+    `load_dense_training_arrays`), not a raw glob — the gap this task closes.
+    """
+    coarsening = PODCoarseningConfig(dataset_dir=pod_snapshot_dataset_dir, rank=2)
+    config = AMGPreconditionerConfig(name="pod2g", coarsening=coarsening)
+
+    precond = create_preconditioner(well_conditioned_matrix, config)
+
+    assert isinstance(precond, AMGPreconditioner)
+    result = precond.apply(residual_vector)
+    assert result.shape == residual_vector.shape
+
+
+def test_factory_amg_requires_amg_config(well_conditioned_matrix: torch.Tensor) -> None:
+    """Factory requires AMGPreconditionerConfig for AMG type."""
+    config = StandardPreconditionerConfig(name="amg", type=PreconditionerType.IDENTITY)
+    config = config.model_copy(update={"type": PreconditionerType.AMG})
+
+    with pytest.raises(TypeError, match="AMG type requires AMGPreconditionerConfig"):
+        create_preconditioner(well_conditioned_matrix, config)
 
 
 # ==============================================================================

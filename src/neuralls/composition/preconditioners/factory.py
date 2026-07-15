@@ -114,23 +114,16 @@ def create_preconditioner(
         )
 
         if isinstance(config.coarsening, PODCoarseningConfig):
-            import numpy as np
-
-            from neuralls.domain.generation.providers import FileInputProvider
+            from neuralls.platform.storage.dataset_readers import load_dense_training_arrays
             from torchalg.preconditioners.implementations.pod import (
                 PODCoarseningStrategy,
             )
 
-            # FileInputProvider.provide()'s matrix argument is unused (protocol
-            # compliance only) — skip the GPU-to-numpy conversion.
-            provider = FileInputProvider(glob_pattern=config.coarsening.snapshots_glob)
-            snapshots = provider.provide(
-                np.empty(0),
-                count=config.coarsening.n_snapshots,
-                rng=np.random.default_rng(),
-            )
+            _, solutions = load_dense_training_arrays(config.coarsening.dataset_dir)
+            if config.coarsening.n_snapshots != -1:
+                solutions = solutions[: config.coarsening.n_snapshots]
             coarsening = PODCoarseningStrategy(
-                snapshots=torch.as_tensor(snapshots, dtype=matrix.dtype, device=matrix.device),
+                snapshots=torch.as_tensor(solutions, dtype=matrix.dtype, device=matrix.device),
                 rank=config.coarsening.rank,
             )
         else:

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from pydantic import ValidationInfo
+
 from neuralls.platform.config.resolution import expand_user_path, resolve_local_path
 from neuralls.platform.config.settings import NeurallsSettings
 
@@ -72,6 +74,24 @@ def expand_config_path(value: str, ctx: ConfigContext) -> str:
 
     expanded = str(expand_user_path(_NEURALLS_RE.sub(_sub, value)))
     return str(resolve_local_path(expanded, base_dir=ctx.config_dir))
+
+
+def expand_path_field(v: object, info: ValidationInfo, *, glob: bool = False) -> object:
+    """Shared body for `@field_validator(..., mode="before")` path/glob expansion.
+
+    Args:
+        v: Raw field value from Pydantic validation.
+        info: Pydantic validation context, carrying the config resolution context.
+        glob: If True, expand as a glob pattern via `expand_config_glob`; otherwise
+            expand as a plain path via `expand_config_path`.
+
+    Returns:
+        The expanded string, or `v` unchanged if it isn't a string or no context is set.
+    """
+    if v is None or info.context is None or not isinstance(v, str):
+        return v
+    ctx = ConfigContext.from_pydantic_context(info.context)
+    return expand_config_glob(v, ctx) if glob else expand_config_path(v, ctx)
 
 
 def _expand_user_path(value: str) -> str:
