@@ -106,13 +106,15 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
             python_model=model_code,
         )
         mlflow.log_artifact(str(checkpoint_file), artifact_path="model")
+        mlflow.log_artifact(str(checkpoint_file), artifact_path="checkpoints")
 
     model_name = "TinyAliasIntegrationModel"
-    registered = mlflow.register_model(
-        model_uri=f"runs:/{run_id}/model",
-        name=model_name,
+    record = register_logged_model(
+        run_id=run_id,
+        registered_model_name=model_name,
+        tracking_uri=tracking_uri,
     )
-    registered_version = int(str(registered.version))
+    registered_version = record.version
 
     assigned_version = assign_dataset_alias_to_registered_model(
         tracking_uri=tracking_uri,
@@ -167,6 +169,7 @@ def test_experiment_id_registration_resolves_via_latest(tmp_path: Path) -> None:
             python_model=model_code,
         )
         mlflow.log_artifact(str(checkpoint_file), artifact_path="model")
+        mlflow.log_artifact(str(checkpoint_file), artifact_path="checkpoints")
 
     experiment_id = "spectral-energy-integration"
     record = register_logged_model(
@@ -225,6 +228,7 @@ def test_two_experiments_same_dataset_no_alias_collision(tmp_path: Path) -> None
             run_ids.append(run.info.run_id)
             mlflow.pyfunc.log_model(artifact_path="model", python_model=model_code)
             mlflow.log_artifact(str(checkpoint_file), artifact_path="model")
+            mlflow.log_artifact(str(checkpoint_file), artifact_path="checkpoints")
 
     record_a = register_logged_model(
         run_id=run_ids[0],

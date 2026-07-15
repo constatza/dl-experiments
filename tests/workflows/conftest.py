@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
@@ -238,11 +239,14 @@ def log_run_with_checkpoint(
     """Factory fixture: log one real run with a minimal pyfunc model + checkpoint.
 
     Each call logs a distinct run under ``mlflow_experiment`` containing a
-    ``.ckpt`` artifact under the ``model`` artifact path whose content equals
-    ``marker``, so callers can assert exactly which run's checkpoint was
-    resolved. ``start_time_ms`` optionally overrides the run's start time to
-    make ordering-sensitive assertions (e.g. "latest run") deterministic
-    instead of relying on real wall-clock ordering.
+    ``.ckpt`` artifact under both the ``model`` and ``checkpoints`` artifact
+    paths whose content equals ``marker``, so callers can assert exactly which
+    run's checkpoint was resolved. Logging under ``checkpoints`` lets the same
+    fixture back both raw-run-reference resolution (``model`` fallback) and
+    registration (which requires a ``checkpoints/`` artifact to pin).
+    ``start_time_ms`` optionally overrides the run's start time to make
+    ordering-sensitive assertions (e.g. "latest run") deterministic instead of
+    relying on real wall-clock ordering.
 
     Args:
         tmp_path: Pytest-provided isolated temp directory.
@@ -281,6 +285,49 @@ def log_run_with_checkpoint(
         with run_context as run:
             mlflow.pyfunc.log_model(artifact_path="model", python_model=model_code)
             mlflow.log_artifact(str(checkpoint_file), artifact_path="model")
+            mlflow.log_artifact(str(checkpoint_file), artifact_path="checkpoints")
+            return run.info.run_id
+
+    return _log_run
+
+
+class LoggedNamedCheckpointsRunFactory(Protocol):
+    """Callable that logs one MLflow run with several named checkpoint files."""
+
+    def __call__(self, checkpoints: Mapping[str, str]) -> str: ...
+
+
+@pytest.fixture
+def log_run_with_named_checkpoints(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    mlflow_experiment: str,
+) -> LoggedNamedCheckpointsRunFactory:
+    """Factory fixture: log one real run with several named checkpoint files.
+
+    Each call logs a distinct run under ``mlflow_experiment`` with one
+    ``checkpoints/<name>`` artifact per ``(name, content)`` pair given —
+    e.g. ``{"best.ckpt": "best", "last.ckpt": "last"}`` — so callers can
+    exercise ambiguous-checkpoint selection and registration pinning against
+    multiple real candidate files.
+
+    Args:
+        tmp_path: Pytest-provided isolated temp directory.
+        mlflow_tracking_uri: Local SQLite tracking URI.
+        mlflow_experiment: Active experiment name (ensures setup ordering).
+
+    Returns:
+        A callable ``(checkpoints: Mapping[str, str]) -> run_id``.
+    """
+
+    def _log_run(checkpoints: Mapping[str, str]) -> str:
+        with mlflow.start_run() as run:
+            run_dir = tmp_path / run.info.run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            for name, content in checkpoints.items():
+                checkpoint_file = run_dir / name
+                checkpoint_file.write_text(content)
+                mlflow.log_artifact(str(checkpoint_file), artifact_path="checkpoints")
             return run.info.run_id
 
     return _log_run

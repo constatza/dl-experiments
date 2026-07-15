@@ -6,16 +6,19 @@ from dataclasses import dataclass
 from collections.abc import Mapping
 from datetime import datetime, UTC
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from loguru import logger
 from mlflow.exceptions import MlflowException
-from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST, ErrorCode
+from mlflow.protos.databricks_pb2 import RESOURCE_ALREADY_EXISTS, RESOURCE_DOES_NOT_EXIST, ErrorCode
 from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.job_metadata import read_job_metadata
 from neuralls.platform.config.models.dataset_identity import normalize_registry_id
+from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 
 RESERVED_ALIASES: set[str] = {"latest"}
+CHECKPOINT_ARTIFACT_PATH_TAG = "checkpoint_artifact_path"
 
 
 @dataclass(frozen=True)
@@ -66,31 +69,115 @@ def _warn_existing_registered_model_name(
     )
 
 
+def _ensure_registered_model_exists(client: MlflowClient, name: str) -> None:
+    """Create the registered model if it does not already exist.
+
+    Args:
+        client: MLflow client bound to the target tracking URI.
+        name: Registered model name to ensure exists.
+
+    Raises:
+        MlflowException: Any error other than "already exists" propagates.
+    """
+    try:
+        client.create_registered_model(name)
+    except MlflowException as exc:
+        if exc.error_code == ErrorCode.Name(RESOURCE_ALREADY_EXISTS):
+            return
+        raise
+
+
+def _select_checkpoint_relative_path(
+    *,
+    client: MlflowClient,
+    run_id: str,
+) -> str:
+    """Download a run's ``checkpoints/`` artifacts and select one unambiguous file.
+
+    Args:
+        client: MLflow client bound to the target tracking URI.
+        run_id: MLflow run whose ``checkpoints/`` artifacts are inspected.
+
+    Returns:
+        The artifact-relative path of the selected checkpoint (e.g.
+        ``"checkpoints/best.ckpt"``), suitable for building a ``runs:/`` URI.
+
+    Raises:
+        FileNotFoundError: If the run has no ``checkpoints/`` artifacts at all.
+        ValueError: If multiple distinct, unresolvable checkpoints are found
+            (propagated unchanged from ``find_single_checkpoint``).
+    """
+    no_checkpoints_message = (
+        f"Run '{run_id}' has no 'checkpoints' artifacts to register. "
+        "Registration requires a checkpoint artifact logged under "
+        "'checkpoints/' before a model version can be pinned."
+    )
+    with TemporaryDirectory() as scratch_dir:
+        try:
+            root = Path(
+                client.download_artifacts(
+                    run_id=run_id,
+                    path="checkpoints",
+                    dst_path=scratch_dir,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise FileNotFoundError(no_checkpoints_message) from exc
+        try:
+            selected = find_single_checkpoint(root)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(no_checkpoints_message) from exc
+        return f"checkpoints/{selected.relative_to(root).as_posix()}"
+
+
 def register_logged_model(
     *,
     run_id: str,
     registered_model_name: str,
     tracking_uri: str,
-    artifact_path: str = "model",
     aliases: tuple[str, ...] = (),
     tags: Mapping[str, str] | None = None,
 ) -> RegisteredModelRecord:
-    """Register a logged model artifact and attach aliases."""
-    from dlkit.mlflow import register_logged_model as _dlkit_register
+    """Register a pinned checkpoint artifact and attach aliases.
 
+    Selects exactly one unambiguous checkpoint file from the run's
+    ``checkpoints/`` artifacts and pins it as the model version's ``source`` —
+    once, deliberately, at registration time — so resolution later becomes a
+    direct download with no scanning. Uses ``MlflowClient.create_model_version``
+    directly (not the fluent ``mlflow.register_model``), since that fluent
+    wrapper's validation rejects a bare single-file source and only accepts an
+    MLmodel-flavored directory or a registered "Logged Model" entity.
+
+    Args:
+        run_id: MLflow run whose ``checkpoints/`` artifacts supply the pinned file.
+        registered_model_name: Registered model name to create or append a version to.
+        tracking_uri: MLflow tracking URI.
+        aliases: Aliases to assign to the new version.
+        tags: Additional version tags to set alongside the pinning metadata.
+
+    Returns:
+        Immutable record describing the new registered model version.
+
+    Raises:
+        FileNotFoundError: If the run has no ``checkpoints/`` artifacts.
+        ValueError: If the run's ``checkpoints/`` artifacts are ambiguous
+            (multiple distinct, unresolvable checkpoint candidates).
+    """
     client = MlflowClient(tracking_uri=tracking_uri)
     _warn_existing_registered_model_name(
         client=client,
         registered_model_name=registered_model_name,
     )
-    registered = _dlkit_register(
-        registered_model_name,
+    _ensure_registered_model_exists(client, registered_model_name)
+
+    relative_path = _select_checkpoint_relative_path(client=client, run_id=run_id)
+    source = f"runs:/{run_id}/{relative_path}"
+    model_version = client.create_model_version(
+        name=registered_model_name,
+        source=source,
         run_id=run_id,
-        artifact_path=artifact_path,
-        tracking_uri=tracking_uri,
     )
-    model_uri = registered.source or f"runs:/{run_id}/{artifact_path.strip('/')}"
-    version = int(registered.version)
+    version = int(model_version.version)
     for alias in _normalize_aliases(aliases):
         client.set_registered_model_alias(
             name=registered_model_name,
@@ -110,6 +197,7 @@ def register_logged_model(
     registration_ts = datetime.now(tz=UTC).isoformat(timespec="seconds")
     effective_tags: dict[str, str] = dict(tags or {})
     effective_tags["registered_at"] = registration_ts
+    effective_tags[CHECKPOINT_ARTIFACT_PATH_TAG] = relative_path
     for key, value in effective_tags.items():
         client.set_model_version_tag(
             name=registered_model_name,
@@ -121,7 +209,7 @@ def register_logged_model(
     return RegisteredModelRecord(
         name=registered_model_name,
         version=version,
-        model_uri=model_uri,
+        model_uri=source,
         run_id=run_id,
     )
 

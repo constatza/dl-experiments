@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import mlflow
 import pytest
+from mlflow.tracking import MlflowClient
 
-from tests.workflows.conftest import LoggedRunFactory
+from tests.workflows.conftest import LoggedNamedCheckpointsRunFactory, LoggedRunFactory
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
@@ -20,12 +20,13 @@ from neuralls.composition.assignments.model_resolution import (
     ModelResolution,
     PreconditionerResolutionResult,
     _download_checkpoint_for_run,
-    _find_single_checkpoint,
     build_neural_download_dirname,
     resolve_model_ref,
     resolve_preconditioner_models,
     resolve_preconditioner_models_with_warnings,
 )
+from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
+from neuralls.platform.tracking.model_registry import register_logged_model
 
 
 def _tracking_uri(tmp_path: Path) -> str:
@@ -244,7 +245,7 @@ def test_find_single_checkpoint_collapses_nested_duplicate_copy(tmp_path: Path) 
     primary.write_bytes(b"same-checkpoint")
     duplicate.write_bytes(b"same-checkpoint")
 
-    resolved = _find_single_checkpoint(root)
+    resolved = find_single_checkpoint(root)
 
     assert resolved == primary
 
@@ -256,7 +257,7 @@ def test_find_single_checkpoint_prefers_best_over_last(tmp_path: Path) -> None:
     best.write_bytes(b"best")
     (root / "last.ckpt").write_bytes(b"last")
 
-    resolved = _find_single_checkpoint(root)
+    resolved = find_single_checkpoint(root)
 
     assert resolved == best
 
@@ -270,7 +271,7 @@ def test_find_single_checkpoint_rejects_multiple_best_candidates(tmp_path: Path)
     (root / "last.ckpt").write_bytes(b"last")
 
     with pytest.raises(ValueError, match="Multiple distinct checkpoints found"):
-        _find_single_checkpoint(root)
+        find_single_checkpoint(root)
 
 
 def test_find_single_checkpoint_rejects_interval_checkpoint_with_last(tmp_path: Path) -> None:
@@ -280,7 +281,7 @@ def test_find_single_checkpoint_rejects_interval_checkpoint_with_last(tmp_path: 
     (root / "last.ckpt").write_bytes(b"last")
 
     with pytest.raises(ValueError, match="Multiple distinct checkpoints found"):
-        _find_single_checkpoint(root)
+        find_single_checkpoint(root)
 
 
 def test_find_single_checkpoint_rejects_distinct_candidates(tmp_path: Path) -> None:
@@ -291,7 +292,7 @@ def test_find_single_checkpoint_rejects_distinct_candidates(tmp_path: Path) -> N
     (root / "second.ckpt").write_bytes(b"second")
 
     with pytest.raises(ValueError, match="Multiple distinct checkpoints found"):
-        _find_single_checkpoint(root)
+        find_single_checkpoint(root)
 
 
 def test_find_single_checkpoint_stays_within_provided_root(tmp_path: Path) -> None:
@@ -304,7 +305,7 @@ def test_find_single_checkpoint_stays_within_provided_root(tmp_path: Path) -> No
     expected.write_bytes(b"target")
     (sibling_root / "other.ckpt").write_bytes(b"sibling")
 
-    resolved = _find_single_checkpoint(target_root)
+    resolved = find_single_checkpoint(target_root)
 
     assert resolved == expected
 
@@ -374,9 +375,15 @@ def test_resolve_registered_ref_latest_picks_highest_version(
     run_c = log_run_with_checkpoint("marker-c")
 
     model_name = "LatestVersionModel"
-    mlflow.register_model(model_uri=f"runs:/{run_b}/model", name=model_name)  # v1
-    mlflow.register_model(model_uri=f"runs:/{run_c}/model", name=model_name)  # v2
-    mlflow.register_model(model_uri=f"runs:/{run_a}/model", name=model_name)  # v3
+    register_logged_model(
+        run_id=run_b, registered_model_name=model_name, tracking_uri=mlflow_tracking_uri
+    )  # v1
+    register_logged_model(
+        run_id=run_c, registered_model_name=model_name, tracking_uri=mlflow_tracking_uri
+    )  # v2
+    register_logged_model(
+        run_id=run_a, registered_model_name=model_name, tracking_uri=mlflow_tracking_uri
+    )  # v3
 
     spec = NeuralPreconditionerConfig(
         name="neural",
@@ -469,4 +476,75 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_and_contin
             specs=[resolvable, unresolvable],
             tracking_uri=mlflow_tracking_uri,
             download_root=tmp_path / "downloads",
+        )
+
+
+def test_resolve_registered_ref_uses_pinned_checkpoint_without_rescanning(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_named_checkpoints: LoggedNamedCheckpointsRunFactory,
+) -> None:
+    """Resolution downloads the pinned artifact directly, ignoring later ambiguity.
+
+    After registration pins ``checkpoints/best.ckpt``, a second, distinct
+    ``best.ckpt`` is added under a nested path so that a rescan (rather than a
+    direct pinned download) would raise on ambiguity. Resolution must still
+    succeed and return exactly the originally-pinned file, proving it never
+    rescans ``checkpoints/``.
+    """
+    run_id = log_run_with_named_checkpoints(
+        {"best.ckpt": "best-content", "last.ckpt": "last-content"}
+    )
+    model_name = "PinnedNoRescanModel"
+    record = register_logged_model(
+        run_id=run_id,
+        registered_model_name=model_name,
+        tracking_uri=mlflow_tracking_uri,
+    )
+
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    ambiguous_best = tmp_path / "nested" / "best.ckpt"
+    ambiguous_best.parent.mkdir(parents=True)
+    ambiguous_best.write_text("ambiguous-best-content")
+    client.log_artifact(run_id, str(ambiguous_best), artifact_path="checkpoints/nested")
+
+    spec = NeuralPreconditionerConfig(
+        name="neural",
+        type=PreconditionerType.NEURAL,
+        model_ref=RegisteredModelRefConfig(name=model_name, version=record.version),
+    )
+
+    resolution = resolve_model_ref(
+        spec=spec,
+        tracking_uri=mlflow_tracking_uri,
+        destination=tmp_path / "downloads",
+    )
+
+    assert resolution.checkpoint_path.name == "best.ckpt"
+    assert resolution.checkpoint_path.read_text() == "best-content"
+
+
+def test_resolve_registered_ref_without_pinned_tag_raises_actionable_error(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
+) -> None:
+    """A registered version created before checkpoint pinning cannot be resolved."""
+    run_id = log_run_with_checkpoint("marker-legacy")
+    model_name = "LegacyUnpinnedModel"
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    client.create_registered_model(model_name)
+    client.create_model_version(name=model_name, source=f"runs:/{run_id}/model", run_id=run_id)
+
+    spec = NeuralPreconditionerConfig(
+        name="neural",
+        type=PreconditionerType.NEURAL,
+        model_ref=RegisteredModelRefConfig(name=model_name, version=1),
+    )
+
+    with pytest.raises(ValueError, match="predates checkpoint pinning"):
+        resolve_model_ref(
+            spec=spec,
+            tracking_uri=mlflow_tracking_uri,
+            destination=tmp_path / "downloads",
         )

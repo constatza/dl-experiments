@@ -46,3 +46,39 @@ def test_logged_model_ref_with_run_id_is_valid() -> None:
     )
     assert cfg.model_ref is not None
     assert cfg.model_ref.source == "logged"
+
+
+def test_assignment_and_registered_model_ref_name_together_is_rejected() -> None:
+    """assignment and model_ref.name are competing identity sources; both is invalid."""
+    with pytest.raises(ValidationError, match="not both"):
+        NeuralPreconditionerConfig(
+            name="neural",
+            type=PreconditionerType.NEURAL,
+            assignment="my-assignment-id",
+            model_ref=RegisteredModelRefConfig(name="unrelated-model", alias="champion"),
+        )
+
+
+def test_assignment_alone_with_registered_model_ref_alias_is_valid() -> None:
+    """assignment plus an alias-only model_ref (no name) is the intended single-source case."""
+    cfg = NeuralPreconditionerConfig(
+        name="neural",
+        type=PreconditionerType.NEURAL,
+        assignment="my-assignment-id",
+        model_ref=RegisteredModelRefConfig(alias="champion"),
+    )
+    assert cfg.assignment == "my-assignment-id"
+    assert isinstance(cfg.model_ref, RegisteredModelRefConfig)
+    assert cfg.model_ref.name is None
+
+
+def test_registered_model_ref_name_alone_without_assignment_is_valid() -> None:
+    """model_ref.name with no assignment references an unrelated registered model."""
+    cfg = NeuralPreconditionerConfig(
+        name="neural",
+        type=PreconditionerType.NEURAL,
+        model_ref=RegisteredModelRefConfig(name="unrelated-model", alias="champion"),
+    )
+    assert cfg.assignment is None
+    assert isinstance(cfg.model_ref, RegisteredModelRefConfig)
+    assert cfg.model_ref.name == "unrelated-model"

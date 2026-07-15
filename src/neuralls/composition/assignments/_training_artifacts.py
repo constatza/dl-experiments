@@ -12,8 +12,8 @@ from loguru import logger
 from mlflow.tracking import MlflowClient
 
 from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
-from neuralls.composition.assignments.model_resolution import _find_single_checkpoint
 from neuralls.composition.tracking.run_specs import build_training_run_spec, format_run_timestamp
+from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 from neuralls.platform.config.models.experiments import AssignmentEntry, ExperimentNamesConfig
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
 from neuralls.platform.storage.training_artifacts import (
@@ -433,7 +433,7 @@ def _download_training_checkpoint(
         raise RuntimeError(
             f"Could not download checkpoints for run '{run_id}' from MLflow: {exc}"
         ) from exc
-    return _find_single_checkpoint(downloaded_root)
+    return find_single_checkpoint(downloaded_root)
 
 
 def _resolve_training_checkpoint(

@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
+import mlflow
 import pytest
+from mlflow.tracking import MlflowClient
 
+from tests.workflows.conftest import LoggedNamedCheckpointsRunFactory, LoggedRunFactory
 from neuralls.platform.tracking.model_registry import (
+    CHECKPOINT_ARTIFACT_PATH_TAG,
     assign_dataset_alias_to_registered_model,
     build_registered_model_name,
     register_logged_model,
@@ -20,94 +24,94 @@ def test_build_registered_model_name_uses_architecture_only() -> None:
     assert build_registered_model_name("NormScaledLinearFFNN") == "NormScaledLinearFFNN"
 
 
-@pytest.fixture
-def mock_dlkit_register_and_client():
-    """Patched dlkit register_logged_model and MlflowClient for registration tests."""
-    with (
-        patch("dlkit.mlflow.register_logged_model") as mock_dlkit_register,
-        patch("neuralls.platform.tracking.model_registry.MlflowClient") as mock_client_cls,
-    ):
-        mock_dlkit_register.return_value.version = "3"
-        mock_dlkit_register.return_value.source = "runs:/run-exp/model"
-        client = mock_client_cls.return_value
-        client.get_model_version_by_alias.return_value.version = "3"
-        yield mock_dlkit_register, client
-
-
-@patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_applies_aliases_and_tags(
-    mock_dlkit_register: MagicMock,
-    mock_client_cls: MagicMock,
-    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
 ) -> None:
-    """Registration normalizes aliases and writes version tags."""
-    mock_dlkit_register.return_value.version = "7"
-    mock_dlkit_register.return_value.source = "runs:/run-1/model"
-    client = mock_client_cls.return_value
-    client.get_model_version_by_alias.return_value.version = "7"
+    """Registration normalizes aliases, pins the checkpoint, and writes version tags."""
+    run_id = log_run_with_checkpoint("marker-aliases")
 
     record = register_logged_model(
-        run_id="run-1",
+        run_id=run_id,
         registered_model_name="NormScaledLinearFFNN",
-        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tracking_uri=mlflow_tracking_uri,
         aliases=("@solutions", "candidate", "candidate"),
-        tags={
-            "dataset": "solutions",
-            "dataset_config_path": str(tmp_path / "datasets" / "solutions.toml"),
-        },
+        tags={"dataset": "solutions"},
     )
 
     assert record.name == "NormScaledLinearFFNN"
-    assert record.version == 7
-    client.set_registered_model_alias.assert_has_calls(
-        [
-            call(name="NormScaledLinearFFNN", alias="solutions", version="7"),
-            call(name="NormScaledLinearFFNN", alias="candidate", version="7"),
-        ]
-    )
-    client.get_model_version_by_alias.assert_has_calls(
-        [
-            call(name="NormScaledLinearFFNN", alias="solutions"),
-            call(name="NormScaledLinearFFNN", alias="candidate"),
-        ]
-    )
-    client.set_model_version_tag.assert_has_calls(
-        [
-            call(
-                name="NormScaledLinearFFNN",
-                version="7",
-                key="dataset",
-                value="solutions",
-            ),
-            call(
-                name="NormScaledLinearFFNN",
-                version="7",
-                key="dataset_config_path",
-                value=str(tmp_path / "datasets" / "solutions.toml"),
-            ),
-        ]
-    )
+    assert record.run_id == run_id
+    assert record.model_uri == f"runs:/{run_id}/checkpoints/marker-aliases.ckpt"
+
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    version_str = str(record.version)
+    solutions_version = client.get_model_version_by_alias("NormScaledLinearFFNN", "solutions")
+    candidate_version = client.get_model_version_by_alias("NormScaledLinearFFNN", "candidate")
+    assert int(solutions_version.version) == record.version
+    assert int(candidate_version.version) == record.version
+
+    version = client.get_model_version("NormScaledLinearFFNN", version_str)
+    assert version.tags["dataset"] == "solutions"
+    assert version.tags[CHECKPOINT_ARTIFACT_PATH_TAG] == "checkpoints/marker-aliases.ckpt"
+    datetime.fromisoformat(version.tags["registered_at"])
 
 
-@patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_rejects_reserved_alias(
-    mock_dlkit_register: MagicMock,
-    _mock_client_cls: MagicMock,
-    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
 ) -> None:
     """Reserved aliases fail fast before assignment."""
-    mock_dlkit_register.return_value.version = "7"
-    mock_dlkit_register.return_value.source = "runs:/run-1/model"
+    run_id = log_run_with_checkpoint("marker-reserved")
+
     with pytest.raises(ValueError, match="reserved"):
         register_logged_model(
-            run_id="run-1",
+            run_id=run_id,
             registered_model_name="NormScaledLinearFFNN",
-            tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+            tracking_uri=mlflow_tracking_uri,
             aliases=("latest",),
             tags=None,
         )
+
+
+def test_register_logged_model_raises_when_run_has_no_checkpoints(
+    mlflow_tracking_uri: str,
+    mlflow_experiment: str,
+) -> None:
+    """Registration fails loudly when the run has no checkpoints/ artifacts at all."""
+    with mlflow.start_run() as run:
+        mlflow.log_param("x", 1)
+        run_id = run.info.run_id
+
+    with pytest.raises(FileNotFoundError, match="no 'checkpoints' artifacts"):
+        register_logged_model(
+            run_id=run_id,
+            registered_model_name="NoCheckpointModel",
+            tracking_uri=mlflow_tracking_uri,
+        )
+
+
+def test_register_logged_model_pins_best_checkpoint_and_tags_source(
+    mlflow_tracking_uri: str,
+    log_run_with_named_checkpoints: LoggedNamedCheckpointsRunFactory,
+) -> None:
+    """Registering a run with best+last checkpoints pins the exact best.ckpt artifact."""
+    run_id = log_run_with_named_checkpoints(
+        {"best.ckpt": "best-content", "last.ckpt": "last-content"}
+    )
+
+    record = register_logged_model(
+        run_id=run_id,
+        registered_model_name="BestCheckpointModel",
+        tracking_uri=mlflow_tracking_uri,
+    )
+
+    expected_source = f"runs:/{run_id}/checkpoints/best.ckpt"
+    assert record.model_uri == expected_source
+
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    version = client.get_model_version("BestCheckpointModel", str(record.version))
+    assert version.source == expected_source
+    assert version.tags[CHECKPOINT_ARTIFACT_PATH_TAG] == "checkpoints/best.ckpt"
 
 
 @patch("neuralls.platform.tracking.model_registry.MlflowClient")
@@ -175,166 +179,115 @@ def test_assign_dataset_alias_to_registered_model_returns_none_when_missing(
 
 
 def test_register_logged_model_uses_experiment_id_as_name(
-    mock_dlkit_register_and_client: tuple,
-    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
 ) -> None:
     """Registering under experiment_id produces a model named by experiment, not architecture."""
-    mock_dlkit_register, client = mock_dlkit_register_and_client
     experiment_id = "spectral-energy"
-    model_class = "NormScaledLinearFFNN"
-    tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
+    run_id = log_run_with_checkpoint("marker-exp")
 
     record = register_logged_model(
-        run_id="run-exp",
+        run_id=run_id,
         registered_model_name=experiment_id,
-        tracking_uri=tracking_uri,
+        tracking_uri=mlflow_tracking_uri,
         aliases=("candidate",),
-        tags={"model_class": model_class},
+        tags={"model_class": "NormScaledLinearFFNN"},
     )
 
     assert record.name == experiment_id
-    mock_dlkit_register.assert_called_once_with(
-        experiment_id,
-        run_id="run-exp",
-        artifact_path="model",
-        tracking_uri=tracking_uri,
-    )
-    registered_at_value = next(
-        call_args.kwargs["value"]
-        for call_args in client.set_model_version_tag.call_args_list
-        if call_args.kwargs["key"] == "registered_at"
-    )
-    client.set_model_version_tag.assert_has_calls(
-        [
-            call(
-                name=experiment_id,
-                version="3",
-                key="registered_at",
-                value=registered_at_value,
-            ),
-            call(
-                name=experiment_id,
-                version="3",
-                key="model_class",
-                value=model_class,
-            ),
-        ],
-        any_order=True,
-    )
-    datetime.fromisoformat(registered_at_value)
+
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    version = client.get_model_version(experiment_id, str(record.version))
+    assert version.tags["model_class"] == "NormScaledLinearFFNN"
+    datetime.fromisoformat(version.tags["registered_at"])
 
 
-@patch("neuralls.platform.tracking.model_registry.logger")
-@patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_warns_when_name_exists(
-    mock_dlkit_register: MagicMock,
-    mock_client_cls: MagicMock,
-    mock_logger: MagicMock,
-    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
 ) -> None:
     """Existing registered names still register a new version and emit one warning."""
-    mock_dlkit_register.return_value.version = "5"
-    mock_dlkit_register.return_value.source = "runs:/run-1/model"
-    client = mock_client_cls.return_value
-    client.get_registered_model.return_value = object()
+    run_id_1 = log_run_with_checkpoint("marker-first")
+    run_id_2 = log_run_with_checkpoint("marker-second")
 
     register_logged_model(
-        run_id="run-1",
+        run_id=run_id_1,
         registered_model_name="exp-1",
-        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tracking_uri=mlflow_tracking_uri,
         tags={"model_class": "NormScaledLinearFFNN"},
     )
 
-    client.get_registered_model.assert_called_once_with("exp-1")
-    mock_dlkit_register.assert_called_once()
-    mock_logger.warning.assert_called_once()
+    with patch("neuralls.platform.tracking.model_registry.logger") as mock_logger:
+        register_logged_model(
+            run_id=run_id_2,
+            registered_model_name="exp-1",
+            tracking_uri=mlflow_tracking_uri,
+            tags={"model_class": "NormScaledLinearFFNN"},
+        )
+        mock_logger.warning.assert_called_once()
 
 
-@patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_always_sets_registered_at(
-    mock_dlkit_register: MagicMock,
-    mock_client_cls: MagicMock,
-    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
 ) -> None:
     """Every registered model version receives a UTC registration timestamp tag."""
-    mock_dlkit_register.return_value.version = "5"
-    mock_dlkit_register.return_value.source = "runs:/run-1/model"
-    client = mock_client_cls.return_value
+    run_id = log_run_with_checkpoint("marker-timestamp")
 
-    register_logged_model(
-        run_id="run-1",
+    record = register_logged_model(
+        run_id=run_id,
         registered_model_name="exp-1",
-        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tracking_uri=mlflow_tracking_uri,
         tags={"model_class": "NormScaledLinearFFNN"},
     )
 
-    registered_at_calls = [
-        call_args
-        for call_args in client.set_model_version_tag.call_args_list
-        if call_args.kwargs["key"] == "registered_at"
-    ]
-    assert len(registered_at_calls) == 1
-    datetime.fromisoformat(registered_at_calls[0].kwargs["value"])
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    version = client.get_model_version("exp-1", str(record.version))
+    datetime.fromisoformat(version.tags["registered_at"])
 
 
-@patch("neuralls.platform.tracking.model_registry.MlflowClient")
-@patch("dlkit.mlflow.register_logged_model")
 def test_register_logged_model_registered_at_not_overridden_by_caller(
-    mock_dlkit_register: MagicMock,
-    mock_client_cls: MagicMock,
-    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
 ) -> None:
     """Caller-provided registered_at values must not replace the invariant timestamp."""
-    mock_dlkit_register.return_value.version = "5"
-    mock_dlkit_register.return_value.source = "runs:/run-1/model"
-    client = mock_client_cls.return_value
+    run_id = log_run_with_checkpoint("marker-override")
 
-    register_logged_model(
-        run_id="run-1",
+    record = register_logged_model(
+        run_id=run_id,
         registered_model_name="exp-1",
-        tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
+        tracking_uri=mlflow_tracking_uri,
         tags={"registered_at": "override"},
     )
 
-    registered_at_calls = [
-        call_args
-        for call_args in client.set_model_version_tag.call_args_list
-        if call_args.kwargs["key"] == "registered_at"
-    ]
-    assert len(registered_at_calls) == 1
-    assert registered_at_calls[0].kwargs["value"] != "override"
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    version = client.get_model_version("exp-1", str(record.version))
+    assert version.tags["registered_at"] != "override"
+    datetime.fromisoformat(version.tags["registered_at"])
 
 
 def test_register_logged_model_two_experiments_no_alias_collision(
-    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
 ) -> None:
     """Two experiments on the same dataset register under separate names without collision."""
-    with (
-        patch("dlkit.mlflow.register_logged_model") as mock_dlkit_register,
-        patch("neuralls.platform.tracking.model_registry.MlflowClient") as mock_client_cls,
-    ):
-        mock_dlkit_register.return_value.version = "1"
-        mock_dlkit_register.return_value.source = "runs:/run-a/model"
-        client = mock_client_cls.return_value
-        client.get_model_version_by_alias.return_value.version = "1"
-        tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
+    run_id_a = log_run_with_checkpoint("marker-a")
+    run_id_b = log_run_with_checkpoint("marker-b")
 
-        record_a = register_logged_model(
-            run_id="run-a",
-            registered_model_name="spectral-energy",
-            tracking_uri=tracking_uri,
-            aliases=("candidate",),
-            tags={"model_class": "NormScaledLinearFFNN"},
-        )
-        record_b = register_logged_model(
-            run_id="run-b",
-            registered_model_name="spectral-energy-normalized",
-            tracking_uri=tracking_uri,
-            aliases=("candidate",),
-            tags={"model_class": "NormScaledLinearFFNN"},
-        )
+    record_a = register_logged_model(
+        run_id=run_id_a,
+        registered_model_name="spectral-energy",
+        tracking_uri=mlflow_tracking_uri,
+        aliases=("candidate",),
+        tags={"model_class": "NormScaledLinearFFNN"},
+    )
+    record_b = register_logged_model(
+        run_id=run_id_b,
+        registered_model_name="spectral-energy-normalized",
+        tracking_uri=mlflow_tracking_uri,
+        aliases=("candidate",),
+        tags={"model_class": "NormScaledLinearFFNN"},
+    )
 
     assert record_a.name != record_b.name
     assert record_a.name == "spectral-energy"

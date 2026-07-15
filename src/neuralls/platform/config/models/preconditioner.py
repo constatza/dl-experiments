@@ -51,7 +51,13 @@ class RegisteredModelRefConfig(BaseModel):
 
     Attributes:
         source: Discriminator field, always "registered".
-        name: Registered model name when explicitly provided.
+        name: Registered model name when explicitly provided. Only meaningful
+            for a registered model with no assignment linkage at all (e.g. an
+            externally-trained baseline this system never trained). When a
+            ``NeuralPreconditionerConfig.assignment`` is set, the registered
+            model name is derived automatically from the assignment; do not
+            also set `name` in that case (see
+            ``NeuralPreconditionerConfig.validate_single_model_identity_source``).
         alias: Model alias (e.g. ``"@solutions"``); ``@`` prefix is stripped.
         version: Explicit model version number.
         latest: If True, select the highest registered version number. This is
@@ -258,6 +264,36 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
         if isinstance(v, (list, tuple)):
             return tuple(str(x) for x in v)
         return v
+
+    @model_validator(mode="after")
+    def validate_single_model_identity_source(self) -> NeuralPreconditionerConfig:
+        """Reject overlapping registered-model identity sources.
+
+        `assignment` derives the registered model name automatically
+        (`build_registered_model_name(assignment_id)`); `model_ref.name` on a
+        `RegisteredModelRefConfig` names a registered model unrelated to any
+        assignment. Setting both would leave undocumented, silent precedence
+        between two competing identity sources.
+
+        Returns:
+            The validated config instance.
+
+        Raises:
+            ValueError: If both `assignment` and a `RegisteredModelRefConfig`
+                `model_ref.name` are set.
+        """
+        if (
+            self.assignment is not None
+            and isinstance(self.model_ref, RegisteredModelRefConfig)
+            and self.model_ref.name is not None
+        ):
+            raise ValueError(
+                "Set either 'assignment' (which derives the registered model name "
+                "automatically) or 'model_ref.name' (for a registered model unrelated "
+                "to any assignment) — not both; assignment is the single source of "
+                "truth for an assignment's registered model identity."
+            )
+        return self
 
 
 class AggregationCoarseningConfig(BaseModel):

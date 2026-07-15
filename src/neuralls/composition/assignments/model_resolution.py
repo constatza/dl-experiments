@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from hashlib import sha256
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -15,7 +14,9 @@ from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST, ErrorCode
 
 from neuralls.platform.config.models.dataset_identity import normalize_registry_id
 from neuralls.platform.storage.filesystem import sanitize_identifier
+from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 from neuralls.platform.tracking.mlflow import quote_filter_value
+from neuralls.platform.tracking.model_registry import CHECKPOINT_ARTIFACT_PATH_TAG
 
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
@@ -199,79 +200,6 @@ def search_logged_models(
     ]
 
 
-def _checkpoint_selection_role(checkpoint: Path) -> str | None:
-    """Classify checkpoint filenames that are safe to prefer over other candidates."""
-    match checkpoint.name:
-        case "best.ckpt":
-            return "best"
-        case _:
-            return None
-
-
-def _select_preferred_checkpoint(checkpoints: list[Path]) -> tuple[str, Path] | None:
-    """Select one preferred checkpoint candidate by explicit filename role."""
-    role_candidates: dict[str, list[Path]] = {"best": []}
-    for checkpoint in checkpoints:
-        match _checkpoint_selection_role(checkpoint):
-            case "best":
-                role_candidates["best"].append(checkpoint)
-            case _:
-                continue
-
-    match role_candidates:
-        case {"best": [best_checkpoint]}:
-            return "best", best_checkpoint
-        case _:
-            return None
-
-
-def _find_single_checkpoint(root: Path) -> Path:
-    """Find one unambiguous checkpoint under a local artifact directory."""
-    checkpoints = sorted(root.glob("**/*.ckpt"))
-    if not checkpoints:
-        raise FileNotFoundError(f"No checkpoint found under {root}")
-    logger.debug(
-        "Checkpoint discovery under {} found candidates: {}",
-        root,
-        [path.as_posix() for path in checkpoints],
-    )
-    if len(checkpoints) == 1:
-        return checkpoints[0]
-
-    groups: dict[tuple[str, str], list[Path]] = {}
-    for checkpoint in checkpoints:
-        digest = sha256(checkpoint.read_bytes()).hexdigest()
-        key = (checkpoint.name, digest)
-        groups.setdefault(key, []).append(checkpoint)
-
-    if len(groups) == 1:
-        duplicates = next(iter(groups.values()))
-        canonical = min(
-            duplicates,
-            key=lambda path: (len(path.relative_to(root).parts), path.relative_to(root).as_posix()),
-        )
-        logger.warning(
-            "Duplicate checkpoint artifacts found under {}. Using canonical path {}.",
-            root,
-            canonical,
-        )
-        return canonical
-
-    match _select_preferred_checkpoint(checkpoints):
-        case ("best", best_checkpoint):
-            logger.warning(
-                "Multiple distinct checkpoint artifacts found under {}. Using best checkpoint {}.",
-                root,
-                best_checkpoint,
-            )
-            return best_checkpoint
-        case _:
-            pass
-
-    candidate_list = ", ".join(path.as_posix() for path in checkpoints)
-    raise ValueError(f"Multiple distinct checkpoints found under {root}: {candidate_list}")
-
-
 def _download_checkpoint_for_run(
     *,
     client: MlflowClient,
@@ -297,7 +225,7 @@ def _download_checkpoint_for_run(
         )
     if primary_root is not None:
         try:
-            return _find_single_checkpoint(primary_root)
+            return find_single_checkpoint(primary_root)
         except FileNotFoundError:
             logger.debug(
                 "No checkpoint under 'checkpoints' for run {}. Falling back to '{}'.",
@@ -318,7 +246,7 @@ def _download_checkpoint_for_run(
             f"Could not download checkpoint artifacts for run '{run_id}' "
             f"from 'checkpoints' or '{fallback_artifact_path}'."
         ) from exc
-    return _find_single_checkpoint(fallback_root)
+    return find_single_checkpoint(fallback_root)
 
 
 def _resolve_registered_ref(
@@ -330,7 +258,24 @@ def _resolve_registered_ref(
     dataset_alias: str | None,
     model_name: str | None,
 ) -> ModelResolution:
-    """Resolve a registered model reference."""
+    """Resolve a registered model reference.
+
+    Registered model versions must have been created by
+    ``register_logged_model``, which pins one unambiguous checkpoint file at
+    registration time and records it under the ``checkpoint_artifact_path``
+    version tag. Resolution here is a direct, O(1) download of that pinned
+    artifact — there is no scanning, deduping, or best-checkpoint fallback;
+    that scan-and-select contract only applies to raw run references
+    (``LoggedModelRefConfig``, see ``_resolve_logged_ref``). A version created
+    before pinning existed (no tag present) cannot be resolved and must be
+    re-registered.
+
+    ``ref.name`` is only reached when there is no assignment context: when a
+    ``NeuralPreconditionerConfig.assignment`` is set, ``model_name`` (derived
+    from the assignment binding) is the single source of truth and
+    ``ref.name`` must be unset (enforced by a model validator on
+    ``NeuralPreconditionerConfig``).
+    """
     resolved_model_name = ref.name or model_name
     if resolved_model_name is None:
         raise ValueError(
@@ -369,11 +314,15 @@ def _resolve_registered_ref(
             f"Registered model '{resolved_model_name}' could not be resolved to an MLflow run."
         )
 
-    checkpoint_path = _download_checkpoint_for_run(
-        client=client,
-        run_id=run_id,
-        destination=destination,
-        fallback_artifact_path="model",
+    pinned_path = version.tags.get(CHECKPOINT_ARTIFACT_PATH_TAG)
+    if pinned_path is None:
+        raise ValueError(
+            f"Registered model '{resolved_model_name}' version {version.version} predates "
+            "checkpoint pinning and cannot be resolved — re-register it (register_logged_model) "
+            "to pin an exact checkpoint before it can be used."
+        )
+    checkpoint_path = Path(
+        client.download_artifacts(run_id=run_id, path=pinned_path, dst_path=str(destination))
     )
     return ModelResolution(
         model_uri=model_uri,

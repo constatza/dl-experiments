@@ -156,7 +156,20 @@ logging of those artifacts to platform tracking helpers so future runs can
 reconstruct the exact system that was compared.
 
 Comparison model resolution treats one resolved MLflow `run_id` as the hard
-boundary for checkpoint discovery. When downloaded run artifacts contain
-multiple `.ckpt` files, composition canonicalizes byte-identical duplicate
-copies, prefers a unique `best.ckpt`, and raises on remaining ambiguity instead
-of silently picking the first path.
+boundary for checkpoint discovery — but that scan-and-select contract now
+applies only to raw run references (`LoggedModelRefConfig`, used for "latest
+trained model" lookups). When downloaded run artifacts contain multiple
+`.ckpt` files, composition canonicalizes byte-identical duplicate copies,
+prefers a unique `best.ckpt`, and raises on remaining ambiguity instead of
+silently picking the first path.
+
+Registered model versions (`RegisteredModelRefConfig`) do not go through that
+scan: `register_logged_model` (`platform/tracking/model_registry.py`) pins one
+unambiguous checkpoint file once, at registration time, recording it in the
+`checkpoint_artifact_path` version tag alongside the version's `source`.
+Resolution then downloads that exact artifact directly — an O(1) lookup with
+no scanning, deduping, or best-checkpoint fallback. A version registered
+before this pinning existed has no `checkpoint_artifact_path` tag and cannot
+be resolved; it must be re-registered. Registration itself is a deliberate,
+manual action (e.g. called ad hoc or via the MLflow UI for alias management)
+— not an automatic side effect of training.
