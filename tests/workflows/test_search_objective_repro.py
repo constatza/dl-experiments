@@ -69,7 +69,7 @@ def _build_search_settings(tmp_path: Path, X: np.ndarray, Y: np.ndarray):
             name="FlexibleDataset",
             batch_size=4,
             num_workers=0,
-            module=DataModuleSelector(name="InMemoryModule"),
+            module=DataModuleSelector(name="ArrayDataModule"),
             features=(ValueEntry(name="x", value=X),),
             targets=(ValueEntry(name="y", value=Y, data_role=DataRole.TARGET),),
             # Default splits (test=0.15, val=0.15) already give a genuinely disjoint

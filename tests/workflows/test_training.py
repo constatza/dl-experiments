@@ -289,7 +289,7 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
             name="FlexibleDataset",
             batch_size=4,
             num_workers=0,
-            module=DataModuleSelector(name="InMemoryModule"),
+            module=DataModuleSelector(name="ArrayDataModule"),
             features=(ValueEntry(name="x", value=X),),
             targets=(ValueEntry(name="y", value=Y, data_role=DataRole.TARGET),),
         ),
@@ -668,7 +668,7 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         model=ModelComponentSettings(name="LinearModel"),
         data=DataSettings(
             name="FlexibleDataset",
-            module=DataModuleSelector(name="InMemoryModule"),
+            module=DataModuleSelector(name="ArrayDataModule"),
         ),
         training=TrainingSettings(
             trainer=TrainerSettings(max_epochs=1, default_root_dir=trainer_root)
