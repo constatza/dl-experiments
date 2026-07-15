@@ -10,7 +10,7 @@ from __future__ import annotations
 from dlkit.infrastructure.config.data_entries import DataEntry
 from loguru import logger
 
-from neuralls.composition.assignments._job_types import TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import AnyJobConfig
 from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
 from neuralls.platform.config.dataset_entries import entry_from_path
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
@@ -21,7 +21,7 @@ from neuralls.platform.storage.training_artifacts import (
 )
 
 
-def _validate_dataset_section(settings: TrainLikeJobConfig) -> None:
+def _validate_dataset_section(settings: AnyJobConfig) -> None:
     """Validate that the job config has a data section."""
     if settings.data is None:
         raise ValueError("Config is missing [data] section")
@@ -41,7 +41,7 @@ def _find_duplicate_entry_names(entries: tuple[DataEntry, ...]) -> set[str]:
 
 
 def validate_runtime_dataset_contract(
-    settings: TrainLikeJobConfig,
+    settings: AnyJobConfig,
     contract: RuntimeDatasetContract,
 ) -> None:
     """Validate the local runtime dataset-entry contract for training."""
@@ -70,7 +70,7 @@ def validate_runtime_dataset_contract(
             f"target name '{contract.target_name}', got {unsupported_target_names}."
         )
 
-    training_cfg = settings.training
+    training_cfg = getattr(settings, "training", None)
     loss_cfg = getattr(training_cfg, "loss", None) if training_cfg else None
     target_key = getattr(loss_cfg, "target_key", None)
     if target_key is None:
@@ -83,7 +83,7 @@ def validate_runtime_dataset_contract(
 
 
 def _primary_feature_name_from_settings(
-    settings: TrainLikeJobConfig,
+    settings: AnyJobConfig,
     contract: RuntimeDatasetContract,
 ) -> str:
     """Resolve the dispatch name for the primary input feature."""
@@ -98,7 +98,7 @@ def _primary_feature_name_from_settings(
 
 
 def _extra_feature_names_from_settings(
-    settings: TrainLikeJobConfig,
+    settings: AnyJobConfig,
     contract: RuntimeDatasetContract,
 ) -> list[str]:
     """Extract extra feature names declared in ``[[data.features]]``."""
@@ -144,7 +144,7 @@ def _create_target_entries(
 
 
 def _load_and_prepare_data(
-    settings: TrainLikeJobConfig,
+    settings: AnyJobConfig,
     workspace: AssignmentWorkspace,
     contract: RuntimeDatasetContract,
 ) -> tuple[TrainingArrays, list[DataEntry], list[DataEntry]]:

@@ -8,21 +8,12 @@ from pathlib import Path
 from loguru import logger
 
 
-def checkpoint_selection_role(checkpoint: Path) -> str | None:
-    """Classify checkpoint filenames that are safe to prefer over other candidates."""
-    match checkpoint.name:
-        case "best.ckpt":
-            return "best"
-        case _:
-            return None
-
-
 def select_preferred_checkpoint(checkpoints: list[Path]) -> tuple[str, Path] | None:
     """Select one preferred checkpoint candidate by explicit filename role."""
     role_candidates: dict[str, list[Path]] = {"best": []}
     for checkpoint in checkpoints:
-        match checkpoint_selection_role(checkpoint):
-            case "best":
+        match checkpoint.name:
+            case "best.ckpt":
                 role_candidates["best"].append(checkpoint)
             case _:
                 continue

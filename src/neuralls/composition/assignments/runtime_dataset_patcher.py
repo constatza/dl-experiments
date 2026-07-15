@@ -6,18 +6,18 @@ from dlkit.config import DataSettings
 from dlkit.infrastructure.config.data_entries import DataEntry
 
 from neuralls.composition.assignments._dataset_assembly import validate_runtime_dataset_contract
-from neuralls.composition.assignments._job_types import TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import AnyJobConfig
 from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
 from neuralls.platform.config.dataset_entries import apply_placeholder_metadata
 
 
-def patch_runtime_dataset(
-    settings: TrainLikeJobConfig,
+def patch_runtime_dataset[T: AnyJobConfig](
+    settings: T,
     *,
     features: list[DataEntry],
     targets: list[DataEntry],
     contract: RuntimeDatasetContract,
-) -> TrainLikeJobConfig:
+) -> T:
     """Inject resolved runtime dataset entries into ``settings.data`` only."""
     validate_runtime_dataset_contract(settings, contract)
     base_data = settings.data or DataSettings()

@@ -80,6 +80,21 @@ class ComparisonRunTags:
 
 
 @dataclass(frozen=True)
+class EvaluationRunTags:
+    """Structured tags for an eval-only run."""
+
+    phase: Literal["evaluation"]
+    assignment_id: str
+    source_training_run_id: str
+    split_artifact: str
+    assignment_display_name: str
+
+    def as_mlflow_tags(self) -> dict[str, str]:
+        """Serialize to MLflow-compatible string tag dict."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class ChildComparisonRunTags:
     """Structured tags for a per-preconditioner nested CG run.
 
@@ -112,7 +127,7 @@ class SessionRunTags:
         experiment_name: MLflow experiment the session's child runs are grouped under.
     """
 
-    phase: Literal["session_training", "session_comparison"]
+    phase: Literal["session_training", "session_comparison", "session_evaluation"]
     case_config: str
     case_config_path: str
     started_at: str
@@ -244,7 +259,7 @@ def build_session_run_spec(
     *,
     case_config_path: Path,
     experiment_name: str,
-    phase: Literal["session_training", "session_comparison"],
+    phase: Literal["session_training", "session_comparison", "session_evaluation"],
     timestamp: str | None = None,
 ) -> tuple[str, SessionRunTags]:
     """Build (run_name, SessionRunTags) for one batch session invocation.
@@ -271,6 +286,23 @@ def build_session_run_spec(
         experiment_name=experiment_name,
     )
     return run_name, tags
+
+
+def build_evaluation_tags(
+    *,
+    assignment_id: str,
+    assignment_display_name: str,
+    source_training_run_id: str,
+    split_artifact: str,
+) -> EvaluationRunTags:
+    """Build structured tags for a checkpoint evaluation run."""
+    return EvaluationRunTags(
+        phase="evaluation",
+        assignment_id=assignment_id,
+        source_training_run_id=source_training_run_id,
+        split_artifact=split_artifact,
+        assignment_display_name=assignment_display_name,
+    )
 
 
 def build_child_comparison_tags(

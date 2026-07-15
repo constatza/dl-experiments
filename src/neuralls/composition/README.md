@@ -4,7 +4,7 @@ The composition package owns wiring and config-driven assembly.
 
 ## Package Map
 
-- `assignments/`: registry loading, assignment wiring, training, comparison, inference
+- `assignments/`: registry loading, assignment wiring, training, eval, comparison, inference
 - `comparison/`: single-run comparison assembly around application/domain logic
 - `generation/`: config-driven dataset orchestration, dataset persistence wiring, and default tracing services
 - `inference/`: inference data-loading composition helpers
@@ -44,7 +44,7 @@ NumPy-backed workflow archives into tensors before calling `torchalg`, and may
 reshape `torchalg` outputs for existing dataset/reporting DTOs, but it does not
 own CG/PCG/FCG algorithms.
 
-For DLKit training, composition now consumes already-loaded lower-case DLKit
+For DLKit training and eval, composition now consumes already-loaded lower-case DLKit
 jobs. DLKit owns TOML parsing, profile references under `[run]`, section merge
 order, and typed validation. Composition owns only runtime materialization:
 dataset entry injection, workspace path patching, and tracking enablement on
@@ -91,13 +91,21 @@ training. DLKit's current
 construction, even though `NpyEntry` can forward format-specific load kwargs
 such as `mmap_mode`.
 
+Eval-only assembly reuses the same supervised dataset contract as training but
+does not recreate split policy. It resolves the latest finished training run
+for each assignment, downloads that run's checkpoint and `splits/*.json`
+artifact from MLflow, patches the downloaded split file into
+`data.splits.filepath`, and delegates metrics plus regression figures to
+DLKit's `evaluate()` API. Missing or ambiguous split artifacts are hard
+failures because regenerating ratios would evaluate a different test set.
+
 Prediction payload normalization follows the same rule. Composition accepts
 DLKit's raw boundary output once, normalizes it into the canonical prediction
 key `y_pred`, and then hands the normalized payload to diagnostics and artifact
 staging. Downstream reporting code does not keep a fallback list of prediction
 aliases.
 
-Training, inference, comparison, and generation assembly all follow the same
+Training, eval, inference, comparison, and generation assembly all follow the same
 rule: composition may decide which collaborators participate in a workflow, but
 it must not absorb low-level IO mechanics, config normalization policy, or
 tensor-level runtime behavior.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.composition.assignments._job_types import TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import AnyJobConfig, TrainLikeJobConfig
 
 
 def _retained_checkpoint_callback(output_dir: Path) -> dict[str, str]:
@@ -55,7 +55,7 @@ def patch_runtime_workspace(
     )
 
 
-def patch_dataloader_runtime(settings: TrainLikeJobConfig) -> TrainLikeJobConfig:
+def patch_dataloader_runtime[T: AnyJobConfig](settings: T) -> T:
     """Force conservative dataloader runtime settings for dense zarr execution."""
     data_cfg = settings.data
     if data_cfg is None:

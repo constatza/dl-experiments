@@ -8,6 +8,7 @@ The CLI package defines one public executable: `neuralls`.
 - `neuralls generate <case.toml>`: build every dataset declared in one case
 - `neuralls generate-single <dataset.toml> --case-config <case.toml>`: build one dataset config
 - `neuralls train <case.toml>`: train every assignment declared in one case
+- `neuralls eval <case.toml>`: evaluate completed assignment checkpoints on their logged test splits
 - `neuralls run <case.toml>`: generate datasets and train the full case matrix
 - `neuralls compare <case.toml>`: run every comparison profile declared in one case after their benchmark datasets exist
 
@@ -18,6 +19,7 @@ The CLI package defines one public executable: `neuralls`.
 - `generate.py`: case-wide dataset generation
 - `generate_single.py`: explicit single-dataset generation
 - `train.py`: case-wide training and aggregate reporting
+- `eval.py`: case-wide checkpoint evaluation and aggregate reporting
 - `run.py`: end-to-end case execution
 - `compare.py`: case-wide solver benchmarking
 - `options.py`: shared option aliases for profile and env-file resolution

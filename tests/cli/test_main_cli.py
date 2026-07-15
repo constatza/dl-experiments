@@ -15,6 +15,7 @@ from typer.testing import CliRunner
 
 from neuralls.application.models import AssignmentResult
 from neuralls.cli.compare import compare_case
+from neuralls.cli.eval import eval_case_batch
 from neuralls.cli.generate import generate_case
 from neuralls.cli.generate_single import generate_single
 from neuralls.cli.main import app
@@ -67,6 +68,7 @@ def test_root_help_lists_only_public_commands() -> None:
     assert sorted(command.commands) == [
         "compare",
         "config",
+        "eval",
         "generate",
         "generate-single",
         "run",
@@ -325,6 +327,14 @@ def test_train_signature_uses_batch_case_argument() -> None:
     assert config.default is ...
 
 
+def test_eval_signature_uses_batch_case_argument() -> None:
+    parameters = inspect.signature(eval_case_batch).parameters
+    config = parameters["config"].default
+
+    assert isinstance(config, ArgumentInfo)
+    assert config.default is ...
+
+
 @patch("neuralls.cli.train.write_metric_report")
 @patch("neuralls.cli.train.train_batch")
 @patch("neuralls.cli.train.load_validated_case_config")
@@ -361,6 +371,48 @@ def test_train_invokes_batch_workflow(
         case_config_path=config.resolve(),
     )
     mock_write_metric_report.assert_called_once_with(batch, metric="eval/mae", output_dir=None)
+
+
+@patch("neuralls.cli.eval.write_eval_metric_report")
+@patch("neuralls.cli.eval.eval_batch")
+@patch("neuralls.cli.eval.load_validated_case_config")
+@patch("neuralls.cli.eval.load_case_settings")
+def test_eval_invokes_batch_workflow(
+    mock_load_settings: MagicMock,
+    mock_load_case_config: MagicMock,
+    mock_eval_batch: MagicMock,
+    mock_write_metric_report: MagicMock,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "case.toml"
+    config.write_text("", encoding="utf-8")
+    settings = MagicMock()
+    cfg = MagicMock()
+    batch = MagicMock()
+    report_dir = tmp_path / "eval"
+    report_dir.mkdir()
+    mock_load_settings.return_value = settings
+    mock_load_case_config.return_value = (cfg, MagicMock())
+    mock_eval_batch.return_value = batch
+    mock_write_metric_report.return_value = report_dir
+
+    result = runner.invoke(
+        app,
+        ["eval", str(config), "--assignment", "a1", "--assignment", "a2"],
+    )
+
+    assert result.exit_code == 0
+    mock_load_settings.assert_called_once_with(config, None, profile=None)
+    mock_load_case_config.assert_called_once_with(config, settings)
+    mock_eval_batch.assert_called_once_with(
+        cfg=cfg,
+        configs_dir=config.resolve().parent,
+        settings=settings,
+        output_root=None,
+        case_config_path=config.resolve(),
+        assignment_ids=["a1", "a2"],
+    )
+    mock_write_metric_report.assert_called_once_with(batch, metric="mae", output_dir=None)
 
 
 def test_run_signature_uses_batch_case_argument() -> None:

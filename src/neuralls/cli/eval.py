@@ -1,0 +1,60 @@
+"""Evaluate trained assignments declared in one case config."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import typer
+
+from neuralls.cli.options import EnvFileOption, ProfileOption
+from neuralls.composition.assignments.assembler import load_validated_case_config
+from neuralls.composition.assignments.evaluation import eval_batch, write_eval_metric_report
+from neuralls.composition.config import load_case_settings
+from neuralls.shared.constants import EXIT_FAILURE
+
+
+def eval_case_batch(
+    config: Path = typer.Argument(
+        ...,
+        help="Path to a case config TOML.",
+    ),
+    metric: str = typer.Option(
+        "mae",
+        help="Evaluation metric key to plot across assignments.",
+    ),
+    output_dir: Path | None = typer.Option(
+        None,
+        help=("Directory for eval reports. Defaults to output_dir/eval/."),
+    ),
+    assignment: list[str] | None = typer.Option(
+        None,
+        "--assignment",
+        help="Assignment id to evaluate. Repeat to evaluate multiple assignments.",
+    ),
+    env_file: EnvFileOption = None,
+    profile: ProfileOption = None,
+) -> None:
+    """Evaluate trained assignment checkpoints on their logged test splits."""
+    try:
+        settings = load_case_settings(config, env_file, profile=profile)
+        cfg, _ = load_validated_case_config(config, settings)
+        batch = eval_batch(
+            cfg=cfg,
+            configs_dir=config.resolve().parent,
+            settings=settings,
+            output_root=output_dir,
+            case_config_path=config.resolve(),
+            assignment_ids=assignment,
+        )
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        typer.echo(f"Error during batch evaluation: {exc}", err=True)
+        raise typer.Exit(code=EXIT_FAILURE) from exc
+
+    report_dir = write_eval_metric_report(batch, metric=metric, output_dir=output_dir)
+    plot_path = report_dir / f"batch_metric_{metric.replace('/', '_')}.png"
+    if plot_path.exists():
+        typer.echo(f"Saved barplot: {plot_path}")
+    else:
+        typer.echo(f"No data to plot for metric '{metric}'.", err=True)
+
+    typer.echo(f"Saved label map: {report_dir / 'batch_eval_labels.json'}")

@@ -87,11 +87,19 @@ Tracking helpers treat DLKit as the authoritative checkpoint artifact logger.
 Workspace uploads therefore exclude the local `checkpoints/` tree and only
 forward staged diagnostics/config artifacts, avoiding duplicate MLflow artifact
 layouts such as `checkpoints/checkpoints/...`.
+Checkpoint discovery canonicalizes byte-identical duplicate artifacts and uses
+explicit filename-role pattern matching for preferred candidates; currently only
+a unique `best.ckpt` is preferred, while interval-style checkpoint names remain
+ambiguous.
 
 MLflow-specific policy also belongs here: safe metric-key sanitization, search
 filter escaping, workflow tracking-environment resolution, and comparison-run
 metric logging all stay under `platform.tracking` so orchestration code does
 not reimplement third-party rules.
+Eval-only artifact recovery follows the same boundary. Platform tracking
+helpers download and validate the checkpoint, split JSON, and staged config
+artifacts from an existing training run, while composition decides which
+assignment should be evaluated and how those artifacts are wired into DLKit.
 When runtime `MLFLOW_TRACKING_URI` or `MLFLOW_ARTIFACT_URI` values are already
 exported, platform tracking helpers preserve them verbatim instead of
 re-normalizing them against the local operating system.

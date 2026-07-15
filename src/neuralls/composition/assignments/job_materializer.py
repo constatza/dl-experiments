@@ -35,7 +35,10 @@ def materialize_training_job(
         contract=contract,
     )
     settings = patch_dataloader_runtime(settings)
-    settings = patch_runtime_workspace(settings, output_dir=workspace.root_dir)
+    settings = patch_runtime_workspace(
+        settings,
+        output_dir=workspace.root_dir,
+    )
     return settings, workspace
 
 

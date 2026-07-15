@@ -235,6 +235,21 @@ name = "ArrayDataModule"
 
 DLKit remains the validator for the final workflow object.
 
+## Eval-Only Runs
+
+Use `neuralls eval <case.toml>` after training to score completed assignment
+checkpoints on their original logged test splits:
+
+```bash
+uv run neuralls eval configs/cases/93x31/evaluate-all.toml --metric mae
+```
+
+The eval workflow reads existing `[[assignments]]`; it does not define a
+separate registry. For each assignment it finds the latest FINISHED training
+run, downloads its checkpoint and `splits/*.json` artifact from MLflow, and
+passes that split file to DLKit via `data.splits.filepath`. Runs without split
+artifacts are not evaluable until the training run is rerun or repaired.
+
 ## Practical Rules
 
 - create one dataset config per real dataset variant
