@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from neuralls.domain.generation import run_generation
+from neuralls.domain.generation.interfaces import TracingSolverCallable
 from neuralls.domain.generation.runner import SingleRhsStrategyRegistration, _registry
 
 
@@ -22,7 +23,9 @@ def test_search_directions_registered_as_single_rhs_strategy() -> None:
     assert isinstance(registration, SingleRhsStrategyRegistration)
 
 
-def test_search_directions_config_accepts_every_n(spd_matrix: np.ndarray) -> None:
+def test_search_directions_config_accepts_every_n(
+    spd_matrix: np.ndarray, direction_solver: TracingSolverCallable
+) -> None:
     """Config accepts `every_n` and yields traced direction/product pairs."""
     cfg = {"samples": 2, "cg_iters": 4, "seed": 0, "every_n": 2}
 
@@ -30,6 +33,7 @@ def test_search_directions_config_accepts_every_n(spd_matrix: np.ndarray) -> Non
         "search_directions",
         spd_matrix,
         cfg=cfg,
+        solver=direction_solver,
         single_rhs=np.ones(spd_matrix.shape[0]),
     )
 
@@ -46,11 +50,14 @@ def test_search_directions_config_accepts_every_n(spd_matrix: np.ndarray) -> Non
 def test_search_directions_collects_repeated_single_rhs(
     spd_matrix: np.ndarray,
     single_rhs: np.ndarray,
+    direction_solver: TracingSolverCallable,
 ) -> None:
     """Single-RHS mode keeps the same RHS while collecting CG search directions."""
     cfg = {"samples": 3, "cg_iters": 4, "seed": 0}
 
-    result = run_generation("search_directions", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+    result = run_generation(
+        "search_directions", spd_matrix, cfg=cfg, solver=direction_solver, single_rhs=single_rhs
+    )
 
     assert result.rhs is not None
     assert result.rhs.shape[1] == single_rhs.shape[0]
@@ -65,11 +72,14 @@ def test_search_directions_collects_repeated_single_rhs(
 def test_search_direction_products_match_matrix_action(
     spd_matrix: np.ndarray,
     single_rhs: np.ndarray,
+    direction_solver: TracingSolverCallable,
 ) -> None:
     """Stored products equal `A @ p_k` for the traced directions."""
     cfg = {"samples": 1, "cg_iters": 3, "seed": 0}
 
-    result = run_generation("search_directions", spd_matrix, cfg=cfg, single_rhs=single_rhs)
+    result = run_generation(
+        "search_directions", spd_matrix, cfg=cfg, solver=direction_solver, single_rhs=single_rhs
+    )
     traces = result.residual_traces
 
     assert traces is not None

@@ -21,10 +21,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import torch
 
 if TYPE_CHECKING:
-    from ..monitoring.event_log import EventLog
-    from ..monitoring.iteration_history import IterationHistory
     from .config import ComparisonGeneral
 
 
@@ -106,11 +105,11 @@ class SolverResult:
     maxiter: int | None = None
     """Maximum iterations allowed."""
 
-    event_log: EventLog | None = None
-    """Optional EventLog with discrete solver events."""
+    event_log: Any | None = None
+    """Optional algorithm diagnostics retained for legacy export/reporting payloads."""
 
-    iteration_history: IterationHistory | None = None
-    """Optional IterationHistory with continuous iteration diagnostics."""
+    iteration_history: Any | None = None
+    """Optional iteration telemetry retained for legacy export/reporting payloads."""
 
     stopping_criterion: str | None = None
     """Description of why solver stopped (e.g., 'converged', 'max_iter', 'breakdown')."""
@@ -248,16 +247,16 @@ class IterationContext:
     iteration: int
     """Current iteration number (0-indexed)."""
 
-    residual: np.ndarray
+    residual: torch.Tensor
     """Current residual vector r_k = b - A*x_k."""
 
-    solution: np.ndarray
+    solution: torch.Tensor
     """Current solution vector x_k."""
 
-    matrix: np.ndarray
+    matrix: torch.Tensor
     """System matrix A (optional, may be expensive to store)."""
 
-    rhs: np.ndarray
+    rhs: torch.Tensor
     """Right-hand side vector b."""
 
 

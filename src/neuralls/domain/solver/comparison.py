@@ -9,24 +9,25 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import numpy as np
-from scipy.linalg import norm
+import torch
+from torchalg import flexible_cg
+from torchalg.preconditioners.base import Preconditioner
+from torchalg.preconditioners.implementations import Identity
 
-from neuralls.domain.solver.factories import flexible_cg
 from neuralls.domain.solver.models.result import (
     CGComparisonResult,
     ComparisonRecommendations,
     RankedRecommendation,
 )
-from neuralls.domain.solver.preconditioners.base import Preconditioner
 from neuralls.shared.constants import DEFAULT_ATOL, DEFAULT_M_MAX, DEFAULT_RTOL
 
 
 def run_cg_comparison(
-    A: np.ndarray,
-    b: np.ndarray,
+    A: torch.Tensor,
+    b: torch.Tensor,
     *,
     preconditioners: Mapping[str, Preconditioner],
-    x0: np.ndarray | None = None,
+    x0: torch.Tensor | None = None,
     rtol: float = DEFAULT_RTOL,
     atol: float = DEFAULT_ATOL,
     maxiter: int = 100,
@@ -41,8 +42,8 @@ def run_cg_comparison(
     algorithm, the same initial guess, and the same system.
 
     Args:
-        A: System matrix.
-        b: Right-hand side vector.
+        A: System matrix tensor.
+        b: Right-hand side vector tensor.
         preconditioners: Dict mapping names to Preconditioner instances.
         x0: Initial guess (defaults to zero).
         rtol: Relative tolerance.
@@ -55,7 +56,7 @@ def run_cg_comparison(
         Dict mapping preconditioner names to CGComparisonResult.
 
     Example:
-        >>> from neuralls.domain.solver.preconditioners import Identity, JacobiPreconditioner
+        >>> from torchalg.preconditioners.implementations import Identity, JacobiPreconditioner
         >>> preconditioners = {
         ...     "none": Identity(),
         ...     "jacobi": JacobiPreconditioner(A),
@@ -63,16 +64,14 @@ def run_cg_comparison(
         >>> results = run_cg_comparison(A, b, preconditioners=preconditioners)
     """
     if x0 is None:
-        x0 = np.zeros_like(b, dtype=np.float64)
-    x0_base = x0.copy()
+        x0 = torch.zeros_like(b, dtype=A.dtype, device=A.device)
+    x0_base = x0.detach().clone()
 
     if "none" not in preconditioners:
-        from neuralls.domain.solver.preconditioners import Identity
-
         preconditioners = dict(preconditioners)
         preconditioners["none"] = Identity()
 
-    x_exact = np.linalg.solve(A.astype(np.float64, copy=False), b.astype(np.float64, copy=False))
+    x_exact = torch.linalg.solve(A, b)
 
     results: dict[str, CGComparisonResult] = {}
 
@@ -89,9 +88,9 @@ def run_cg_comparison(
                 m_max=m_max,
                 breakdown_tol=breakdown_tol,
             )
-        except (ValueError, RuntimeError, np.linalg.LinAlgError) as solver_exc:
+        except (ValueError, RuntimeError) as solver_exc:
             result = CGComparisonResult(
-                x=x0_base.copy(),
+                x=_to_numpy(x0_base),
                 converged=False,
                 iterations=0,
                 residual=float("inf"),
@@ -99,30 +98,28 @@ def run_cg_comparison(
                 residual_history_rel=[],
                 residual_history_abs=[],
                 preconditioner=precond_name,
-                initial_guess=x0_base.copy(),
+                initial_guess=_to_numpy(x0_base),
                 exact_error=None,
-                rhs_norm=norm(b),
+                rhs_norm=float(torch.linalg.vector_norm(b)),
                 breakdown=False,
                 error=f"CG solver failed: {solver_exc}",
             )
         else:
-            exact_norm = norm(x_exact)
+            exact_norm = float(torch.linalg.vector_norm(x_exact))
             exact_error = (
-                norm(x_sol - x_exact) / exact_norm if exact_norm != 0 else norm(x_sol - x_exact)
+                float(torch.linalg.vector_norm(x_sol - x_exact)) / exact_norm
+                if exact_norm != 0
+                else float(torch.linalg.vector_norm(x_sol - x_exact))
             )
 
             rhs_norm = info.rhs_norm
-            residual: list[float] = (
-                info.iteration_history.residual_norms.to_list()
-                if info.iteration_history is not None
-                else [info.residual_abs]
-            )
+            residual: list[float] = list(info.residual_history_abs or (info.residual_abs,))
             residual_rel: list[float] = (
                 [r / rhs_norm for r in residual] if rhs_norm > 0 else list(residual)
             )
 
             result = CGComparisonResult(
-                x=x_sol,
+                x=_to_numpy(x_sol),
                 converged=info.converged,
                 iterations=info.iterations,
                 residual=info.residual,
@@ -130,7 +127,7 @@ def run_cg_comparison(
                 residual_history_rel=residual_rel,
                 residual_history_abs=residual,
                 preconditioner=precond_name,
-                initial_guess=x0_base.copy(),
+                initial_guess=_to_numpy(x0_base),
                 exact_error=exact_error,
                 rhs_norm=info.rhs_norm,
                 breakdown=info.breakdown,
@@ -139,6 +136,11 @@ def run_cg_comparison(
         results[precond_name] = result
 
     return results
+
+
+def _to_numpy(value: torch.Tensor) -> np.ndarray:
+    """Convert solver tensors at the reporting DTO boundary."""
+    return value.detach().cpu().numpy()
 
 
 def _requires_flexible_cg(preconditioner: Preconditioner) -> bool:

@@ -108,6 +108,7 @@ def test_resolve_binding_strategy_counts_rejects_finite_trace_replacement(
 
 def test_generate_mixture_row_kind_codes_length_matches_trace_rows_after_shuffle(
     spd_matrix: np.ndarray,
+    solver_overrides: dict,
 ) -> None:
     """row_kind_codes must align with error_traces.residuals, not with base-system count.
 
@@ -124,6 +125,7 @@ def test_generate_mixture_row_kind_codes_length_matches_trace_rows_after_shuffle
         seed=0,
         shuffle=True,
         strategy_overrides={"gaussian_residuals": {"cg_iters": 3}},
+        solver_overrides=solver_overrides,
     )
 
     assert result.row_kind_codes.shape[0] == result.rhs.shape[0]
@@ -131,6 +133,7 @@ def test_generate_mixture_row_kind_codes_length_matches_trace_rows_after_shuffle
 
 def test_mixed_strategy_row_kind_codes_concatenated_correctly(
     spd_matrix: np.ndarray,
+    solver_overrides: dict,
 ) -> None:
     """row_kind_codes must cover every row in order: forward rows first, then trace rows."""
     from neuralls.shared.enum_codecs import decode_row_kind_array
@@ -145,6 +148,7 @@ def test_mixed_strategy_row_kind_codes_concatenated_correctly(
         seed=0,
         shuffle=False,
         strategy_overrides={"gaussian_residuals": {"cg_iters": 1}},
+        solver_overrides=solver_overrides,
     )
 
     assert result.rhs.shape[0] == 7
@@ -158,7 +162,9 @@ def test_mixed_strategy_row_kind_codes_concatenated_correctly(
     assert kinds[6] == RowKind.CG_INTERNAL  # iter 1, system 1
 
 
-def test_gaussian_split_mix_preserves_requested_total_rows(spd_matrix: np.ndarray) -> None:
+def test_gaussian_split_mix_preserves_requested_total_rows(
+    spd_matrix: np.ndarray, solver_overrides: dict
+) -> None:
     """A residual/pure Gaussian split uses exact row budgets for both strategies."""
     from neuralls.shared.enum_codecs import decode_row_kind_array
     from neuralls.shared.types import RowKind
@@ -172,6 +178,7 @@ def test_gaussian_split_mix_preserves_requested_total_rows(spd_matrix: np.ndarra
             "gaussian_residuals": {"cg_iters": 2, "seed": 42},
             "gaussian_forward": {"seed": 43},
         },
+        solver_overrides=solver_overrides,
     )
 
     assert result.rhs.shape[0] == 10
@@ -194,6 +201,7 @@ def test_gaussian_split_mix_preserves_requested_total_rows(spd_matrix: np.ndarra
 def test_archive_split_mix_uses_solution_archive_skip(
     tmp_path: Path,
     spd_matrix: np.ndarray,
+    solver_overrides: dict,
 ) -> None:
     """Archive-backed split rows can skip residual base systems to avoid duplicate pairs."""
     vectors = []
@@ -221,6 +229,7 @@ def test_archive_split_mix_uses_solution_archive_skip(
                 "skip": 1,
             },
         },
+        solver_overrides=solver_overrides,
     )
 
     assert result.rhs.shape[0] == 5

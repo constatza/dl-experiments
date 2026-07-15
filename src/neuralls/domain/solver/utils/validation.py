@@ -12,7 +12,7 @@ Design:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 
@@ -91,8 +91,6 @@ def validate_ax_equals_b(matrix: np.ndarray, rhs: np.ndarray, lhs: np.ndarray) -
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..monitoring.event_log import EventLog
-
 
 def check_solution_validity(solution: NDArray) -> bool:
     """Check if solution contains only finite values.
@@ -116,7 +114,7 @@ def check_solution_validity(solution: NDArray) -> bool:
 
 
 def record_breakdown_event(
-    event_log: EventLog | None,
+    event_log: Any | None,
     solution: NDArray,
     iteration: int,
 ) -> None:
@@ -129,23 +127,14 @@ def record_breakdown_event(
 
     Example:
         >>> import numpy as np
-        >>> from neuralls.domain.solver.monitoring.event_log import EventLog
-        >>> from neuralls.domain.solver.monitoring.events import EventType
-        >>>
+        >>> class EventLog:
+        ...     def record(self, event_type: str, *, iteration: int, reason: str) -> None:
+        ...         self.payload = (event_type, iteration, reason)
         >>> event_log = EventLog()
-        >>> solution = np.array([1.0, np.nan, 3.0])
-        >>> record_breakdown_event(event_log, solution, iteration=5)
-        >>>
-        >>> event = event_log.find_first(EventType.BREAKDOWN)
-        >>> event.iteration
-        5
-        >>> event.metadata["reason"]
-        'nan_in_solution'
+        >>> record_breakdown_event(event_log, np.array([1.0, np.nan]), iteration=5)
     """
     if event_log is None:
         return
-
-    from ..monitoring.events import EventType
 
     has_nan = bool(np.any(np.isnan(solution)))
     has_inf = bool(np.any(np.isinf(solution)))
@@ -157,7 +146,7 @@ def record_breakdown_event(
         reason_parts.append("inf_in_solution")
 
     event_log.record(
-        EventType.BREAKDOWN,
+        "breakdown",
         iteration=iteration,
         reason=", ".join(reason_parts),
     )

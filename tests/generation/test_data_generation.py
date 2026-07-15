@@ -25,6 +25,7 @@ def test_error_strategy_with_random(
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """Residuals strategy embeds trace pairs (r_k, e_k) directly into rhs/solutions.
 
@@ -35,6 +36,7 @@ def test_error_strategy_with_random(
         archive_solutions: Pre-computed archive solutions fixture
         archive_rhs: Pre-computed archive RHS vectors fixture
         test_seed: Random seed fixture
+        solver_overrides: Default tracing solvers for single-RHS strategies
     """
     cg_iters = 3
     rhs, solutions, residuals, error_traces = generate_mixture(
@@ -42,6 +44,7 @@ def test_error_strategy_with_random(
         mix={"residuals": 1.0},
         total=2,
         strategy_overrides={"residuals": {"cg_iters": cg_iters}},
+        solver_overrides=solver_overrides,
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -65,6 +68,7 @@ def test_error_strategy_with_archive(
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """Residuals strategy with archive produces trace rows satisfying A @ sol = rhs."""
     cg_iters = 3
@@ -73,6 +77,7 @@ def test_error_strategy_with_archive(
         mix={"residuals": 1.0},
         total=2,
         strategy_overrides={"residuals": {"cg_iters": cg_iters}},
+        solver_overrides=solver_overrides,
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -95,6 +100,7 @@ def test_error_vectors_satisfy_equation(
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """A @ e_k = r_k holds for all trace rows (A e_k = r_k by construction)."""
     cg_iters = 5
@@ -103,6 +109,7 @@ def test_error_vectors_satisfy_equation(
         mix={"residuals": 1.0},
         total=3,
         strategy_overrides={"residuals": {"cg_iters": cg_iters}},
+        solver_overrides=solver_overrides,
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -122,6 +129,7 @@ def test_residuals_match_current_solutions(
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """A @ solutions = rhs holds for all rows (r_k = A @ e_k by construction)."""
     rhs, solutions, _, error_traces = generate_mixture(
@@ -129,6 +137,7 @@ def test_residuals_match_current_solutions(
         mix={"residuals": 1.0},
         total=2,
         strategy_overrides={"residuals": {"cg_iters": 4}},
+        solver_overrides=solver_overrides,
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -148,6 +157,7 @@ def test_error_strategy_mixed_with_forward_strategy(
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """Mixing neutral_ones + residuals concatenates rows; A @ sol = rhs for all."""
     cg_iters = 2
@@ -155,6 +165,7 @@ def test_error_strategy_mixed_with_forward_strategy(
         A=small_spd_matrix,
         counts={"neutral_ones": 1, "residuals": 6},
         strategy_overrides={"residuals": {"cg_iters": cg_iters}},
+        solver_overrides=solver_overrides,
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -214,6 +225,7 @@ def test_error_strategy_validation(
     small_spd_matrix: np.ndarray,
     small_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """Test error strategy validates sufficient archive samples.
 
@@ -224,6 +236,7 @@ def test_error_strategy_validation(
         small_spd_matrix: Test SPD matrix fixture
         small_rhs: Test RHS vector fixture
         test_seed: Random seed fixture
+        solver_overrides: Default tracing solvers for single-RHS strategies
     """
     # Archive with only 1 solution, but we need 2 base systems after integer division
     insufficient_archive = np.array([[0.5, 0.3]], dtype=np.float64)
@@ -234,6 +247,7 @@ def test_error_strategy_validation(
             mix={"residuals": 1.0},
             total=8,
             strategy_overrides={"residuals": {"cg_iters": 3}},
+            solver_overrides=solver_overrides,
             seed=test_seed,
             shuffle=False,
             archive_solutions=insufficient_archive,
@@ -250,6 +264,7 @@ def test_error_strategy_in_generate_mixture(
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """Mixing normal + residuals produces concatenated rows satisfying A @ sol = rhs."""
     cg_iters = 3
@@ -258,6 +273,7 @@ def test_error_strategy_in_generate_mixture(
         mix={"normal": 0.5, "residuals": 0.5},
         total=4,
         strategy_overrides={"residuals": {"cg_iters": cg_iters}},
+        solver_overrides=solver_overrides,
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -282,6 +298,7 @@ def test_error_strategy_traces_structure(
     archive_solutions: np.ndarray,
     archive_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """Residuals strategy produces base_systems * (cg_iters+1) rows total."""
     cg_iters = 4
@@ -290,6 +307,7 @@ def test_error_strategy_traces_structure(
         mix={"residuals": 1.0},
         total=3,
         strategy_overrides={"residuals": {"cg_iters": cg_iters}},
+        solver_overrides=solver_overrides,
         seed=test_seed,
         shuffle=False,
         archive_solutions=archive_solutions,
@@ -311,6 +329,7 @@ def test_error_strategy_with_zero_iterations(
     small_spd_matrix: np.ndarray,
     small_rhs: np.ndarray,
     test_seed: int,
+    solver_overrides: dict,
 ) -> None:
     """Test error strategy rejects zero CG iterations.
 
@@ -320,6 +339,7 @@ def test_error_strategy_with_zero_iterations(
         small_spd_matrix: Test SPD matrix fixture
         small_rhs: Test RHS vector fixture
         test_seed: Random seed fixture
+        solver_overrides: Default tracing solvers for single-RHS strategies
     """
     with pytest.raises(ValueError, match="(greater than or equal to 1|cg_iters)"):
         rhs, solutions, residuals, error_traces = generate_mixture(
@@ -327,6 +347,7 @@ def test_error_strategy_with_zero_iterations(
             mix={"residuals": 1.0},
             total=2,
             strategy_overrides={"residuals": {"cg_iters": 0}},  # Zero iterations
+            solver_overrides=solver_overrides,
             seed=test_seed,
             shuffle=False,
         )
@@ -747,7 +768,7 @@ def test_pydantic_requires_solutions_glob_for_solution_archive() -> None:
         )
 
 
-def test_pydantic_validates_residual_iters_type() -> None:
+def test_pydantic_validates_residual_iters_type(solver_overrides: dict) -> None:
     """Test that Pydantic validates parameter types (cg_iters must be int)."""
     A = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
     np.array([1.0, 0.0], dtype=np.float64)
@@ -759,6 +780,7 @@ def test_pydantic_validates_residual_iters_type() -> None:
             mix={"residuals": 1.0},
             total=2,
             strategy_overrides={"residuals": {"cg_iters": "many"}},
+            solver_overrides=solver_overrides,
         )
 
 

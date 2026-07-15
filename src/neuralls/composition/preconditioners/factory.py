@@ -25,24 +25,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from numpy.typing import NDArray
-
-from neuralls.domain.solver.preconditioners.implementations import (
+import torch
+from torchalg.preconditioners.base import Preconditioner
+from torchalg.preconditioners.implementations import (
     Identity,
     JacobiPreconditioner,
     ILUPreconditioner,
     IC0Preconditioner,
     ICholeskyPreconditioner,
+    NeuralPreconditioner,
 )
-from neuralls.domain.solver.preconditioners.implementations.neural import NeuralPreconditioner
-from neuralls.domain.solver.preconditioners.base import Preconditioner
 from neuralls.platform.config.models.preconditioner import PreconditionerType
 
 if TYPE_CHECKING:
     from neuralls.platform.config.models.preconditioner import (
         ConcretePreconditionerConfig,
     )
-    from neuralls.domain.solver.preconditioners.ports import PredictorAdapter
+    from torchalg.preconditioners.ports import PredictorAdapter
 
 
 @dataclass(frozen=True)
@@ -65,7 +64,7 @@ class PreconditionerScheduleConfig:
 
 
 def create_preconditioner(
-    matrix: NDArray,
+    matrix: torch.Tensor,
     config: ConcretePreconditionerConfig,
     adapter: PredictorAdapter | None = None,
 ) -> Preconditioner:
@@ -107,10 +106,10 @@ def create_preconditioner(
     if config.type == PreconditionerType.AMG:
         if not isinstance(config, AMGPreconditionerConfig):
             raise TypeError(f"AMG type requires AMGPreconditionerConfig, got {type(config)}")
-        from neuralls.domain.solver.preconditioners.implementations.amg import (
+        from torchalg.preconditioners.implementations.amg import (
+            AggregationCoarsening,
             AMGPreconditioner,
             JacobiSmoother,
-            SparseAggregationCoarsening,
             VCycle,
         )
 
@@ -118,17 +117,24 @@ def create_preconditioner(
             import numpy as np
 
             from neuralls.domain.generation.providers import FileInputProvider
-            from neuralls.domain.solver.preconditioners.implementations.pod import (
+            from torchalg.preconditioners.implementations.pod import (
                 PODCoarseningStrategy,
             )
 
+            # FileInputProvider.provide()'s matrix argument is unused (protocol
+            # compliance only) — skip the GPU-to-numpy conversion.
             provider = FileInputProvider(glob_pattern=config.coarsening.snapshots_glob)
             snapshots = provider.provide(
-                matrix, count=config.coarsening.n_snapshots, rng=np.random.default_rng()
+                np.empty(0),
+                count=config.coarsening.n_snapshots,
+                rng=np.random.default_rng(),
             )
-            coarsening = PODCoarseningStrategy(snapshots=snapshots, rank=config.coarsening.rank)
+            coarsening = PODCoarseningStrategy(
+                snapshots=torch.as_tensor(snapshots, dtype=matrix.dtype, device=matrix.device),
+                rank=config.coarsening.rank,
+            )
         else:
-            coarsening = SparseAggregationCoarsening(omega=config.coarsening.omega)
+            coarsening = AggregationCoarsening(omega=config.coarsening.omega)
 
         smoother = JacobiSmoother(omega=config.smoother_omega)
         cycle = VCycle(
@@ -162,7 +168,7 @@ def create_preconditioner(
             if ckpt_r is None:
                 raise ValueError("NeuralAMGPreconditionerConfig.restriction requires a checkpoint")
             restrictor = adapter.create_predictor(ckpt_r, r_cfg.config_path, r_cfg.data_config_path)
-        from neuralls.domain.solver.preconditioners.implementations.amg import (
+        from torchalg.preconditioners.implementations.amg import (
             AMGPreconditioner,
             JacobiSmoother,
             NeuralCoarseningStrategy,
@@ -259,7 +265,7 @@ def create_scheduled_preconditioner(
     if schedule.start_iter == 0 and schedule.limit_iters < 0:
         return primary
 
-    from neuralls.domain.solver.preconditioners.implementations.scheduled import (
+    from torchalg.preconditioners.implementations.scheduled import (
         ScheduledPreconditioner,
     )
 

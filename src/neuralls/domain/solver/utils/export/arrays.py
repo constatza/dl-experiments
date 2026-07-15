@@ -10,11 +10,21 @@ from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
+import torch
+from torchalg.monitoring import IterationHistory, TraceMode
 
-from neuralls.domain.solver.monitoring.iteration_history import IterationHistory
-from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 
 from .formats import ArrayFormat
+
+
+def _history_array(value: object) -> np.ndarray:
+    """Convert torchalg vector histories to NumPy arrays for export."""
+    to_tensor = getattr(value, "to_tensor", None)
+    if callable(to_tensor):
+        value = to_tensor()
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().numpy()
+    return np.asarray(value)
 
 
 def save_system_arrays(
@@ -96,7 +106,7 @@ def save_iteration_history(
         format: Export format (NPZ, TXT, or BOTH).
 
     Example:
-        >>> from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+        >>> from torchalg.monitoring import TraceMode
         >>> history = IterationHistory(mode=TraceMode.MINIMAL)
         >>> history.log_iteration(residual_norm=1.0)
         >>> history.log_iteration(residual_norm=0.5)
@@ -113,11 +123,11 @@ def save_iteration_history(
 
     if history.mode == TraceMode.FULL:
         if history.residuals is not None:
-            arrays_dict["residuals"] = history.residuals.to_array()
+            arrays_dict["residuals"] = _history_array(history.residuals)
         if history.solutions is not None:
-            arrays_dict["solutions"] = history.solutions.to_array()
+            arrays_dict["solutions"] = _history_array(history.solutions)
         if history.directions is not None:
-            arrays_dict["directions"] = history.directions.to_array()
+            arrays_dict["directions"] = _history_array(history.directions)
 
     # Save NPZ format
     if format in (ArrayFormat.NPZ, ArrayFormat.BOTH):
@@ -129,8 +139,8 @@ def save_iteration_history(
 
         if history.mode == TraceMode.FULL:
             if history.residuals is not None:
-                np.savetxt(output_dir / "residuals.txt", history.residuals.to_array())
+                np.savetxt(output_dir / "residuals.txt", _history_array(history.residuals))
             if history.solutions is not None:
-                np.savetxt(output_dir / "solutions.txt", history.solutions.to_array())
+                np.savetxt(output_dir / "solutions.txt", _history_array(history.solutions))
             if history.directions is not None:
-                np.savetxt(output_dir / "directions.txt", history.directions.to_array())
+                np.savetxt(output_dir / "directions.txt", _history_array(history.directions))

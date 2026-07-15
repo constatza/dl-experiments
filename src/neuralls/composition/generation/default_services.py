@@ -6,42 +6,18 @@ from typing import Any
 
 import numpy as np
 
+from neuralls.composition.solvers import run_traced_pcg
 from neuralls.domain.generation.ports import TracingSolverPort
-from neuralls.domain.solver import pcg
-from neuralls.domain.solver.monitoring.iteration_history import IterationHistory
-from neuralls.domain.solver.monitoring.trace_mode import TraceMode
-from neuralls.domain.solver.scipy_wrapper import SciPyCGSolver
 
 
-def make_residual_solver() -> TracingSolverPort:
-    """Construct the default tracing solver for residual trace strategies."""
+def make_solver() -> TracingSolverPort:
+    """Construct the default tracing solver for single-RHS trace strategies.
 
-    def _solve(
-        A: np.ndarray,
-        b: np.ndarray,
-        x0: np.ndarray,
-        *,
-        maxiter: int,
-        rtol: float,
-        atol: float,
-    ) -> tuple[np.ndarray, Any]:
-        history = IterationHistory(mode=TraceMode.FULL)
-        solver = SciPyCGSolver(iteration_history=history)
-        return solver.solve(
-            A=A,
-            b=b,
-            x0=x0,
-            maxiter=maxiter,
-            rtol=rtol,
-            atol=atol,
-            trace_mode="full",
-        )
-
-    return _solve
-
-
-def make_direction_solver() -> TracingSolverPort:
-    """Construct the default tracing solver for search direction strategies."""
+    Shared by residual (``residuals``/``gaussian_residuals``) and direction
+    (``search_directions``) strategies alike — both trace the same torchalg
+    PCG call with full iteration history; there is currently no behavioral
+    difference between them.
+    """
 
     def _solve(
         A: np.ndarray,
@@ -52,14 +28,6 @@ def make_direction_solver() -> TracingSolverPort:
         rtol: float,
         atol: float,
     ) -> tuple[np.ndarray, Any]:
-        return pcg(
-            A=A,
-            b=b,
-            x0=x0,
-            maxiter=maxiter,
-            rtol=rtol,
-            atol=atol,
-            trace_mode=TraceMode.FULL,
-        )
+        return run_traced_pcg(A, b, x0, maxiter=maxiter, rtol=rtol, atol=atol)
 
     return _solve

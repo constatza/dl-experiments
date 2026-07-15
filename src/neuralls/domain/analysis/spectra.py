@@ -8,9 +8,10 @@ from collections.abc import Callable
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg as linalg
+import torch
 from loguru import logger
 
-PreconditionerCallable = Callable[[np.ndarray], np.ndarray]
+PreconditionerCallable = Callable[[torch.Tensor], torch.Tensor]
 
 
 def precondition_matrix(
@@ -30,11 +31,9 @@ def precondition_matrix(
         All Preconditioner objects are callable via __call__, so this function
         works with both bare functions and Preconditioner objects uniformly.
     """
-    columns = [
-        np.asarray(preconditioner(matrix[:, idx]), dtype=np.float64, copy=False)
-        for idx in range(matrix.shape[1])
-    ]
-    return np.column_stack(columns)
+    matrix_tensor = torch.as_tensor(matrix, dtype=torch.float64)
+    columns = [preconditioner(matrix_tensor[:, idx]) for idx in range(matrix.shape[1])]
+    return torch.stack(columns, dim=1).detach().cpu().numpy().astype(np.float64, copy=False)
 
 
 def compute_condition_numbers(

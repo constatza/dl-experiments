@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import torch
 from loguru import logger
 
 from neuralls.composition.comparison.models import (
@@ -203,7 +204,10 @@ def _load_linear_system(
     validate_rhs_vector(b, A)
     if resolved_input is not None and resolved_input.lhs is not None:
         validate_ax_equals_b(A, b, resolved_input.lhs)
-    return LinearSystem(matrix=A, rhs=b)
+    return LinearSystem(
+        matrix=torch.tensor(A, dtype=torch.float64),
+        rhs=torch.tensor(b, dtype=torch.float64),
+    )
 
 
 def _log_matrix_condition_number(

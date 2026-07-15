@@ -8,7 +8,8 @@ The composition package owns wiring and config-driven assembly.
 - `comparison/`: single-run comparison assembly around application/domain logic
 - `generation/`: config-driven dataset orchestration, dataset persistence wiring, and default tracing services
 - `inference/`: inference data-loading composition helpers
-- `preconditioners/`: config-to-preconditioner factory wiring (Identity, Jacobi, ILU, IC0, ICholesky, AMG, NeuralAMG, Neural)
+- `preconditioners/`: config-to-`torchalg` preconditioner factory wiring (Identity, Jacobi, ILU, IC0, ICholesky, AMG, NeuralAMG, Neural)
+- `solvers/`: config/workflow-to-`torchalg` solver runner adapters
 - `tracking/`: tracking tag and run-spec assembly
 
 ## Semantic Difference
@@ -33,8 +34,15 @@ or client policy.
 
 Preconditioner assembly follows the same boundary. Platform config validates
 shared schedule fields such as `start_iter`, `limit_iters`, and `fallback`;
-composition maps those values into the domain `ScheduledPreconditioner` without
-owning the iteration-switching policy.
+composition maps those values into `torchalg` preconditioner objects without
+owning the algorithms or iteration-switching policy. This adapter is an
+anti-corruption layer between neuralls config/IO concepts and torchalg runtime
+objects; it must not reimplement solver or preconditioner APIs.
+
+Solver runner assembly follows the same ownership split. Composition may adapt
+NumPy-backed workflow archives into tensors before calling `torchalg`, and may
+reshape `torchalg` outputs for existing dataset/reporting DTOs, but it does not
+own CG/PCG/FCG algorithms.
 
 For DLKit training, composition now consumes already-loaded lower-case DLKit
 jobs. DLKit owns TOML parsing, profile references under `[run]`, section merge

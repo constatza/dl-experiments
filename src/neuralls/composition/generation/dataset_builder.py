@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from neuralls.composition.generation.default_services import make_solver
 from neuralls.domain.generation.data_types import NormalizeType
 from neuralls.domain.generation.orchestration import build_dataset_payload
 from neuralls.domain.generation.ports import DatasetAccumulatorPort
@@ -16,6 +17,13 @@ from neuralls.platform.storage.datasets import (
 from neuralls.platform.storage.manifest_io import read_dataset_manifest
 from neuralls.shared.constants import DATASET_MANIFEST_FILENAME
 from neuralls.shared.types import DatasetFormat
+
+_DEFAULT_SOLVER = make_solver()
+_DEFAULT_SOLVER_OVERRIDES: dict[str, Any] = {
+    "residuals": _DEFAULT_SOLVER,
+    "gaussian_residuals": _DEFAULT_SOLVER,
+    "search_directions": _DEFAULT_SOLVER,
+}
 
 
 def _guard_format_conflict(dataset_dir: Path, intended: DatasetFormat) -> None:
@@ -80,7 +88,7 @@ def build_dataset(
         shuffle=shuffle,
         seed=seed,
         strategy_overrides=strategy_overrides,
-        solver_overrides=solver_overrides,
+        solver_overrides={**_DEFAULT_SOLVER_OVERRIDES, **(solver_overrides or {})},
         accumulator=acc,
     )
     dataset_storage.write_dataset(dataset_path, payload)

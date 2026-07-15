@@ -56,8 +56,8 @@ class FakeLoadedPredictor(FakeCheckpointPredictor):
 
 
 @pytest.fixture
-def residual_vector() -> np.ndarray:
-    return np.array([1.0, 2.0, 3.0], dtype=np.float64)
+def residual_vector() -> torch.Tensor:
+    return torch.tensor([1.0, 2.0, 3.0], dtype=torch.float64)
 
 
 @pytest.fixture
@@ -89,7 +89,7 @@ def _make_supported_result(shape_tensor: torch.Tensor, variant: str) -> Any:
 @pytest.mark.parametrize("variant", ["prediction_output"])
 def test_dlkit_predictor_accepts_supported_result_shapes(
     variant: str,
-    residual_vector: np.ndarray,
+    residual_vector: torch.Tensor,
     solver_prediction_tensor: torch.Tensor,
 ) -> None:
     checkpoint_predictor = FakeCheckpointPredictor(
@@ -129,7 +129,7 @@ def test_dlkit_inference_predictor_accepts_supported_result_shapes(
 
 
 def test_dlkit_predictor_reports_unsupported_result_type(
-    residual_vector: np.ndarray,
+    residual_vector: torch.Tensor,
 ) -> None:
     predictor = DLKitPredictor(FakeCheckpointPredictor(object()), device="cpu")
 
@@ -163,7 +163,7 @@ def test_solver_factory_uses_dlkit_structural_prediction_contract(
     monkeypatch: pytest.MonkeyPatch,
     checkpoint_path: Path,
     solver_prediction_tensor: torch.Tensor,
-    residual_vector: np.ndarray,
+    residual_vector: torch.Tensor,
 ) -> None:
     loaded_predictor = FakeLoadedPredictor(
         FakePredictionOutput(predictions=solver_prediction_tensor)
@@ -210,14 +210,14 @@ def test_inference_factory_uses_dlkit_structural_prediction_contract(
 
 
 @pytest.fixture
-def matrix_array() -> np.ndarray:
-    return np.eye(3, dtype=np.float64)
+def matrix_array() -> torch.Tensor:
+    return torch.eye(3, dtype=torch.float64)
 
 
 @pytest.mark.parametrize("variant", ["prediction_output"])
 def test_apply_no_extras_uses_positional_call(
     variant: str,
-    residual_vector: np.ndarray,
+    residual_vector: torch.Tensor,
     solver_prediction_tensor: torch.Tensor,
 ) -> None:
     checkpoint_predictor = FakeCheckpointPredictor(
@@ -235,8 +235,8 @@ def test_apply_no_extras_uses_positional_call(
 @pytest.mark.parametrize("variant", ["prediction_output"])
 def test_apply_with_extras_uses_keyword_call(
     variant: str,
-    residual_vector: np.ndarray,
-    matrix_array: np.ndarray,
+    residual_vector: torch.Tensor,
+    matrix_array: torch.Tensor,
     solver_prediction_tensor: torch.Tensor,
 ) -> None:
     checkpoint_predictor = FakeCheckpointPredictor(
@@ -255,8 +255,8 @@ def test_apply_with_extras_uses_keyword_call(
 @pytest.mark.parametrize("variant", ["prediction_output"])
 def test_extra_tensor_has_batch_dimension(
     variant: str,
-    residual_vector: np.ndarray,
-    matrix_array: np.ndarray,
+    residual_vector: torch.Tensor,
+    matrix_array: torch.Tensor,
     solver_prediction_tensor: torch.Tensor,
 ) -> None:
     checkpoint_predictor = FakeCheckpointPredictor(

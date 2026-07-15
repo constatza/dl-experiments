@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from neuralls.domain.solver.models.result import ComparisonResult
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
@@ -83,8 +84,8 @@ class LinearSystem:
         rhs: Right-hand side vector b in Ax=b (shape: n,).
     """
 
-    matrix: np.ndarray
-    rhs: np.ndarray
+    matrix: torch.Tensor
+    rhs: torch.Tensor
 
 
 @dataclass(frozen=True)

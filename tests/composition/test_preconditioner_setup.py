@@ -12,12 +12,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import torch
+from torchalg.preconditioners.base import BindableInputs, Preconditioner
 
 from neuralls.composition.comparison._preconditioner_setup import (
     _collect_extra_name_positions,
     _load_and_bind_extra_inputs,
 )
-from neuralls.domain.solver.preconditioners.base import BindableInputs, Preconditioner
 from neuralls.platform.storage.manifest import DatasetArtifact, DatasetNormalization
 from neuralls.platform.storage.manifest_io import make_dataset_manifest, save_dataset_manifest
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
@@ -28,16 +29,16 @@ class _StubBindable(Preconditioner, BindableInputs):
 
     def __init__(self, extra_names: tuple[str, ...]) -> None:
         self._names = extra_names
-        self.bound_inputs: dict[str, np.ndarray] = {}
+        self.bound_inputs: dict[str, torch.Tensor] = {}
 
     @property
     def extra_input_names(self) -> tuple[str, ...]:
         return self._names
 
-    def bind_inputs(self, **inputs: np.ndarray) -> None:
+    def bind_inputs(self, **inputs: torch.Tensor) -> None:
         self.bound_inputs.update(inputs)
 
-    def apply(self, residual: np.ndarray) -> np.ndarray:
+    def apply(self, residual: torch.Tensor) -> torch.Tensor:
         return residual
 
 
@@ -231,7 +232,7 @@ def test_load_and_bind_binds_zebra_from_position_0(
     ``sorted({"zebra", "apple"}) → ["apple", "zebra"]`` and assigned
     apple→position 0 (wrong) and zebra→position 1 (wrong).
     """
-    matrix = _MATRIX
+    matrix = torch.as_tensor(_MATRIX, dtype=torch.float64)
     preconditioners: dict[str, Preconditioner] = {"model": stub_bindable_non_alpha}
 
     _load_and_bind_extra_inputs(
@@ -245,7 +246,7 @@ def test_load_and_bind_binds_zebra_from_position_0(
         "'zebra' was not bound at all — positions were not resolved."
     )
     np.testing.assert_allclose(
-        stub_bindable_non_alpha.bound_inputs["zebra"],
+        stub_bindable_non_alpha.bound_inputs["zebra"].detach().cpu().numpy(),
         _PARAMS_ZEBRA[_SAMPLE_INDEX],
         err_msg=(
             "'zebra' received the wrong parameter array. "
@@ -259,7 +260,7 @@ def test_load_and_bind_binds_apple_from_position_1(
     dataset_with_two_params: Path,
 ) -> None:
     """_load_and_bind_extra_inputs must bind position-1 data to "apple"."""
-    matrix = _MATRIX
+    matrix = torch.as_tensor(_MATRIX, dtype=torch.float64)
     preconditioners: dict[str, Preconditioner] = {"model": stub_bindable_non_alpha}
 
     _load_and_bind_extra_inputs(
@@ -271,7 +272,7 @@ def test_load_and_bind_binds_apple_from_position_1(
 
     assert "apple" in stub_bindable_non_alpha.bound_inputs, "'apple' was not bound at all."
     np.testing.assert_allclose(
-        stub_bindable_non_alpha.bound_inputs["apple"],
+        stub_bindable_non_alpha.bound_inputs["apple"].detach().cpu().numpy(),
         _PARAMS_APPLE[_SAMPLE_INDEX],
         err_msg=(
             "'apple' received the wrong parameter array. "
@@ -290,7 +291,7 @@ def test_load_and_bind_does_not_swap_arrays_for_non_alpha_names(
     arrays swapped because sorted() alphabetized the names before assigning
     positional indices.
     """
-    matrix = _MATRIX
+    matrix = torch.as_tensor(_MATRIX, dtype=torch.float64)
     preconditioners: dict[str, Preconditioner] = {"model": stub_bindable_non_alpha}
 
     _load_and_bind_extra_inputs(

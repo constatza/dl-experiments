@@ -18,7 +18,11 @@ from neuralls.composition.comparison._preconditioner_setup import (
 from neuralls.composition.comparison.models import ComparisonPaths
 from neuralls.composition.comparison.models import ResolvedComparisonInput
 from neuralls.domain.analysis.spectra import PreconditionerCallable, compute_condition_numbers
-from neuralls.domain.solver.comparison import format_results_summary, run_cg_comparison
+from neuralls.domain.solver.comparison import (
+    _to_numpy,
+    format_results_summary,
+    run_cg_comparison,
+)
 from neuralls.domain.solver.models.result import (
     ComparisonRecommendations,
     ComparisonResult,
@@ -143,7 +147,7 @@ def compare_preconditioners(
         resolved_input=resolved_input,
     )
     _log_matrix_condition_number(
-        system.matrix,
+        _to_numpy(system.matrix),
         matrix_path=paths.matrix,
         display_name=display_name,
     )
@@ -167,7 +171,7 @@ def compare_preconditioners(
     cond_callables: dict[str, PreconditionerCallable] = {
         name: p for name, p in scheduled_preconditioners.items()
     }
-    cond_numbers = compute_condition_numbers(system.matrix, cond_callables)
+    cond_numbers = compute_condition_numbers(_to_numpy(system.matrix), cond_callables)
 
     results = run_cg_comparison(
         system.matrix,

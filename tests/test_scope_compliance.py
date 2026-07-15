@@ -6,8 +6,6 @@ from pathlib import Path
 
 from neuralls.platform.config.loaders import load_comparison_config
 
-from tests.benchmarks.from_file.conftest import DATA_DIR, L_PATH, MATRIX_PATHS, RHS_PATHS
-
 
 def test_runtime_roots_stay_under_tmp_path(
     tmp_path: Path,
@@ -28,14 +26,6 @@ def test_runtime_roots_stay_under_tmp_path(
     assert mlflow_tracking_dir == expected_root / "mlruns"
     assert mlflow_artifact_dir == expected_root / "mlartifacts"
     assert Path.cwd() == expected_root
-
-
-def test_benchmark_fixtures_are_vendored_under_tests() -> None:
-    """From-file benchmark defaults must resolve under the committed tests tree."""
-    assert DATA_DIR.is_dir()
-    assert all(DATA_DIR in path.parents for path in MATRIX_PATHS)
-    assert all(DATA_DIR in path.parents for path in RHS_PATHS)
-    assert DATA_DIR in L_PATH.parents
 
 
 def test_comparison_fixture_configs_load_from_tests_tree(neuralls_settings) -> None:

@@ -13,6 +13,7 @@ exact solutions. Training mapping: NN(A @ p_k) ≈ p_k, meaning NN ≈ A^{-1}
 from __future__ import annotations
 
 import numpy as np
+from torchalg.models.result import SolverResult
 
 from ..interfaces import GeneratedSamples, ArchiveData, TracingSolverCallable
 from ..runner import register_single_rhs_strategy
@@ -22,6 +23,12 @@ from ..providers import HybridInputProvider
 from ..transforms import ComputeRhsTransform
 from neuralls.domain.normalization import ResidualTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_residual_traces
+
+
+def _direction_trace_to_numpy(info: SolverResult) -> np.ndarray:
+    if info.direction_vectors is None:
+        raise RuntimeError("Search directions were not captured by the torchalg solver result.")
+    return info.direction_vectors.detach().cpu().numpy()
 
 
 @register_single_rhs_strategy(supports_matrix_replacement=True)
@@ -135,10 +142,7 @@ class SearchDirectionsStrategy:
                 atol=1e-20,
             )
 
-            if info.iteration_history is None or info.iteration_history.directions is None:
-                raise RuntimeError("Search directions were not captured in FULL trace mode.")
-
-            direction_seq = info.iteration_history.directions.to_array()
+            direction_seq = _direction_trace_to_numpy(info)
             if direction_seq.size == 0:
                 raise RuntimeError(f"Search directions array is empty for sample {sample_idx + 1}.")
 

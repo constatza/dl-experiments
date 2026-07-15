@@ -22,7 +22,7 @@ Example:
     >>> from neuralls.domain.solver.utils.export import quick_export, ArrayFormat
     >>> from neuralls.domain.solver.models.config import SolverConfig
     >>> from neuralls.domain.solver.models.result import SolverResult
-    >>> from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+    >>> from torchalg.monitoring import TraceMode
     >>>
     >>> # Level 1: Quick export (new code)
     >>> config = SolverConfig(
@@ -136,7 +136,7 @@ def quick_export(
         >>> from neuralls.domain.solver.utils.export import quick_export, ArrayFormat
         >>> from neuralls.domain.solver.models.config import SolverConfig
         >>> from neuralls.domain.solver.models.result import SolverResult
-        >>> from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+        >>> from torchalg.monitoring import TraceMode
         >>> config = SolverConfig(
         ...     algorithm="cg",
         ...     rtol=1e-6,
@@ -219,7 +219,7 @@ def save_solver_data(
         >>> from neuralls.domain.solver.utils.export import save_solver_data, ArrayFormat
         >>> from neuralls.domain.solver.models.config import SolverConfig
         >>> from neuralls.domain.solver.models.result import SolverResult
-        >>> from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+        >>> from torchalg.monitoring import TraceMode
         >>> config = SolverConfig(
         ...     algorithm="cg",
         ...     rtol=1e-6,

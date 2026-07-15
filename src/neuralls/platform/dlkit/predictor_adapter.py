@@ -20,39 +20,34 @@ from dlkit import load_model
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from loguru import logger
 
-from neuralls.domain.solver.preconditioners.ports import (
+from torchalg.preconditioners.ports import (
     ExtraInputPredictorPort,
     PredictorAdapter,
-)
-from neuralls.domain.solver.preconditioners.tensor_utils import (
-    extract_model_output,
-    prepare_model_input,
 )
 
 from ._prediction_outputs import extract_prediction_tensor
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
     from dlkit.interfaces.inference import CheckpointPredictor as DLKitCheckpointPredictor
 
 
 def _extra_to_tensors(
-    extra_inputs: dict[str, NDArray],
+    extra_inputs: dict[str, torch.Tensor],
     device: str,
 ) -> dict[str, torch.Tensor]:
-    """Convert extra numpy arrays to batched float64 tensors.
+    """Move extra input tensors to the predictor device and add a batch axis."""
+    return {name: _prepare_model_input(arr, device) for name, arr in extra_inputs.items()}
 
-    Uses prepare_model_input (numpy → float64 tensor → unsqueeze(0)).
-    Works for any rank: (n,) → (1,n), (n,n) → (1,n,n), etc.
 
-    Args:
-        extra_inputs: Named numpy arrays to convert.
-        device: Target device string ("cpu", "cuda", "mps").
+def _prepare_model_input(value: torch.Tensor, device: str) -> torch.Tensor:
+    """Prepare a solver tensor for DLKit prediction."""
+    return value.detach().to(device=device, dtype=torch.float64).unsqueeze(0)
 
-    Returns:
-        Dict of name → batched float64 tensor.
-    """
-    return {name: prepare_model_input(arr, device) for name, arr in extra_inputs.items()}
+
+def _extract_model_output(value: torch.Tensor) -> torch.Tensor:
+    """Remove DLKit's batch dimension while preserving a tensor result."""
+    result = value.detach().to(dtype=torch.float64)
+    return result.squeeze(0) if result.ndim > 1 and result.shape[0] == 1 else result
 
 
 class DLKitPredictor(ExtraInputPredictorPort):
@@ -97,7 +92,7 @@ class DLKitPredictor(ExtraInputPredictorPort):
         # currently populated by DLKitAdapter from config if available, else empty.
         return self._required_inputs
 
-    def apply(self, residual: NDArray, **extra_inputs: NDArray) -> NDArray:
+    def apply(self, residual: torch.Tensor, **extra_inputs: torch.Tensor) -> torch.Tensor:
         """Apply neural network to residual.
 
         Args:
@@ -113,7 +108,7 @@ class DLKitPredictor(ExtraInputPredictorPort):
             RuntimeError: If predictor unloaded or GPU error
         """
         try:
-            input_tensor = prepare_model_input(residual, self._device)
+            input_tensor = _prepare_model_input(residual, self._device)
             if extra_inputs:
                 tensors: dict[str, torch.Tensor] = {"x": input_tensor}
                 tensors.update(_extra_to_tensors(extra_inputs, self._device))
@@ -121,12 +116,12 @@ class DLKitPredictor(ExtraInputPredictorPort):
             else:
                 output = self._predictor.predict(input_tensor)
             primary = extract_prediction_tensor(output)
-            return extract_model_output(primary)
+            return _extract_model_output(primary).to(device=residual.device, dtype=residual.dtype)
 
         except torch.cuda.OutOfMemoryError as e:
             raise RuntimeError(
                 f"GPU out of memory during inference on device {self._device}. "
-                f"Residual shape: {residual.shape}. "
+                f"Residual shape: {tuple(residual.shape)}. "
                 "Try reducing batch size or using CPU."
             ) from e
 
@@ -138,7 +133,7 @@ class DLKitPredictor(ExtraInputPredictorPort):
                 ) from e
             raise RuntimeError(
                 f"Neural inference failed: {e}. "
-                f"Model device: {self._device}, Residual shape: {residual.shape}"
+                f"Model device: {self._device}, Residual shape: {tuple(residual.shape)}"
             ) from e
 
         except (TypeError, AttributeError, ValueError) as e:

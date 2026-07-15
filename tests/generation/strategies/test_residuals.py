@@ -112,6 +112,7 @@ def test_residuals_single_rhs_shapes(
 def test_residuals_multi_rhs_shapes(
     spd_matrix: np.ndarray,
     solution_files: tuple[list[Path], str],
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """Multiple-RHS mode: all output arrays have correct shapes."""
     files, glob_pattern = solution_files
@@ -125,7 +126,7 @@ def test_residuals_multi_rhs_shapes(
         "solutions_glob": glob_pattern,
     }
 
-    result = run_generation("residuals", spd_matrix, cfg=cfg)
+    result = run_generation("residuals", spd_matrix, cfg=cfg, solver=residual_solver)
 
     rows_per_system = trace_rows_per_system(cg_iters)
     expected_systems = _expected_trace_systems(requested_rows, rows_per_system)
@@ -143,14 +144,16 @@ def test_residuals_multi_rhs_shapes(
     assert et.true_solutions.shape == (expected_systems, n)
 
 
-def test_gaussian_residuals_multi_rhs_shapes(spd_matrix: np.ndarray) -> None:
+def test_gaussian_residuals_multi_rhs_shapes(
+    spd_matrix: np.ndarray, residual_solver: TracingSolverCallable
+) -> None:
     """Gaussian residuals do not require archive solutions or solution globs."""
     n = spd_matrix.shape[0]
     requested_rows = 8
     cg_iters = 3
     cfg = {"samples": requested_rows, "cg_iters": cg_iters, "seed": 0}
 
-    result = run_generation("gaussian_residuals", spd_matrix, cfg=cfg)
+    result = run_generation("gaussian_residuals", spd_matrix, cfg=cfg, solver=residual_solver)
 
     rows_per_system = trace_rows_per_system(cg_iters)
     expected_systems = _expected_trace_systems(requested_rows, rows_per_system)
@@ -167,11 +170,13 @@ def test_gaussian_residuals_multi_rhs_shapes(spd_matrix: np.ndarray) -> None:
     assert et.true_solutions.shape == (expected_systems, n)
 
 
-def test_gaussian_residuals_math_holds(spd_matrix: np.ndarray) -> None:
+def test_gaussian_residuals_math_holds(
+    spd_matrix: np.ndarray, residual_solver: TracingSolverCallable
+) -> None:
     """Gaussian residuals still satisfy e_k = x_true - x_k and r_k = A @ e_k."""
     cfg = {"samples": 10, "cg_iters": 4, "seed": 0}
 
-    result = run_generation("gaussian_residuals", spd_matrix, cfg=cfg)
+    result = run_generation("gaussian_residuals", spd_matrix, cfg=cfg, solver=residual_solver)
 
     et = result.error_traces
     assert et is not None
@@ -192,6 +197,7 @@ def test_gaussian_residuals_math_holds(spd_matrix: np.ndarray) -> None:
 def test_error_equals_true_minus_current(
     spd_matrix: np.ndarray,
     solution_files: tuple[list[Path], str],
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """e_k = x_true - x_k holds for every recorded trace pair."""
     files, glob_pattern = solution_files
@@ -202,7 +208,7 @@ def test_error_equals_true_minus_current(
         "solutions_glob": glob_pattern,
     }
 
-    result = run_generation("residuals", spd_matrix, cfg=cfg)
+    result = run_generation("residuals", spd_matrix, cfg=cfg, solver=residual_solver)
 
     et = result.error_traces
     assert et is not None
@@ -216,6 +222,7 @@ def test_error_equals_true_minus_current(
 def test_residual_equals_b_minus_ax(
     spd_matrix: np.ndarray,
     solution_files: tuple[list[Path], str],
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """r_k = b - A @ x_k: CG residual matches b - A @ current iterate."""
     files, glob_pattern = solution_files
@@ -226,7 +233,7 @@ def test_residual_equals_b_minus_ax(
         "solutions_glob": glob_pattern,
     }
 
-    result = run_generation("residuals", spd_matrix, cfg=cfg)
+    result = run_generation("residuals", spd_matrix, cfg=cfg, solver=residual_solver)
 
     et = result.error_traces
     assert et is not None
@@ -243,6 +250,7 @@ def test_residual_equals_b_minus_ax(
 def test_residual_equals_a_times_error(
     spd_matrix: np.ndarray,
     solution_files: tuple[list[Path], str],
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """r_k = A @ e_k: holds exactly because b = A @ x_true in archive mode."""
     files, glob_pattern = solution_files
@@ -253,7 +261,7 @@ def test_residual_equals_a_times_error(
         "solutions_glob": glob_pattern,
     }
 
-    result = run_generation("residuals", spd_matrix, cfg=cfg)
+    result = run_generation("residuals", spd_matrix, cfg=cfg, solver=residual_solver)
 
     et = result.error_traces
     assert et is not None
@@ -381,6 +389,7 @@ def test_residuals_every_n_indices_correct(
 def test_residuals_every_n_math_still_holds(
     spd_matrix: np.ndarray,
     solution_files: tuple[list[Path], str],
+    residual_solver: TracingSolverCallable,
 ) -> None:
     """e_k = x_true - x_k and r_k = A @ e_k hold even after every_n downsampling."""
     files, glob_pattern = solution_files
@@ -392,7 +401,7 @@ def test_residuals_every_n_math_still_holds(
         "every_n": 2,
     }
 
-    result = run_generation("residuals", spd_matrix, cfg=cfg)
+    result = run_generation("residuals", spd_matrix, cfg=cfg, solver=residual_solver)
 
     et = result.error_traces
     assert et is not None

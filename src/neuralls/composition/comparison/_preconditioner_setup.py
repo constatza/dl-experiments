@@ -6,14 +6,14 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-import numpy as np
+import torch
+from torchalg.preconditioners.base import BindableInputs, Preconditioner
 
 from neuralls.composition.preconditioners.factory import (
     PreconditionerScheduleConfig,
     create_preconditioner,
     create_scheduled_preconditioner,
 )
-from neuralls.domain.solver.preconditioners.base import BindableInputs, Preconditioner
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.storage.training_artifacts import (
     load_array_source_sample,
@@ -21,7 +21,7 @@ from neuralls.platform.storage.training_artifacts import (
 )
 
 if TYPE_CHECKING:
-    from neuralls.domain.solver.preconditioners.ports import PredictorAdapter
+    from torchalg.preconditioners.ports import PredictorAdapter
 
 # Arrays always available from LinearSystem — never need loading from disk.
 _SYSTEM_ARRAYS_ALWAYS_AVAILABLE: frozenset[str] = frozenset({"matrix"})
@@ -79,7 +79,7 @@ class PreconditionerService:
 
     def create_preconditioner(
         self,
-        matrix: np.ndarray,
+        matrix: torch.Tensor,
         config: PreconditionerConfig,
     ) -> Preconditioner:
         """Create a single preconditioner.
@@ -95,7 +95,7 @@ class PreconditionerService:
 
     def create_preconditioner_set(
         self,
-        matrix: np.ndarray,
+        matrix: torch.Tensor,
         configs: Sequence[PreconditionerConfig],
     ) -> dict[str, Preconditioner]:
         """Create multiple preconditioners for comparison.
@@ -112,7 +112,7 @@ class PreconditionerService:
 
 def _create_scheduled_preconditioners(
     preconditioner_configs: Sequence[PreconditionerConfig],
-    matrix: np.ndarray,
+    matrix: torch.Tensor,
     base_preconditioners: dict[str, Any],
 ) -> dict[str, Preconditioner]:
     """Wrap base preconditioners with scheduling if configured.
@@ -166,7 +166,7 @@ def _load_extra_data(
     matrix_path: Path,
     name_to_position: dict[str, int],
     matrix_index: int,
-) -> dict[str, np.ndarray]:
+) -> dict[str, torch.Tensor]:
     """Load named extra arrays from a dataset dir using declaration-order positions.
 
     Args:
@@ -180,7 +180,7 @@ def _load_extra_data(
     """
     arrays = load_training_arrays(matrix_path)
     return {
-        name: load_array_source_sample(arrays.parameter_sources[pos], matrix_index)
+        name: torch.tensor(load_array_source_sample(arrays.parameter_sources[pos], matrix_index))
         for name, pos in name_to_position.items()
         if pos < len(arrays.parameter_sources)
     }
@@ -188,7 +188,7 @@ def _load_extra_data(
 
 def _load_and_bind_extra_inputs(
     scheduled_preconditioners: dict[str, Preconditioner],
-    matrix: np.ndarray,
+    matrix: torch.Tensor,
     matrix_path: Path,
     matrix_index: int,
 ) -> None:
@@ -206,12 +206,16 @@ def _load_and_bind_extra_inputs(
         if name_to_position and matrix_path.is_dir()
         else {}
     )
+    extra_data = {
+        name: value.to(dtype=matrix.dtype, device=matrix.device)
+        for name, value in extra_data.items()
+    }
     _bind_system_inputs(scheduled_preconditioners, {"matrix": matrix, **extra_data})
 
 
 def _bind_system_inputs(
     preconditioners: dict[str, Preconditioner],
-    system_data: dict[str, np.ndarray],
+    system_data: dict[str, torch.Tensor],
 ) -> None:
     """Bind dataset-sourced extra inputs to preconditioners that declare them.
 

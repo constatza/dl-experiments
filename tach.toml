@@ -102,10 +102,6 @@ paths = [
     "neuralls.domain.generation.strategies",
     "neuralls.domain.solver",
     "neuralls.domain.solver.models",
-    "neuralls.domain.solver.monitoring",
-    "neuralls.domain.solver.preconditioners",
-    "neuralls.domain.solver.preconditioners.implementations",
-    "neuralls.domain.solver.strategies",
     "neuralls.domain.solver.utils",
 ]
 layer = "domain"
@@ -115,4 +111,3 @@ depends_on = ["neuralls.domain.**", "neuralls.shared", "neuralls.shared.**"]
 path = "neuralls.shared"
 layer = "shared"
 depends_on = ["neuralls.shared.**"]
-

@@ -25,14 +25,14 @@ def sample_matrix(spd_matrix: np.ndarray) -> np.ndarray:
 @pytest.fixture
 def residual_solver() -> TracingSolverCallable:
     """Default tracing solver for residuals / residual_traces strategies."""
-    from neuralls.composition.generation.default_services import make_residual_solver
+    from neuralls.composition.generation.default_services import make_solver
 
-    return make_residual_solver()
+    return make_solver()
 
 
 @pytest.fixture
 def direction_solver() -> TracingSolverCallable:
     """Default tracing solver for search_directions strategy."""
-    from neuralls.composition.generation.default_services import make_direction_solver
+    from neuralls.composition.generation.default_services import make_solver
 
-    return make_direction_solver()
+    return make_solver()

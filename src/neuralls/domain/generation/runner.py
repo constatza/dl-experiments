@@ -14,8 +14,6 @@ from .interfaces import (
     ArchiveData,
     TracingSolverCallable,
 )
-from neuralls.domain.solver import pcg
-from neuralls.domain.solver.monitoring.trace_mode import TraceMode
 
 
 @dataclass(frozen=True)
@@ -74,23 +72,6 @@ class StrategyRegistry:
 
 
 _registry = StrategyRegistry()
-
-
-def _default_solver() -> TracingSolverCallable:
-    """Return a default PCG solver with full iteration tracing (captures residuals, solutions, directions)."""
-
-    def _solve(
-        A: np.ndarray,
-        b: np.ndarray,
-        x0: np.ndarray,
-        *,
-        maxiter: int,
-        rtol: float,
-        atol: float,
-    ) -> tuple[np.ndarray, Any]:
-        return pcg(A, b, x0, maxiter=maxiter, rtol=rtol, atol=atol, trace_mode=TraceMode.FULL)
-
-    return _solve
 
 
 def register_strategy[StrategyClass](
@@ -153,7 +134,9 @@ def run_generation(
         strategy_name: Name of the strategy to run (must be registered)
         matrix: System matrix, shape (n, n)
         cfg: Strategy configuration dictionary (validated by strategy)
-        solver: Tracing solver callable. Defaults to SciPy PCG with full tracing when not provided.
+        solver: Tracing solver callable. Required for single-RHS (trace) strategies;
+            neuralls does not construct a default solver of its own — inject one via
+            ``neuralls.composition.generation.default_services.make_solver``.
         archive: Optional pre-loaded archive data to pass to the strategy
         single_rhs: Optional single RHS vector, shape (n,). If provided to single-RHS strategies
             (trace strategies), all samples will solve the same system A @ x = single_rhs
@@ -163,16 +146,20 @@ def run_generation(
 
     Raises:
         KeyError: If strategy name is unknown
+        ValueError: If a single-RHS strategy is run without an explicit solver
     """
     registration = _registry.get(strategy_name)
     if isinstance(registration, SingleRhsStrategyRegistration):
-        effective_solver: TracingSolverCallable = (
-            solver if solver is not None else _default_solver()
-        )
+        if solver is None:
+            raise ValueError(
+                f"Strategy '{strategy_name}' requires an explicit solver; neuralls does not "
+                "construct a default one. Inject one via "
+                "neuralls.composition.generation.default_services.make_solver()."
+            )
         return registration.strategy.generate(
             matrix,
             cfg=cfg,
-            solver=effective_solver,
+            solver=solver,
             single_rhs=single_rhs,
             archive=archive,
         )

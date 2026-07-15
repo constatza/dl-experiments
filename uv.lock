@@ -1643,6 +1643,7 @@ dependencies = [
     { name = "tcl" },
     { name = "tomli-w" },
     { name = "torch" },
+    { name = "torchalg" },
     { name = "typer" },
     { name = "zarr" },
 ]
@@ -1671,6 +1672,7 @@ requires-dist = [
     { name = "tcl", specifier = ">=0.2" },
     { name = "tomli-w", specifier = ">=1.0.0" },
     { name = "torch", specifier = ">=2.8.0,<2.10.0", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "torchalg", git = "https://github.com/constatza/torchalg.git" },
     { name = "typer", specifier = ">=0.19.2" },
     { name = "zarr", specifier = ">=3.2.0" },
 ]
@@ -3410,6 +3412,14 @@ dependencies = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/68/71b142d713c5449b4b3446233d85dc711f63c42d7768b28c690ff55bc181/torch_geometric-2.8.0-py3-none-any.whl", hash = "sha256:1f62e415a2e9ee69d34617d1b0b230e9d9040f51809b96e801e742770fd4dada", size = 1325330, upload-time = "2026-06-05T21:13:18.257Z" },
+]
+
+[[package]]
+name = "torchalg"
+version = "0.1.0"
+source = { git = "https://github.com/constatza/torchalg.git#58f3eb25d7197b9a9a180bbe518f0b304291589b" }
+dependencies = [
+    { name = "torch" },
 ]
 
 [[package]]

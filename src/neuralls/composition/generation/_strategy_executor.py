@@ -16,15 +16,8 @@ from neuralls.composition.generation._archive_resolution import (
 )
 from neuralls.composition.generation._context_builder import DataGenerationContext
 from neuralls.composition.generation.dataset_builder import build_dataset
-from neuralls.composition.generation.default_services import (
-    make_direction_solver,
-    make_residual_solver,
-)
 from neuralls.domain.generation.plan import GenerationPlan, StrategySpec
 from neuralls.shared.constants import DEFAULT_RANDOM_SEED
-
-_DEFAULT_RESIDUAL_SOLVER = make_residual_solver()
-_DEFAULT_DIRECTION_SOLVER = make_direction_solver()
 
 
 def _execute_solution_archive(
@@ -163,11 +156,6 @@ def _execute_synthetic_generation(
         shuffle=bool(shuffle_value),
         seed=seed,
         strategy_overrides=strategy_overrides,
-        solver_overrides={
-            "residuals": _DEFAULT_RESIDUAL_SOLVER,
-            "gaussian_residuals": _DEFAULT_RESIDUAL_SOLVER,
-            "search_directions": _DEFAULT_DIRECTION_SOLVER,
-        },
         dataset_format=context.dataset_format,
     )
     return Path(dataset_path)

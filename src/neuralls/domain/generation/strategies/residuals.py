@@ -13,6 +13,7 @@ targets dx_k = x_true - x_k at each iteration.
 from __future__ import annotations
 
 import numpy as np
+import torch
 
 from ..interfaces import GeneratedSamples, ArchiveData, TracingSolverCallable
 from ..runner import register_single_rhs_strategy
@@ -22,6 +23,12 @@ from ..providers import HybridInputProvider, RandomInputProvider, provide_soluti
 from ..transforms import ComputeRhsTransform
 from neuralls.domain.normalization import ErrorTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_error_traces
+
+
+def _tensor_trace_to_numpy(value: torch.Tensor | None) -> np.ndarray:
+    if value is None:
+        return np.array([])
+    return value.detach().cpu().numpy()
 
 
 class _BaseResidualsStrategy:
@@ -165,16 +172,8 @@ class _BaseResidualsStrategy:
                 atol=1e-20,
             )
 
-            # Extract vectors from iteration history
-            assert (
-                info.iteration_history is not None and info.iteration_history.residuals is not None
-            )
-            residual_seq = info.iteration_history.residuals.to_array()
-            solution_seq = (
-                info.iteration_history.solutions.to_array()
-                if info.iteration_history.solutions
-                else np.array([])
-            )
+            residual_seq = _tensor_trace_to_numpy(info.residual_vectors)
+            solution_seq = _tensor_trace_to_numpy(info.solution_vectors)
 
             residual_seq = residual_seq[:: config.every_n]
             if solution_seq.size > 0:

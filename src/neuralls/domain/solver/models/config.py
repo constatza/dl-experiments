@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+from torchalg.monitoring import TraceMode
 from neuralls.shared.types import ComparisonRhsSourceKind
 
 

@@ -31,7 +31,7 @@ def save_solver_config(
     Example:
         >>> from pathlib import Path
         >>> from neuralls.domain.solver.models.config import SolverConfig
-        >>> from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+        >>> from torchalg.monitoring import TraceMode
         >>> config = SolverConfig(
         ...     algorithm="preconditioned_cg",
         ...     rtol=1e-6,
@@ -72,7 +72,7 @@ def save_full_config(
     Example:
         >>> from pathlib import Path
         >>> from neuralls.domain.solver.models.config import SolverConfig
-        >>> from neuralls.domain.solver.monitoring.trace_mode import TraceMode
+        >>> from torchalg.monitoring import TraceMode
         >>> solver_cfg = SolverConfig(
         ...     algorithm="preconditioned_cg",
         ...     rtol=1e-6,

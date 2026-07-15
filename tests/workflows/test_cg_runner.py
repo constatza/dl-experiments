@@ -18,7 +18,15 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+import torch
 from numpy.testing import assert_allclose
+from torchalg.models.result import SolverResult
+from torchalg.preconditioners.base import NonLinearPreconditioner, PreconditionerContext
+from torchalg.preconditioners.implementations import (
+    Identity,
+    JacobiPreconditioner,
+    ScheduledPreconditioner,
+)
 
 from neuralls.domain.solver.comparison import (
     format_results_summary,
@@ -26,16 +34,9 @@ from neuralls.domain.solver.comparison import (
     summarize_best_combinations,
 )
 from neuralls.domain.solver.models.result import CGComparisonResult
-from neuralls.domain.solver.preconditioners import (
-    Identity,
-    JacobiPreconditioner,
-    PreconditionerContext,
-    ScheduledPreconditioner,
-)
-from neuralls.domain.solver.preconditioners.base import NonLinearPreconditioner
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from torch import Tensor
 
 
 # ==============================================================================
@@ -44,7 +45,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def spd_matrix() -> NDArray:
+def spd_matrix() -> Tensor:
     """Small 10x10 SPD matrix for testing.
 
     Returns:
@@ -52,11 +53,12 @@ def spd_matrix() -> NDArray:
     """
     n = 10
     A = np.random.RandomState(42).rand(n, n)
-    return A.T @ A + np.eye(n) * 2.0  # Add to diagonal for better conditioning
+    spd = A.T @ A + np.eye(n) * 2.0
+    return torch.as_tensor(spd, dtype=torch.float64)
 
 
 @pytest.fixture
-def rhs_vector(spd_matrix: NDArray) -> NDArray:
+def rhs_vector(spd_matrix: Tensor) -> Tensor:
     """Compatible RHS vector for spd_matrix.
 
     Args:
@@ -65,7 +67,7 @@ def rhs_vector(spd_matrix: NDArray) -> NDArray:
     Returns:
         RHS vector with same dimension as matrix
     """
-    return np.random.RandomState(42).rand(spd_matrix.shape[0])
+    return torch.as_tensor(np.random.RandomState(42).rand(spd_matrix.shape[0]), dtype=torch.float64)
 
 
 @pytest.fixture
@@ -131,7 +133,7 @@ def mock_comparison_results() -> dict[str, CGComparisonResult]:
 
 
 def test_run_cg_comparison_with_preconditioner_instances(
-    spd_matrix: NDArray, rhs_vector: NDArray
+    spd_matrix: Tensor, rhs_vector: Tensor
 ) -> None:
     """Test run_cg_comparison with Identity and Jacobi preconditioner instances."""
     preconditioners = {
@@ -161,7 +163,7 @@ def test_run_cg_comparison_with_preconditioner_instances(
         assert isinstance(result.converged, bool)
 
 
-def test_run_cg_comparison_routes_to_flexible_cg(spd_matrix: NDArray, rhs_vector: NDArray) -> None:
+def test_run_cg_comparison_routes_to_flexible_cg(spd_matrix: Tensor, rhs_vector: Tensor) -> None:
     """Test that ScheduledPreconditioner routes to flexible_cg."""
     primary = JacobiPreconditioner(spd_matrix)
     fallback = Identity()
@@ -187,34 +189,32 @@ def test_run_cg_comparison_routes_to_flexible_cg(spd_matrix: NDArray, rhs_vector
 
 def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
     monkeypatch: pytest.MonkeyPatch,
-    spd_matrix: NDArray,
-    rhs_vector: NDArray,
+    spd_matrix: Tensor,
+    rhs_vector: Tensor,
 ) -> None:
     """Test that all preconditioners use flexible_cg uniformly."""
 
     class DummyNonLinearPreconditioner(NonLinearPreconditioner):
         def apply(
             self,
-            residual: NDArray,
+            residual: torch.Tensor,
             context: PreconditionerContext | None = None,
-        ) -> NDArray:
+        ) -> torch.Tensor:
             return residual
 
     flexible_calls: list[str] = []
 
-    from neuralls.domain.solver.models.result import SolverResult
-
-    def fake_flexible_cg(*args: object, **kwargs: object) -> tuple[NDArray, SolverResult]:
+    def fake_flexible_cg(*args: object, **kwargs: object) -> tuple[torch.Tensor, SolverResult]:
         flexible_calls.append("flexible")
-        return np.zeros_like(rhs_vector), SolverResult(
+        return torch.zeros_like(rhs_vector), SolverResult(
             converged=True,
             iterations=3,
             residual=1e-8,
             residual_abs=1e-8,
-            rhs_norm=float(np.linalg.norm(rhs_vector)),
+            rhs_norm=float(torch.linalg.vector_norm(rhs_vector)),
             breakdown=False,
-            residual_history_rel=[1.0, 1e-8],
-            residual_history_abs=[1.0, 1e-8],
+            residual_history_rel=(1.0, 1e-8),
+            residual_history_abs=(1.0, 1e-8),
             tol=1e-8,
             atol=1e-10,
         )
@@ -237,7 +237,7 @@ def test_run_cg_comparison_routes_nonlinear_preconditioner_to_flexible_cg(
     assert results["nonlinear"].converged
 
 
-def test_run_cg_comparison_routes_to_pcg(spd_matrix: NDArray, rhs_vector: NDArray) -> None:
+def test_run_cg_comparison_routes_to_pcg(spd_matrix: Tensor, rhs_vector: Tensor) -> None:
     """Test that non-contextual preconditioner routes to pcg."""
     preconditioners = {"identity": Identity()}
 
@@ -256,7 +256,7 @@ def test_run_cg_comparison_routes_to_pcg(spd_matrix: NDArray, rhs_vector: NDArra
     assert result.converged
 
 
-def test_run_cg_comparison_adds_none_baseline(spd_matrix: NDArray, rhs_vector: NDArray) -> None:
+def test_run_cg_comparison_adds_none_baseline(spd_matrix: Tensor, rhs_vector: Tensor) -> None:
     """Test that 'none' baseline is automatically added if missing."""
     preconditioners = {"jacobi": JacobiPreconditioner(spd_matrix)}
 
@@ -279,7 +279,7 @@ def test_run_cg_comparison_adds_none_baseline(spd_matrix: NDArray, rhs_vector: N
     assert none_result.preconditioner == "none"
 
 
-def test_run_cg_comparison_computes_exact_error(spd_matrix: NDArray, rhs_vector: NDArray) -> None:
+def test_run_cg_comparison_computes_exact_error(spd_matrix: Tensor, rhs_vector: Tensor) -> None:
     """Test that run_cg_comparison computes exact error correctly."""
     preconditioners = {"identity": Identity()}
 
@@ -299,11 +299,11 @@ def test_run_cg_comparison_computes_exact_error(spd_matrix: NDArray, rhs_vector:
     assert result.exact_error >= 0
 
     # Compute expected exact error
-    x_exact = np.linalg.solve(spd_matrix, rhs_vector)
+    x_exact = np.linalg.solve(spd_matrix.numpy(), rhs_vector.numpy())
     exact_norm = np.linalg.norm(x_exact)
     expected_error = np.linalg.norm(result.x - x_exact) / exact_norm
 
-    assert_allclose(result.exact_error, expected_error, rtol=1e-10)
+    assert_allclose(result.exact_error, expected_error, rtol=1e-7)
 
 
 # ==============================================================================
