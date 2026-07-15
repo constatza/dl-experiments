@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -194,7 +194,6 @@ def test_train_single_returns_run_id_and_metrics(tmp_path: Path, neuralls_settin
             "neuralls.composition.assignments.multi_training.train_model",
             return_value=("run-123", tracking_uri),
         ),
-        patch("neuralls.composition.assignments.multi_training.register_logged_model"),
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics",
             return_value={"eval/mae": 0.1},
@@ -240,7 +239,6 @@ def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) 
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
         ),
-        patch("neuralls.composition.assignments.multi_training.register_logged_model"),
         patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
         mock_identity.return_value.name = "dataset-id"
@@ -266,17 +264,13 @@ def job_config_with_model_name(tmp_path: Path) -> Path:
     return _write_job_config(tmp_path / "job.toml", model_profile)
 
 
-def test_annotate_mlflow_run_registers_under_assignment_id(
+def test_annotate_mlflow_run_tags_run_with_assignment_id(
     tmp_path: Path,
     job_config_with_model_name: Path,
 ) -> None:
-    """After training, model is registered under assignment_id with model_class tag."""
-    with (
-        patch(
-            "neuralls.composition.assignments.multi_training.register_logged_model"
-        ) as mock_register,
-        patch("neuralls.composition.assignments.multi_training.MlflowClient"),
-    ):
+    """After training, the run is tagged with assignment_id and model_class — not registered."""
+    with patch("neuralls.composition.assignments.multi_training.MlflowClient") as mock_client_cls:
+        mock_client = mock_client_cls.return_value
         _annotate_mlflow_run(
             label="1",
             run_id="run-abc",
@@ -291,18 +285,18 @@ def test_annotate_mlflow_run_registers_under_assignment_id(
             job_display_name="FFNN",
         )
 
-    mock_register.assert_called_once_with(
-        run_id="run-abc",
-        registered_model_name="spectral-energy",
-        tracking_uri=build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-        tags={
-            "assignment_id": "spectral-energy",
-            "dataset_id": "solutions",
-            "job_id": "ffnn",
-            "assignment_display_name": "Spectral Energy",
-            "model_class": "NormScaledLinearFFNN",
-        },
+    expected_tags = {
+        "assignment_id": "spectral-energy",
+        "dataset_id": "solutions",
+        "job_id": "ffnn",
+        "assignment_display_name": "Spectral Energy",
+        "model_class": "NormScaledLinearFFNN",
+    }
+    mock_client.set_tag.assert_has_calls(
+        [call("run-abc", key, value) for key, value in expected_tags.items()],
+        any_order=True,
     )
+    assert mock_client.set_tag.call_count == len(expected_tags)
 
 
 def test_train_batch_raises_for_empty_config(tmp_path: Path, neuralls_settings) -> None:
@@ -345,7 +339,6 @@ def test_train_batch_returns_local_output_dir(
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
         ),
-        patch("neuralls.composition.assignments.multi_training.register_logged_model"),
         patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
         result = train_batch(
@@ -413,7 +406,6 @@ def test_train_batch_forwards_custom_training_experiment_name(
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
         ),
-        patch("neuralls.composition.assignments.multi_training.register_logged_model"),
         patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
         train_batch(

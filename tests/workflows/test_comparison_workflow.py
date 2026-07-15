@@ -18,6 +18,7 @@ from neuralls.composition.assignments.comparison_batch import (
     _resolve_neural_preconditioners,
     _run_comparison_from_config,
     _validate_neural_preconditioner,
+    neural_specs_from_assignments,
     run_comparison_batch,
 )
 from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
@@ -28,7 +29,7 @@ from neuralls.domain.solver.models.result import (
     PlotPaths,
     RankedRecommendation,
 )
-from neuralls.platform.config.models.experiments import ComparisonRegistryEntry
+from neuralls.platform.config.models.experiments import AssignmentEntry, ComparisonRegistryEntry
 from neuralls.platform.config.models.experiments import CaseConfig
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
@@ -500,6 +501,32 @@ def test_resolve_neural_preconditioners_validates_all() -> None:
     ]
     resolved = _resolve_neural_preconditioners(specs)
     assert len(resolved) == 2
+
+
+def test_neural_specs_from_assignments_uses_logged_ref_with_assignment_tag() -> None:
+    """Auto-generated specs reference unregistered runs tagged by assignment_id."""
+    entry = AssignmentEntry(id="ffnn_solutions", dataset="solutions", job="ffnn")
+    client = MagicMock()
+    client.search_experiments.return_value = []
+
+    specs = neural_specs_from_assignments([entry], claimed_ids=set(), client=client)
+
+    assert len(specs) == 1
+    spec = specs[0]
+    assert spec.assignment == "ffnn_solutions"
+    assert spec.model_ref == LoggedModelRefConfig(
+        latest=True, tags={"assignment_id": "ffnn_solutions"}
+    )
+
+
+def test_neural_specs_from_assignments_skips_claimed_ids() -> None:
+    """Assignments already covered by an explicit preconditioner are skipped."""
+    entry = AssignmentEntry(id="ffnn_solutions", dataset="solutions", job="ffnn")
+    client = MagicMock()
+
+    specs = neural_specs_from_assignments([entry], claimed_ids={"ffnn_solutions"}, client=client)
+
+    assert specs == []
 
 
 def test_extract_array_artifacts_detaches_numpy_data(tmp_path: Path) -> None:

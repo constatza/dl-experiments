@@ -30,11 +30,7 @@ from neuralls.platform.reporting.plots import plot_metric_comparison
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
 from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
-from neuralls.platform.tracking.model_registry import (
-    build_registered_model_name,
-    register_logged_model,
-    read_model_class_name,
-)
+from neuralls.platform.tracking.model_registry import read_model_class_name
 from neuralls.composition.tracking.run_specs import (
     build_registration_tags,
     build_session_run_spec,
@@ -196,17 +192,20 @@ def _annotate_mlflow_run(
     job_registry_id: str | None,
     job_display_name: str,
 ) -> None:
-    """Log batch params and register model under assignment_id for one completed training run.
+    """Log batch params and tag one completed training run for later lookup.
 
     The checkpoint itself is already uploaded to this run by train_model() —
-    this only adds batch-level bookkeeping params and the model registration.
+    this only adds batch-level bookkeeping params and identifying tags
+    (assignment_id, dataset_id, job_id, ...) so the run can later be found by
+    tag-filtered lookup (see ``LoggedModelRefConfig``). No model registration
+    happens here — the registry is reserved for deliberate/manual promotion.
 
     Args:
         label: Short numeric label for log messages.
         run_id: MLflow run UUID for the completed training run.
         tracking_uri: MLflow tracking server URI.
         job_config_path: Path to job config (provides [model].class as model_class tag).
-        assignment_id: Assignment identifier used as the registered model name.
+        assignment_id: Assignment identifier tagged on the run for later lookup.
     """
     client = MlflowClient(tracking_uri=tracking_uri)
 
@@ -225,7 +224,6 @@ def _annotate_mlflow_run(
         logger.warning(f"[{label}] Could not log params to MLflow: {exc}")
 
     model_class = read_model_class_name(job_config_path)
-    registered_name = build_registered_model_name(assignment_id)
     entry = AssignmentEntry(
         id=assignment_id,
         dataset=dataset_registry_id or resolved_dataset_id,
@@ -238,26 +236,10 @@ def _annotate_mlflow_run(
     )
 
     try:
-        record = register_logged_model(
-            run_id=run_id,
-            registered_model_name=registered_name,
-            tracking_uri=tracking_uri,
-            tags=reg_tags.as_mlflow_tags(),
-        )
-        logger.info(
-            "[{}] Registered {} v{} under assignment_id '{}'",
-            label,
-            record.name,
-            record.version,
-            assignment_id,
-        )
+        for key, value in reg_tags.as_mlflow_tags().items():
+            client.set_tag(run_id, key, value)
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "[{}] Could not register model for run {}: {}",
-            label,
-            run_id,
-            exc,
-        )
+        logger.warning(f"[{label}] Could not tag MLflow run {run_id}: {exc}")
 
 
 def _train_single(

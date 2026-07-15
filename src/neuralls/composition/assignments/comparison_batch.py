@@ -24,10 +24,10 @@ from neuralls.composition.comparison.config_assembler import resolve_comparison_
 from neuralls.composition.assignments.assembler import load_validated_case_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.config.models.preconditioner import (
+    LoggedModelRefConfig,
     NeuralPreconditionerConfig,
     PreconditionerConfig,
     PreconditionerType,
-    RegisteredModelRefConfig,
 )
 from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.reporting.artifacts import (
@@ -187,9 +187,12 @@ def neural_specs_from_assignments(
 ) -> list[NeuralPreconditionerConfig]:
     """Generate NeuralPreconditionerConfig stubs from assignment entries.
 
-    For each entry, fetches the ``neuralls.extra_feature_names`` tag from the
-    training run so that FiLM models receive their condition tensor during
-    comparison.
+    Each stub references the most recent unregistered training run tagged
+    with the assignment's id, rather than a registry entry — automatic model
+    consumption reads raw MLflow runs, since the registry is reserved for
+    deliberate/manual promotion. For each entry, also fetches the
+    ``neuralls.extra_feature_names`` tag from the training run so that FiLM
+    models receive their condition tensor during comparison.
 
     Args:
         entries: Assignment entries to convert.
@@ -205,7 +208,7 @@ def neural_specs_from_assignments(
             name=entry.effective_display_name,
             type=PreconditionerType.NEURAL,
             assignment=entry.id,
-            model_ref=RegisteredModelRefConfig(latest=True),
+            model_ref=LoggedModelRefConfig(latest=True, tags={"assignment_id": entry.id}),
             extra_input_names=fetch_extra_input_names_for_model(entry.id, client),
         )
         for entry in entries
