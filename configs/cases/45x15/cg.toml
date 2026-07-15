@@ -47,17 +47,17 @@ display_name = "Solutions CG-10 45x15 (POD-2G snapshot source)"
 [[jobs]]
 id = "scale-equivariant-constant-width-factorized"
 path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
-display_name = "Scale Equivariant Constant Width FFNN"
+display_name = "Scale Equivariant Constant Width FFNN (SiLU, 6L, bias)"
 
 [[jobs]]
 id = "scale-equivariant-constant-width-softplus-factorized"
 path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized.toml"
-display_name = "Scale Equivariant Constant Width Softplus FFNN"
+display_name = "Scale Equivariant Constant Width Softplus FFNN (ReLU, 3L)"
 
 [[jobs]]
 id = "scale-equivariant-embedded-fully-factorized"
 path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN"
+display_name = "Scale Equivariant Embedded Fully FFNN (Identity, 4L)"
 
 [[jobs]]
 id = "scale-equivariant-embedded-fully-factorized-gelu"
@@ -82,7 +82,7 @@ display_name = "Scale Equivariant Embedded Fully FFNN (GELU, 2L)"
 [[jobs]]
 id = "scale-equivariant-embedded-fully-softplus-factorized"
 path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized.toml"
-display_name = "Scale Equivariant Embedded Fully Softplus FFNN"
+display_name = "Scale Equivariant Embedded Fully Softplus FFNN (GELU, 4L, bias)"
 
 [[jobs]]
 id = "scale-equivariant-embedded-fully-softplus-factorized-relu-3l"
