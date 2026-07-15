@@ -54,7 +54,11 @@ class RegisteredModelRefConfig(BaseModel):
         name: Registered model name when explicitly provided.
         alias: Model alias (e.g. ``"@solutions"``); ``@`` prefix is stripped.
         version: Explicit model version number.
-        latest: If True, select the latest version.
+        latest: If True, select the highest registered version number. This is
+            "most recently registered," not "best-performing" — there is no
+            metric-based (e.g. lowest validation loss) selection. Use an
+            explicit `alias` pointed at a deliberately-chosen version if you
+            need a stable, quality-vetted reference.
     """
 
     source: Literal["registered"] = "registered"
@@ -86,7 +90,10 @@ class LoggedModelRefConfig(BaseModel):
     Attributes:
         source: Discriminator field, always "logged".
         run_id: Explicit MLflow run ID to reference.
-        latest: If True, find the latest matching model via filters.
+        latest: If True, select the most recently *started* run matching the
+            given filters (ordered by ``attributes.start_time DESC``). This is
+            "most recent," not "best-performing" — there is no metric-based
+            (e.g. lowest validation loss) selection.
         model_name: Filter by logged model name.
         experiment_name: Filter by experiment name.
         experiment_id: Filter by experiment ID.

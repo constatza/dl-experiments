@@ -10,6 +10,8 @@ from typing import Any, cast
 from loguru import logger
 from mlflow.tracking import MlflowClient
 from mlflow.entities import Run
+from mlflow.exceptions import MlflowException
+from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST, ErrorCode
 
 from neuralls.platform.config.models.dataset_identity import normalize_registry_id
 from neuralls.platform.storage.filesystem import sanitize_identifier
@@ -91,12 +93,19 @@ def build_registered_model_uri(
 
 
 def search_registered_models(*, model_name: str, tracking_uri: str) -> list[Any]:
-    """Return matching registered models by exact name."""
+    """Return matching registered models by exact name.
+
+    Only a genuine "no such registered model" response yields an empty list;
+    any other MLflow error (auth, connectivity, ...) propagates so callers don't
+    mistake a transient failure for a missing model.
+    """
     client = MlflowClient(tracking_uri=tracking_uri)
     try:
         return [client.get_registered_model(model_name)]
-    except Exception:  # noqa: BLE001
-        return []
+    except MlflowException as exc:
+        if exc.error_code == ErrorCode.Name(RESOURCE_DOES_NOT_EXIST):
+            return []
+        raise
 
 
 def list_model_versions(model_name: str, *, tracking_uri: str) -> list[int]:

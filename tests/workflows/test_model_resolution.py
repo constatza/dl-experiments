@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import mlflow
 import pytest
 
+from tests.workflows.conftest import LoggedRunFactory
 from neuralls.platform.config.models.preconditioner import (
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
@@ -318,4 +320,119 @@ def test_download_checkpoint_for_run_raises_on_ambiguous_distinct_artifacts(
             run_id="run-1",
             destination=tmp_path / "out",
             fallback_artifact_path="model",
+        )
+
+
+def test_resolve_registered_ref_latest_picks_highest_version(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
+) -> None:
+    """latest=True must select the highest registered version, not run order.
+
+    Registration happens out of chronological run-creation order: the
+    highest version number ends up backing the *earliest*-created run, so a
+    resolver that accidentally selects "most recently created run" instead
+    of "highest version number" fails this test.
+    """
+    run_a = log_run_with_checkpoint("marker-a")
+    run_b = log_run_with_checkpoint("marker-b")
+    run_c = log_run_with_checkpoint("marker-c")
+
+    model_name = "LatestVersionModel"
+    mlflow.register_model(model_uri=f"runs:/{run_b}/model", name=model_name)  # v1
+    mlflow.register_model(model_uri=f"runs:/{run_c}/model", name=model_name)  # v2
+    mlflow.register_model(model_uri=f"runs:/{run_a}/model", name=model_name)  # v3
+
+    spec = NeuralPreconditionerConfig(
+        name="neural",
+        type=PreconditionerType.NEURAL,
+        model_ref=RegisteredModelRefConfig(name=model_name, latest=True),
+    )
+
+    resolution = resolve_model_ref(
+        spec=spec,
+        tracking_uri=mlflow_tracking_uri,
+        destination=tmp_path / "downloads",
+    )
+
+    assert resolution.run_id == run_a
+    assert resolution.checkpoint_path.read_text() == "marker-a"
+
+
+def test_resolve_logged_ref_latest_picks_most_recently_started_run(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    mlflow_experiment: str,
+    log_run_with_checkpoint: LoggedRunFactory,
+) -> None:
+    """latest=True for a logged-model ref selects the most-recently-started run.
+
+    The "new" run's DB record is created before the "old" one, decoupling
+    start_time ordering from row-insertion ordering, so the test can't pass
+    by accident on insertion order rather than the intended
+    ``attributes.start_time DESC`` ordering.
+    """
+    run_new = log_run_with_checkpoint("marker-new", start_time_ms=5_000)
+    run_old = log_run_with_checkpoint("marker-old", start_time_ms=1_000)
+    assert run_old != run_new
+
+    spec = NeuralPreconditionerConfig(
+        name="neural",
+        type=PreconditionerType.NEURAL,
+        model_ref=LoggedModelRefConfig(latest=True, experiment_name=mlflow_experiment),
+    )
+
+    resolution = resolve_model_ref(
+        spec=spec,
+        tracking_uri=mlflow_tracking_uri,
+        destination=tmp_path / "downloads",
+    )
+
+    assert resolution.run_id == run_new
+    assert resolution.checkpoint_path.read_text() == "marker-new"
+
+
+def test_resolve_preconditioner_models_with_warnings_skips_unresolved_and_continues(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
+) -> None:
+    """skip_unresolved=True keeps a batch going and records one warning per failure.
+
+    Without skip_unresolved, the same batch must raise instead.
+    """
+    run_id = log_run_with_checkpoint("marker-ok")
+    resolvable = NeuralPreconditionerConfig(
+        name="neural-ok",
+        type=PreconditionerType.NEURAL,
+        model_ref=LoggedModelRefConfig(run_id=run_id),
+    )
+    unresolvable = NeuralPreconditionerConfig(
+        name="neural-missing",
+        type=PreconditionerType.NEURAL,
+        model_ref=RegisteredModelRefConfig(name="DoesNotExistModel", latest=True),
+    )
+
+    result = resolve_preconditioner_models_with_warnings(
+        specs=[resolvable, unresolvable],
+        tracking_uri=mlflow_tracking_uri,
+        download_root=tmp_path / "downloads",
+        skip_unresolved=True,
+    )
+
+    assert len(result.specs) == 1
+    resolved_spec = result.specs[0]
+    assert isinstance(resolved_spec, NeuralPreconditionerConfig)
+    assert resolved_spec.name == "neural-ok"
+    assert resolved_spec.resolved_checkpoint_path is not None
+    assert len(result.warnings) == 1
+    assert "neural-missing" in result.warnings[0]
+    assert "DoesNotExistModel" in result.warnings[0]
+
+    with pytest.raises(ValueError, match="DoesNotExistModel"):
+        resolve_preconditioner_models_with_warnings(
+            specs=[resolvable, unresolvable],
+            tracking_uri=mlflow_tracking_uri,
+            download_root=tmp_path / "downloads",
         )

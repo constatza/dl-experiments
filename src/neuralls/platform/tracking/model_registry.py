@@ -8,6 +8,8 @@ from datetime import datetime, UTC
 from pathlib import Path
 
 from loguru import logger
+from mlflow.exceptions import MlflowException
+from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST, ErrorCode
 from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.job_metadata import read_job_metadata
@@ -54,8 +56,10 @@ def _warn_existing_registered_model_name(
     """Warn when registration will append a version to an existing model."""
     try:
         client.get_registered_model(registered_model_name)
-    except Exception:
-        return
+    except MlflowException as exc:
+        if exc.error_code == ErrorCode.Name(RESOURCE_DOES_NOT_EXIST):
+            return
+        raise
     logger.warning(
         "Registered model '{}' already exists. Registering a new version.",
         registered_model_name,

@@ -33,9 +33,16 @@ def log_comparison_artifact_uri() -> None:
 
 
 def log_skipped_preconditioners(warnings: Sequence[str]) -> None:
-    """Log the count of skipped preconditioners when present."""
+    """Log skipped-preconditioner count and reasons so drops are visible on the run.
+
+    Each warning already carries the preconditioner name and failure reason
+    (see ``resolve_preconditioner_models_with_warnings``). The count alone is not
+    enough to notice a silently thinner comparison, so the full messages are
+    logged as a text artifact next to the comparison plot.
+    """
     if warnings:
         mlflow.log_param("skipped_preconditioners", str(len(warnings)))
+        mlflow.log_text("\n".join(warnings), "skipped_preconditioners.txt")
 
 
 def log_comparison_result_metrics(

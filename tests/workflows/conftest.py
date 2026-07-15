@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Protocol
 
+import mlflow
 import pytest
+from dlkit.infrastructure.io import url_resolver
+from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
@@ -19,6 +23,46 @@ from neuralls.composition.assignments.multi_training import TrainingRunResult
 
 EXP_ID_ALPHA: str = "alpha-experiment"
 EXP_ID_BETA: str = "beta-experiment"
+
+_IDENTITY_MODEL_SOURCE = "\n".join(
+    [
+        "import mlflow",
+        "from typing import Dict, List",
+        "",
+        "class _IdentityModel(mlflow.pyfunc.PythonModel):",
+        "    def predict(self, context, model_input: List[Dict[str, str]], params=None) -> List[Dict[str, str]]:",
+        "        _ = context",
+        "        _ = params",
+        "        return model_input",
+        "",
+        "mlflow.models.set_model(_IdentityModel())",
+        "",
+    ]
+)
+
+
+def _artifact_location(path: Path) -> str:
+    """Convert a local artifacts root into the file:// URI form MLflow expects.
+
+    Args:
+        path: Local directory to use as an experiment artifact root.
+
+    Returns:
+        A ``file://`` URI string.
+    """
+    return url_resolver.build_uri(path.resolve(), scheme="file")
+
+
+class LoggedRunFactory(Protocol):
+    """Callable that logs one MLflow run with a checkpoint marker artifact."""
+
+    def __call__(
+        self,
+        marker: str,
+        *,
+        run_name: str | None = None,
+        start_time_ms: int | None = None,
+    ) -> str: ...
 
 
 @pytest.fixture
@@ -140,3 +184,103 @@ def neural_spec_invalid() -> NeuralPreconditionerConfig:
         name="neural-invalid",
         type=PreconditionerType.NEURAL,
     )
+
+
+# ---------------------------------------------------------------------------
+# Real local MLflow tracking store fixtures (SQLite + filesystem artifacts)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mlflow_tracking_uri(tmp_path: Path) -> str:
+    """Local SQLite MLflow tracking URI scoped to this test's temp directory.
+
+    Args:
+        tmp_path: Pytest-provided isolated temp directory.
+
+    Returns:
+        A ``sqlite:///...`` tracking URI string.
+    """
+    return f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
+
+
+@pytest.fixture
+def mlflow_experiment(tmp_path: Path, mlflow_tracking_uri: str) -> str:
+    """Create and activate a real local MLflow experiment with file-backed artifacts.
+
+    Args:
+        tmp_path: Pytest-provided isolated temp directory.
+        mlflow_tracking_uri: Local SQLite tracking URI to bind the experiment to.
+
+    Returns:
+        The created experiment's name.
+    """
+    artifacts_dir = (tmp_path / "mlartifacts").resolve()
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+    experiment_name = f"workflow-test-{tmp_path.name}"
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    if client.get_experiment_by_name(experiment_name) is None:
+        client.create_experiment(
+            experiment_name,
+            artifact_location=_artifact_location(artifacts_dir),
+        )
+    mlflow.set_experiment(experiment_name)
+    return experiment_name
+
+
+@pytest.fixture
+def log_run_with_checkpoint(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    mlflow_experiment: str,
+) -> LoggedRunFactory:
+    """Factory fixture: log one real run with a minimal pyfunc model + checkpoint.
+
+    Each call logs a distinct run under ``mlflow_experiment`` containing a
+    ``.ckpt`` artifact under the ``model`` artifact path whose content equals
+    ``marker``, so callers can assert exactly which run's checkpoint was
+    resolved. ``start_time_ms`` optionally overrides the run's start time to
+    make ordering-sensitive assertions (e.g. "latest run") deterministic
+    instead of relying on real wall-clock ordering.
+
+    Args:
+        tmp_path: Pytest-provided isolated temp directory.
+        mlflow_tracking_uri: Local SQLite tracking URI.
+        mlflow_experiment: Active experiment name (ensures setup ordering).
+
+    Returns:
+        A callable ``(marker, *, run_name=None, start_time_ms=None) -> run_id``.
+    """
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    experiment = client.get_experiment_by_name(mlflow_experiment)
+    if experiment is None:
+        raise RuntimeError(f"Experiment '{mlflow_experiment}' was not found after creation.")
+
+    def _log_run(
+        marker: str,
+        *,
+        run_name: str | None = None,
+        start_time_ms: int | None = None,
+    ) -> str:
+        checkpoint_file = tmp_path / f"{marker}.ckpt"
+        checkpoint_file.write_text(marker)
+        model_code = tmp_path / f"{marker}_model.py"
+        model_code.write_text(_IDENTITY_MODEL_SOURCE)
+
+        if start_time_ms is not None:
+            created = client.create_run(
+                experiment_id=experiment.experiment_id,
+                run_name=run_name or marker,
+                start_time=start_time_ms,
+            )
+            run_context = mlflow.start_run(run_id=created.info.run_id)
+        else:
+            run_context = mlflow.start_run(run_name=run_name or marker)
+
+        with run_context as run:
+            mlflow.pyfunc.log_model(artifact_path="model", python_model=model_code)
+            mlflow.log_artifact(str(checkpoint_file), artifact_path="model")
+            return run.info.run_id
+
+    return _log_run

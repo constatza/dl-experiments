@@ -56,14 +56,11 @@ def _lookup_run_id_for_model(entry_id: str, client: MlflowClient) -> str | None:
     Returns:
         MLflow run ID of the latest model version, or None if unavailable.
     """
-    try:
-        versions = client.search_model_versions(f"name='{build_registered_model_name(entry_id)}'")
-        if not versions:
-            return None
-        latest = max(versions, key=lambda v: int(v.version))
-        return latest.run_id or None
-    except Exception:  # noqa: BLE001
+    versions = client.search_model_versions(f"name='{build_registered_model_name(entry_id)}'")
+    if not versions:
         return None
+    latest = max(versions, key=lambda v: int(v.version))
+    return latest.run_id or None
 
 
 def fetch_extra_input_names_for_model(entry_id: str, client: MlflowClient) -> tuple[str, ...]:
@@ -82,10 +79,7 @@ def fetch_extra_input_names_for_model(entry_id: str, client: MlflowClient) -> tu
     run_id = _lookup_run_id_for_model(entry_id, client)
     if run_id is None:
         return ()
-    try:
-        return fetch_extra_feature_names(run_id, client=client)
-    except Exception:  # noqa: BLE001
-        return ()
+    return fetch_extra_feature_names(run_id, client=client)
 
 
 __all__ = [
