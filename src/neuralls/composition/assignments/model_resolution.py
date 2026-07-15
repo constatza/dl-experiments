@@ -199,6 +199,32 @@ def search_logged_models(
     ]
 
 
+def _checkpoint_selection_role(checkpoint: Path) -> str | None:
+    """Classify checkpoint filenames that are safe to prefer over other candidates."""
+    match checkpoint.name:
+        case "best.ckpt":
+            return "best"
+        case _:
+            return None
+
+
+def _select_preferred_checkpoint(checkpoints: list[Path]) -> tuple[str, Path] | None:
+    """Select one preferred checkpoint candidate by explicit filename role."""
+    role_candidates: dict[str, list[Path]] = {"best": []}
+    for checkpoint in checkpoints:
+        match _checkpoint_selection_role(checkpoint):
+            case "best":
+                role_candidates["best"].append(checkpoint)
+            case _:
+                continue
+
+    match role_candidates:
+        case {"best": [best_checkpoint]}:
+            return "best", best_checkpoint
+        case _:
+            return None
+
+
 def _find_single_checkpoint(root: Path) -> Path:
     """Find one unambiguous checkpoint under a local artifact directory."""
     checkpoints = sorted(root.glob("**/*.ckpt"))
@@ -230,6 +256,17 @@ def _find_single_checkpoint(root: Path) -> Path:
             canonical,
         )
         return canonical
+
+    match _select_preferred_checkpoint(checkpoints):
+        case ("best", best_checkpoint):
+            logger.warning(
+                "Multiple distinct checkpoint artifacts found under {}. Using best checkpoint {}.",
+                root,
+                best_checkpoint,
+            )
+            return best_checkpoint
+        case _:
+            pass
 
     candidate_list = ", ".join(path.as_posix() for path in checkpoints)
     raise ValueError(f"Multiple distinct checkpoints found under {root}: {candidate_list}")

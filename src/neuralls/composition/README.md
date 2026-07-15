@@ -158,5 +158,5 @@ reconstruct the exact system that was compared.
 Comparison model resolution treats one resolved MLflow `run_id` as the hard
 boundary for checkpoint discovery. When downloaded run artifacts contain
 multiple `.ckpt` files, composition canonicalizes byte-identical duplicate
-copies and raises on distinct candidates instead of silently picking the first
-path.
+copies, prefers a unique `best.ckpt`, and raises on remaining ambiguity instead
+of silently picking the first path.

@@ -249,6 +249,40 @@ def test_find_single_checkpoint_collapses_nested_duplicate_copy(tmp_path: Path) 
     assert resolved == primary
 
 
+def test_find_single_checkpoint_prefers_best_over_last(tmp_path: Path) -> None:
+    root = tmp_path / "run-download"
+    root.mkdir(parents=True)
+    best = root / "best.ckpt"
+    best.write_bytes(b"best")
+    (root / "last.ckpt").write_bytes(b"last")
+
+    resolved = _find_single_checkpoint(root)
+
+    assert resolved == best
+
+
+def test_find_single_checkpoint_rejects_multiple_best_candidates(tmp_path: Path) -> None:
+    root = tmp_path / "run-download"
+    (root / "a").mkdir(parents=True)
+    (root / "b").mkdir(parents=True)
+    (root / "a" / "best.ckpt").write_bytes(b"best-a")
+    (root / "b" / "best.ckpt").write_bytes(b"best-b")
+    (root / "last.ckpt").write_bytes(b"last")
+
+    with pytest.raises(ValueError, match="Multiple distinct checkpoints found"):
+        _find_single_checkpoint(root)
+
+
+def test_find_single_checkpoint_rejects_interval_checkpoint_with_last(tmp_path: Path) -> None:
+    root = tmp_path / "run-download"
+    root.mkdir(parents=True)
+    (root / "epoch=12-step=500.ckpt").write_bytes(b"interval")
+    (root / "last.ckpt").write_bytes(b"last")
+
+    with pytest.raises(ValueError, match="Multiple distinct checkpoints found"):
+        _find_single_checkpoint(root)
+
+
 def test_find_single_checkpoint_rejects_distinct_candidates(tmp_path: Path) -> None:
     """Multiple distinct checkpoint files in one run root should fail loudly."""
     root = tmp_path / "run-download"
