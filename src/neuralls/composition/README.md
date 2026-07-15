@@ -120,6 +120,18 @@ itself: it delegates metric-key sanitization, comparison-run metric logging, and
 nested child-run writes to `platform.tracking`, while only assembling child tag
 payloads and deciding when the logging happens.
 
+Comparison plot legends are a separate concern from that MLflow metric-key
+policy. `composition.comparison._plots` builds display labels for condition
+number, convergence, and iteration-count plots by combining each config name
+with `platform.reporting.preconditioner_labels.describe_preconditioner`, which
+inspects the *constructed* `torchalg` preconditioner object's own attributes
+(AMG grid levels, cycle type, smoother/coarsening omega, POD-2G's actual
+fitted basis rank) rather than re-reading the TOML config. This keeps labels
+truthful to what was actually built — including cases where a configured
+value (e.g. a POD energy-threshold `rank`) differs from the resolved runtime
+value — without composition or platform maintaining a second, config-derived
+description that could drift out of sync with the live object.
+
 Case-driven comparison selection is intentionally simple: one comparison entry
 loads one system from its required `rhs_source`. Generated and raw sources use
 the configured matrix dataset plus `matrix_index`, while dataset sources

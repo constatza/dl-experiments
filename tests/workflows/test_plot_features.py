@@ -8,8 +8,12 @@ from unittest.mock import patch
 import matplotlib
 import numpy as np
 import pytest
+import torch
 
 matplotlib.use("Agg")
+
+from torchalg.preconditioners.base import Preconditioner
+from torchalg.preconditioners.implementations import Identity, JacobiPreconditioner
 
 from neuralls.composition.comparison._plots import _generate_comparison_plots
 from neuralls.composition.comparison.models import ComparisonPaths
@@ -73,6 +77,23 @@ def simple_cond_numbers() -> dict[str, float]:
         Mapping from preconditioner name to condition number float.
     """
     return {"identity": 1.0, "jacobi": 5.0}
+
+
+@pytest.fixture
+def two_preconditioners() -> dict[str, Preconditioner]:
+    """Constructed preconditioner instances matching ``two_result_entries``' keys.
+
+    Returns:
+        A dict with two entries: "identity" and "jacobi", holding real
+        constructed preconditioner objects (not config data) so
+        ``_generate_comparison_plots`` can derive descriptive plot labels
+        from them.
+    """
+    matrix = torch.diag(torch.tensor([2.0, 3.0], dtype=torch.float64))
+    return {
+        "identity": Identity(),
+        "jacobi": JacobiPreconditioner(matrix),
+    }
 
 
 @pytest.fixture
@@ -294,6 +315,7 @@ def test_generate_comparison_plots_includes_iterations_barplot(
     tmp_path: Path,
     two_result_entries: dict[str, CGComparisonResult],
     simple_cond_numbers: dict[str, float],
+    two_preconditioners: dict[str, Preconditioner],
 ) -> None:
     """_generate_comparison_plots returns PlotPaths with iterations_barplot set.
 
@@ -304,6 +326,7 @@ def test_generate_comparison_plots_includes_iterations_barplot(
         tmp_path: Pytest temporary directory used for ComparisonPaths.
         two_result_entries: Two-entry result dict from fixture.
         simple_cond_numbers: Simple condition number mapping from fixture.
+        two_preconditioners: Constructed preconditioner instances from fixture.
     """
     figures_dir = tmp_path / "figures"
     figures_dir.mkdir(parents=True)
@@ -323,6 +346,8 @@ def test_generate_comparison_plots_includes_iterations_barplot(
         ),
         patch("neuralls.composition.comparison._plots.plot_metric_comparison"),
     ):
-        result = _generate_comparison_plots(two_result_entries, simple_cond_numbers, paths)
+        result = _generate_comparison_plots(
+            two_result_entries, simple_cond_numbers, paths, two_preconditioners
+        )
 
     assert result.iterations_barplot is not None

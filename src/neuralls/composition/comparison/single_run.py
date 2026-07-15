@@ -189,6 +189,7 @@ def compare_preconditioners(
         results,
         cond_numbers,
         paths,
+        scheduled_preconditioners,
         display_name=display_name,
         rtol=general_params.params.rtol,
         atol=general_params.params.atol,
