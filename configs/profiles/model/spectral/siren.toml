@@ -1,6 +1,0 @@
-[model]
-name = "ScaleEquivariantSiren"
-hidden_size = 504
-omega0 = 30.0
-num_layers = 1
-norm = "l2"

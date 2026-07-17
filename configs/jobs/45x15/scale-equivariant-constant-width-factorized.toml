@@ -2,7 +2,15 @@
 type = "train"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/scale-eq-const/silu-6L-b.toml"
 data = "../../profiles/data/array-small-batch.toml"
 training = "../../profiles/training/conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"
+
+[model]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+project = false
+activation = "silu"
+dropout = 0.0
+norm = "l2"
+num_layers = 6
+bias = true

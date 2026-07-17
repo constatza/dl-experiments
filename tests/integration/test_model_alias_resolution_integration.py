@@ -185,7 +185,6 @@ def test_experiment_id_registration_resolves_via_latest(tmp_path: Path) -> None:
     spec = NeuralPreconditionerConfig(
         name="neural",
         type=PreconditionerType.NEURAL,
-        experiment=experiment_id,
         model_ref=RegisteredModelRefConfig(latest=True),
     )
 

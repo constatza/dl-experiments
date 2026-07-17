@@ -2,10 +2,19 @@
 type = "search"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/scale-eq-const/silu-6L-b.toml"
 data = "../../profiles/data/array-small-batch.toml"
 training = "../../profiles/training/debug-overfit.toml"
 plots = "../../profiles/plots/default.toml"
+
+
+[model]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+project = false
+activation = "silu"
+dropout = 0.0
+norm = "l2"
+num_layers = 6
+bias = true
 
 [search]
 objective = "train/loss"
@@ -16,6 +25,7 @@ name = "NopPruner"
 module_path = "optuna.pruners"
 
 [search.space]
+"model.project" = { type = "categorical", choices = [true, false] }
 "model.num_layers" = { type = "int", low = 1, high = 6 }
 "model.activation" = { type = "categorical", choices = ["relu", "gelu", "silu", "tanh", "sigmoid", "leaky_relu", "identity"] }
 "model.bias" = { type = "categorical", choices = [true, false] }

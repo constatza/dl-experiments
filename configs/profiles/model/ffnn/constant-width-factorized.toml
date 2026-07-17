@@ -1,4 +1,0 @@
-[model]
-name = "ConstantWidthFactorizedFFNN"
-activation = "gelu"
-num_layers = 3

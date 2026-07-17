@@ -45,16 +45,6 @@ path = "../../datasets/test/45x15randomE/sparse-rhs-single-matrix.toml"
 display_name = "Sparse RHS 45x15randomE Single Matrix"
 
 [[jobs]]
-id = "constant-width-factorized"
-path = "../../jobs/ffnn/constant-width-factorized.toml"
-display_name = "Constant-Width Factorized FFNN"
-
-[[jobs]]
-id = "constant-width-simple-factorized"
-path = "../../jobs/ffnn/constant-width-simple-factorized.toml"
-display_name = "Constant-Width Simple Factorized FFNN"
-
-[[jobs]]
 id = "scale-equivariant-constant-width-factorized"
 path = "../../jobs/ffnn/scale-equivariant-constant-width-factorized.toml"
 display_name = "Scale-Equivariant Constant-Width Factorized FFNN"
@@ -69,8 +59,6 @@ matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_source = { kind = "gaussian" }
 seed = 42
 assignments = [
-  "constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
-  "constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
 ]
@@ -79,8 +67,6 @@ assignments = [
 matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_source = { kind = "dataset", path = "${NEURALLS_PROCESSED_DIR}/scaled-solutions-45x15randomE-single-matrix" }
 assignments = [
-  "constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
-  "constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
 ]
@@ -89,19 +75,9 @@ assignments = [
 matrix_dataset = "gaussian-cg100-45x15randomE-single-matrix"
 rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 assignments = [
-  "constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
-  "constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-factorized-gaussian-cg100-45x15randomE-single-matrix",
   "scale-equivariant-constant-width-simple-factorized-gaussian-cg100-45x15randomE-single-matrix",
 ]
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15randomE-single-matrix"
-job = "constant-width-factorized"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15randomE-single-matrix"
-job = "constant-width-simple-factorized"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15randomE-single-matrix"

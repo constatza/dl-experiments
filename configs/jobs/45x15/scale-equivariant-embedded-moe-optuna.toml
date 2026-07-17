@@ -3,28 +3,28 @@ type = "search"
 seed = 42
 precision = "64"
 data = "../../profiles/data/array-default.toml"
-training = "../../profiles/training/debug-overfit.toml"
+training = "../../profiles/training/extended-conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"
 
 
 [model]
-name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+name = "ScaleEquivariantEmbeddedMoEFFNN"
 num_layers = 4
+num_experts = 4
+top_k = 2
 activation = "gelu"
-bias = true
+bias = false
 dropout = 0.0
 
 [search]
-objective = "train/loss"
+objective = "val/loss"
 n_trials = 100
-
-[search.pruner]
-name = "NopPruner"
-module_path = "optuna.pruners"
 
 [search.space]
 "model.project" = { type = "categorical", choices = [true, false] }
 "model.num_layers" = { type = "int", low = 1, high = 6 }
+"model.num_experts" = { type = "int", low = 2, high = 8 }
+"model.top_k" = { type = "int", low = 1, high = 4 }
 "model.activation" = { type = "categorical", choices = ["relu", "gelu", "silu", "tanh", "sigmoid", "leaky_relu", "identity"] }
 "model.bias" = { type = "categorical", choices = [true, false] }
 "model.dropout" = { type = "float", low = 0.0, high = 0.5 }

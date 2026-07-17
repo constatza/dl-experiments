@@ -89,6 +89,16 @@ id = "scale-equivariant-embedded-fully-softplus-factorized-relu-3l"
 path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized-relu-3l.toml"
 display_name = "Scale Equivariant Embedded Fully Softplus FFNN (ReLU, 3L)"
 
+[[jobs]]
+id = "scale-equivariant-embedded-hyper"
+path = "../../jobs/45x15/scale-equivariant-embedded-hyper.toml"
+display_name = "Scale Equivariant Embedded Hyper FFNN (GELU, 4L, 2 lanes)"
+
+[[jobs]]
+id = "scale-equivariant-embedded-moe"
+path = "../../jobs/45x15/scale-equivariant-embedded-moe.toml"
+display_name = "Scale Equivariant Embedded MoE FFNN (GELU, 4L, 4 experts, top-2)"
+
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15"
 rhs_source = { kind = "gaussian" }
@@ -145,3 +155,11 @@ job = "scale-equivariant-embedded-fully-softplus-factorized"
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-embedded-fully-softplus-factorized-relu-3l"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-hyper"
+
+[[assignments]]
+dataset = "gaussian-cg100-45x15"
+job = "scale-equivariant-embedded-moe"

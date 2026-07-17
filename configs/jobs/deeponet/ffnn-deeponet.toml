@@ -1,8 +1,0 @@
-[run]
-type = "train"
-seed = 42
-precision = "64"
-model = "../../profiles/model/deeponet/ffnn-deeponet.toml"
-data = "../../profiles/data/deeponet-branch-trunk.toml"
-training = "../../profiles/training/default.toml"
-plots = "../../profiles/plots/default.toml"

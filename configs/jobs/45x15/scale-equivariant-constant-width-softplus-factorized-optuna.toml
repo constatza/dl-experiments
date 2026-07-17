@@ -2,16 +2,25 @@
 type = "search"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/scale-eq-const-softplus/relu-3L.toml"
 data = "../../profiles/data/array-small-batch.toml"
 training = "../../profiles/training/conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"
+
+
+[model]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+project = false
+num_layers = 3
+activation = "relu"
+bias = false
+dropout = 0.0
 
 [search]
 objective = "val/loss"
 n_trials = 100
 
 [search.space]
+"model.project" = { type = "categorical", choices = [true, false] }
 "model.num_layers" = { type = "int", low = 1, high = 6 }
 "model.activation" = { type = "categorical", choices = ["relu", "gelu", "silu", "tanh", "sigmoid", "leaky_relu", "identity"] }
 "model.bias" = { type = "categorical", choices = [true, false] }

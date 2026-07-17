@@ -2,16 +2,24 @@
 type = "search"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/scale-eq-full/identity-4L.toml"
 data = "../../profiles/data/array-default.toml"
 training = "../../profiles/training/extended-conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"
+
+
+[model]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+num_layers = 4
+activation = "identity"
+bias = false
+dropout = 0.0
 
 [search]
 objective = "val/loss"
 n_trials = 100
 
 [search.space]
+"model.project" = { type = "categorical", choices = [true, false] }
 "model.num_layers" = { type = "int", low = 1, high = 6 }
 "model.activation" = { type = "categorical", choices = ["relu", "gelu", "silu", "tanh", "sigmoid", "leaky_relu", "identity"] }
 "model.bias" = { type = "categorical", choices = [true, false] }

@@ -2,7 +2,13 @@
 type = "train"
 seed = 42
 precision = "64"
-model = "../../profiles/model/ffnn/scale-eq-full/gelu-2L.toml"
 data = "../../profiles/data/array-default.toml"
 training = "../../profiles/training/extended-conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"
+
+[model]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+num_layers = 2
+activation = "gelu"
+bias = false
+dropout = 0.0

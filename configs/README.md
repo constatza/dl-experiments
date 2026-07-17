@@ -210,7 +210,7 @@ entrypoint, so the inline `[search]` block belongs there.
 
 ```toml
 [model]
-name = "ScaleEquivariantEmbeddedFullyFactorizedFFNN"
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
 num_layers = 1
 
 [data]

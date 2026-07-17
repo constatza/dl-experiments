@@ -7,8 +7,10 @@ training = "../../profiles/training/extended-conservative-plateau.toml"
 plots = "../../profiles/plots/default.toml"
 
 [model]
-name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+name = "ScaleEquivariantEmbeddedMoEFFNN"
 num_layers = 4
-activation = "silu"
+num_experts = 4
+top_k = 2
+activation = "gelu"
 bias = false
 dropout = 0.0

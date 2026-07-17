@@ -10,8 +10,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from dlkit.infrastructure.config.factories import load_job
-from dlkit.infrastructure.config.job_config import InferenceJobConfig
+from dlkit.infrastructure.config.job_config import InferenceJobConfig, TrainingJobConfig
 
 from neuralls.composition.assignments.evaluation import (
     EvaluationAssignmentContext,
@@ -52,9 +51,10 @@ def _write_split(path: Path) -> None:
     )
 
 
-def test_eval_materialization_injects_split_file_and_array_datamodule(tmp_path: Path) -> None:
-    job_path = Path(__file__).resolve().parents[2] / "configs/jobs/ffnn/ffnn.toml"
-    job = load_job(job_path)
+def test_eval_materialization_injects_split_file_and_array_datamodule(
+    tmp_path: Path, minimal_training_job: TrainingJobConfig
+) -> None:
+    job = minimal_training_job
     split_file = tmp_path / "split.json"
     checkpoint = tmp_path / "model.ckpt"
     rhs = tmp_path / "rhs.npy"
@@ -137,9 +137,9 @@ def test_write_eval_metric_report_accepts_plain_and_prefixed_metric(tmp_path: Pa
 def test_materialize_inference_settings_uses_staged_config_paths(
     monkeypatch,
     tmp_path: Path,
+    minimal_training_job: TrainingJobConfig,
 ) -> None:
-    job_path = Path(__file__).resolve().parents[2] / "configs/jobs/ffnn/ffnn.toml"
-    job = load_job(job_path)
+    job = minimal_training_job
     staged_job = tmp_path / "staged-job.toml"
     staged_data = tmp_path / "staged-data.toml"
     current_job = tmp_path / "current-job.toml"

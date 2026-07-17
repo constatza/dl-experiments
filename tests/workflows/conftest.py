@@ -8,6 +8,8 @@ from typing import Protocol
 
 import mlflow
 import pytest
+from dlkit.infrastructure.config.factories import load_job
+from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.io import url_resolver
 from mlflow.tracking import MlflowClient
 
@@ -17,6 +19,26 @@ from neuralls.platform.config.models.preconditioner import (
     StandardPreconditionerConfig,
 )
 from neuralls.composition.assignments.multi_training import TrainingRunResult
+
+_MINIMAL_TRAINING_JOB_TOML = """
+[run]
+type = "train"
+
+[model]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+num_layers = 1
+activation = "gelu"
+
+[data]
+name = "FlexibleDataset"
+batch_size = 4
+
+[data.module]
+name = "ArrayDataModule"
+module_path = "dlkit.engine.adapters.lightning.datamodules"
+
+[training]
+"""
 
 # ---------------------------------------------------------------------------
 # Named constants
@@ -64,6 +86,16 @@ class LoggedRunFactory(Protocol):
         run_name: str | None = None,
         start_time_ms: int | None = None,
     ) -> str: ...
+
+
+@pytest.fixture
+def minimal_training_job(tmp_path: Path) -> TrainingJobConfig:
+    """Self-contained training job config, independent of any repo config file."""
+    job_path = tmp_path / "minimal-job.toml"
+    job_path.write_text(_MINIMAL_TRAINING_JOB_TOML, encoding="utf-8")
+    job = load_job(job_path)
+    assert isinstance(job, TrainingJobConfig)
+    return job
 
 
 @pytest.fixture
