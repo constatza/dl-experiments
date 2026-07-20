@@ -15,19 +15,14 @@ path = "../../jobs/45x15/scale-equivariant-constant-width-factorized-overfit.tom
 display_name = "Scale Equivariant Constant Width FFNN"
 
 [[jobs]]
-id = "scale-equivariant-constant-width-softplus-factorized"
-path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized-overfit.toml"
-display_name = "Scale Equivariant Constant Width Softplus FFNN"
+id = "scale-equivariant-constant-width-factorized-relu"
+path = "../../jobs/45x15/scale-equivariant-constant-width-factorized-relu-overfit.toml"
+display_name = "Scale Equivariant Constant Width FFNN (ReLU)"
 
 [[jobs]]
-id = "scale-equivariant-embedded-fully-factorized"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-overfit.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN"
-
-[[jobs]]
-id = "scale-equivariant-embedded-fully-softplus-factorized"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized-overfit.toml"
-display_name = "Scale Equivariant Embedded Fully Softplus FFNN"
+id = "scale-equivariant-embedded-factorized"
+path = "../../jobs/45x15/scale-equivariant-embedded-factorized-overfit.toml"
+display_name = "Scale Equivariant Embedded FFNN (GELU, bias)"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
@@ -35,12 +30,8 @@ job = "scale-equivariant-constant-width-factorized"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-constant-width-softplus-factorized"
+job = "scale-equivariant-constant-width-factorized-relu"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-factorized"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-softplus-factorized"
+job = "scale-equivariant-embedded-factorized"

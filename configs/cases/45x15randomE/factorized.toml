@@ -54,9 +54,9 @@ display_name = "Sparse RHS 45x15randomE"
 # ── Models (FullyEmbedded factorized variants) ────────────────────────────────
 
 [[jobs]]
-id           = "scale-equivariant-embedded-fully-factorized"
-path         = "../../jobs/ffnn/scale-equivariant-embedded-fully-factorized.toml"
-display_name = "Scale-Equivariant Embedded Fully Factorized FFNN"
+id           = "scale-equivariant-embedded-factorized"
+path         = "../../jobs/ffnn/scale-equivariant-embedded-factorized.toml"
+display_name = "Scale-Equivariant Embedded Factorized FFNN"
 
 # ── Comparisons (one per training dataset, filtered to own assignments) ───────
 
@@ -65,7 +65,7 @@ matrix_dataset = "gaussian-cg10-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
 assignments    = [
-  "scale-equivariant-embedded-fully-factorized-gaussian-cg10-45x15randomE",
+  "scale-equivariant-embedded-factorized-gaussian-cg10-45x15randomE",
 ]
 
 [[comparisons]]
@@ -73,29 +73,29 @@ matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "gaussian" }
 seed           = 42
 assignments    = [
-  "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
+  "scale-equivariant-embedded-factorized-gaussian-cg100-45x15randomE",
 ]
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "dataset", path = "${NEURALLS_PROCESSED_DIR}/scaled-solutions-45x15randomE" }
 assignments    = [
-  "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
+  "scale-equivariant-embedded-factorized-gaussian-cg100-45x15randomE",
 ]
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15randomE"
 rhs_source = { kind = "sparse", indices = [0, 1, -1], values = [90.0, 100.0, -100.0] }
 assignments    = [
-  "scale-equivariant-embedded-fully-factorized-gaussian-cg100-45x15randomE",
+  "scale-equivariant-embedded-factorized-gaussian-cg100-45x15randomE",
 ]
 
 # ── Assignments (2 models × 2 datasets) ──────────────────────────────────────
 
 [[assignments]]
 dataset = "gaussian-cg10-45x15randomE"
-job = "scale-equivariant-embedded-fully-factorized"
+job = "scale-equivariant-embedded-factorized"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15randomE"
-job = "scale-equivariant-embedded-fully-factorized"
+job = "scale-equivariant-embedded-factorized"

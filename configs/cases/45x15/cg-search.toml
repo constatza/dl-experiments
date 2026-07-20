@@ -40,19 +40,14 @@ path = "../../jobs/45x15/scale-equivariant-constant-width-factorized-optuna.toml
 display_name = "Scale Equivariant Constant Width FFNN Optuna Search"
 
 [[jobs]]
-id = "scale-equivariant-constant-width-softplus-factorized-search"
-path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized-optuna.toml"
-display_name = "Scale Equivariant Constant Width Softplus FFNN Optuna Search"
+id = "scale-equivariant-constant-width-factorized-relu-search"
+path = "../../jobs/45x15/scale-equivariant-constant-width-factorized-relu-optuna.toml"
+display_name = "Scale Equivariant Constant Width FFNN Optuna Search (ReLU)"
 
 [[jobs]]
-id = "scale-equivariant-embedded-fully-factorized-search"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-optuna.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN Optuna Search"
-
-[[jobs]]
-id = "scale-equivariant-embedded-fully-softplus-factorized-search"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized-optuna.toml"
-display_name = "Scale Equivariant Embedded Fully Softplus FFNN Optuna Search"
+id = "scale-equivariant-embedded-factorized-search"
+path = "../../jobs/45x15/scale-equivariant-embedded-factorized-optuna.toml"
+display_name = "Scale Equivariant Embedded FFNN Optuna Search (GELU, bias)"
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg100-45x15"
@@ -81,12 +76,8 @@ job = "scale-equivariant-constant-width-factorized-search"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-constant-width-softplus-factorized-search"
+job = "scale-equivariant-constant-width-factorized-relu-search"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-factorized-search"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-softplus-factorized-search"
+job = "scale-equivariant-embedded-factorized-search"

@@ -50,44 +50,19 @@ path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
 display_name = "Scale Equivariant Constant Width FFNN (SiLU, 6L, bias)"
 
 [[jobs]]
-id = "scale-equivariant-constant-width-softplus-factorized"
-path = "../../jobs/45x15/scale-equivariant-constant-width-softplus-factorized.toml"
-display_name = "Scale Equivariant Constant Width Softplus FFNN (ReLU, 3L)"
+id = "scale-equivariant-constant-width-factorized-relu"
+path = "../../jobs/45x15/scale-equivariant-constant-width-factorized-relu.toml"
+display_name = "Scale Equivariant Constant Width FFNN (ReLU)"
 
 [[jobs]]
-id = "scale-equivariant-embedded-fully-factorized"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN (Identity, 4L)"
+id = "scale-equivariant-embedded-factorized"
+path = "../../jobs/45x15/scale-equivariant-embedded-factorized.toml"
+display_name = "Scale Equivariant Embedded FFNN (GELU, 4L, bias)"
 
 [[jobs]]
-id = "scale-equivariant-embedded-fully-factorized-gelu"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-gelu.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN (GELU, 4L)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-fully-factorized-silu"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-silu.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN (SiLU, 4L)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-fully-factorized-relu"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-relu.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN (ReLU, 4L)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-fully-factorized-gelu-2l"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-factorized-gelu-2l.toml"
-display_name = "Scale Equivariant Embedded Fully FFNN (GELU, 2L)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-fully-softplus-factorized"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized.toml"
-display_name = "Scale Equivariant Embedded Fully Softplus FFNN (GELU, 4L, bias)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-fully-softplus-factorized-relu-3l"
-path = "../../jobs/45x15/scale-equivariant-embedded-fully-softplus-factorized-relu-3l.toml"
-display_name = "Scale Equivariant Embedded Fully Softplus FFNN (ReLU, 3L)"
+id = "scale-equivariant-embedded-factorized-silu"
+path = "../../jobs/45x15/scale-equivariant-embedded-factorized-silu.toml"
+display_name = "Scale Equivariant Embedded FFNN (SiLU, 4L)"
 
 [[jobs]]
 id = "scale-equivariant-embedded-hyper"
@@ -126,35 +101,15 @@ job = "scale-equivariant-constant-width-factorized"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-constant-width-softplus-factorized"
+job = "scale-equivariant-constant-width-factorized-relu"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-factorized"
+job = "scale-equivariant-embedded-factorized"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-factorized-gelu"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-factorized-silu"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-factorized-relu"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-factorized-gelu-2l"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-softplus-factorized"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-fully-softplus-factorized-relu-3l"
+job = "scale-equivariant-embedded-factorized-silu"
 
 [[assignments]]
 dataset = "gaussian-cg100-45x15"

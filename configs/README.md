@@ -138,8 +138,9 @@ Case configs bind:
 - case-level MLflow topology
 
 The 45x15 `cg.toml` case compares the pure CG-N training dataset across Scale
-Equivariant Embedded Fully FFNN, Scale Equivariant Constant Width FFNN, and
-Scale Equivariant Constant Width Softplus FFNN variants. The companion
+Equivariant Embedded FFNN and Scale Equivariant Constant Width FFNN variants
+(both built on the single `ScaleEquivariantEmbeddedFactorizedFFNN` class, distinguished
+by their `project`/activation/layer-count settings). The companion
 `cg-search.toml` case binds one Optuna search job per network variant. Those
 search jobs tune learning rate, layer count, activation, bias, dropout, and
 scale-equivariant initialization/gain parameters.
@@ -159,8 +160,8 @@ id = "train-dataset"
 path = "../../datasets/train/45x15/gaussian-cg100.toml"
 
 [[jobs]]
-id = "scale-equivariant-embedded-fully-factorized"
-path = "../../jobs/ffnn/scale-equivariant-embedded-fully-factorized.toml"
+id = "scale-equivariant-embedded-factorized"
+path = "../../jobs/ffnn/scale-equivariant-embedded-factorized.toml"
 
 [[comparisons]]
 id = "scaled"
@@ -169,7 +170,7 @@ rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-
 
 [[assignments]]
 dataset = "train-dataset"
-job = "scale-equivariant-embedded-fully-factorized"
+job = "scale-equivariant-embedded-factorized"
 ```
 
 `[names].training` controls the MLflow experiment bucket for training runs.
