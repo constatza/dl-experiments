@@ -27,7 +27,7 @@ type = "ic0"
 [[comparison_defaults.preconditioners]]
 name = "amg"
 type = "amg"
-coarsening = { method = "aggregation" }
+coarsening = { method = "aggregation", theta = 0.05 }
 
 [[comparison_defaults.preconditioners]]
 name = "pod2g-cg1"

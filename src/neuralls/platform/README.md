@@ -24,6 +24,12 @@ job loader adapter, and MLflow client operations. DLKit itself owns job
 composition and schema validation; platform does not reconstruct DLKit sections
 locally.
 
+AMG-family preconditioner config keeps coarsening controls explicit at the TOML
+boundary. Classical smoothed aggregation exposes both the strength-of-connection
+threshold `theta`, which controls aggregate and coarse-grid size, and the
+prolongation smoothing damping `omega`; composition passes those values through
+unchanged to the concrete `torchalg` coarsening strategy.
+
 The current DLKit bridge is intentionally thin. It rejects removed uppercase
 neuralls job manifests and forwards lower-case job TOMLs to DLKit's native
 `load_job()` entrypoint. DLKit resolves `run.model`, `run.data`,

@@ -25,7 +25,7 @@ from torchalg.preconditioners.implementations import (
     NeuralPreconditioner,
     ScheduledPreconditioner,
 )
-from torchalg.preconditioners.implementations.amg import AMGPreconditioner
+from torchalg.preconditioners.implementations.amg import AggregationCoarsening, AMGPreconditioner
 from torchalg.preconditioners.ports import ExtraInputPredictorPort, PredictorAdapter
 
 from neuralls.composition.preconditioners.factory import (
@@ -459,11 +459,17 @@ def test_factory_creates_amg_preconditioner_with_aggregation_coarsening(
     well_conditioned_matrix: torch.Tensor, residual_vector: torch.Tensor
 ) -> None:
     """Factory creates AMGPreconditioner for AMG type with aggregation coarsening."""
-    config = AMGPreconditionerConfig(name="amg", coarsening=AggregationCoarseningConfig())
+    config = AMGPreconditionerConfig(
+        name="amg",
+        coarsening=AggregationCoarseningConfig(theta=0.05, omega=0.5),
+    )
 
     precond = create_preconditioner(well_conditioned_matrix, config)
 
     assert isinstance(precond, AMGPreconditioner)
+    assert isinstance(precond._coarsening, AggregationCoarsening)
+    assert precond._coarsening._theta == 0.05
+    assert precond._coarsening._omega == 0.5
     result = precond.apply(residual_vector)
     assert result.shape == residual_vector.shape
 

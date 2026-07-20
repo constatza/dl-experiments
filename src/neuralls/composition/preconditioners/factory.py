@@ -176,7 +176,10 @@ def create_preconditioner(
                 rank=neural_pod_cfg.rank,
             )
         else:
-            coarsening = AggregationCoarsening(omega=config.coarsening.omega)
+            coarsening = AggregationCoarsening(
+                theta=config.coarsening.theta,
+                omega=config.coarsening.omega,
+            )
 
         smoother = JacobiSmoother(omega=config.smoother_omega)
         cycle = VCycle(

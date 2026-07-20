@@ -90,10 +90,10 @@ def pod_amg_preconditioner(
 def test_describe_preconditioner_amg_aggregation_coarsening(
     aggregation_amg_preconditioner: AMGPreconditioner,
 ) -> None:
-    """AMG with smoothed-aggregation coarsening reports levels, cycle, and both omegas."""
+    """AMG with smoothed-aggregation coarsening reports levels, cycle, theta, and omegas."""
     detail = describe_preconditioner(aggregation_amg_preconditioner)
 
-    assert detail == "2-lvl V-cycle, Jacobi ω=0.67, aggregation ω=0.67"
+    assert detail == "2-lvl V-cycle, Jacobi ω=0.67, aggregation θ=0.25 ω=0.67"
 
 
 # ==============================================================================
@@ -180,7 +180,7 @@ def test_preconditioner_label_includes_amg_detail(
     """Labels combine the config name with the live structural detail."""
     label = preconditioner_label("amg", aggregation_amg_preconditioner)
 
-    assert label == "amg (2-lvl V-cycle, Jacobi ω=0.67, aggregation ω=0.67)"
+    assert label == "amg (2-lvl V-cycle, Jacobi ω=0.67, aggregation θ=0.25 ω=0.67)"
 
 
 def test_preconditioner_label_falls_back_to_bare_name_without_detail() -> None:
@@ -202,6 +202,6 @@ def test_build_preconditioner_labels_maps_each_name(
     labels = build_preconditioner_labels(preconditioners)
 
     assert labels == {
-        "amg": "amg (2-lvl V-cycle, Jacobi ω=0.67, aggregation ω=0.67)",
+        "amg": "amg (2-lvl V-cycle, Jacobi ω=0.67, aggregation θ=0.25 ω=0.67)",
         "identity": "identity",
     }

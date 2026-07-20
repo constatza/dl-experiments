@@ -353,6 +353,12 @@ class AggregationCoarseningConfig(BaseModel):
     """Classical smoothed-aggregation coarsening (SA-AMG)."""
 
     method: Literal["aggregation"] = "aggregation"
+    theta: float = Field(
+        default=0.25,
+        gt=0.0,
+        lt=1.0,
+        description="Strength-of-connection threshold controlling AMG aggregate/coarse-grid size.",
+    )
     omega: float = Field(default=0.67, gt=0.0, description="Prolongation Jacobi-smoothing damping.")
     model_config = ConfigDict(extra="forbid", frozen=True)
 

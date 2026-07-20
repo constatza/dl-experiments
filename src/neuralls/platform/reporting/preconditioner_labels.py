@@ -37,7 +37,7 @@ def describe_preconditioner(precond: Preconditioner) -> str:
 
     Returns:
         str: A structural detail string, such as ``"2-lvl V-cycle, Jacobi
-            ω=0.67, aggregation ω=0.67"`` for AMG, or ``""`` for
+            ω=0.67, aggregation θ=0.25 ω=0.67"`` for AMG, or ``""`` for
             preconditioner types with no meaningful structural variants
             (e.g. ``Identity``, ``JacobiPreconditioner``, ``NeuralPreconditioner``).
     """
@@ -128,12 +128,12 @@ def _describe_coarsening(coarsening: object) -> str:
 
     Returns:
         str: ``"POD rank={n}"`` using the actual fitted basis width for
-            POD-2G coarsening, ``"aggregation ω={omega}"`` for smoothed
-            aggregation, or the class name as a fallback for other
+            POD-2G coarsening, ``"aggregation θ={theta} ω={omega}"`` for
+            smoothed aggregation, or the class name as a fallback for other
             ``CoarseningStrategy`` implementations.
     """
     if isinstance(coarsening, PODCoarseningStrategy):
         return f"POD rank={coarsening._basis.shape[1]}"
     if isinstance(coarsening, AggregationCoarsening):
-        return f"aggregation ω={coarsening._omega:.2g}"
+        return f"aggregation θ={coarsening._theta:.2g} ω={coarsening._omega:.2g}"
     return type(coarsening).__name__
