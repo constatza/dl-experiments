@@ -10,8 +10,12 @@ from mlflow.tracking import MlflowClient
 
 from tests.workflows.conftest import LoggedNamedCheckpointsRunFactory, LoggedRunFactory
 from neuralls.platform.config.models.preconditioner import (
+    AMGPreconditionerConfig,
     LoggedModelRefConfig,
+    NeuralAMGPreconditionerConfig,
+    NeuralPODCoarseningConfig,
     NeuralPreconditionerConfig,
+    NeuralTransferConfig,
     PreconditionerType,
     RegisteredModelRefConfig,
     StandardPreconditionerConfig,
@@ -53,7 +57,10 @@ def test_build_neural_download_dirname_prefers_assignment_id() -> None:
         assignment="residuals-100-embedded-spd",
         model_ref=LoggedModelRefConfig(run_id="run-1"),
     )
-    assert build_neural_download_dirname(neural) == "residuals-100-embedded-spd"
+    assert (
+        build_neural_download_dirname(neural, fallback_name=neural.name)
+        == "residuals-100-embedded-spd"
+    )
 
 
 def test_build_neural_download_dirname_sanitizes_display_name_when_needed() -> None:
@@ -63,7 +70,7 @@ def test_build_neural_download_dirname_sanitizes_display_name_when_needed() -> N
         type=PreconditionerType.NEURAL,
         model_ref=LoggedModelRefConfig(run_id="run-1"),
     )
-    dirname = build_neural_download_dirname(neural)
+    dirname = build_neural_download_dirname(neural, fallback_name=neural.name)
     assert dirname == "Residual-Error_100_Gaussian_Embedded_SPD"
     assert "|" not in dirname
     assert ":" not in dirname
@@ -170,7 +177,7 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
     assert isinstance(resolved, PreconditionerResolutionResult)
     assert resolved.specs == [jacobi]
     assert len(resolved.warnings) == 1
-    assert "Skipping neural preconditioner 'missing-neural'" in resolved.warnings[0]
+    assert "Skipping missing-neural" in resolved.warnings[0]
 
 
 @patch("neuralls.composition.assignments.model_resolution.MlflowClient")
@@ -548,3 +555,107 @@ def test_resolve_registered_ref_without_pinned_tag_raises_actionable_error(
             tracking_uri=mlflow_tracking_uri,
             destination=tmp_path / "downloads",
         )
+
+
+# ==============================================================================
+# CheckpointRefBearing: symmetric resolution across nested checkpoint refs
+# ==============================================================================
+
+
+def test_resolve_preconditioner_models_resolves_neural_pod_coarsening_ref(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
+) -> None:
+    """A checkpoint ref nested in AMGPreconditionerConfig.coarsening gets resolved.
+
+    Before the generic CheckpointRefBearing resolver, only the top-level
+    `type == "neural"` spec was resolved — this is the gap the new
+    NeuralPODCoarseningConfig would otherwise fall into.
+    """
+    run_id = log_run_with_checkpoint("marker-neural-pod")
+    spec = AMGPreconditionerConfig(
+        name="neural-pod2g",
+        coarsening=NeuralPODCoarseningConfig(
+            dataset_dir=tmp_path / "params-dataset",
+            input_names=("young_modulus",),
+            model_ref=LoggedModelRefConfig(run_id=run_id),
+        ),
+    )
+
+    resolved = resolve_preconditioner_models(
+        specs=[spec],
+        tracking_uri=mlflow_tracking_uri,
+        download_root=tmp_path / "downloads",
+    )
+
+    assert len(resolved) == 1
+    resolved_spec = resolved[0]
+    assert isinstance(resolved_spec, AMGPreconditionerConfig)
+    resolved_coarsening = resolved_spec.coarsening
+    assert isinstance(resolved_coarsening, NeuralPODCoarseningConfig)
+    assert resolved_coarsening.resolved_checkpoint_path is not None
+    assert resolved_coarsening.resolved_checkpoint_path.read_text() == "marker-neural-pod"
+
+
+def test_resolve_preconditioner_models_resolves_neural_amg_prolongation_and_restriction(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+    log_run_with_checkpoint: LoggedRunFactory,
+) -> None:
+    """Prolongation and restriction refs resolve independently to distinct checkpoints.
+
+    Distinct source runs prove the two refs aren't accidentally resolved to
+    the same download directory (a `name`-only download dirname would
+    collide, since both refs share one spec name).
+    """
+    prolongation_run = log_run_with_checkpoint("marker-prolongation")
+    restriction_run = log_run_with_checkpoint("marker-restriction")
+    spec = NeuralAMGPreconditionerConfig(
+        name="neural-amg",
+        prolongation=NeuralTransferConfig(model_ref=LoggedModelRefConfig(run_id=prolongation_run)),
+        restriction=NeuralTransferConfig(model_ref=LoggedModelRefConfig(run_id=restriction_run)),
+    )
+
+    resolved = resolve_preconditioner_models(
+        specs=[spec],
+        tracking_uri=mlflow_tracking_uri,
+        download_root=tmp_path / "downloads",
+    )
+
+    assert len(resolved) == 1
+    resolved_spec = resolved[0]
+    assert isinstance(resolved_spec, NeuralAMGPreconditionerConfig)
+    assert resolved_spec.prolongation.resolved_checkpoint_path is not None
+    assert resolved_spec.prolongation.resolved_checkpoint_path.read_text() == "marker-prolongation"
+    assert resolved_spec.restriction is not None
+    assert resolved_spec.restriction.resolved_checkpoint_path is not None
+    assert resolved_spec.restriction.resolved_checkpoint_path.read_text() == "marker-restriction"
+    assert (
+        resolved_spec.prolongation.resolved_checkpoint_path
+        != resolved_spec.restriction.resolved_checkpoint_path
+    )
+
+
+def test_resolve_preconditioner_models_with_warnings_labels_failed_nested_ref(
+    tmp_path: Path,
+    mlflow_tracking_uri: str,
+) -> None:
+    """A failed nested ref's warning names its label, not just the spec name."""
+    spec = NeuralAMGPreconditionerConfig(
+        name="neural-amg-broken",
+        prolongation=NeuralTransferConfig(
+            model_ref=RegisteredModelRefConfig(name="DoesNotExistModel", latest=True)
+        ),
+    )
+
+    result = resolve_preconditioner_models_with_warnings(
+        specs=[spec],
+        tracking_uri=mlflow_tracking_uri,
+        download_root=tmp_path / "downloads",
+        skip_unresolved=True,
+    )
+
+    assert result.specs == []
+    assert len(result.warnings) == 1
+    assert "neural-amg-broken (prolongation)" in result.warnings[0]

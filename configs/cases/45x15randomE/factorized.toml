@@ -29,6 +29,22 @@ name = "amg"
 type = "amg"
 coarsening = { method = "aggregation" }
 
+# neural-pod2g: snapshots are predicted from gaussian-cg10-45x15randomE's
+# Young's-modulus `params` array via a checkpoint, instead of read from a
+# precomputed solutions array (compare to the dataset-backed "pod2g" pattern
+# in configs/cases/45x15/cg.toml). `input_names` must match the checkpoint's
+# own trained forward()/predict() keyword argument name(s) exactly - these
+# are declared training-side in the DLKit job config, NOT derived from the
+# dataset's on-disk params artifact naming, so the placeholder "young_modulus"
+# below must be replaced with whatever a real training job actually declares.
+# No job in this repo is yet trained to map params -> full-order solutions,
+# so checkpoint_path below is a placeholder too — replace it with a real
+# checkpoint (or an `assignment =` reference) before using this entry.
+[[comparison_defaults.preconditioners]]
+name = "neural-pod2g"
+type = "amg"
+coarsening = { method = "neural_pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg10-45x15randomE", checkpoint_path = "${NEURALLS_OUTPUT_DIR}/PLACEHOLDER-params-to-solution.ckpt", input_names = ["young_modulus"], rank = 0.9999 }
+
 # ── Training datasets ─────────────────────────────────────────────────────────
 
 [[datasets]]

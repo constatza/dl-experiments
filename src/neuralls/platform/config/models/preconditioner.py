@@ -7,7 +7,7 @@ They support both factory creation and scheduling/comparison concerns.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal, Any, Annotated
+from typing import Literal, Any, Annotated, Protocol, Self, cast, runtime_checkable
 from pathlib import Path
 
 from pydantic import (
@@ -50,7 +50,7 @@ class RegisteredModelRefConfig(BaseModel):
     """Reference to a model registered in the MLflow Model Registry.
 
     Attributes:
-        source: Discriminator field, always "registered".
+        source: Discriminator field, always "registry".
         name: Registered model name when explicitly provided. Only meaningful
             for a registered model with no assignment linkage at all (e.g. an
             externally-trained baseline this system never trained). When a
@@ -67,7 +67,7 @@ class RegisteredModelRefConfig(BaseModel):
             need a stable, quality-vetted reference.
     """
 
-    source: Literal["registered"] = "registered"
+    source: Literal["registry"] = "registry"
     name: str | None = Field(default=None, min_length=1)
     alias: str | None = None
     version: int | None = Field(default=None, ge=1)
@@ -94,7 +94,7 @@ class LoggedModelRefConfig(BaseModel):
     """Reference to a model logged within an MLflow run.
 
     Attributes:
-        source: Discriminator field, always "logged".
+        source: Discriminator field, always "run".
         run_id: Explicit MLflow run ID to reference.
         latest: If True, select the most recently *started* run matching the
             given filters (ordered by ``attributes.start_time DESC``). This is
@@ -108,7 +108,7 @@ class LoggedModelRefConfig(BaseModel):
         tags: Optional tag filters.
     """
 
-    source: Literal["logged"] = "logged"
+    source: Literal["run"] = "run"
     run_id: str | None = Field(default=None, min_length=1)
     latest: bool | None = None
     model_name: str | None = None
@@ -167,6 +167,72 @@ ModelRefConfig = Annotated[
 ]
 
 
+class NeuralCheckpointRef(BaseModel):
+    """Shared checkpoint-identity fields for any config that loads a trained network.
+
+    Composition (a nested ``identity`` field) would be the usual preference for
+    an orthogonal concern like this, but Pydantic composition would force a
+    nested TOML sub-table, breaking the existing flat shape of configs that
+    already embed these fields. Inheritance keeps the flat shape. Consumers
+    that only need to resolve a checkpoint should type against this mixin
+    directly rather than against a concrete leaf class.
+    """
+
+    checkpoint_path: Path | None = None
+    assignment: str | None = None
+    config_path: Path | None = None
+    data_config_path: Path | None = None
+    model_ref: ModelRefConfig | None = None
+    resolved_checkpoint_path: Path | None = None
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    @field_validator("checkpoint_path", "config_path", "data_config_path", mode="before")
+    @classmethod
+    def _expand_paths(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ${NEURALLS_*} placeholders and resolve checkpoint-related paths.
+
+        Args:
+            v: Raw value from config field.
+            info: Pydantic validation info carrying context.
+
+        Returns:
+            Resolved absolute path string, or original value if not a string.
+        """
+        if v is None or info.context is None or not isinstance(v, str):
+            return v
+        from neuralls.platform.config.context import ConfigContext, expand_config_path
+
+        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
+
+
+@runtime_checkable
+class CheckpointRefBearing(Protocol):
+    """A preconditioner config that owns one or more resolvable checkpoint refs.
+
+    The resolution layer (``composition/assignments/model_resolution.py``)
+    resolves every ``NeuralCheckpointRef`` reachable from a preconditioner
+    spec the same way, regardless of whether the config *is* a ref
+    (``NeuralPreconditionerConfig``) or *has* one nested in a field
+    (``AMGPreconditionerConfig.coarsening``, ``NeuralAMGPreconditionerConfig
+    .prolongation``/``.restriction``) — implementing this protocol is what
+    makes a config participate, with no branching on ``PreconditionerType``
+    in the resolver itself.
+
+    Invariant: ``with_resolved_refs`` must accept a tuple of exactly the
+    labels and length last returned by ``checkpoint_refs()`` — the resolver
+    always round-trips the same set it read, never a different arity.
+    """
+
+    def checkpoint_refs(self) -> tuple[tuple[str, NeuralCheckpointRef], ...]:
+        """Return every ``(label, ref)`` pair reachable from this config."""
+        ...
+
+    def with_resolved_refs(self, resolved: tuple[tuple[str, NeuralCheckpointRef], ...]) -> Self:
+        """Rebuild this config with the given resolved refs substituted in."""
+        ...
+
+
 class BasePreconditionerConfig(BaseModel):
     """Shared fields for all preconditioners.
 
@@ -213,16 +279,10 @@ class IC0PreconditionerConfig(BasePreconditionerConfig):
     )
 
 
-class NeuralPreconditionerConfig(BasePreconditionerConfig):
+class NeuralPreconditionerConfig(BasePreconditionerConfig, NeuralCheckpointRef):
     """Neural preconditioner configuration."""
 
     type: Literal[PreconditionerType.NEURAL] = PreconditionerType.NEURAL
-    checkpoint_path: Path | None = None
-    assignment: str | None = None
-    config_path: Path | None = None
-    data_config_path: Path | None = None
-    model_ref: ModelRefConfig | None = None
-    resolved_checkpoint_path: Path | None = None
     extra_input_names: tuple[str, ...] = Field(
         default=(),
         description=(
@@ -231,24 +291,6 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
             "The comparison workflow loads matching named arrays from the dataset directory."
         ),
     )
-
-    @field_validator("checkpoint_path", "config_path", "data_config_path", mode="before")
-    @classmethod
-    def _expand_paths(cls, v: object, info: ValidationInfo) -> object:
-        """Expand ${NEURALLS_*} placeholders and resolve neural preconditioner paths.
-
-        Args:
-            v: Raw value from config field.
-            info: Pydantic validation info carrying context.
-
-        Returns:
-            Resolved absolute path string, or original value if not a string.
-        """
-        if v is None or info.context is None or not isinstance(v, str):
-            return v
-        from neuralls.platform.config.context import ConfigContext, expand_config_path
-
-        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
 
     @field_validator("extra_input_names", mode="before")
     @classmethod
@@ -264,6 +306,17 @@ class NeuralPreconditionerConfig(BasePreconditionerConfig):
         if isinstance(v, (list, tuple)):
             return tuple(str(x) for x in v)
         return v
+
+    def checkpoint_refs(self) -> tuple[tuple[str, NeuralCheckpointRef], ...]:
+        """This preconditioner's own identity is its single checkpoint ref."""
+        return (("", self),)
+
+    def with_resolved_refs(
+        self, resolved: tuple[tuple[str, NeuralCheckpointRef], ...]
+    ) -> NeuralPreconditionerConfig:
+        """Resolution replaces this spec's own identity fields."""
+        _, ref = resolved[0]
+        return cast(NeuralPreconditionerConfig, ref)
 
     @model_validator(mode="after")
     def validate_single_model_identity_source(self) -> NeuralPreconditionerConfig:
@@ -372,8 +425,103 @@ class PODCoarseningConfig(BaseModel):
         return v
 
 
+class NeuralPODCoarseningConfig(NeuralCheckpointRef):
+    """POD-2G coarsening whose snapshot ensemble is predicted by a checkpoint.
+
+    Same POD-2G math as ``PODCoarseningConfig`` (Nikolopoulos et al. 2022,
+    §3.3-3.5), but the high-fidelity snapshot ensemble is *predicted* by a
+    trained network instead of read from precomputed solutions: ``dataset_dir``
+    supplies the network's input parameter arrays (not the solutions
+    themselves), and the checkpoint identity fields inherited from
+    ``NeuralCheckpointRef`` locate the model that turns those parameters into
+    snapshots.
+    """
+
+    method: Literal["neural_pod"] = "neural_pod"
+    dataset_dir: Path = Field(
+        ...,
+        description="Generated dataset directory whose `params` arrays feed the checkpoint.",
+    )
+    input_names: tuple[str, ...] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Checkpoint forward()/predict() keyword-argument names, one per "
+            "dataset `params` array, in the same order. These are declared by "
+            "the checkpoint's DLKit training job — NOT derived from how the "
+            "dataset writer happened to name the on-disk params artifacts; "
+            "there is no relationship between the two, so this must be set "
+            "explicitly (mirrors NeuralPreconditionerConfig.extra_input_names)."
+        ),
+    )
+    n_snapshots: int = Field(
+        default=-1, description="Number of predicted snapshots to keep; -1 means all."
+    )
+    rank: int | float = Field(
+        default=8,
+        description=(
+            "Fixed number of POD modes to retain (int), or minimum cumulative "
+            "captured energy to retain (float in (0, 1] — e.g. 0.9999)."
+        ),
+    )
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator("dataset_dir", mode="before")
+    @classmethod
+    def _expand_dataset_dir(cls, v: object, info: ValidationInfo) -> object:
+        """Expand ``${NEURALLS_*}`` placeholders and anchor the dataset directory.
+
+        Args:
+            v: Raw field value.
+            info: Pydantic validation context.
+
+        Returns:
+            Resolved path string, or original value if not a string.
+        """
+        from neuralls.platform.config.context import expand_path_field
+
+        return expand_path_field(v, info)
+
+    @field_validator("input_names", mode="before")
+    @classmethod
+    def _coerce_input_names_to_tuple(cls, v: object) -> tuple[str, ...] | object:
+        """Coerce list to tuple for input_names field.
+
+        Args:
+            v: Raw value that may be list, tuple, or other type.
+
+        Returns:
+            Tuple of strings, or original value if not list/tuple.
+        """
+        if isinstance(v, (list, tuple)):
+            return tuple(str(x) for x in v)
+        return v
+
+    @field_validator("rank")
+    @classmethod
+    def _validate_rank(cls, v: int | float) -> int | float:
+        """Enforce the per-mode constraint matching whichever branch was matched.
+
+        Args:
+            v: The parsed ``rank`` value — an int (mode count) or float
+                (energy threshold).
+
+        Returns:
+            The validated value, unchanged.
+
+        Raises:
+            ValueError: If an int rank is < 1, or a float rank is outside (0, 1].
+        """
+        if isinstance(v, float):
+            if not (0.0 < v <= 1.0):
+                raise ValueError(f"rank as an energy threshold must be in (0, 1], got {v}")
+        elif v < 1:
+            raise ValueError(f"rank as a mode count must be >= 1, got {v}")
+        return v
+
+
 CoarseningConfig = Annotated[
-    AggregationCoarseningConfig | PODCoarseningConfig,
+    AggregationCoarseningConfig | PODCoarseningConfig | NeuralPODCoarseningConfig,
     Field(discriminator="method"),
 ]
 
@@ -382,13 +530,14 @@ class AMGPreconditionerConfig(BasePreconditionerConfig):
     """AMG-family preconditioner configuration (multigrid coarsening + cycle).
 
     ``coarsening`` selects the strategy that builds the prolongation/
-    restriction operator — ``AggregationCoarseningConfig`` (classical SA-AMG)
-    or ``PODCoarseningConfig`` (POD-2G). Required, no default: the caller must
+    restriction operator — ``AggregationCoarseningConfig`` (classical SA-AMG),
+    ``PODCoarseningConfig`` (POD-2G), or ``NeuralPODCoarseningConfig``
+    (checkpoint-predicted POD-2G). Required, no default: the caller must
     state which coarsening strategy an AMG config means. A future coarsening
-    strategy (e.g. a hierarchical multi-level POD) is added the same way: one
-    more class in the ``CoarseningConfig`` union, not a new
-    ``PreconditionerType`` and not new fields on this class — the underlying
-    ``AMGPreconditioner`` is already generic over any ``CoarseningStrategy``.
+    strategy is added the same way: one more class in the
+    ``CoarseningConfig`` union, not a new ``PreconditionerType`` and not new
+    fields on this class — the underlying ``AMGPreconditioner`` is already
+    generic over any ``CoarseningStrategy``.
     """
 
     type: Literal[PreconditionerType.AMG] = PreconditionerType.AMG
@@ -398,8 +547,21 @@ class AMGPreconditionerConfig(BasePreconditionerConfig):
     smoother_omega: float = Field(default=0.67, gt=0.0, description="Weighted Jacobi damping.")
     coarsening: CoarseningConfig
 
+    def checkpoint_refs(self) -> tuple[tuple[str, NeuralCheckpointRef], ...]:
+        """Expose the coarsening's checkpoint ref, when coarsening is neural."""
+        if isinstance(self.coarsening, NeuralPODCoarseningConfig):
+            return (("coarsening", self.coarsening),)
+        return ()
 
-class NeuralTransferConfig(BaseModel):
+    def with_resolved_refs(
+        self, resolved: tuple[tuple[str, NeuralCheckpointRef], ...]
+    ) -> AMGPreconditionerConfig:
+        """Rebuild with a resolved coarsening ref substituted in."""
+        _, ref = resolved[0]
+        return self.model_copy(update={"coarsening": cast(NeuralPODCoarseningConfig, ref)})
+
+
+class NeuralTransferConfig(NeuralCheckpointRef):
     """Config for one neural transfer operator (prolongation or restriction).
 
     Required inputs (the extra arrays the network expects beyond its vector input)
@@ -407,31 +569,6 @@ class NeuralTransferConfig(BaseModel):
     ``ExtraInputPredictorPort.required_inputs``, which is populated by the adapter
     from the model config.  This eliminates duplication with the DLKit TOML.
     """
-
-    model_config = ConfigDict(extra="ignore", frozen=True)
-    checkpoint_path: Path | None = None
-    model_ref: ModelRefConfig | None = None
-    config_path: Path | None = None
-    data_config_path: Path | None = None
-    resolved_checkpoint_path: Path | None = None
-
-    @field_validator("checkpoint_path", "config_path", "data_config_path", mode="before")
-    @classmethod
-    def _expand_paths(cls, v: object, info: ValidationInfo) -> object:
-        """Expand ``${NEURALLS_*}`` placeholders in path fields.
-
-        Args:
-            v: Raw field value.
-            info: Pydantic validation context.
-
-        Returns:
-            Resolved path string, or original value if not a string.
-        """
-        if v is None or info.context is None or not isinstance(v, str):
-            return v
-        from neuralls.platform.config.context import ConfigContext, expand_config_path
-
-        return expand_config_path(v, ConfigContext.from_pydantic_context(info.context))
 
 
 class NeuralAMGPreconditionerConfig(BasePreconditionerConfig):
@@ -450,6 +587,22 @@ class NeuralAMGPreconditionerConfig(BasePreconditionerConfig):
     aggregation_omega: float = Field(default=0.67, gt=0.0)
     prolongation: NeuralTransferConfig
     restriction: NeuralTransferConfig | None = None
+
+    def checkpoint_refs(self) -> tuple[tuple[str, NeuralCheckpointRef], ...]:
+        """Expose prolongation's ref, plus restriction's when set."""
+        refs: tuple[tuple[str, NeuralCheckpointRef], ...] = (("prolongation", self.prolongation),)
+        if self.restriction is not None:
+            refs += (("restriction", self.restriction),)
+        return refs
+
+    def with_resolved_refs(
+        self, resolved: tuple[tuple[str, NeuralCheckpointRef], ...]
+    ) -> NeuralAMGPreconditionerConfig:
+        """Rebuild with resolved prolongation/restriction refs substituted in."""
+        updates: dict[str, NeuralTransferConfig] = {}
+        for label, ref in resolved:
+            updates[label] = cast(NeuralTransferConfig, ref)
+        return self.model_copy(update=updates)
 
 
 ConcretePreconditionerConfig = (

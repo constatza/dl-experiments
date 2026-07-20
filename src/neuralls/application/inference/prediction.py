@@ -60,16 +60,18 @@ def collect_predictions(
     return predictions, 0.0
 
 
-def process_predictions(
-    raw_predictions: list[np.ndarray],
-) -> np.ndarray:
-    """Process raw prediction batches into single array.
+def stack_predictions(raw_predictions: list[np.ndarray]) -> np.ndarray:
+    """Concatenate raw prediction batches into one array, preserving row shape.
+
+    Unlike `process_predictions`, this does not flatten the result — use it
+    when callers need per-row vectors intact (e.g. a POD snapshot ensemble,
+    shape `(n_samples, n_dofs)`), rather than a flat scalar-per-row array.
 
     Args:
         raw_predictions: List of batch prediction arrays from predictor.
 
     Returns:
-        Flattened prediction array.
+        Concatenated prediction array, one row per input sample.
     """
     if not raw_predictions:
         raise ValueError("No predictions available to process.")
@@ -94,8 +96,21 @@ def process_predictions(
 
         normalized.append(array)
 
-    stacked = np.concatenate(normalized, axis=0)
-    return stacked.ravel()
+    return np.concatenate(normalized, axis=0)
+
+
+def process_predictions(
+    raw_predictions: list[np.ndarray],
+) -> np.ndarray:
+    """Process raw prediction batches into a single flattened array.
+
+    Args:
+        raw_predictions: List of batch prediction arrays from predictor.
+
+    Returns:
+        Flattened prediction array.
+    """
+    return stack_predictions(raw_predictions).ravel()
 
 
 def run_prediction(

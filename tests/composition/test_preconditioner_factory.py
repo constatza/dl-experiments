@@ -10,6 +10,7 @@ Follows project principles:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -32,9 +33,11 @@ from neuralls.composition.preconditioners.factory import (
     create_scheduled_preconditioner,
     PreconditionerScheduleConfig,
 )
+from neuralls.domain.inference_ports import InferencePredictorPort
 from neuralls.platform.config.models.preconditioner import (
     AggregationCoarseningConfig,
     AMGPreconditionerConfig,
+    NeuralPODCoarseningConfig,
     NeuralPreconditionerConfig,
     PODCoarseningConfig,
     PreconditionerType,
@@ -94,6 +97,37 @@ class MockAdapter(PredictorAdapter):
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
         return self.predictor
+
+
+class MockInferencePredictor(InferencePredictorPort):
+    """Lightweight mock batch-inference predictor for neural POD-2G testing."""
+
+    def __init__(self, output_dim: int) -> None:
+        """Initialize with the row width to return for each predicted snapshot."""
+        self._output_dim = output_dim
+        self.cleaned_up = False
+
+    def predict_batch(self, feature_batch: dict[str, np.ndarray]) -> np.ndarray:
+        """Mock prediction: one zero row per input sample."""
+        n_samples = next(iter(feature_batch.values())).shape[0]
+        return np.zeros((n_samples, self._output_dim))
+
+    def cleanup(self) -> None:
+        """Mark as cleaned up."""
+        self.cleaned_up = True
+
+
+def make_mock_inference_predictor_factory(
+    output_dim: int,
+) -> Callable[[Path, object], MockInferencePredictor]:
+    """Build an `inference_predictor_factory` callable, raising on a missing checkpoint."""
+
+    def factory(checkpoint_path: Path, settings: object) -> MockInferencePredictor:
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+        return MockInferencePredictor(output_dim)
+
+    return factory
 
 
 # ==============================================================================
@@ -167,6 +201,58 @@ def pod_snapshot_dataset_dir(tmp_path: Path, well_conditioned_matrix: torch.Tens
         ),
     )
     return dataset_dir
+
+
+@pytest.fixture
+def neural_pod_dataset_dir(tmp_path: Path, well_conditioned_matrix: torch.Tensor) -> Path:
+    """Minimal manifest-backed dataset dir supplying one `params` array.
+
+    Unlike `pod_snapshot_dataset_dir`, this dataset carries no meaningful
+    `solutions` — the neural POD-2G branch never reads solutions off disk,
+    it predicts the snapshot ensemble from `params` via a checkpoint. Uses
+    plain `npy` artifacts (not `zarr`) since local zarr stores can hang in
+    the sandboxed test environment. The array's on-disk artifact key is
+    irrelevant to the model call — `NeuralPODCoarseningConfig.input_names`
+    (not any dataset-side key) supplies the checkpoint's kwarg name(s).
+    """
+    from neuralls.platform.storage.manifest import DatasetArtifact, DatasetNormalization
+    from neuralls.platform.storage.manifest_io import (
+        make_dataset_manifest,
+        save_dataset_manifest,
+    )
+
+    n = well_conditioned_matrix.shape[0]
+    samples = 4
+    rng = np.random.default_rng(0)
+    params = rng.standard_normal((samples, 2))
+
+    np.save(tmp_path / "matrix.npy", well_conditioned_matrix.numpy())
+    np.save(tmp_path / "rhs.npy", np.zeros((samples, n)))
+    np.save(tmp_path / "solutions.npy", np.zeros((samples, n)))
+    np.save(tmp_path / "params.npy", params)
+
+    save_dataset_manifest(
+        tmp_path,
+        make_dataset_manifest(
+            matrix=DatasetArtifact(path="matrix.npy", format="npy", dtype="float64", shape=(n, n)),
+            rhs=DatasetArtifact(path="rhs.npy", format="npy", dtype="float64", shape=(samples, n)),
+            solutions=DatasetArtifact(
+                path="solutions.npy", format="npy", dtype="float64", shape=(samples, n)
+            ),
+            normalization=DatasetNormalization(
+                type="none", matrix_norm=1.0, matrix_norm_type="fro", scale={}
+            ),
+            params=(
+                DatasetArtifact(
+                    path="params.npy",
+                    format="npy",
+                    dtype="float64",
+                    shape=(samples, 2),
+                ),
+            ),
+        ),
+    )
+    return tmp_path
 
 
 # ==============================================================================
@@ -400,6 +486,86 @@ def test_factory_creates_amg_preconditioner_with_pod_coarsening(
     assert isinstance(precond, AMGPreconditioner)
     result = precond.apply(residual_vector)
     assert result.shape == residual_vector.shape
+
+
+def test_factory_creates_amg_preconditioner_with_neural_pod_coarsening(
+    well_conditioned_matrix: torch.Tensor,
+    residual_vector: torch.Tensor,
+    neural_pod_dataset_dir: Path,
+    mock_checkpoint: Path,
+) -> None:
+    """Factory creates AMGPreconditioner for AMG type with neural POD-2G coarsening.
+
+    The snapshot ensemble is predicted by a checkpoint (via the injected
+    `inference_predictor_factory`), not read from a precomputed solutions
+    array — the gap this task closes.
+    """
+    coarsening = NeuralPODCoarseningConfig(
+        dataset_dir=neural_pod_dataset_dir,
+        checkpoint_path=mock_checkpoint,
+        input_names=("x",),
+        rank=2,
+    )
+    config = AMGPreconditionerConfig(name="neural-pod2g", coarsening=coarsening)
+    factory = make_mock_inference_predictor_factory(output_dim=well_conditioned_matrix.shape[0])
+
+    precond = create_preconditioner(
+        well_conditioned_matrix, config, inference_predictor_factory=factory
+    )
+
+    assert isinstance(precond, AMGPreconditioner)
+    result = precond.apply(residual_vector)
+    assert result.shape == residual_vector.shape
+
+
+def test_factory_neural_pod_coarsening_requires_params_in_dataset(
+    well_conditioned_matrix: torch.Tensor,
+    pod_snapshot_dataset_dir: Path,
+    mock_checkpoint: Path,
+) -> None:
+    """A dataset with no `params` array raises an actionable count-mismatch error.
+
+    `pod_snapshot_dataset_dir` has rhs/solutions but no params (the common
+    case — only one dataset in the whole repo populates params) — pointing
+    neural_pod coarsening at it (with `input_names` declaring one expected
+    input) must fail clearly, not with an opaque `RuntimeError: generator
+    raised StopIteration` from an empty feature dict.
+    """
+    coarsening = NeuralPODCoarseningConfig(
+        dataset_dir=pod_snapshot_dataset_dir,
+        checkpoint_path=mock_checkpoint,
+        input_names=("x",),
+        rank=2,
+    )
+    config = AMGPreconditionerConfig(name="neural-pod2g", coarsening=coarsening)
+    factory = make_mock_inference_predictor_factory(output_dim=well_conditioned_matrix.shape[0])
+
+    with pytest.raises(ValueError, match="input_names has 1 name.*has 0 .params. array"):
+        create_preconditioner(well_conditioned_matrix, config, inference_predictor_factory=factory)
+
+
+def test_factory_neural_pod_coarsening_rejects_input_names_count_mismatch(
+    well_conditioned_matrix: torch.Tensor,
+    neural_pod_dataset_dir: Path,
+    mock_checkpoint: Path,
+) -> None:
+    """Declaring more/fewer input_names than the dataset has params arrays is rejected.
+
+    `neural_pod_dataset_dir` has exactly one `params` array; declaring two
+    names must fail with a clear count mismatch, not silently zip-truncate
+    or call the checkpoint with a wrong signature.
+    """
+    coarsening = NeuralPODCoarseningConfig(
+        dataset_dir=neural_pod_dataset_dir,
+        checkpoint_path=mock_checkpoint,
+        input_names=("young_modulus", "poisson_ratio"),
+        rank=2,
+    )
+    config = AMGPreconditionerConfig(name="neural-pod2g", coarsening=coarsening)
+    factory = make_mock_inference_predictor_factory(output_dim=well_conditioned_matrix.shape[0])
+
+    with pytest.raises(ValueError, match="input_names has 2 name.*has 1 .params. array"):
+        create_preconditioner(well_conditioned_matrix, config, inference_predictor_factory=factory)
 
 
 def test_factory_amg_requires_amg_config(well_conditioned_matrix: torch.Tensor) -> None:

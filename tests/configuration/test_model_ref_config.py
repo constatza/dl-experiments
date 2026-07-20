@@ -45,7 +45,7 @@ def test_logged_model_ref_with_run_id_is_valid() -> None:
         model_ref=LoggedModelRefConfig(run_id="abc123"),
     )
     assert cfg.model_ref is not None
-    assert cfg.model_ref.source == "logged"
+    assert cfg.model_ref.source == "run"
 
 
 def test_assignment_and_registered_model_ref_name_together_is_rejected() -> None:

@@ -22,8 +22,10 @@ Design:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torchalg.preconditioners.base import Preconditioner
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
     from neuralls.platform.config.models.preconditioner import (
         ConcretePreconditionerConfig,
     )
+    from neuralls.domain.inference_ports import InferencePredictorPort
     from torchalg.preconditioners.ports import PredictorAdapter
 
 
@@ -67,6 +70,7 @@ def create_preconditioner(
     matrix: torch.Tensor,
     config: ConcretePreconditionerConfig,
     adapter: PredictorAdapter | None = None,
+    inference_predictor_factory: Callable[[Path, Any], InferencePredictorPort] | None = None,
 ) -> Preconditioner:
     """Create preconditioner from configuration.
 
@@ -77,6 +81,9 @@ def create_preconditioner(
         matrix: System matrix A
         config: Preconditioner configuration from TOML
         adapter: Optional adapter for neural preconditioner (DI for testing)
+        inference_predictor_factory: Optional batch-inference predictor
+            factory for neural POD-2G coarsening (DI for testing); defaults
+            to `create_inference_predictor` from `platform.dlkit.inference_adapter`.
 
     Returns:
         Preconditioner instance
@@ -96,6 +103,7 @@ def create_preconditioner(
         AMGPreconditionerConfig,
         IC0PreconditionerConfig,
         NeuralAMGPreconditionerConfig,
+        NeuralPODCoarseningConfig,
         NeuralPreconditionerConfig,
         PODCoarseningConfig,
     )
@@ -125,6 +133,47 @@ def create_preconditioner(
             coarsening = PODCoarseningStrategy(
                 snapshots=torch.as_tensor(solutions, dtype=matrix.dtype, device=matrix.device),
                 rank=config.coarsening.rank,
+            )
+        elif isinstance(config.coarsening, NeuralPODCoarseningConfig):
+            from neuralls.application.inference.prediction import (
+                collect_predictions,
+                stack_predictions,
+            )
+            from neuralls.platform.storage.dataset_readers import load_parameter_arrays
+            from torchalg.preconditioners.implementations.pod import (
+                PODCoarseningStrategy,
+            )
+
+            neural_pod_cfg = config.coarsening
+            ckpt = neural_pod_cfg.resolved_checkpoint_path or neural_pod_cfg.checkpoint_path
+            if ckpt is None:
+                raise ValueError(
+                    "NeuralPODCoarseningConfig requires checkpoint_path or resolved_checkpoint_path"
+                )
+            if inference_predictor_factory is None:
+                from neuralls.platform.dlkit.inference_adapter import (
+                    create_inference_predictor,
+                )
+
+                inference_predictor_factory = create_inference_predictor
+
+            param_arrays = load_parameter_arrays(neural_pod_cfg.dataset_dir)
+            input_names = neural_pod_cfg.input_names
+            if len(input_names) != len(param_arrays):
+                raise ValueError(
+                    f"NeuralPODCoarseningConfig.input_names has {len(input_names)} name(s) but "
+                    f"dataset_dir={neural_pod_cfg.dataset_dir!r} has {len(param_arrays)} `params` "
+                    "array(s) — one name per array, in matching order, is required."
+                )
+            feature_batch = dict(zip(input_names, param_arrays))
+            with inference_predictor_factory(ckpt, None) as predictor:
+                raw_predictions, _ = collect_predictions(predictor, feature_batch, batch_size=256)
+            predicted = stack_predictions(raw_predictions)
+            if neural_pod_cfg.n_snapshots != -1:
+                predicted = predicted[: neural_pod_cfg.n_snapshots]
+            coarsening = PODCoarseningStrategy(
+                snapshots=torch.as_tensor(predicted, dtype=matrix.dtype, device=matrix.device),
+                rank=neural_pod_cfg.rank,
             )
         else:
             coarsening = AggregationCoarsening(omega=config.coarsening.omega)

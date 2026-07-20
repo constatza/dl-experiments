@@ -13,4 +13,4 @@ normalize_system = "matrix"
 [[preconditioners]]
 name = "neural"
 type = "neural"
-model_ref = { source = "registered", name = "NormScaledLinearFFNN", alias = "solutions" }
+model_ref = { source = "registry", name = "NormScaledLinearFFNN", alias = "solutions" }

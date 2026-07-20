@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from loguru import logger
 from mlflow.tracking import MlflowClient
@@ -19,8 +19,9 @@ from neuralls.platform.tracking.mlflow import quote_filter_value
 from neuralls.platform.tracking.model_registry import CHECKPOINT_ARTIFACT_PATH_TAG
 
 from neuralls.platform.config.models.preconditioner import (
+    CheckpointRefBearing,
     LoggedModelRefConfig,
-    NeuralPreconditionerConfig,
+    NeuralCheckpointRef,
     PreconditionerConfig,
     RegisteredModelRefConfig,
 )
@@ -66,11 +67,19 @@ def _sanitize_download_dirname(value: str) -> str:
     return sanitize_identifier(value, default="neural-model")
 
 
-def build_neural_download_dirname(spec: NeuralPreconditionerConfig) -> str:
-    """Build a stable local artifact directory name for one neural spec."""
-    if spec.assignment is not None:
-        return _sanitize_download_dirname(spec.assignment)
-    return _sanitize_download_dirname(spec.name)
+def build_neural_download_dirname(ref: NeuralCheckpointRef, *, fallback_name: str) -> str:
+    """Build a stable local artifact directory name for one checkpoint ref.
+
+    Args:
+        ref: The checkpoint ref being resolved.
+        fallback_name: Name to use when the ref has no `assignment` — callers
+            resolving more than one ref per spec (e.g. prolongation and
+            restriction) must pass a name unique per ref, not just the
+            spec's own name, or their downloads collide into one directory.
+    """
+    if ref.assignment is not None:
+        return _sanitize_download_dirname(ref.assignment)
+    return _sanitize_download_dirname(fallback_name)
 
 
 def build_logged_model_uri(*, run_id: str, artifact_path: str) -> str:
@@ -390,13 +399,13 @@ def _resolve_logged_ref(
 
 def resolve_model_ref(
     *,
-    spec: NeuralPreconditionerConfig,
+    spec: NeuralCheckpointRef,
     tracking_uri: str,
     destination: Path,
     dataset_alias: str | None = None,
     model_name: str | None = None,
 ) -> ModelResolution:
-    """Resolve one neural preconditioner model reference."""
+    """Resolve one checkpoint ref's `model_ref` to a concrete checkpoint."""
     ref = spec.model_ref
     client = MlflowClient(tracking_uri=tracking_uri)
     destination.mkdir(parents=True, exist_ok=True)
@@ -438,6 +447,62 @@ def resolve_preconditioner_models(
     ).specs
 
 
+def _resolve_checkpoint_ref(
+    ref: NeuralCheckpointRef,
+    *,
+    name: str,
+    label: str,
+    tracking_uri: str,
+    download_root: Path,
+    dataset_alias: str | None,
+    assignment_contexts: dict[str, AssignmentModelContext] | None,
+    skip_unresolved: bool,
+) -> tuple[NeuralCheckpointRef, str | None]:
+    """Resolve one checkpoint ref to a concrete checkpoint path.
+
+    Already-set `checkpoint_path` is copied through unchanged; otherwise
+    `model_ref` is resolved against MLflow and downloaded.
+
+    Returns:
+        Tuple of (resolved-or-original ref, warning message or `None`).
+        A non-`None` warning means resolution was skipped (only possible
+        when `skip_unresolved=True`) and the original ref is returned as-is.
+    """
+    display_name = f"{name} ({label})" if label else name
+    if ref.checkpoint_path is not None:
+        return ref.model_copy(update={"resolved_checkpoint_path": ref.checkpoint_path}), None
+    if ref.model_ref is None:
+        raise ValueError(f"'{display_name}' requires either checkpoint_path or model_ref.")
+
+    context = (
+        assignment_contexts.get(ref.assignment)
+        if assignment_contexts is not None and ref.assignment is not None
+        else None
+    )
+    fallback_name = f"{name}-{label}" if label else name
+    destination = download_root / build_neural_download_dirname(ref, fallback_name=fallback_name)
+    try:
+        resolution = resolve_model_ref(
+            spec=ref,
+            tracking_uri=tracking_uri,
+            destination=destination,
+            dataset_alias=context.dataset_alias if context is not None else dataset_alias,
+            model_name=context.model_name if context is not None else None,
+        )
+    except (ValueError, FileNotFoundError, RuntimeError, OSError, KeyError) as exc:
+        if not skip_unresolved:
+            raise
+        warning = f"Skipping {display_name}: {exc}"
+        logger.warning(warning)
+        return ref, warning
+
+    checkpoint_path = resolution.checkpoint_path
+    resolved_ref = ref.model_copy(
+        update={"checkpoint_path": checkpoint_path, "resolved_checkpoint_path": checkpoint_path}
+    )
+    return resolved_ref, None
+
+
 def resolve_preconditioner_models_with_warnings(
     *,
     specs: list[PreconditionerConfig],
@@ -447,54 +512,46 @@ def resolve_preconditioner_models_with_warnings(
     assignment_contexts: dict[str, AssignmentModelContext] | None = None,
     skip_unresolved: bool = False,
 ) -> PreconditionerResolutionResult:
-    """Resolve neural preconditioners and optionally skip unresolved ones."""
+    """Resolve every checkpoint-bearing preconditioner spec, symmetrically.
+
+    Dispatches purely on the `CheckpointRefBearing` protocol — a spec either
+    exposes checkpoint refs (however many, wherever nested) or it doesn't;
+    there is no branching on `PreconditionerType` here.
+    """
     resolved: list[PreconditionerConfig] = []
     warnings: list[str] = []
     for spec in specs:
-        if spec.type != "neural":
+        if not isinstance(spec, CheckpointRefBearing):
             resolved.append(spec)
             continue
-        neural_spec = cast(NeuralPreconditionerConfig, spec)
-        if neural_spec.checkpoint_path is not None:
-            resolved.append(
-                neural_spec.model_copy(
-                    update={"resolved_checkpoint_path": neural_spec.checkpoint_path}
-                )
-            )
+        refs = spec.checkpoint_refs()
+        if not refs:
+            resolved.append(spec)
             continue
-        if neural_spec.model_ref is None:
-            raise ValueError(
-                f"Neural solver '{neural_spec.name}' requires either checkpoint_path or model_ref."
-            )
-        context = (
-            assignment_contexts.get(neural_spec.assignment)
-            if assignment_contexts is not None and neural_spec.assignment is not None
-            else None
-        )
-        try:
-            resolution = resolve_model_ref(
-                spec=neural_spec,
+
+        resolved_refs: list[tuple[str, NeuralCheckpointRef]] = []
+        skipped = False
+        for label, ref in refs:
+            resolved_ref, warning = _resolve_checkpoint_ref(
+                ref,
+                name=spec.name,
+                label=label,
                 tracking_uri=tracking_uri,
-                destination=download_root / build_neural_download_dirname(neural_spec),
-                dataset_alias=context.dataset_alias if context is not None else dataset_alias,
-                model_name=context.model_name if context is not None else None,
+                download_root=download_root,
+                dataset_alias=dataset_alias,
+                assignment_contexts=assignment_contexts,
+                skip_unresolved=skip_unresolved,
             )
-        except (ValueError, FileNotFoundError, RuntimeError, OSError, KeyError) as exc:
-            if not skip_unresolved:
-                raise
-            warning = f"Skipping neural preconditioner '{neural_spec.name}': {exc}"
-            logger.warning(warning)
-            warnings.append(warning)
+            if warning is not None:
+                warnings.append(warning)
+                skipped = True
+                break
+            resolved_refs.append((label, resolved_ref))
+
+        if skipped:
             continue
-        checkpoint_path = resolution.checkpoint_path
-        resolved.append(
-            neural_spec.model_copy(
-                update={
-                    "checkpoint_path": checkpoint_path,
-                    "resolved_checkpoint_path": checkpoint_path,
-                }
-            )
-        )
+        resolved.append(spec.with_resolved_refs(tuple(resolved_refs)))
+
     return PreconditionerResolutionResult(
         specs=resolved,
         warnings=tuple(warnings),
