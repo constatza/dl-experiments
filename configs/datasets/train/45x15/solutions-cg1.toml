@@ -1,0 +1,23 @@
+id = "solutions-cg1-45x15"
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/stiffness/subdomain_1_Kaa.txt"
+solutions_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+# "0 CG iterations": cg_iters on the residuals/trace strategies has a hard
+# floor of 1 (and even cg_iters=1 emits 2 rows per system - iteration 0 AND
+# iteration 1, not just the plain solution). solution_archive is the true
+# zero-CG-iteration case - it loads the archived ground-truth solutions
+# directly (e_0 = x_true) with no CG solve at all.
+[[generation.strategy]]
+name = "solution_archive"
+samples = -1
+solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"

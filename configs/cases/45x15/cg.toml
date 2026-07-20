@@ -30,9 +30,19 @@ type = "amg"
 coarsening = { method = "aggregation" }
 
 [[comparison_defaults.preconditioners]]
-name = "pod2g"
+name = "pod2g-cg1"
+type = "amg"
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/solutions-cg1-45x15", n_snapshots = -1, rank = 0.9999 }
+
+[[comparison_defaults.preconditioners]]
+name = "pod2g-cg10"
 type = "amg"
 coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/solutions-cg10-45x15", n_snapshots = -1, rank = 0.9999 }
+
+[[comparison_defaults.preconditioners]]
+name = "pod2g-cg50"
+type = "amg"
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/solutions-cg50-45x15", n_snapshots = -1, rank = 0.9999 }
 
 [[datasets]]
 id = "gaussian-cg100-45x15"
@@ -40,9 +50,19 @@ path = "../../datasets/train/45x15/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 45x15"
 
 [[datasets]]
+id = "solutions-cg1-45x15"
+path = "../../datasets/train/45x15/solutions-cg1.toml"
+display_name = "Solutions (plain, 0 CG iterations) 45x15 (POD-2G snapshot source)"
+
+[[datasets]]
 id = "solutions-cg10-45x15"
 path = "../../datasets/train/45x15/solutions-cg10.toml"
 display_name = "Solutions CG-10 45x15 (POD-2G snapshot source)"
+
+[[datasets]]
+id = "solutions-cg50-45x15"
+path = "../../datasets/train/45x15/solutions-cg50.toml"
+display_name = "Solutions CG-50 45x15 (POD-2G snapshot source)"
 
 [[jobs]]
 id = "scale-equivariant-constant-width-factorized"
