@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,7 +52,10 @@ from neuralls.platform.tracking.evaluation_artifacts import (
     download_training_evaluation_artifacts,
 )
 from neuralls.platform.tracking.mlflow import build_workflow_environment
-from neuralls.platform.tracking.mlflow_client import find_successful_run
+from neuralls.platform.tracking.mlflow_client import (
+    find_successful_run,
+    log_eval_batch_artifacts_to_mlflow,
+)
 
 type EvaluateFn = Callable[..., EvaluationResult]
 type MlflowClientFactory = Callable[..., MlflowClient]
@@ -78,6 +82,8 @@ class EvaluationBatchResult:
     results: list[EvaluationRunResult]
     label_map: dict[str, dict[str, str | None]]
     output_dir: Path
+    tracking_uri: str
+    parent_run_id: str
 
 
 @dataclass(frozen=True)
@@ -272,7 +278,9 @@ def _build_eval_context(
     )
     client = mlflow_client_factory(tracking_uri=tracking_uri)
     download_dir = output_root / "eval" / "_downloads" / assignment.id / training_run_id
-    artifacts = download_training_evaluation_artifacts(client, training_run_id, download_dir)
+    artifacts = download_training_evaluation_artifacts(
+        client, training_run_id, download_dir, assignment_id=assignment.id
+    )
     config_paths = _resolve_eval_config_paths(
         assignment=assignment,
         configs_dir=configs_dir,
@@ -543,6 +551,8 @@ def eval_batch(
         results=results,
         label_map=_make_label_map(results),
         output_dir=base_output / "eval",
+        tracking_uri=eval_mlflow_env.tracking_uri,
+        parent_run_id=handle.parent_run_id,
     )
 
 
@@ -550,12 +560,21 @@ def write_eval_metric_report(
     batch: EvaluationBatchResult,
     *,
     metric: str,
-    output_dir: Path | None = None,
-) -> Path:
-    """Write aggregate eval artifacts for one metric."""
-    report_dir = output_dir if output_dir is not None else batch.output_dir
-    report_dir.mkdir(parents=True, exist_ok=True)
+) -> bool:
+    """Build eval-batch summary artifacts and log them to the batch's MLflow parent run.
 
+    Stages the comparison barplot and label map in a scratch directory and
+    uploads them via ``log_eval_batch_artifacts_to_mlflow`` — nothing is left
+    on local disk, matching the batch's other artifacts, which all live under
+    the session parent run rather than a non-MLflow output directory.
+
+    Args:
+        batch: Completed eval batch result.
+        metric: Metric key to plot across assignments.
+
+    Returns:
+        True if a comparison plot was produced (metric present for >=1 result).
+    """
     labels: list[str] = []
     values: list[float] = []
     for result in batch.results:
@@ -570,26 +589,38 @@ def write_eval_metric_report(
         labels.append(result.label)
         values.append(value)
 
-    if labels:
-        legend = {
-            result.label: (
-                f"{result.assignment_display_name} (run: {result.evaluation_run_id})"
-                if result.evaluation_run_id
-                else result.assignment_display_name
+    plot_name = f"batch_metric_{metric.replace('/', '_')}.png"
+    with tempfile.TemporaryDirectory() as tmp:
+        work_root = Path(tmp)
+        plotted = bool(labels)
+        if plotted:
+            legend = {
+                result.label: (
+                    f"{result.assignment_display_name} (run: {result.evaluation_run_id})"
+                    if result.evaluation_run_id
+                    else result.assignment_display_name
+                )
+                for result in batch.results
+                if result.label in labels
+            }
+            plot_metric_comparison(
+                labels=labels,
+                values=values,
+                metric_name=metric,
+                legend=legend,
+                save_path=work_root / plot_name,
             )
-            for result in batch.results
-            if result.label in labels
-        }
-        plot_metric_comparison(
-            labels=labels,
-            values=values,
-            metric_name=metric,
-            legend=legend,
-            save_path=report_dir / f"batch_metric_{metric.replace('/', '_')}.png",
+
+        (work_root / "batch_eval_labels.json").write_text(
+            json.dumps(batch.label_map, indent=2),
+            encoding="utf-8",
         )
 
-    (report_dir / "batch_eval_labels.json").write_text(
-        json.dumps(batch.label_map, indent=2),
-        encoding="utf-8",
-    )
-    return report_dir
+        log_eval_batch_artifacts_to_mlflow(
+            tracking_uri=batch.tracking_uri,
+            run_id=batch.parent_run_id,
+            work_root=work_root,
+            flat_files=(plot_name, "batch_eval_labels.json"),
+        )
+
+    return plotted

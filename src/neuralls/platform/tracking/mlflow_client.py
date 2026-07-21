@@ -103,6 +103,29 @@ _COMPARISON_FLAT_FILES: tuple[str, ...] = (
 )
 
 
+def log_eval_batch_artifacts_to_mlflow(
+    tracking_uri: str,
+    run_id: str,
+    work_root: Path,
+    flat_files: Sequence[str],
+) -> None:
+    """Upload eval-batch summary artifacts (barplot + label map) to an existing MLflow run.
+
+    Args:
+        tracking_uri: MLflow tracking URI.
+        run_id: Existing MLflow run to upload into (the batch's session parent run).
+        work_root: Local scratch directory the summary artifacts were staged into.
+        flat_files: Individual file names under ``work_root`` to upload, when present.
+    """
+    _log_artifact_paths(
+        tracking_uri=tracking_uri,
+        run_id=run_id,
+        root=work_root,
+        dirs=(),
+        flat_files=flat_files,
+    )
+
+
 def log_comparison_artifacts_to_mlflow(
     tracking_uri: str,
     run_id: str,
@@ -142,6 +165,21 @@ def tag_run_parent(*, run_id: str, tracking_uri: str, parent_run_id: str) -> Non
         MlflowClient(tracking_uri=tracking_uri).set_tag(run_id, "mlflow.parentRunId", parent_run_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Could not set parent run tag on {}: {}", run_id, exc)
+
+
+def mark_run_failed(*, run_id: str, tracking_uri: str) -> None:
+    """Best-effort mark a run FAILED so it never reads as successful when it isn't.
+
+    Args:
+        run_id: Run to mark.
+        tracking_uri: MLflow tracking URI.
+    """
+    from mlflow.tracking import MlflowClient
+
+    try:
+        MlflowClient(tracking_uri=tracking_uri).set_terminated(run_id, status="FAILED")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not mark run {} as FAILED: {}", run_id, exc)
 
 
 def find_mlflow_run(
@@ -190,12 +228,18 @@ def find_successful_run(
     mlflow_experiment_name: str,
     assignment_id: str,
 ) -> str | None:
-    """Return the run_id of the most recent FINISHED run tagged with this assignment_id.
+    """Return the run_id of the most recent FINISHED run with a checkpoint artifact.
 
-    Used to decide whether an assignment (one job run on one dataset) has
-    already completed successfully, so a batch rerun can skip retraining it.
-    Only a FINISHED run counts — a crashed or still-running prior attempt
-    never blocks a retry.
+    A FINISHED status alone isn't sufficient: dlkit closes the MLflow run (status=FINISHED)
+    before neuralls's own post-training checkpoint-upload step runs, so a run can be
+    FINISHED with no checkpoint if that later step fails. This walks FINISHED runs
+    newest-first and returns the first one dlkit's has_checkpoint_artifact() confirms
+    actually has a checkpoint, so a broken newest attempt doesn't permanently shadow an
+    older, genuinely complete run for the same assignment.
+
+    Used to decide whether an assignment (one job run on one dataset) has already
+    completed successfully, so a batch rerun can skip retraining it, and by eval to pick
+    which run to evaluate.
 
     Args:
         tracking_uri: MLflow tracking URI.
@@ -203,8 +247,9 @@ def find_successful_run(
         assignment_id: The assignment's stable id (tagged on its training run).
 
     Returns:
-        The matching run's run_id, or None if no FINISHED run exists yet.
+        The matching run's run_id, or None if no FINISHED run with a checkpoint exists yet.
     """
+    from dlkit.mlflow import has_checkpoint_artifact
     from mlflow.tracking import MlflowClient
 
     client = MlflowClient(tracking_uri=tracking_uri)
@@ -217,10 +262,19 @@ def find_successful_run(
         filter_string=(
             f"tags.assignment_id = '{assignment_id}' and attributes.status = 'FINISHED'"
         ),
-        max_results=1,
+        max_results=20,
         order_by=["attributes.start_time DESC"],
     )
-    return runs[0].info.run_id if runs else None
+    for run in runs:
+        if has_checkpoint_artifact(run.info.run_id, tracking_uri=tracking_uri):
+            return run.info.run_id
+        logger.warning(
+            "Run {} for assignment '{}' is FINISHED but has no checkpoint artifact; "
+            "skipping to an older candidate if one exists.",
+            run.info.run_id,
+            assignment_id,
+        )
+    return None
 
 
 def log_diagnostics_to_mlflow(

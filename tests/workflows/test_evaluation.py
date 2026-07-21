@@ -125,13 +125,18 @@ def test_write_eval_metric_report_accepts_plain_and_prefixed_metric(tmp_path: Pa
         ],
         label_map={},
         output_dir=tmp_path,
+        tracking_uri=f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}",
+        parent_run_id="parent-run-1",
     )
 
-    report_dir = write_eval_metric_report(batch, metric="rmse")
+    with patch("mlflow.tracking.MlflowClient") as mock_client_cls:
+        client = mock_client_cls.return_value
+        plotted = write_eval_metric_report(batch, metric="rmse")
 
-    assert report_dir == tmp_path
-    assert (tmp_path / "batch_metric_rmse.png").exists()
-    assert (tmp_path / "batch_eval_labels.json").exists()
+    assert plotted is True
+    logged_paths = {Path(call.args[1]).name for call in client.log_artifact.call_args_list}
+    assert logged_paths == {"batch_metric_rmse.png", "batch_eval_labels.json"}
+    assert all(call.args[0] == "parent-run-1" for call in client.log_artifact.call_args_list)
 
 
 def test_materialize_inference_settings_uses_staged_config_paths(
@@ -301,9 +306,13 @@ def test_eval_batch_continues_after_one_assignment_fails(
 
     assert [result.assignment_id for result in batch.results] == ["assign-ok"]
 
-    report_dir = write_eval_metric_report(batch, metric="mae")
-    assert (report_dir / "batch_metric_mae.png").exists()
-    assert (report_dir / "batch_eval_labels.json").exists()
+    with patch("mlflow.tracking.MlflowClient") as mock_client_cls:
+        client = mock_client_cls.return_value
+        plotted = write_eval_metric_report(batch, metric="mae")
+
+    assert plotted is True
+    logged_paths = {Path(call.args[1]).name for call in client.log_artifact.call_args_list}
+    assert logged_paths == {"batch_metric_mae.png", "batch_eval_labels.json"}
 
 
 def test_eval_assignment_passes_parent_link_hooks(

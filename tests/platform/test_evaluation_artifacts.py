@@ -8,6 +8,10 @@ from pathlib import Path
 import pytest
 
 from neuralls.platform.tracking.evaluation_artifacts import (
+    CheckpointArtifactError,
+    CorruptCheckpointArtifactError,
+    MissingCheckpointArtifactError,
+    download_training_checkpoint,
     download_training_config_artifacts,
     download_training_split_file,
 )
@@ -74,6 +78,78 @@ def test_download_training_split_file_rejects_multiple_json_files(tmp_path: Path
 
     with pytest.raises(ValueError, match="multiple split JSON artifacts"):
         download_training_split_file(client, "run-1", tmp_path / "downloads")  # type: ignore[arg-type]
+
+
+def test_download_training_checkpoint_raises_when_no_checkpoint_artifact(tmp_path: Path) -> None:
+    """A FINISHED run with no 'checkpoints/' artifact (e.g. a stale pre-fix run) must
+    fail with a clear, actionable error instead of MLflow's generic download exception.
+    """
+    (tmp_path / "artifacts").mkdir()
+    client = FakeArtifactClient(tmp_path / "artifacts")
+
+    with pytest.raises(MissingCheckpointArtifactError, match="run-1.*assignment-1"):
+        download_training_checkpoint(
+            client,  # type: ignore[arg-type]
+            "run-1",
+            tmp_path / "downloads",
+            assignment_id="assignment-1",
+        )
+
+
+def test_download_training_checkpoint_returns_checkpoint_when_present(tmp_path: Path) -> None:
+    checkpoint_dir = tmp_path / "artifacts" / "checkpoints"
+    checkpoint_dir.mkdir(parents=True)
+    checkpoint_file = checkpoint_dir / "best.ckpt"
+    checkpoint_file.write_bytes(b"weights")
+    client = FakeArtifactClient(tmp_path / "artifacts")
+
+    result = download_training_checkpoint(
+        client,  # type: ignore[arg-type]
+        "run-1",
+        tmp_path / "downloads",
+        assignment_id="assignment-1",
+    )
+
+    assert result == checkpoint_file
+
+
+def test_download_training_checkpoint_raises_corrupt_error_when_download_fails(
+    tmp_path: Path,
+) -> None:
+    """A run whose 'checkpoints/' artifact IS listed but fails to download must raise
+    CorruptCheckpointArtifactError (not the generic MLflow error), distinct from a
+    genuinely missing checkpoint, with the original MLflow exception chained.
+    """
+    checkpoint_dir = tmp_path / "artifacts" / "checkpoints"
+    checkpoint_dir.mkdir(parents=True)
+    (checkpoint_dir / "best.ckpt").write_bytes(b"weights")
+
+    original_error = RuntimeError("please ensure that the path is correct")
+
+    class BrokenDownloadClient(FakeArtifactClient):
+        def download_artifacts(self, run_id: str, path: str, dst_path: str) -> str:
+            del run_id, path, dst_path
+            raise original_error
+
+    client = BrokenDownloadClient(tmp_path / "artifacts")
+
+    with pytest.raises(CorruptCheckpointArtifactError, match="run-1.*assignment-1") as excinfo:
+        download_training_checkpoint(
+            client,  # type: ignore[arg-type]
+            "run-1",
+            tmp_path / "downloads",
+            assignment_id="assignment-1",
+        )
+
+    assert excinfo.value.__cause__ is original_error
+
+
+def test_checkpoint_artifact_errors_share_common_base() -> None:
+    """Both checkpoint-artifact exceptions must narrow to CheckpointArtifactError so
+    callers can catch 'any checkpoint issue' without enumerating every subclass.
+    """
+    assert issubclass(MissingCheckpointArtifactError, CheckpointArtifactError)
+    assert issubclass(CorruptCheckpointArtifactError, CheckpointArtifactError)
 
 
 def test_download_training_config_artifacts_returns_none_when_absent(tmp_path: Path) -> None:

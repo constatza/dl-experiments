@@ -10,6 +10,7 @@ Covers:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 import re
 from types import SimpleNamespace
@@ -19,8 +20,17 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+from neuralls.composition.assignments.runtime_dataset_contract import (
+    default_training_dataset_contract,
+)
+from neuralls.composition.assignments.training import (
+    _TrainingFinalizationContext,
+    _finalize_training_run,
+)
 from neuralls.platform.config.models.experiments import ExperimentNamesConfig
-from neuralls.platform.config.resolution import build_sqlite_tracking_uri
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
+from neuralls.platform.config.resolution import MlflowPaths, build_sqlite_tracking_uri
+from neuralls.platform.tracking.mlflow import MlflowRunConfig
 import torch
 from tensordict import TensorDict
 
@@ -778,3 +788,188 @@ def test_execute_result_unwraps_optimization_result() -> None:
 
     assert _unwrap_execution_result(training_result) is training_result
     assert _unwrap_execution_result(optimization_result) is training_result
+
+
+# ---------------------------------------------------------------------------
+# _finalize_training_run tests
+#
+# Narrow tests against _finalize_training_run directly (not through the full
+# train_model() mocking harness) — the extraction's whole point is that
+# reaching a Step 6-8 failure path no longer requires mocking the upstream
+# data-loading/execute() machinery.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def finalize_workspace(tmp_path: Path) -> AssignmentWorkspace:
+    """Assignment workspace for _finalize_training_run tests."""
+    workspace = AssignmentWorkspace(
+        dataset_id="dataset-1",
+        run_id="workspace-run",
+        root_dir=tmp_path / "workspace",
+        data_dir=tmp_path / "workspace" / "data",
+    )
+    workspace.checkpoint_dir.mkdir(parents=True)
+    return workspace
+
+
+@pytest.fixture
+def finalize_assignment() -> SimpleNamespace:
+    """Minimal assignment collaborator exposing the .spec fields _finalize_training_run reads."""
+    return SimpleNamespace(
+        spec=SimpleNamespace(
+            assignment_id="exp-1",
+            dataset_id="dataset-1",
+            job_id="job-1",
+            job_display_name="Job One",
+        )
+    )
+
+
+@pytest.fixture
+def finalize_run_config(tmp_path: Path) -> MlflowRunConfig:
+    """MlflowRunConfig for _finalize_training_run tests."""
+    return MlflowRunConfig(
+        experiment_name="CustomTrain",
+        run_name="Experiment One | run",
+        tags={},
+        paths=MlflowPaths(tracking_uri="sqlite:///unused.db", artifact_uri=None),
+        workspace_root=tmp_path / "workspace",
+    )
+
+
+@pytest.fixture
+def finalize_config_path(tmp_path: Path) -> Path:
+    """Job config TOML path for _finalize_training_run tests."""
+    config_path = tmp_path / "model.toml"
+    config_path.write_text("")
+    return config_path
+
+
+@pytest.fixture
+def finalize_context(
+    finalize_workspace: AssignmentWorkspace,
+    finalize_assignment: SimpleNamespace,
+    finalize_run_config: MlflowRunConfig,
+    finalize_config_path: Path,
+) -> _TrainingFinalizationContext:
+    """Bundled context for _finalize_training_run tests, with a resolvable run_id."""
+    return _TrainingFinalizationContext(
+        training_result=SimpleNamespace(run_id="run-123", metrics={}),
+        run_config=finalize_run_config,
+        workspace=finalize_workspace,
+        assignment=finalize_assignment,
+        assignment_id="exp-1",
+        resolved_assignment_display_name="Experiment One",
+        dataset_id="dataset-1",
+        resolved_dataset_display_name="Dataset One",
+        workflow_settings=SimpleNamespace(data=None),
+        contract=default_training_dataset_contract(),
+        config_path=finalize_config_path,
+        resolved_data_config_path=None,
+        fallback_tracking_uri="sqlite:///fallback.db",
+    )
+
+
+def test_finalize_training_run_happy_path_returns_run_coords(
+    finalize_context: _TrainingFinalizationContext,
+) -> None:
+    """All Step 6-8 collaborators succeed: returns (run_id, tracking_uri); no failure marking."""
+    resolved_coords = ("sqlite:///resolved.db", "mlflow-exp-1", "run-123")
+    checkpoint_path = finalize_context.workspace.checkpoint_dir / "model.ckpt"
+
+    with (
+        patch(
+            "neuralls.composition.assignments.training._resolve_mlflow_run_ids",
+            return_value=resolved_coords,
+        ),
+        patch(
+            "neuralls.composition.assignments.training._resolve_training_checkpoint",
+            return_value=checkpoint_path,
+        ),
+        patch("neuralls.composition.assignments.training._log_training_context"),
+        patch("neuralls.composition.assignments.training.ensure_checkpoint_artifact"),
+        patch("neuralls.composition.assignments.training._stage_training_artifacts"),
+        patch("neuralls.composition.assignments.training._log_training_evaluation"),
+        patch("neuralls.composition.assignments.training.log_artifacts_to_mlflow"),
+        patch("neuralls.composition.assignments.training.log_extra_feature_names_tag"),
+        patch("neuralls.composition.assignments.training.mark_run_failed") as mock_mark_failed,
+    ):
+        result = _finalize_training_run(finalize_context)
+
+    assert result == ("run-123", "sqlite:///resolved.db")
+    mock_mark_failed.assert_not_called()
+
+
+def test_finalize_training_run_marks_run_failed_and_reraises_on_durability_failure(
+    finalize_context: _TrainingFinalizationContext,
+) -> None:
+    """A durability step (ensure_checkpoint_artifact) raising marks the run FAILED and re-raises.
+
+    The exact same exception instance must propagate — mark_run_failed must not
+    swallow or wrap it.
+    """
+    resolved_coords = ("sqlite:///resolved.db", "mlflow-exp-1", "run-123")
+    checkpoint_path = finalize_context.workspace.checkpoint_dir / "model.ckpt"
+    original_exc = RuntimeError("checkpoint upload failed")
+
+    with (
+        patch(
+            "neuralls.composition.assignments.training._resolve_mlflow_run_ids",
+            return_value=resolved_coords,
+        ),
+        patch(
+            "neuralls.composition.assignments.training._resolve_training_checkpoint",
+            return_value=checkpoint_path,
+        ),
+        patch("neuralls.composition.assignments.training._log_training_context"),
+        patch(
+            "neuralls.composition.assignments.training.ensure_checkpoint_artifact",
+            side_effect=original_exc,
+        ),
+        patch("neuralls.composition.assignments.training._stage_training_artifacts"),
+        patch("neuralls.composition.assignments.training._log_training_evaluation"),
+        patch("neuralls.composition.assignments.training.log_artifacts_to_mlflow"),
+        patch("neuralls.composition.assignments.training.log_extra_feature_names_tag"),
+        patch("neuralls.composition.assignments.training.mark_run_failed") as mock_mark_failed,
+        pytest.raises(RuntimeError, match="checkpoint upload failed") as exc_info,
+    ):
+        _finalize_training_run(finalize_context)
+
+    assert exc_info.value is original_exc
+    mock_mark_failed.assert_called_once_with(run_id="run-123", tracking_uri="sqlite:///resolved.db")
+
+
+def test_finalize_training_run_raises_without_marking_when_no_run_established(
+    finalize_context: _TrainingFinalizationContext,
+) -> None:
+    """No MLflow run at all (no coords, fallback creation also fails): raises RuntimeError.
+
+    mark_run_failed must not be called since no run_id was ever resolved — there
+    is nothing to mark.
+    """
+    context = replace(
+        finalize_context,
+        training_result=SimpleNamespace(metrics={}),  # no run_id/mlflow_run_id attrs
+    )
+    checkpoint_path = context.workspace.checkpoint_dir / "model.ckpt"
+
+    with (
+        patch(
+            "neuralls.composition.assignments.training._resolve_mlflow_run_ids",
+            return_value=None,
+        ),
+        patch(
+            "neuralls.composition.assignments.training._resolve_training_checkpoint",
+            return_value=checkpoint_path,
+        ),
+        patch(
+            "neuralls.composition.assignments.training.create_fallback_training_run",
+            side_effect=RuntimeError("no mlflow server reachable"),
+        ),
+        patch("neuralls.composition.assignments.training.mark_run_failed") as mock_mark_failed,
+        pytest.raises(RuntimeError, match="exp-1"),
+    ):
+        _finalize_training_run(context)
+
+    mock_mark_failed.assert_not_called()

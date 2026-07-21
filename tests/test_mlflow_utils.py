@@ -26,7 +26,10 @@ from neuralls.platform.tracking.mlflow import (
     sanitize_metric_key_segment,
     start_run_if_needed,
 )
-from neuralls.platform.tracking.mlflow_client import log_artifacts_to_mlflow
+from neuralls.platform.tracking.mlflow_client import (
+    log_artifacts_to_mlflow,
+    log_eval_batch_artifacts_to_mlflow,
+)
 
 
 class DummyRun:
@@ -428,3 +431,25 @@ def test_log_artifacts_to_mlflow_excludes_checkpoints(tmp_path: Path) -> None:
     logged_paths = [Path(call.args[1]).name for call in client.log_artifacts.call_args_list]
     assert "checkpoints" not in logged_paths
     assert set(logged_paths) == {"figures", "metrics", "predictions", "config"}
+
+
+def test_log_eval_batch_artifacts_to_mlflow_uploads_only_existing_files(tmp_path: Path) -> None:
+    """No plot is produced when a metric is missing for every result — that file
+    must simply be skipped, not uploaded as missing/empty.
+    """
+    work_root = tmp_path / "work"
+    work_root.mkdir()
+    (work_root / "batch_eval_labels.json").write_text("{}")
+    # "batch_metric_mae.png" intentionally not created.
+
+    with patch("mlflow.tracking.MlflowClient") as mock_client_cls:
+        client = mock_client_cls.return_value
+        log_eval_batch_artifacts_to_mlflow(
+            tracking_uri=f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}",
+            run_id="run-1",
+            work_root=work_root,
+            flat_files=("batch_metric_mae.png", "batch_eval_labels.json"),
+        )
+
+    logged_paths = [Path(call.args[1]).name for call in client.log_artifact.call_args_list]
+    assert logged_paths == ["batch_eval_labels.json"]

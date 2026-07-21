@@ -24,7 +24,11 @@ def eval_case_batch(
     ),
     output_dir: Path | None = typer.Option(
         None,
-        help=("Directory for eval reports. Defaults to output_dir/eval/."),
+        help=(
+            "Directory for per-assignment local staging (downloaded checkpoints, "
+            "predictions, figures). Defaults to output_dir/eval/. The batch metric "
+            "plot and label map are logged to MLflow, not written here."
+        ),
     ),
     assignment: list[str] | None = typer.Option(
         None,
@@ -50,11 +54,10 @@ def eval_case_batch(
         typer.echo(f"Error during batch evaluation: {exc}", err=True)
         raise typer.Exit(code=EXIT_FAILURE) from exc
 
-    report_dir = write_eval_metric_report(batch, metric=metric, output_dir=output_dir)
-    plot_path = report_dir / f"batch_metric_{metric.replace('/', '_')}.png"
-    if plot_path.exists():
-        typer.echo(f"Saved barplot: {plot_path}")
+    plotted = write_eval_metric_report(batch, metric=metric)
+    if plotted:
+        typer.echo(f"Logged batch metric plot for '{metric}' to MLflow run {batch.parent_run_id}.")
     else:
         typer.echo(f"No data to plot for metric '{metric}'.", err=True)
 
-    typer.echo(f"Saved label map: {report_dir / 'batch_eval_labels.json'}")
+    typer.echo(f"Logged eval label map to MLflow run {batch.parent_run_id}.")
