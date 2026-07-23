@@ -8,16 +8,23 @@ import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
+from dlkit.common import ChildFailure, ChildSuccess
 from dlkit.common.results import EvaluationResult
+from dlkit.engine.workflows.multi_run import MultiRunSpec, RunSpec
 from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.job_config import InferenceJobConfig
-from dlkit.interfaces.inference import evaluate
+from dlkit.interfaces.api import run_multirun_spec
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
 from neuralls.composition.assignments._dataset_assembly import _load_and_prepare_data
 from neuralls.composition.assignments._job_types import AnyJobConfig
+from neuralls.composition.assignments._registry_lookup import (
+    _find_registry_entry,
+    _resolve_config_paths,
+)
 from neuralls.composition.assignments.assembler import load_assignment
 from neuralls.composition.assignments.job_loader import load_experiment_job
 from neuralls.composition.assignments.runtime_dataset_contract import (
@@ -29,16 +36,9 @@ from neuralls.composition.tracking.run_specs import (
     build_evaluation_tags,
     build_session_run_spec,
 )
-from neuralls.composition.tracking.session import session_parent_run
-from neuralls.platform.dlkit.tracking_hooks import build_parent_link_hooks
 from neuralls.platform.config.models.experiments import (
     AssignmentEntry,
     CaseConfig,
-    RegistryEntry,
-)
-from neuralls.platform.config.registry import (
-    resolve_dataset_config_path,
-    resolve_job_config_path,
 )
 from neuralls.platform.config.resolution import (
     derive_output_root_from_tracking_uri,
@@ -51,13 +51,16 @@ from neuralls.platform.tracking.evaluation_artifacts import (
     TrainingEvaluationArtifacts,
     download_training_evaluation_artifacts,
 )
-from neuralls.platform.tracking.mlflow import build_workflow_environment
+from neuralls.platform.tracking.mlflow import (
+    build_workflow_environment,
+    create_session_parent_run,
+    finalize_session_parent_run,
+)
 from neuralls.platform.tracking.mlflow_client import (
     find_successful_run,
     log_eval_batch_artifacts_to_mlflow,
 )
 
-type EvaluateFn = Callable[..., EvaluationResult]
 type MlflowClientFactory = Callable[..., MlflowClient]
 
 
@@ -108,42 +111,24 @@ class EvaluationAssignmentContext:
     job_display_name: str | None
 
 
+@dataclass(frozen=True)
+class PreparedEvaluation:
+    """One assignment's fully-resolved eval settings, ready for a dlkit RunSpec."""
+
+    inference_settings: InferenceJobConfig
+    assignment: AssignmentEntry
+    resolved_assignment_display_name: str
+    training_run_id: str
+    client: MlflowClient
+    split_file: Path
+    output_root: Path
+    label: str
+    run_name: str
+
+
 def _sanitize_path_part(value: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")
     return sanitized or "assignment"
-
-
-def _find_registry_entry(
-    entries: Sequence[RegistryEntry], registry_id: str
-) -> RegistryEntry | None:
-    for entry in entries:
-        if entry.id == registry_id:
-            return entry
-    return None
-
-
-def _resolve_config_paths(
-    assignment: AssignmentEntry,
-    configs_dir: Path,
-    cfg: CaseConfig,
-) -> tuple[Path, Path]:
-    job_path = resolve_job_config_path(
-        cfg,
-        configs_dir,
-        assignment.job_id,
-        assignment_id=assignment.id,
-    )
-    dataset_path = resolve_dataset_config_path(
-        cfg,
-        configs_dir,
-        assignment.dataset_id,
-        assignment_id=assignment.id,
-    )
-    if not job_path.exists():
-        raise FileNotFoundError(f"Job config not found: {job_path}")
-    if not dataset_path.exists():
-        raise FileNotFoundError(f"Dataset config not found: {dataset_path}")
-    return job_path, dataset_path
 
 
 def _resolve_display_metadata(
@@ -378,13 +363,7 @@ def _tag_evaluation_run(
     training_run_id: str,
     split_file: Path,
 ) -> None:
-    """Set bookkeeping tags/params on a completed eval run.
-
-    Parent-run linkage is handled separately and atomically at run-creation
-    time via ``build_parent_link_hooks`` (mirroring ``train_model()``'s
-    ``_annotate_mlflow_run`` split: hooks own parent nesting, this function
-    owns retroactive bookkeeping only).
-    """
+    """Set bookkeeping tags/params dlkit has no concept of on a completed eval run."""
     if run_id is None:
         return
     tags = build_evaluation_tags(
@@ -399,7 +378,7 @@ def _tag_evaluation_run(
     client.log_param(run_id, "split_file", split_file.as_posix())
 
 
-def eval_assignment(
+def prepare_evaluation_settings(
     *,
     cfg: CaseConfig,
     configs_dir: Path,
@@ -407,13 +386,16 @@ def eval_assignment(
     assignment: AssignmentEntry,
     output_root: Path,
     case_config_path: Path,
-    label: str,
     tracking_uri: str,
-    parent_run_id: str | None = None,
-    evaluate_fn: EvaluateFn = evaluate,
+    label: str,
     mlflow_client_factory: MlflowClientFactory = MlflowClient,
-) -> EvaluationRunResult:
-    """Evaluate one existing training assignment on its logged test split."""
+) -> PreparedEvaluation:
+    """Resolve one assignment's checkpoint, split, and dlkit eval settings.
+
+    Building a distinct InferenceJobConfig per assignment (vs. one settings
+    object shared across the sweep) is what lets each child evaluate against
+    the dataset it was actually trained on.
+    """
     context = _build_eval_context(
         cfg=cfg,
         configs_dir=configs_dir,
@@ -431,35 +413,57 @@ def eval_assignment(
         context=context,
     )
     data_settings = inference_settings.data
-    batch_size = data_settings.batch_size if data_settings is not None else 32
-
-    result = evaluate_fn(
-        inference_settings,
-        checkpoint_path=context.artifacts.checkpoint_path,
-        split="test",
-        log_to_mlflow=True,
-        run_name=assignment.effective_display_name,
-        hooks=build_parent_link_hooks(parent_run_id),
-        batch_size=batch_size or 32,
+    batch_size = (data_settings.batch_size if data_settings is not None else None) or 32
+    inference_settings = inference_settings.patch(
+        {"tracking": {"backend": "mlflow"}, "data": {"batch_size": batch_size}}
     )
-    assignment_dir = output_root / "eval" / _sanitize_path_part(assignment.id)
+    return PreparedEvaluation(
+        inference_settings=inference_settings,
+        assignment=assignment,
+        resolved_assignment_display_name=assignment.effective_display_name,
+        training_run_id=context.training_run_id,
+        client=context.client,
+        split_file=context.artifacts.split_file,
+        output_root=output_root,
+        label=label,
+        run_name=assignment.effective_display_name,
+    )
+
+
+def to_eval_run_spec(prepared: PreparedEvaluation) -> RunSpec:
+    """Build a dlkit multirun ``RunSpec`` for one already-prepared evaluation."""
+    return RunSpec(
+        id=prepared.assignment.id,
+        label=prepared.resolved_assignment_display_name,
+        settings=prepared.inference_settings,
+        run_name=prepared.run_name,
+    )
+
+
+def _finalize_eval_child(
+    prepared: PreparedEvaluation,
+    execution_result: object,
+) -> EvaluationRunResult:
+    """Finalize one successful multirun child: save outputs, tag, and build the result."""
+    result = cast(EvaluationResult, execution_result)
+    assignment_dir = prepared.output_root / "eval" / _sanitize_path_part(prepared.assignment.id)
     figures_dir = _save_eval_outputs(result, assignment_dir=assignment_dir)
     _tag_evaluation_run(
-        client=context.client,
+        client=prepared.client,
         run_id=result.mlflow_run_id,
-        assignment_id=assignment.id,
-        assignment_display_name=assignment.effective_display_name,
-        training_run_id=context.training_run_id,
-        split_file=context.artifacts.split_file,
+        assignment_id=prepared.assignment.id,
+        assignment_display_name=prepared.resolved_assignment_display_name,
+        training_run_id=prepared.training_run_id,
+        split_file=prepared.split_file,
     )
     return EvaluationRunResult(
-        label=label,
-        assignment_id=assignment.id,
-        assignment_display_name=assignment.effective_display_name,
-        training_run_id=context.training_run_id,
+        label=prepared.label,
+        assignment_id=prepared.assignment.id,
+        assignment_display_name=prepared.resolved_assignment_display_name,
+        training_run_id=prepared.training_run_id,
         evaluation_run_id=result.mlflow_run_id,
         metrics=dict(result.metrics),
-        split_file=context.artifacts.split_file,
+        split_file=prepared.split_file,
         figures_dir=figures_dir,
     )
 
@@ -488,7 +492,7 @@ def eval_batch(
     case_config_path: Path | None = None,
     assignment_ids: Sequence[str] | None = None,
 ) -> EvaluationBatchResult:
-    """Evaluate selected assignments from one case config."""
+    """Evaluate selected assignments from one case config as one dlkit multirun sweep."""
     settings = require_settings(settings, case_config_path=case_config_path)
     selected_ids = set(assignment_ids or ())
     assignments = [
@@ -511,48 +515,92 @@ def eval_batch(
     resolved_case_config_path = (
         case_config_path.resolve() if case_config_path is not None else (configs_dir / "case.toml")
     )
+    mlflow_experiment_name = cfg.names.training
 
     results: list[EvaluationRunResult] = []
+    prepared_by_child_id: dict[str, PreparedEvaluation] = {}
+    run_specs: list[RunSpec] = []
+    any_failed = False
+
     with scoped_mlflow_environment(eval_mlflow_env.env):
         session_run_name, session_tags = build_session_run_spec(
             case_config_path=resolved_case_config_path,
-            experiment_name=cfg.names.training,
+            experiment_name=mlflow_experiment_name,
             phase="session_evaluation",
         )
-        with session_parent_run(
-            tracking_uri=eval_mlflow_env.tracking_uri,
-            artifact_uri=eval_mlflow_env.artifact_uri,
-            run_name=session_run_name,
-            tags=session_tags.as_mlflow_tags(),
-            experiment_name=cfg.names.training,
-        ) as handle:
-            for index, assignment in enumerate(assignments, start=1):
-                label = str(index)
-                try:
-                    result = eval_assignment(
-                        cfg=cfg,
-                        configs_dir=configs_dir,
-                        settings=settings,
-                        assignment=assignment,
-                        output_root=base_output,
-                        case_config_path=resolved_case_config_path,
-                        label=label,
-                        tracking_uri=eval_mlflow_env.tracking_uri,
-                        parent_run_id=handle.parent_run_id,
-                    )
-                    results.append(result)
-                except Exception as exc:  # noqa: BLE001
-                    # Mirror train_batch()'s resilience: one assignment's
-                    # failure must never abort the rest of the batch.
-                    handle.mark_failed()
-                    logger.error("Eval assignment '{}' failed: {}", assignment.id, exc)
+
+        # One assignment's failure must never abort the rest of the batch.
+        for index, assignment in enumerate(assignments, start=1):
+            try:
+                prepared = prepare_evaluation_settings(
+                    cfg=cfg,
+                    configs_dir=configs_dir,
+                    settings=settings,
+                    assignment=assignment,
+                    output_root=base_output,
+                    case_config_path=resolved_case_config_path,
+                    tracking_uri=eval_mlflow_env.tracking_uri,
+                    label=str(index),
+                )
+            except Exception as exc:  # noqa: BLE001
+                any_failed = True
+                logger.error("Eval assignment '{}' failed: {}", assignment.id, exc)
+                continue
+            prepared_by_child_id[assignment.id] = prepared
+            run_specs.append(to_eval_run_spec(prepared))
+
+        # dlkit owns the sweep's parent run, per-child MLflow runs/tagging, and failure isolation.
+        sweep_result = None
+        if run_specs:
+            sweep_result = run_multirun_spec(
+                MultiRunSpec(
+                    experiment_name=mlflow_experiment_name,
+                    parent_run_name=session_run_name,
+                    parent_tags=dict(session_tags.as_mlflow_tags()),
+                    failure_policy="continue",
+                    children=tuple(run_specs),
+                )
+            )
+            for child_outcome in sweep_result.children:
+                prepared = prepared_by_child_id[child_outcome.child_id]
+                match child_outcome:
+                    case ChildSuccess():
+                        results.append(_finalize_eval_child(prepared, child_outcome.result))
+                    case ChildFailure():
+                        any_failed = True
+                        logger.error(
+                            "Eval assignment '{}' failed: {}",
+                            child_outcome.child_id,
+                            child_outcome.message,
+                        )
+
+        if sweep_result is not None:
+            parent_run_id = sweep_result.parent_run_id
+            tracking_uri = sweep_result.tracking_uri or eval_mlflow_env.tracking_uri
+        else:
+            # Nothing to dispatch (dlkit rejects an empty sweep), but the
+            # summary report below still needs one MLflow run to log to.
+            tracking_uri = eval_mlflow_env.tracking_uri
+            parent_run_id = create_session_parent_run(
+                tracking_uri=tracking_uri,
+                artifact_uri=eval_mlflow_env.artifact_uri,
+                run_name=session_run_name,
+                tags=session_tags.as_mlflow_tags(),
+                experiment_name=mlflow_experiment_name,
+            )
+
+        finalize_session_parent_run(
+            tracking_uri=tracking_uri,
+            run_id=parent_run_id,
+            status="FAILED" if any_failed else "FINISHED",
+        )
 
     return EvaluationBatchResult(
         results=results,
         label_map=_make_label_map(results),
         output_dir=base_output / "eval",
-        tracking_uri=eval_mlflow_env.tracking_uri,
-        parent_run_id=handle.parent_run_id,
+        tracking_uri=tracking_uri,
+        parent_run_id=parent_run_id,
     )
 
 

@@ -151,22 +151,6 @@ def log_comparison_artifacts_to_mlflow(
     )
 
 
-def tag_run_parent(*, run_id: str, tracking_uri: str, parent_run_id: str) -> None:
-    """Set the ``mlflow.parentRunId`` tag linking a child run to its parent.
-
-    Args:
-        run_id: Child run to tag.
-        tracking_uri: MLflow tracking URI.
-        parent_run_id: Parent run UUID to link to.
-    """
-    from mlflow.tracking import MlflowClient
-
-    try:
-        MlflowClient(tracking_uri=tracking_uri).set_tag(run_id, "mlflow.parentRunId", parent_run_id)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Could not set parent run tag on {}: {}", run_id, exc)
-
-
 def mark_run_failed(*, run_id: str, tracking_uri: str) -> None:
     """Best-effort mark a run FAILED so it never reads as successful when it isn't.
 

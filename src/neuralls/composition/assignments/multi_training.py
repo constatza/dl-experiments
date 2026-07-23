@@ -9,16 +9,15 @@ from pathlib import Path
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
+from dlkit.common import ChildFailure, ChildSuccess
+from dlkit.engine.workflows.multi_run import MultiRunSpec, RunSpec
+from dlkit.interfaces.api import run_multirun_spec
+
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
 from neuralls.platform.config.models.experiments import (
     CaseConfig,
     AssignmentEntry,
-    RegistryEntry,
     resolve_display_name,
-)
-from neuralls.platform.config.registry import (
-    resolve_dataset_config_path,
-    resolve_job_config_path,
 )
 from neuralls.platform.config.resolution import (
     derive_output_root_from_tracking_uri,
@@ -28,15 +27,27 @@ from neuralls.platform.config.loaders import load_data_config
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.plots import plot_metric_comparison
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
-from neuralls.platform.tracking.mlflow import build_workflow_environment
+from neuralls.platform.tracking.mlflow import (
+    build_workflow_environment,
+    finalize_session_parent_run,
+)
 from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
 from neuralls.platform.tracking.model_registry import read_model_class_name
 from neuralls.composition.tracking.run_specs import (
     build_registration_tags,
     build_session_run_spec,
 )
-from neuralls.composition.tracking.session import session_parent_run
-from neuralls.composition.assignments.training import train_model
+from neuralls.composition.assignments._registry_lookup import (
+    _find_registry_entry,
+    _resolve_config_paths,
+)
+from neuralls.composition.assignments.training import (
+    PreparedTraining,
+    cleanup_prepared_training,
+    finalize_prepared_training,
+    prepare_training_settings,
+    to_run_spec,
+)
 
 
 @dataclass(frozen=True)
@@ -105,72 +116,6 @@ def _make_label_map(
         }
         for r in results
     }
-
-
-def _resolve_config_paths(
-    assignment: AssignmentEntry,
-    configs_dir: Path,
-    cfg: CaseConfig,
-) -> tuple[Path, Path]:
-    """Resolve job and dataset config paths from an assignment entry.
-
-    Args:
-        assignment: Single ``[[assignments]]`` entry.
-        configs_dir: Parent directory of the assignments TOML.
-
-    Returns:
-        Tuple of ``(job_config_path, data_config_path)``.
-
-    Raises:
-        FileNotFoundError: If either resolved config path does not exist.
-    """
-    job_path = resolve_job_config_path(
-        cfg,
-        configs_dir,
-        assignment.job_id,
-        assignment_id=assignment.id,
-    )
-    dataset_path = resolve_dataset_config_path(
-        cfg,
-        configs_dir,
-        assignment.dataset_id,
-        assignment_id=assignment.id,
-    )
-
-    if not job_path.exists():
-        raise FileNotFoundError(f"Job config not found: {job_path}")
-    if not dataset_path.exists():
-        raise FileNotFoundError(f"Dataset config not found: {dataset_path}")
-
-    return job_path, dataset_path
-
-
-_BATCH_METRIC_PREFIXES = ("eval/", "val/", "test/")
-
-
-def _collect_batch_metrics(
-    results: list[TrainingRunResult],
-) -> dict[str, float]:
-    """Aggregate metrics from all completed training runs.
-
-    Reads metrics that were already fetched and stored in TrainingRunResult.
-    Returns averaged metrics across all runs that have them.
-    Only metrics whose keys start with ``eval/``, ``val/``, or ``test/`` are
-    averaged — counter metrics like epoch counts are excluded.
-
-    Args:
-        results: List of completed training run results.
-
-    Returns:
-        Dict of aggregated metric summaries.
-    """
-    all_metrics: dict[str, list[float]] = {}
-    for result in results:
-        for key, value in result.metrics.items():
-            if any(key.startswith(p) for p in _BATCH_METRIC_PREFIXES):
-                all_metrics.setdefault(key, []).append(value)
-
-    return {f"avg_{key}": sum(vals) / len(vals) for key, vals in all_metrics.items() if vals}
 
 
 # ---------------------------------------------------------------------------
@@ -242,60 +187,42 @@ def _annotate_mlflow_run(
         logger.warning(f"[{label}] Could not tag MLflow run {run_id}: {exc}")
 
 
-def _train_single(
-    settings: NeurallsSettings | None,
-    assignment_id: str,
-    assignment_display_name: str,
-    job_config_path: Path,
-    data_config_path: Path,
+def _finalize_batch_child(
+    *,
     label: str,
-    output_root: Path | None,
-    mlflow_experiment_name: str,
-    parent_run_id: str | None = None,
-    dataset_registry_id: str | None = None,
-    dataset_display_name: str | None = None,
-    job_registry_id: str | None = None,
-    job_display_name: str | None = None,
+    prepared: PreparedTraining,
+    execution_result: object,
+    settings: NeurallsSettings,
 ) -> TrainingRunResult:
-    """Train one assignment and fetch MLflow metrics.
+    """Finalize one successful multirun child: durability, metrics, annotation.
+
+    Mirrors what the old ``_train_single`` did after ``train_model()``
+    returned — everything needed (assignment/dataset/job identity) is already
+    resolved onto ``prepared.assignment.spec`` from the prepare pass.
 
     Args:
-        assignment_id: The ``id`` field from the TOML entry.
-        job_config_path: Path to job config TOML.
-        data_config_path: Path to dataset config TOML.
-        label: Short numeric label for this run ("1", "2", …).
-        output_root: Optional custom output root directory.
+        label: Short numeric label for log messages.
+        prepared: This assignment's prepared training inputs.
+        execution_result: The multirun child's dispatch result.
+        settings: Resolved neuralls settings.
 
     Returns:
         ``TrainingRunResult`` with the MLflow run ID and metrics.
     """
-    logger.info(f"[{label}] Training assignment: {assignment_display_name}")
-    settings = require_settings(settings)
-
-    run_id, tracking_uri = train_model(
-        config_path=job_config_path,
-        settings=settings,
-        data_config_path=data_config_path,
-        output_root=output_root,
-        assignment_id=assignment_id,
-        assignment_display_name=assignment_display_name,
-        dataset_registry_id=dataset_registry_id,
-        dataset_display_name=dataset_display_name,
-        job_registry_id=job_registry_id,
-        job_display_name=job_display_name,
-        mlflow_experiment_name=mlflow_experiment_name,
-        parent_run_id=parent_run_id,
-    )
-    data_cfg = load_data_config(data_config_path, settings)
+    spec = prepared.assignment.spec
+    run_id, tracking_uri = finalize_prepared_training(prepared, execution_result)
+    data_cfg = load_data_config(prepared.resolved_data_config_path, settings)
     resolved_dataset_id = resolve_dataset_identity(
         data_cfg=data_cfg,
-        config_path=data_config_path,
+        config_path=prepared.resolved_data_config_path,
     ).name
-    model_class = read_model_class_name(job_config_path)
-    resolved_dataset_display_name = resolve_display_name(resolved_dataset_id, dataset_display_name)
+    model_class = read_model_class_name(prepared.config_path)
+    resolved_dataset_display_name = resolve_display_name(
+        resolved_dataset_id, spec.dataset_display_name
+    )
     resolved_job_display_name = resolve_display_name(
-        model_class or job_registry_id or assignment_id,
-        job_display_name,
+        model_class or spec.job_id or spec.assignment_id,
+        spec.job_display_name,
     )
 
     metrics: dict[str, float] = {}
@@ -308,43 +235,32 @@ def _train_single(
         label=label,
         run_id=run_id,
         tracking_uri=tracking_uri,
-        job_config_path=job_config_path,
-        assignment_id=assignment_id,
-        assignment_display_name=assignment_display_name,
+        job_config_path=prepared.config_path,
+        assignment_id=spec.assignment_id,
+        assignment_display_name=spec.assignment_display_name,
         resolved_dataset_id=resolved_dataset_id,
         dataset_display_name=resolved_dataset_display_name,
-        dataset_registry_id=dataset_registry_id,
-        job_registry_id=job_registry_id,
+        dataset_registry_id=spec.dataset_id,
+        job_registry_id=spec.job_id,
         job_display_name=resolved_job_display_name,
     )
 
     logger.info(f"[{label}] Done. run_id={run_id}, metrics={list(metrics.keys())}")
     return TrainingRunResult(
         label=label,
-        assignment_id=assignment_id,
-        assignment_display_name=assignment_display_name,
+        assignment_id=spec.assignment_id,
+        assignment_display_name=spec.assignment_display_name,
         mlflow_run_id=run_id,
         metrics=metrics,
         resolved_dataset_id=resolved_dataset_id,
         dataset_display_name=resolved_dataset_display_name,
         model_class=model_class,
         job_display_name=resolved_job_display_name,
-        dataset_registry_id=dataset_registry_id,
-        job_registry_id=job_registry_id,
-        job_config_path=job_config_path,
-        data_config_path=data_config_path,
+        dataset_registry_id=spec.dataset_id,
+        job_registry_id=spec.job_id,
+        job_config_path=prepared.config_path,
+        data_config_path=prepared.resolved_data_config_path,
     )
-
-
-def _find_registry_entry(
-    entries: list[RegistryEntry],
-    registry_id: str,
-) -> RegistryEntry | None:
-    """Look up one registry entry by id."""
-    for entry in entries:
-        if entry.id == registry_id:
-            return entry
-    return None
 
 
 def _resolve_training_entry_metadata(
@@ -425,61 +341,94 @@ def train_batch(
     resolved_case_config_path = _resolve_case_config_path(case_config_path, configs_dir)
 
     # ------------------------------------------------------------------
-    # Phase 1: Train — one session parent groups the independent child runs
+    # Phase 1: Prepare every assignment's settings, then run them as one
+    # dlkit multirun sweep — dlkit owns the parent run's lifecycle, child
+    # tagging, and per-child failure isolation natively.
     # ------------------------------------------------------------------
     results: list[TrainingRunResult] = []
-    n = len(assignment_entries)
     with scoped_mlflow_environment(training_mlflow_env.env):
         session_run_name, session_tags = build_session_run_spec(
             case_config_path=resolved_case_config_path,
             experiment_name=mlflow_experiment_name,
             phase="session_training",
         )
-        with session_parent_run(
-            tracking_uri=training_mlflow_env.tracking_uri,
-            artifact_uri=training_mlflow_env.artifact_uri,
-            run_name=session_run_name,
-            tags=session_tags.as_mlflow_tags(),
-            experiment_name=mlflow_experiment_name,
-        ) as handle:
-            for i, entry in enumerate(assignment_entries, start=1):
-                label = str(i)
-                try:
-                    assignment_id = entry.id
-                    assignment_display_name = entry.effective_display_name
-                    job_config_path, data_config = _resolve_config_paths(entry, configs_dir, cfg)
-                    (
-                        dataset_registry_id,
-                        dataset_display_name,
-                        job_registry_id,
-                        job_display_name,
-                    ) = _resolve_training_entry_metadata(
-                        entry=entry,
-                        cfg=cfg,
-                    )
 
-                    result = _train_single(
-                        settings=settings,
-                        assignment_id=assignment_id,
-                        assignment_display_name=assignment_display_name,
-                        job_config_path=job_config_path,
-                        data_config_path=data_config,
-                        label=label,
-                        output_root=base_output,
-                        mlflow_experiment_name=mlflow_experiment_name,
-                        parent_run_id=handle.parent_run_id,
-                        dataset_registry_id=dataset_registry_id,
-                        dataset_display_name=dataset_display_name,
-                        job_registry_id=job_registry_id,
-                        job_display_name=job_display_name,
-                    )
-                    results.append(result)
-                    logger.info(f"Completed {i}/{n} assignments")
-                except Exception as exc:  # noqa: BLE001
-                    # Mirror run_assignment()'s resilience: one assignment's
-                    # failure must never abort the rest of the batch.
-                    handle.mark_failed()
-                    logger.error(f"[{label}] Assignment '{entry.id}' failed: {exc}")
+        prepared_by_child_id: dict[str, tuple[PreparedTraining, str]] = {}
+        run_specs: list[RunSpec] = []
+        session_failed = False
+
+        for i, entry in enumerate(assignment_entries, start=1):
+            label = str(i)
+            try:
+                job_config_path, data_config = _resolve_config_paths(entry, configs_dir, cfg)
+                (
+                    dataset_registry_id,
+                    dataset_display_name,
+                    job_registry_id,
+                    job_display_name,
+                ) = _resolve_training_entry_metadata(entry=entry, cfg=cfg)
+                prepared = prepare_training_settings(
+                    config_path=job_config_path,
+                    data_config_path=data_config,
+                    settings=settings,
+                    output_root=base_output,
+                    assignment_id=entry.id,
+                    assignment_display_name=entry.effective_display_name,
+                    dataset_registry_id=dataset_registry_id,
+                    dataset_display_name=dataset_display_name,
+                    job_registry_id=job_registry_id,
+                    job_display_name=job_display_name,
+                    mlflow_experiment_name=mlflow_experiment_name,
+                    batched=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Mirror run_assignment()'s resilience: one assignment's
+                # failure must never abort the rest of the batch.
+                session_failed = True
+                logger.error(f"[{label}] Assignment '{entry.id}' failed to prepare: {exc}")
+                continue
+            prepared_by_child_id[prepared.assignment.spec.assignment_id] = (prepared, label)
+            run_specs.append(to_run_spec(prepared))
+
+        sweep_result = None
+        if run_specs:
+            sweep_result = run_multirun_spec(
+                MultiRunSpec(
+                    experiment_name=mlflow_experiment_name,
+                    parent_run_name=session_run_name,
+                    parent_tags=dict(session_tags.as_mlflow_tags()),
+                    failure_policy="continue",
+                    children=tuple(run_specs),
+                )
+            )
+            for outcome in sweep_result.children:
+                prepared, label = prepared_by_child_id[outcome.child_id]
+                try:
+                    match outcome:
+                        case ChildSuccess():
+                            results.append(
+                                _finalize_batch_child(
+                                    label=label,
+                                    prepared=prepared,
+                                    execution_result=outcome.result,
+                                    settings=settings,
+                                )
+                            )
+                            logger.info(f"Completed {label}/{len(run_specs)} assignments")
+                        case ChildFailure():
+                            session_failed = True
+                            logger.error(
+                                f"[{label}] Assignment '{outcome.child_id}' failed: {outcome.message}"
+                            )
+                finally:
+                    cleanup_prepared_training(prepared)
+
+        if sweep_result is not None:
+            finalize_session_parent_run(
+                tracking_uri=sweep_result.tracking_uri or training_mlflow_env.tracking_uri,
+                run_id=sweep_result.parent_run_id,
+                status="FAILED" if session_failed else "FINISHED",
+            )
 
     label_map = _make_label_map(results)
     output_dir = base_output / "training"

@@ -1,13 +1,15 @@
-"""Assignment orchestration for training neural network models.
+"""Batch training workflow: prepare/reuse-check every assignment, then train them as one dlkit multirun sweep.
 
 This module provides the main orchestration functions for running assignments
 (one job run on one dataset):
-- `run_assignment()`: Run a single assignment (data generation + training)
-- `run_assignment_matrix()`: Run every assignment from one case config
+- `run_assignment()`: Generate/cache one assignment's dataset, run the MLflow
+  reuse check, and either report a cache-hit success or prepare it for the sweep.
+- `run_assignment_matrix()`: Run every assignment from one case config as a
+  single dlkit multirun sweep.
 
 Architecture:
     1. Data generation (with caching) - process_config() from generation module
-    2. Model training (with checkpoint detection) - train_model() from training module
+    2. Model training (with checkpoint detection) - dlkit's run_multirun_spec()
     3. Solver comparison (separate) - compare_preconditioners() from compare module
 
 Note:
@@ -21,6 +23,10 @@ from pathlib import Path
 
 from loguru import logger
 
+from dlkit.common import ChildFailure, ChildSuccess
+from dlkit.engine.workflows.multi_run import MultiRunSpec, RunSpec
+from dlkit.interfaces.api import run_multirun_spec
+
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
 from neuralls.composition.assignments.assembler import (
     load_assignment_batch,
@@ -33,12 +39,20 @@ from neuralls.platform.storage.base import load_matrix
 from neuralls.application.models import AssignmentResult
 from neuralls.platform.caching import compute_directory_hash
 from neuralls.composition.generation.processing import process_config
-from neuralls.composition.assignments.training import train_model
+from neuralls.composition.assignments.training import (
+    PreparedTraining,
+    cleanup_prepared_training,
+    finalize_prepared_training,
+    prepare_training_settings,
+    to_run_spec,
+)
 from neuralls.platform.storage.dataset_readers import resolve_dataset_artifacts
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
-from neuralls.platform.tracking.mlflow import build_workflow_environment
+from neuralls.platform.tracking.mlflow import (
+    build_workflow_environment,
+    finalize_session_parent_run,
+)
 from neuralls.platform.tracking.mlflow_client import find_successful_run
-from neuralls.composition.tracking.session import session_parent_run
 
 
 def run_assignment(
@@ -56,18 +70,17 @@ def run_assignment(
     dataset_display_name: str | None = None,
     job_registry_id: str | None = None,
     job_display_name: str | None = None,
-    parent_run_id: str | None = None,
     mlflow_experiment_name: str | None = None,
     tracking_uri: str | None = None,
-) -> AssignmentResult:
-    """Run data generation and model training for a single assignment.
+) -> AssignmentResult | PreparedTraining:
+    """Generate/cache one assignment's dataset and prepare it for the training sweep.
 
-    This function orchestrates a complete assignment workflow:
+    This function performs everything a dlkit multirun sweep child can't do for
+    itself, ahead of `run_assignment_matrix()` building that sweep:
     1. Load data configuration from TOML file
     2. Generate/cache dataset artifacts (manifest + .npy + sparse pack)
     3. Check MLflow for an already-completed run of this assignment (skip if found and force=False)
-    4. Train model if needed (creates checkpoint)
-    5. Return success/failure result
+    4. If training is needed, resolve dlkit settings via `prepare_training_settings()`
 
     Args:
         job_config_path: Path to a job configuration TOML (e.g., /path/to/job.toml)
@@ -78,21 +91,27 @@ def run_assignment(
         tracking_uri: MLflow tracking URI used to check for a prior completed run.
 
     Returns:
-        AssignmentResult with status='Success' or 'Failed' and optional error message
+        An `AssignmentResult` with status='Success' (a completed MLflow run already
+        exists and `force=False`) or status='Failed' (dataset generation, the reuse
+        check, or dlkit settings preparation raised). Otherwise a `PreparedTraining`
+        ready to become one child of the training sweep in `run_assignment_matrix()`.
 
     Note:
         For solver comparison, use compare_preconditioners() after training completes.
-        This function only generates data and trains models.
+        This function only generates data and prepares models for training.
 
     Example:
-        >>> result = run_assignment(
+        >>> outcome = run_assignment(
+        ...     settings=settings,
         ...     job_config_path=Path("/tmp/job.toml"),
         ...     data_config_path=Path("/tmp/dataset.toml"),
         ...     output_root=Path("output"),
         ...     force=False,
         ...     src_hash="abc123",
+        ...     assignment_id="assignment-1",
+        ...     assignment_display_name="Assignment 1",
         ... )
-        >>> print(result.status)
+        >>> isinstance(outcome, AssignmentResult) and outcome.status
         'Success'
     """
     try:
@@ -140,32 +159,30 @@ def run_assignment(
             is not None
         )
 
-        # Step 3: Train model unless a completed run already exists
+        # Step 3: Skip training if a completed run already exists; otherwise resolve
+        # this assignment's dlkit settings so the caller can add it to the sweep.
         if already_done:
             logger.info(f"Using existing MLflow run for assignment '{assignment_id}'")
-        else:
-            run_id, _ = train_model(
-                config_path=job_config_path,
-                job_registry_id=job_registry_id,
-                job_display_name=job_display_name,
-                settings=settings,
-                data_config_path=data_config_path,
-                output_root=output_root,
-                max_epochs=max_epochs,
+            return AssignmentResult(
                 assignment_id=assignment_id,
                 assignment_display_name=assignment_display_name,
-                dataset_registry_id=dataset_registry_id,
-                dataset_display_name=dataset_display_name,
-                parent_run_id=parent_run_id,
-                mlflow_experiment_name=mlflow_experiment_name,
+                status="Success",
             )
-            logger.info(f"Training complete: run {run_id}")
 
-        # Step 4: Return success result
-        return AssignmentResult(
+        return prepare_training_settings(
+            config_path=job_config_path,
+            data_config_path=data_config_path,
+            settings=settings,
+            output_root=output_root,
+            max_epochs=max_epochs,
             assignment_id=assignment_id,
             assignment_display_name=assignment_display_name,
-            status="Success",
+            dataset_registry_id=dataset_registry_id,
+            dataset_display_name=dataset_display_name,
+            job_registry_id=job_registry_id,
+            job_display_name=job_display_name,
+            mlflow_experiment_name=mlflow_experiment_name,
+            batched=True,
         )
     except Exception as exc:  # noqa: BLE001
         # Broad by design: one assignment's failure (including dlkit-internal
@@ -180,6 +197,43 @@ def run_assignment(
         )
 
 
+def _finalize_assignment_child(
+    *,
+    prepared: PreparedTraining,
+    execution_result: object,
+) -> AssignmentResult:
+    """Finalize one successful multirun child: make its checkpoint durable in MLflow.
+
+    Converts a durability failure into a Failed `AssignmentResult` rather than
+    raising — mirrors `run_assignment()`'s original per-assignment failure
+    isolation, which used to cover the full train+finalize path via `train_model()`.
+
+    Args:
+        prepared: This assignment's prepared training inputs.
+        execution_result: The multirun child's dispatch result.
+
+    Returns:
+        `AssignmentResult` with status='Success' or 'Failed'.
+    """
+    spec = prepared.assignment.spec
+    try:
+        run_id, _ = finalize_prepared_training(prepared, execution_result)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Assignment {spec.assignment_id} failed: {exc}")
+        return AssignmentResult(
+            assignment_id=spec.assignment_id,
+            assignment_display_name=spec.assignment_display_name,
+            status="Failed",
+            error=str(exc),
+        )
+    logger.info(f"Training complete: run {run_id}")
+    return AssignmentResult(
+        assignment_id=spec.assignment_id,
+        assignment_display_name=spec.assignment_display_name,
+        status="Success",
+    )
+
+
 def run_assignment_matrix(
     case_config_path: Path,
     settings: NeurallsSettings | None = None,
@@ -190,13 +244,16 @@ def run_assignment_matrix(
 ) -> list[AssignmentResult]:
     """Run training for every assignment defined in one case config.
 
-    This is the main orchestrator for running multiple assignments in sequence.
-    Each assignment consists of:
+    This is the main orchestrator for running multiple assignments. Each
+    assignment consists of:
     1. Dataset generation (with caching based on data config + src hash)
-    2. Model training (with MLflow-backed reuse unless force=True)
+    2. Model training (with MLflow-backed reuse unless force=True), dispatched
+       as one dlkit multirun sweep across every assignment that needs it
 
-    The function processes assignments sequentially to avoid resource contention.
-    Failed assignments don't stop the batch - each returns a result with status.
+    Assignments whose MLflow reuse check finds a completed run are resolved
+    immediately without joining the sweep. Failed assignments — whether the
+    failure happened during dataset generation/preparation or during the
+    sweep itself — don't stop the batch; each returns a result with status.
 
     Args:
         case_config_path: Path to a case config defining all assignments
@@ -204,7 +261,8 @@ def run_assignment_matrix(
         project_root: Root directory for resolving src/ (auto-detected if None)
 
     Returns:
-        List of AssignmentResult objects, one per assignment (success or failure)
+        List of AssignmentResult objects, one per assignment (success or
+        failure), in the same order as the case config's `[[assignments]]`.
 
     Note:
         For solver comparison after training, use comparison workflows:
@@ -237,9 +295,9 @@ def run_assignment_matrix(
 
     logger.info(f"Training {len(assignments)} assignments from {case_config_path}")
 
-    # Open one case-level MLflow parent run so every training/search run below
-    # (including dlkit's own nested Optuna trial runs) nests under it, and so
-    # the MLflow experiment gets its artifact_location pinned before dlkit auto-creates it.
+    # Resolve the case-level MLflow topology once. Every assignment needing
+    # training joins one dlkit multirun sweep below — dlkit owns that sweep's
+    # parent run's lifecycle and per-child failure isolation natively.
     cfg, _ = load_validated_case_config(case_config_path, settings)
     training_mlflow_env = build_workflow_environment(
         tracking_uri=cfg.mlflow.tracking_uri,
@@ -248,55 +306,100 @@ def run_assignment_matrix(
     )
     mlflow_experiment_name = cfg.names.training
 
-    results: list[AssignmentResult] = []
+    results_by_id: dict[str, AssignmentResult] = {}
+    prepared_by_child_id: dict[str, PreparedTraining] = {}
+    run_specs: list[RunSpec] = []
+    any_failed = False
+
     with scoped_mlflow_environment(training_mlflow_env.env):
         session_run_name, session_tags = build_session_run_spec(
             case_config_path=case_config_path.resolve(),
             experiment_name=mlflow_experiment_name,
             phase="session_training",
         )
-        with session_parent_run(
-            tracking_uri=training_mlflow_env.tracking_uri,
-            artifact_uri=training_mlflow_env.artifact_uri,
-            run_name=session_run_name,
-            tags=session_tags.as_mlflow_tags(),
-            experiment_name=mlflow_experiment_name,
-        ) as handle:
-            # Run each assignment sequentially
-            # Sequential execution avoids GPU/memory contention and makes logs clearer
-            for assignment in assignments:
-                # Log assignment details for progress tracking
-                logger.info(f"\n{'=' * 60}")
-                logger.info(f"Assignment: {assignment.spec.assignment_display_name}")
-                logger.info(
-                    f"  Job: {assignment.spec.job_display_name or assignment.spec.job_config_path.stem}"
-                )
-                logger.info(
-                    f"  Dataset: {assignment.spec.dataset_display_name or assignment.workspace.dataset_id}"
-                )
-                logger.info(f"{'=' * 60}")
 
-                # Run single assignment (catches exceptions internally)
-                result = run_assignment(
-                    settings=settings,
-                    job_config_path=assignment.spec.job_config_path,
-                    data_config_path=assignment.spec.data_config_path,
-                    output_root=batch.output_root,
-                    force=force,
-                    src_hash=src_hash,
-                    max_epochs=max_epochs,
-                    assignment_id=assignment.spec.assignment_id,
-                    assignment_display_name=assignment.spec.assignment_display_name,
-                    dataset_registry_id=assignment.spec.dataset_id,
-                    dataset_display_name=assignment.spec.dataset_display_name,
-                    job_registry_id=assignment.spec.job_id,
-                    job_display_name=assignment.spec.job_display_name,
-                    parent_run_id=handle.parent_run_id,
-                    mlflow_experiment_name=mlflow_experiment_name,
-                    tracking_uri=training_mlflow_env.tracking_uri,
-                )
-                results.append(result)
-                if not result.is_success:
-                    handle.mark_failed()
+        # Phase 1: Generate/cache each assignment's dataset and run its MLflow
+        # reuse check. Cache hits resolve immediately; everything else is
+        # prepared as one child of the sweep below.
+        for assignment in assignments:
+            spec = assignment.spec
+            logger.info(f"\n{'=' * 60}")
+            logger.info(f"Assignment: {spec.assignment_display_name}")
+            logger.info(f"  Job: {spec.job_display_name or spec.job_config_path.stem}")
+            logger.info(
+                f"  Dataset: {spec.dataset_display_name or assignment.workspace.dataset_id}"
+            )
+            logger.info(f"{'=' * 60}")
 
-    return results
+            outcome = run_assignment(
+                settings=settings,
+                job_config_path=spec.job_config_path,
+                data_config_path=spec.data_config_path,
+                output_root=batch.output_root,
+                force=force,
+                src_hash=src_hash,
+                max_epochs=max_epochs,
+                assignment_id=spec.assignment_id,
+                assignment_display_name=spec.assignment_display_name,
+                dataset_registry_id=spec.dataset_id,
+                dataset_display_name=spec.dataset_display_name,
+                job_registry_id=spec.job_id,
+                job_display_name=spec.job_display_name,
+                mlflow_experiment_name=mlflow_experiment_name,
+                tracking_uri=training_mlflow_env.tracking_uri,
+            )
+            match outcome:
+                case PreparedTraining():
+                    prepared_by_child_id[spec.assignment_id] = outcome
+                    run_specs.append(to_run_spec(outcome))
+                case AssignmentResult():
+                    results_by_id[spec.assignment_id] = outcome
+                    if not outcome.is_success:
+                        any_failed = True
+
+        # Phase 2: Dispatch every assignment that needs training as one sweep.
+        sweep_result = None
+        if run_specs:
+            sweep_result = run_multirun_spec(
+                MultiRunSpec(
+                    experiment_name=mlflow_experiment_name,
+                    parent_run_name=session_run_name,
+                    parent_tags=dict(session_tags.as_mlflow_tags()),
+                    failure_policy="continue",
+                    children=tuple(run_specs),
+                )
+            )
+            for child_outcome in sweep_result.children:
+                prepared = prepared_by_child_id[child_outcome.child_id]
+                try:
+                    match child_outcome:
+                        case ChildSuccess():
+                            result = _finalize_assignment_child(
+                                prepared=prepared,
+                                execution_result=child_outcome.result,
+                            )
+                            results_by_id[child_outcome.child_id] = result
+                            if not result.is_success:
+                                any_failed = True
+                        case ChildFailure():
+                            any_failed = True
+                            logger.error(
+                                f"Assignment '{child_outcome.child_id}' failed: {child_outcome.message}"
+                            )
+                            results_by_id[child_outcome.child_id] = AssignmentResult(
+                                assignment_id=child_outcome.child_id,
+                                assignment_display_name=prepared.resolved_assignment_display_name,
+                                status="Failed",
+                                error=child_outcome.message,
+                            )
+                finally:
+                    cleanup_prepared_training(prepared)
+
+        if sweep_result is not None:
+            finalize_session_parent_run(
+                tracking_uri=sweep_result.tracking_uri or training_mlflow_env.tracking_uri,
+                run_id=sweep_result.parent_run_id,
+                status="FAILED" if any_failed else "FINISHED",
+            )
+
+    return [results_by_id[assignment.spec.assignment_id] for assignment in assignments]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -10,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from dlkit.common import ChildSuccess
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, TrainingJobConfig
 
 from neuralls.composition.assignments.evaluation import (
@@ -17,11 +19,13 @@ from neuralls.composition.assignments.evaluation import (
     EvaluationBatchResult,
     EvaluationConfigPaths,
     EvaluationRunResult,
+    PreparedEvaluation,
+    _finalize_eval_child,
     _materialize_inference_settings,
     _as_inference_job,
     _with_eval_runtime_dataset,
-    eval_assignment,
     eval_batch,
+    to_eval_run_spec,
     write_eval_metric_report,
 )
 from neuralls.composition.assignments.runtime_dataset_contract import (
@@ -258,6 +262,28 @@ def two_assignment_case_config(tmp_path: Path) -> Path:
     return path
 
 
+def _fake_prepared_evaluation(tmp_path: Path, assignment_id: str) -> PreparedEvaluation:
+    """Minimal ``PreparedEvaluation`` stand-in for these integration tests.
+
+    Mirrors ``test_runner.py``'s ``_fake_prepared_training``: a real
+    ``PreparedEvaluation`` (needed so ``_finalize_eval_child`` can read its
+    fields) with a duck-typed ``AssignmentEntry`` and a mocked MLflow client —
+    the real settings-resolution pipeline is skipped by mocking
+    ``prepare_evaluation_settings``/``run_multirun_spec``.
+    """
+    return PreparedEvaluation(
+        inference_settings=MagicMock(),
+        assignment=AssignmentEntry(id=assignment_id, dataset="d1", job="j1"),
+        resolved_assignment_display_name=assignment_id,
+        training_run_id="train-1",
+        client=MagicMock(),
+        split_file=tmp_path / "split.json",
+        output_root=tmp_path,
+        label="1",
+        run_name=assignment_id,
+    )
+
+
 def test_eval_batch_continues_after_one_assignment_fails(
     two_assignment_case_config: Path,
     tmp_path: Path,
@@ -270,32 +296,33 @@ def test_eval_batch_continues_after_one_assignment_fails(
     lose already-completed reporting.
     """
     cfg = load_case_config(two_assignment_case_config, neuralls_settings)
-    ok_result = EvaluationRunResult(
-        label="1",
-        assignment_id="assign-ok",
-        assignment_display_name="assign-ok",
-        training_run_id="train-1",
-        evaluation_run_id="eval-1",
-        metrics={"mae": 0.1},
-        split_file=tmp_path / "split.json",
-        figures_dir=tmp_path / "figures",
+    prepared_ok = _fake_prepared_evaluation(tmp_path, "assign-ok")
+    fake_result = SimpleNamespace(mlflow_run_id="eval-1", metrics={"mae": 0.1}, figures={})
+    sweep_result = SimpleNamespace(
+        parent_run_id="parent-run-1",
+        tracking_uri=cfg.mlflow.tracking_uri,
+        children=(
+            ChildSuccess(
+                child_id="assign-ok", label="assign-ok", run_id="eval-1", result=fake_result
+            ),
+        ),
     )
 
-    def _fake_eval_assignment(*, assignment, **kwargs):
+    def _fake_prepare(*, assignment, **kwargs):
         if assignment.id == "assign-fail":
             raise RuntimeError("checkpoint missing")
-        return ok_result
+        return prepared_ok
 
     with (
         patch(
-            "neuralls.composition.assignments.evaluation.eval_assignment",
-            side_effect=_fake_eval_assignment,
-        ),
+            "neuralls.composition.assignments.evaluation.prepare_evaluation_settings",
+            side_effect=_fake_prepare,
+        ) as mock_prepare,
         patch(
-            "neuralls.composition.tracking.session.create_session_parent_run",
-            return_value="parent-run-1",
-        ),
-        patch("neuralls.composition.tracking.session.finalize_session_parent_run"),
+            "neuralls.composition.assignments.evaluation.run_multirun_spec",
+            return_value=sweep_result,
+        ) as mock_sweep,
+        patch("neuralls.composition.assignments.evaluation.finalize_session_parent_run"),
     ):
         batch = eval_batch(
             cfg=cfg,
@@ -304,6 +331,8 @@ def test_eval_batch_continues_after_one_assignment_fails(
             case_config_path=two_assignment_case_config,
         )
 
+    assert mock_prepare.call_count == 2
+    assert mock_sweep.called
     assert [result.assignment_id for result in batch.results] == ["assign-ok"]
 
     with patch("mlflow.tracking.MlflowClient") as mock_client_cls:
@@ -315,76 +344,81 @@ def test_eval_batch_continues_after_one_assignment_fails(
     assert logged_paths == {"batch_metric_mae.png", "batch_eval_labels.json"}
 
 
-def test_eval_assignment_passes_parent_link_hooks(
-    monkeypatch,
-    tmp_path: Path,
+def test_eval_batch_falls_back_to_own_parent_run_when_every_assignment_fails(
+    two_assignment_case_config: Path,
     neuralls_settings,
 ) -> None:
-    """eval_assignment wires build_parent_link_hooks into evaluate_fn — the
-    same helper train_model() uses — so the child run is nested under its
-    session parent atomically at creation, not via a post-hoc tag set after
-    evaluate_fn() has already closed the run.
+    """No RunSpecs to dispatch still needs one MLflow run for the summary report.
+
+    dlkit rejects an empty sweep, so when every assignment fails in phase 1,
+    eval_batch must fall back to creating its own session-parent run rather
+    than calling run_multirun_spec at all.
     """
-    mock_client = MagicMock()
-    context = EvaluationAssignmentContext(
-        client=mock_client,
+    cfg = load_case_config(two_assignment_case_config, neuralls_settings)
+
+    with (
+        patch(
+            "neuralls.composition.assignments.evaluation.prepare_evaluation_settings",
+            side_effect=RuntimeError("checkpoint missing"),
+        ),
+        patch("neuralls.composition.assignments.evaluation.run_multirun_spec") as mock_sweep,
+        patch(
+            "neuralls.composition.assignments.evaluation.create_session_parent_run",
+            return_value="fallback-parent-run",
+        ) as mock_create,
+        patch(
+            "neuralls.composition.assignments.evaluation.finalize_session_parent_run"
+        ) as mock_finalize,
+    ):
+        batch = eval_batch(
+            cfg=cfg,
+            configs_dir=two_assignment_case_config.parent,
+            settings=neuralls_settings,
+            case_config_path=two_assignment_case_config,
+        )
+
+    assert not mock_sweep.called
+    assert mock_create.called
+    assert batch.results == []
+    assert batch.parent_run_id == "fallback-parent-run"
+    assert mock_finalize.call_args.kwargs["status"] == "FAILED"
+
+
+def test_to_eval_run_spec_builds_run_spec_from_prepared_evaluation(tmp_path: Path) -> None:
+    """to_eval_run_spec() carries each child's own resolved settings into the sweep."""
+    settings_sentinel = object()
+    prepared = PreparedEvaluation(
+        inference_settings=settings_sentinel,
+        assignment=AssignmentEntry(id="assign-ok", dataset="d1", job="j1"),
+        resolved_assignment_display_name="Assign OK",
         training_run_id="train-1",
-        artifacts=TrainingEvaluationArtifacts(
-            checkpoint_path=tmp_path / "model.ckpt",
-            split_file=tmp_path / "split.json",
-            config_artifacts=TrainingConfigArtifacts(config_dir=None),
-        ),
-        config_paths=EvaluationConfigPaths(
-            job_config_path=tmp_path / "job.toml",
-            data_config_path=tmp_path / "data.toml",
-            staged_job_config_path=tmp_path / "job.toml",
-            staged_data_config_path=tmp_path / "data.toml",
-        ),
-        dataset_display_name=None,
-        job_display_name=None,
-    )
-    monkeypatch.setattr(
-        "neuralls.composition.assignments.evaluation._build_eval_context",
-        lambda **kwargs: context,
-    )
-    monkeypatch.setattr(
-        "neuralls.composition.assignments.evaluation._materialize_inference_settings",
-        lambda **kwargs: SimpleNamespace(data=None),
-    )
-
-    sentinel_hooks = object()
-    build_hooks_calls: list[str | None] = []
-
-    def fake_build_parent_link_hooks(parent_run_id):
-        build_hooks_calls.append(parent_run_id)
-        return sentinel_hooks
-
-    monkeypatch.setattr(
-        "neuralls.composition.assignments.evaluation.build_parent_link_hooks",
-        fake_build_parent_link_hooks,
-    )
-
-    captured_kwargs: dict[str, object] = {}
-
-    def fake_evaluate_fn(settings, **kwargs):
-        captured_kwargs.update(kwargs)
-        return SimpleNamespace(mlflow_run_id="run-99", metrics={"mae": 0.1}, figures={})
-
-    eval_assignment(
-        cfg=CaseConfig(),
-        configs_dir=tmp_path,
-        settings=neuralls_settings,
-        assignment=AssignmentEntry(id="a1", dataset="d1", job="j1"),
+        client=MagicMock(),
+        split_file=tmp_path / "split.json",
         output_root=tmp_path,
-        case_config_path=tmp_path / "case.toml",
         label="1",
-        tracking_uri="sqlite:///" + str(tmp_path / "mlflow.db"),
-        parent_run_id="parent-1",
-        evaluate_fn=fake_evaluate_fn,
-        mlflow_client_factory=lambda **kwargs: MagicMock(),
+        run_name="Assign OK",
     )
 
-    assert build_hooks_calls == ["parent-1"]
-    assert captured_kwargs["hooks"] is sentinel_hooks
-    tagged_keys = [call.args[1] for call in mock_client.set_tag.call_args_list]
-    assert "mlflow.parentRunId" not in tagged_keys
+    run_spec = to_eval_run_spec(prepared)
+
+    assert run_spec.id == "assign-ok"
+    assert run_spec.label == "Assign OK"
+    assert run_spec.settings is settings_sentinel
+    assert run_spec.run_name == "Assign OK"
+
+
+def test_finalize_eval_child_saves_outputs_and_tags_run(tmp_path: Path) -> None:
+    """_finalize_eval_child saves metrics/figures and tags the child's MLflow run."""
+    mock_client = MagicMock()
+    prepared = _fake_prepared_evaluation(tmp_path, "assign-ok")
+    prepared = replace(prepared, client=mock_client)
+    fake_result = SimpleNamespace(mlflow_run_id="eval-1", metrics={"mae": 0.1}, figures={})
+
+    result = _finalize_eval_child(prepared, fake_result)
+
+    assert result.assignment_id == "assign-ok"
+    assert result.evaluation_run_id == "eval-1"
+    assert result.metrics == {"mae": 0.1}
+    metrics_file = tmp_path / "eval" / "assign-ok" / "metrics" / "evaluation_metrics.json"
+    assert metrics_file.exists()
+    assert mock_client.set_tag.called

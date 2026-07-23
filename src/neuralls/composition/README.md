@@ -92,12 +92,26 @@ construction, even though `NpyEntry` can forward format-specific load kwargs
 such as `mmap_mode`.
 
 Eval-only assembly reuses the same supervised dataset contract as training but
-does not recreate split policy. It resolves the latest finished training run
-for each assignment, downloads that run's checkpoint and `splits/*.json`
-artifact from MLflow, patches the downloaded split file into
-`data.splits.filepath`, and delegates metrics plus regression figures to
-DLKit's `evaluate()` API. Missing or ambiguous split artifacts are hard
+does not recreate split policy. For each assignment it resolves the latest
+finished training run, downloads that run's checkpoint and `splits/*.json`
+artifact from MLflow, and patches the downloaded split file into
+`data.splits.filepath` — producing one fully-resolved, assignment-specific
+`InferenceJobConfig` per child. Missing or ambiguous split artifacts are hard
 failures because regenerating ratios would evaluate a different test set.
+
+Eval assembly delegates sweep orchestration to DLKit the same way training
+does: every prepared assignment becomes one DLKit multirun `RunSpec`, and the
+whole case config's selected assignments dispatch as a single
+`run_multirun_spec()` sweep. DLKit's `MultiRunOrchestrator` owns the parent
+run's lifecycle, per-child MLflow run creation and `mlflow.parentRunId`
+tagging, and per-child failure isolation; composition's only remaining job is
+building each child's settings ahead of dispatch and finalizing (saving
+metrics/figures, tagging bookkeeping params) each successful `ChildOutcome`
+afterward. Resolving a distinct `InferenceJobConfig` per assignment before
+dispatch — rather than sharing one settings object across the sweep — is what
+lets one job evaluated across several datasets correctly evaluate each child
+against the dataset it was actually trained on, instead of the exotic
+mixed-job-batch case.
 
 Prediction payload normalization follows the same rule. Composition accepts
 DLKit's raw boundary output once, normalizes it into the canonical prediction

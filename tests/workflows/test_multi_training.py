@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import call, patch
 
 import pytest
+
+from dlkit.common import ChildSuccess
 
 from neuralls.platform.config.models.experiments import CaseConfig, ExperimentNamesConfig
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
@@ -14,12 +17,12 @@ from neuralls.platform.config.loaders import load_case_config, load_raw_toml
 from neuralls.composition.assignments.multi_training import (
     TrainingRunResult,
     _annotate_mlflow_run,
-    _collect_batch_metrics,
+    _finalize_batch_child,
     _make_label_map,
     _resolve_config_paths,
-    _train_single,
     train_batch,
 )
+from neuralls.composition.assignments.training import PreparedTraining
 from neuralls.platform.tracking.mlflow import create_session_parent_run
 
 
@@ -97,6 +100,59 @@ def training_run_results(tmp_path: Path) -> list[TrainingRunResult]:
 
 
 @pytest.fixture
+def make_prepared_training(tmp_path: Path):
+    """Factory for a minimal ``PreparedTraining`` stand-in, keyed by assignment id.
+
+    ``assignment``/``run_config`` are duck-typed ``SimpleNamespace`` objects
+    carrying only the attributes ``_finalize_batch_child``/``to_run_spec``
+    actually read — real ``RunnableAssignment``/``MlflowRunConfig`` instances
+    aren't needed for these unit tests.
+    """
+
+    def _make(assignment_id: str = "exp-1") -> PreparedTraining:
+        model_profile = _write_model_profile(
+            tmp_path / f"{assignment_id}-model.toml", "NormScaledLinearFFNN"
+        )
+        job_cfg = _write_job_config(tmp_path / f"{assignment_id}-job.toml", model_profile)
+        data_cfg = tmp_path / f"{assignment_id}-dataset.toml"
+        data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
+        spec = SimpleNamespace(
+            assignment_id=assignment_id,
+            assignment_display_name=assignment_id,
+            dataset_id="ds-1",
+            dataset_display_name=None,
+            job_id="job-1",
+            job_display_name=None,
+        )
+        return PreparedTraining(
+            workflow_settings=None,
+            run_config=SimpleNamespace(
+                experiment_name="Train",
+                run_name=assignment_id,
+                tags={"assignment_id": assignment_id},
+            ),
+            runtime_mlflow_env=None,
+            tmp_path=tmp_path,
+            workspace=None,
+            assignment=SimpleNamespace(spec=spec),
+            resolved_assignment_display_name=assignment_id,
+            dataset_id="ds-1",
+            resolved_dataset_display_name="ds-1",
+            contract=None,
+            config_path=job_cfg,
+            resolved_data_config_path=data_cfg,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def prepared_training(make_prepared_training) -> PreparedTraining:
+    """A single ``PreparedTraining`` stand-in for finalize-time unit tests."""
+    return make_prepared_training()
+
+
+@pytest.fixture
 def job_config_file(tmp_path: Path) -> Path:
     """Create a minimal job config TOML file."""
     model_profile = _write_model_profile(
@@ -156,13 +212,6 @@ def test_make_label_map(training_run_results: list[TrainingRunResult]) -> None:
     assert result["3"]["mlflow_run_id"] == "ccc333"
 
 
-def test_collect_batch_metrics(training_run_results: list[TrainingRunResult]) -> None:
-    """Batch metrics average matching eval or val keys."""
-    result = _collect_batch_metrics(training_run_results)
-    assert result["avg_eval/mae"] == pytest.approx(0.04)
-    assert "avg_val_loss" not in result
-
-
 def test_resolve_config_paths(
     tmp_path: Path,
     job_config_file: Path,
@@ -181,17 +230,15 @@ def test_resolve_config_paths(
     assert data_path == dataset_config_file
 
 
-def test_train_single_returns_run_id_and_metrics(tmp_path: Path, neuralls_settings) -> None:
-    """Single training run returns the MLflow run id and fetched metrics."""
-    model_profile = _write_model_profile(tmp_path / "model.toml", "NormScaledLinearFFNN")
-    job_cfg = _write_job_config(tmp_path / "job.toml", model_profile)
-    data_cfg = tmp_path / "dataset.toml"
-    data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
-    tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlflow.db")
+def test_finalize_batch_child_returns_run_id_and_metrics(
+    prepared_training: PreparedTraining, neuralls_settings
+) -> None:
+    """Finalizing one successful multirun child returns its MLflow run id and metrics."""
+    tracking_uri = build_sqlite_tracking_uri(prepared_training.tmp_path / "mlflow.db")
 
     with (
         patch(
-            "neuralls.composition.assignments.multi_training.train_model",
+            "neuralls.composition.assignments.multi_training.finalize_prepared_training",
             return_value=("run-123", tracking_uri),
         ),
         patch(
@@ -200,61 +247,16 @@ def test_train_single_returns_run_id_and_metrics(tmp_path: Path, neuralls_settin
         ),
         patch("neuralls.composition.assignments.multi_training.MlflowClient"),
     ):
-        result = _train_single(
-            settings=neuralls_settings,
-            assignment_id="exp-1",
-            assignment_display_name="exp-1",
-            job_config_path=job_cfg,
-            data_config_path=data_cfg,
+        result = _finalize_batch_child(
             label="1",
-            output_root=None,
-            mlflow_experiment_name="Train",
+            prepared=prepared_training,
+            execution_result=object(),
+            settings=neuralls_settings,
         )
 
     assert result.mlflow_run_id == "run-123"
     assert result.metrics["eval/mae"] == pytest.approx(0.1)
-
-
-def test_train_single_forwards_parent_run_id(tmp_path: Path, neuralls_settings) -> None:
-    """Single training forwards the optional batch parent run id unchanged."""
-    model_profile = _write_model_profile(tmp_path / "model.toml", "NormScaledLinearFFNN")
-    job_cfg = _write_job_config(tmp_path / "job.toml", model_profile)
-    data_cfg = tmp_path / "dataset.toml"
-    data_cfg.write_text('id = "dataset"\n[source]\nmatrix_path = "matrix.txt"\n')
-    ckpt_dir = tmp_path / "ckpt"
-    ckpt_dir.mkdir()
-    ckpt = ckpt_dir / "model.ckpt"
-    ckpt.touch()
-
-    with (
-        patch(
-            "neuralls.composition.assignments.multi_training.train_model",
-            return_value=("run-123", build_sqlite_tracking_uri(tmp_path / "mlflow.db")),
-        ) as mock_train,
-        patch("neuralls.composition.assignments.multi_training.load_data_config"),
-        patch(
-            "neuralls.composition.assignments.multi_training.resolve_dataset_identity"
-        ) as mock_identity,
-        patch("neuralls.composition.assignments.multi_training.read_model_class_name"),
-        patch(
-            "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
-        ),
-        patch("neuralls.composition.assignments.multi_training.MlflowClient"),
-    ):
-        mock_identity.return_value.name = "dataset-id"
-        _train_single(
-            settings=neuralls_settings,
-            assignment_id="exp-1",
-            assignment_display_name="exp-1",
-            job_config_path=job_cfg,
-            data_config_path=data_cfg,
-            label="1",
-            output_root=None,
-            mlflow_experiment_name="Train",
-            parent_run_id="parent-123",
-        )
-
-    assert mock_train.call_args.kwargs["parent_run_id"] == "parent-123"
+    assert result.assignment_id == "exp-1"
 
 
 @pytest.fixture
@@ -319,22 +321,37 @@ def test_train_batch_returns_local_output_dir(
     valid_experiments_toml: Path,
     tmp_path: Path,
     neuralls_settings,
+    make_prepared_training,
 ) -> None:
-    """Batch output is a local training directory and no batch comparison run is opened."""
+    """Batch output is a local training directory, sourced from one dlkit multirun sweep."""
     tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlflow.db")
     cfg = load_case_config(valid_experiments_toml, neuralls_settings)
+    prepared = make_prepared_training("ffnn_test")
+    sweep_result = SimpleNamespace(
+        parent_run_id="parent-run-1",
+        tracking_uri=tracking_uri,
+        children=(
+            ChildSuccess(
+                child_id="ffnn_test", label="ffnn_test", run_id="run-123", result=object()
+            ),
+        ),
+    )
 
     with (
         patch(
-            "neuralls.composition.assignments.multi_training.train_model",
+            "neuralls.composition.assignments.multi_training.prepare_training_settings",
+            return_value=prepared,
+        ) as mock_prepare,
+        patch(
+            "neuralls.composition.assignments.multi_training.run_multirun_spec",
+            return_value=sweep_result,
+        ) as mock_sweep,
+        patch(
+            "neuralls.composition.assignments.multi_training.finalize_prepared_training",
             return_value=("run-123", tracking_uri),
-        ) as mock_train,
+        ),
         patch(
-            "neuralls.composition.tracking.session.create_session_parent_run",
-            return_value="parent-run-1",
-        ) as mock_create_parent,
-        patch(
-            "neuralls.composition.tracking.session.finalize_session_parent_run"
+            "neuralls.composition.assignments.multi_training.finalize_session_parent_run"
         ) as mock_finalize_parent,
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
@@ -348,11 +365,15 @@ def test_train_batch_returns_local_output_dir(
             case_config_path=valid_experiments_toml,
         )
 
-    assert mock_train.call_count == 1
-    assert mock_train.call_args.kwargs["mlflow_experiment_name"] == ExperimentNamesConfig().training
-    assert mock_train.call_args.kwargs["parent_run_id"] == "parent-run-1"
-    mock_create_parent.assert_called_once()
-    mock_finalize_parent.assert_called_once()
+    assert mock_prepare.call_count == 1
+    assert (
+        mock_prepare.call_args.kwargs["mlflow_experiment_name"] == ExperimentNamesConfig().training
+    )
+    assert mock_prepare.call_args.kwargs["batched"] is True
+    mock_sweep.assert_called_once()
+    mock_finalize_parent.assert_called_once_with(
+        tracking_uri=tracking_uri, run_id="parent-run-1", status="FINISHED"
+    )
     assert result.output_dir == (tmp_path / "training")
     assert result.label_map["1"]["assignment_id"] == "ffnn_test"
 
@@ -361,6 +382,7 @@ def test_train_batch_forwards_custom_training_experiment_name(
     valid_experiments_toml: Path,
     tmp_path: Path,
     neuralls_settings,
+    make_prepared_training,
 ) -> None:
     """Batch training forwards the case-configured training experiment name."""
     valid_experiments_toml.write_text(
@@ -392,17 +414,31 @@ def test_train_batch_forwards_custom_training_experiment_name(
     )
     cfg = load_case_config(valid_experiments_toml, neuralls_settings)
     tracking_uri = build_sqlite_tracking_uri(tmp_path / "mlflow.db")
+    prepared = make_prepared_training("ffnn_test")
+    sweep_result = SimpleNamespace(
+        parent_run_id="parent-run-1",
+        tracking_uri=tracking_uri,
+        children=(
+            ChildSuccess(
+                child_id="ffnn_test", label="ffnn_test", run_id="run-123", result=object()
+            ),
+        ),
+    )
 
     with (
         patch(
-            "neuralls.composition.assignments.multi_training.train_model",
-            return_value=("run-123", tracking_uri),
-        ) as mock_train,
+            "neuralls.composition.assignments.multi_training.prepare_training_settings",
+            return_value=prepared,
+        ) as mock_prepare,
         patch(
-            "neuralls.composition.tracking.session.create_session_parent_run",
-            return_value="parent-run-1",
+            "neuralls.composition.assignments.multi_training.run_multirun_spec",
+            return_value=sweep_result,
         ),
-        patch("neuralls.composition.tracking.session.finalize_session_parent_run"),
+        patch(
+            "neuralls.composition.assignments.multi_training.finalize_prepared_training",
+            return_value=("run-123", tracking_uri),
+        ),
+        patch("neuralls.composition.assignments.multi_training.finalize_session_parent_run"),
         patch(
             "neuralls.composition.assignments.multi_training.fetch_mlflow_metrics", return_value={}
         ),
@@ -415,7 +451,7 @@ def test_train_batch_forwards_custom_training_experiment_name(
             case_config_path=valid_experiments_toml,
         )
 
-    assert mock_train.call_args.kwargs["mlflow_experiment_name"] == "CustomTrain"
+    assert mock_prepare.call_args.kwargs["mlflow_experiment_name"] == "CustomTrain"
 
 
 def test_create_session_parent_run_uses_case_config_identity(tmp_path: Path) -> None:

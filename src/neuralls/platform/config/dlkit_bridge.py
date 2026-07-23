@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from dlkit.common.errors import ConfigValidationError
 from dlkit.infrastructure.config.factories import load_job
 from dlkit.infrastructure.config.job_config import (
+    ConvergenceJobConfig,
     InferenceJobConfig,
+    MultiRunJobConfig,
     SearchJobConfig,
     TrainingJobConfig,
 )
@@ -22,6 +25,21 @@ def load_job_config(path: Path, settings: NeurallsSettings) -> AnyJobSettings:
     Legacy uppercase manifests are not special-cased: they have no ``[run]``
     section, so DLKit's own validation in ``load_job()`` already fails fast
     with ``ConfigValidationError: No run.type found...``.
+
+    ``load_job()``'s return type also covers ``ConvergenceJobConfig``/
+    ``MultiRunJobConfig`` (sweep-level configs, not one job) — rejected here
+    since this function's contract is "one job", matching its callers
+    (per-assignment training/search/inference).
+
+    Raises:
+        ConfigValidationError: *path* resolves to a sweep-level config
+            (``run.type`` of ``"converge"`` or ``"multirun"``).
     """
     del settings
-    return load_job(path)
+    loaded = load_job(path)
+    if isinstance(loaded, (ConvergenceJobConfig, MultiRunJobConfig)):
+        raise ConfigValidationError(
+            f"{path} is a {type(loaded).__name__}, not a single job config — "
+            "load_job_config() only loads train/predict/search jobs."
+        )
+    return loaded

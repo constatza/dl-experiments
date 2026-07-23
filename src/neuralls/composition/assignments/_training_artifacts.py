@@ -56,7 +56,7 @@ def _build_training_run_config(
     mlflow_experiment_name: str | None,
     runtime_mlflow_env: Mapping[str, str],
     workspace_root: Path,
-    parent_run_id: str | None = None,
+    include_timestamp: bool = True,
 ) -> MlflowRunConfig:
     """Build the execute()-time MLflow run config for training.
 
@@ -69,7 +69,9 @@ def _build_training_run_config(
         mlflow_experiment_name: Override for the MLflow experiment bucket name.
         runtime_mlflow_env: MLflow environment variable mapping.
         workspace_root: Root directory for the training workspace.
-        parent_run_id: Optional parent run UUID for nested tracking.
+        include_timestamp: Whether to append a timestamp to the run name.
+            False for batch runs, where the parent/sweep already disambiguates
+            children without one.
 
     Returns:
         Fully configured MlflowRunConfig.
@@ -89,9 +91,9 @@ def _build_training_run_config(
             experiment_name=experiment_name,
             paths=paths,
             workspace_root=workspace_root,
-            include_timestamp=parent_run_id is None,
+            include_timestamp=include_timestamp,
         )
-    ts = f" | {format_run_timestamp()}" if parent_run_id is None else ""
+    ts = f" | {format_run_timestamp()}" if include_timestamp else ""
     return MlflowRunConfig(
         experiment_name=experiment_name,
         run_name=f"{assignment_display_name}{ts}",

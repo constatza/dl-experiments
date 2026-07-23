@@ -5,13 +5,45 @@ without involving the CLI layer. These are integration tests that verify
 the full workflow logic.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import tomli_w
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+from dlkit.common import ChildSuccess
+
+from neuralls.composition.assignments.training import PreparedTraining
 from neuralls.composition.assignments.training_batch import run_assignment_matrix
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 import os
+
+
+def _fake_prepared_training(tmp_path: Path, assignment_id: str) -> PreparedTraining:
+    """Minimal ``PreparedTraining`` stand-in for these integration tests.
+
+    A real ``PreparedTraining`` instance (needed so `run_assignment_matrix`'s
+    ``match``/``case`` dispatch on it works) with duck-typed ``SimpleNamespace``
+    stand-ins for the nested fields ``to_run_spec()``/``_finalize_assignment_child``
+    actually read — the real training pipeline is skipped by mocking
+    ``prepare_training_settings``/``run_multirun_spec``/``finalize_prepared_training``.
+    """
+    spec = SimpleNamespace(assignment_id=assignment_id, assignment_display_name=assignment_id)
+    return PreparedTraining(
+        workflow_settings=MagicMock(),
+        run_config=SimpleNamespace(run_name=assignment_id, tags={}),
+        runtime_mlflow_env=None,
+        tmp_path=tmp_path / f"{assignment_id}-workspace",
+        workspace=None,
+        assignment=SimpleNamespace(spec=spec),
+        resolved_assignment_display_name=assignment_id,
+        dataset_id="ds-1",
+        resolved_dataset_display_name=assignment_id,
+        contract=None,
+        config_path=tmp_path / f"{assignment_id}-job.toml",
+        resolved_data_config_path=tmp_path / f"{assignment_id}-dataset.toml",
+    )
 
 
 def _write_training_job_config(path: Path, *, experiment_name: str) -> None:
@@ -81,9 +113,7 @@ def _write_training_job_config(path: Path, *, experiment_name: str) -> None:
         tomli_w.dump(job_config, f)
 
 
-@patch("neuralls.composition.assignments.training_batch.train_model")
 def test_run_assignments_full_flow(
-    mock_train: MagicMock,
     tmp_path: Path,
     neuralls_settings,
 ) -> None:
@@ -181,27 +211,48 @@ def test_run_assignments_full_flow(
     # Set NEURALLS_OUTPUT_DIR to ensure no contamination (although we passed project_root)
     os.environ["NEURALLS_OUTPUT_DIR"] = str(data_dir / "output")
 
-    # Mock training to return a (run_id, tracking_uri) pair
-    mock_train.return_value = ("test-run-id", tracking_uri)
-
-    # 6. Run the flow
-    results = run_assignment_matrix(
-        case_config_path=master_config_path,
-        settings=neuralls_settings,
-        force=True,
-        project_root=tmp_path,
+    # Mock the dlkit sweep dispatch/finalization to avoid expensive training.
+    prepared = _fake_prepared_training(tmp_path, exp_name)
+    sweep_result = SimpleNamespace(
+        parent_run_id="parent-run-1",
+        tracking_uri=tracking_uri,
+        children=(
+            ChildSuccess(child_id=exp_name, label=exp_name, run_id="test-run-id", result=object()),
+        ),
     )
+
+    with (
+        patch(
+            "neuralls.composition.assignments.training_batch.prepare_training_settings",
+            return_value=prepared,
+        ) as mock_prepare,
+        patch(
+            "neuralls.composition.assignments.training_batch.run_multirun_spec",
+            return_value=sweep_result,
+        ) as mock_sweep,
+        patch(
+            "neuralls.composition.assignments.training_batch.finalize_prepared_training",
+            return_value=("test-run-id", tracking_uri),
+        ),
+        patch("neuralls.composition.assignments.training_batch.finalize_session_parent_run"),
+    ):
+        # 6. Run the flow
+        results = run_assignment_matrix(
+            case_config_path=master_config_path,
+            settings=neuralls_settings,
+            force=True,
+            project_root=tmp_path,
+        )
 
     # Verify workflow behavior
     assert len(results) == 1
     assert results[0].assignment_id == exp_name
     assert results[0].status == "Success"
-    assert mock_train.called
+    assert mock_prepare.called
+    assert mock_sweep.called
 
 
-@patch("neuralls.composition.assignments.training_batch.train_model")
 def test_run_assignment_matrix_with_mlflow(
-    mock_train: MagicMock,
     tmp_path: Path,
     neuralls_settings,
 ) -> None:
@@ -283,19 +334,44 @@ def test_run_assignment_matrix_with_mlflow(
     # Set NEURALLS_OUTPUT_DIR
     os.environ["NEURALLS_OUTPUT_DIR"] = str(data_dir / "output")
 
-    # Mock training to return a (run_id, tracking_uri) pair
-    mock_train.return_value = ("mlflow-test-run-id", tracking_uri)
-
-    # 5. Run the flow with MLflow enabled
-    results = run_assignment_matrix(
-        case_config_path=master_config_path,
-        settings=neuralls_settings,
-        force=True,
-        project_root=tmp_path,
+    # Mock the dlkit sweep dispatch/finalization to avoid expensive training.
+    prepared = _fake_prepared_training(tmp_path, exp_name)
+    sweep_result = SimpleNamespace(
+        parent_run_id="parent-run-1",
+        tracking_uri=tracking_uri,
+        children=(
+            ChildSuccess(
+                child_id=exp_name, label=exp_name, run_id="mlflow-test-run-id", result=object()
+            ),
+        ),
     )
+
+    with (
+        patch(
+            "neuralls.composition.assignments.training_batch.prepare_training_settings",
+            return_value=prepared,
+        ) as mock_prepare,
+        patch(
+            "neuralls.composition.assignments.training_batch.run_multirun_spec",
+            return_value=sweep_result,
+        ) as mock_sweep,
+        patch(
+            "neuralls.composition.assignments.training_batch.finalize_prepared_training",
+            return_value=("mlflow-test-run-id", tracking_uri),
+        ),
+        patch("neuralls.composition.assignments.training_batch.finalize_session_parent_run"),
+    ):
+        # 5. Run the flow with MLflow enabled
+        results = run_assignment_matrix(
+            case_config_path=master_config_path,
+            settings=neuralls_settings,
+            force=True,
+            project_root=tmp_path,
+        )
 
     # Verify workflow behavior
     assert len(results) == 1
     assert results[0].assignment_id == exp_name
     assert results[0].status == "Success"
-    assert mock_train.called
+    assert mock_prepare.called
+    assert mock_sweep.called

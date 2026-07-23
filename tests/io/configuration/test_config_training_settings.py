@@ -190,7 +190,11 @@ def test_checked_in_jobs_load_through_dlkit(config_path: Path) -> None:
     that synthetic test fixtures elsewhere don't exercise.
     """
     from dlkit.infrastructure.config.factories import load_job
+    from dlkit.infrastructure.config.job_config import ConvergenceJobConfig, MultiRunJobConfig
 
     job = load_job(config_path)
+    assert not isinstance(job, (ConvergenceJobConfig, MultiRunJobConfig)), (
+        f"{config_path} is a sweep-level config, not a single job"
+    )
     assert job.model is not None
     assert job.data is not None

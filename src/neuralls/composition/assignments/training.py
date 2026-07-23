@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dlkit.engine.workflows.multi_run import RunSpec
 from dlkit.infrastructure.config.core.patching import patch_model
-from dlkit.interfaces.api import execute
-from dlkit.interfaces.api.domain.override_types import ExecutionOverrides
 
 from neuralls.composition.assignments._dataset_assembly import (
     _extra_feature_names_from_settings,
@@ -32,11 +32,9 @@ from neuralls.composition.assignments.runtime_dataset_contract import (
     RuntimeDatasetContract,
     default_training_dataset_contract,
 )
-from neuralls.platform.dlkit.tracking_hooks import build_parent_link_hooks
 from neuralls.platform.config.loaders import load_tracking_config
 from neuralls.platform.config.models.workspace import AssignmentWorkspace, RunnableAssignment
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
-from neuralls.platform.tracking.environment import scoped_mlflow_environment
 from neuralls.platform.tracking.extra_features import log_extra_feature_names_tag
 from neuralls.platform.tracking.mlflow import (
     MlflowRunConfig,
@@ -146,6 +144,230 @@ class _TrainingFinalizationContext:
     config_path: Path
     resolved_data_config_path: Path | None
     fallback_tracking_uri: str | None
+
+
+@dataclass(frozen=True)
+class PreparedTraining:
+    """Fully-resolved training inputs, ready for a single ``execute()`` call.
+
+    Owns a temporary workspace directory (``tmp_path``) that must outlive both
+    the ``execute()`` call and the subsequent ``finalize_prepared_training()``
+    call — release it with ``cleanup_prepared_training()`` once finalization
+    has completed (success or failure).
+    """
+
+    workflow_settings: AnyJobConfig
+    run_config: MlflowRunConfig
+    runtime_mlflow_env: MlflowRuntimeEnvironment
+    tmp_path: Path
+    workspace: AssignmentWorkspace
+    assignment: RunnableAssignment
+    resolved_assignment_display_name: str
+    dataset_id: str
+    resolved_dataset_display_name: str
+    contract: RuntimeDatasetContract
+    config_path: Path
+    resolved_data_config_path: Path
+
+
+def prepare_training_settings(
+    *,
+    config_path: str | Path,
+    data_config_path: str | Path,
+    settings: NeurallsSettings | None = None,
+    case_config_path: str | Path | None = None,
+    output_root: Path | str | None = None,
+    max_epochs: int | None = None,
+    assignment_id: str | None = None,
+    assignment_display_name: str | None = None,
+    dataset_registry_id: str | None = None,
+    dataset_display_name: str | None = None,
+    job_registry_id: str | None = None,
+    job_display_name: str | None = None,
+    mlflow_experiment_name: str | None = None,
+    batched: bool = False,
+) -> PreparedTraining:
+    """Resolve one assignment's dataset, config, and dlkit settings for training.
+
+    This is steps 1-4 of what ``train_model()`` used to do inline: load the
+    assignment config, resolve/stage dataset artifacts, build the execute()-time
+    MLflow naming/tags, and configure dlkit's settings. Splitting it out lets a
+    batch caller build every assignment's settings up front and hand them to
+    dlkit's ``run_multirun_spec()`` as a single sweep, instead of calling
+    ``execute()`` once per assignment itself.
+
+    The returned ``PreparedTraining.tmp_path`` is a real (not context-managed)
+    temp directory — the caller must eventually call
+    ``cleanup_prepared_training()`` on the result, after ``execute()`` and
+    ``finalize_prepared_training()`` have both run.
+
+    Args:
+        config_path: Path to a job configuration TOML.
+        data_config_path: Path to a dataset configuration TOML.
+        batched: True when this assignment is one child of a batch/sweep —
+            omits the run-name timestamp, since the sweep already
+            disambiguates children without one.
+
+    Returns:
+        PreparedTraining ready to pass to ``execute()`` and then
+        ``finalize_prepared_training()``.
+    """
+    resolved_case_config_path = Path(case_config_path) if case_config_path else None
+    settings = require_settings(settings, case_config_path=resolved_case_config_path)
+    runtime_environment = build_runtime_environment(
+        output_root,
+        default_output_root=settings.output_dir,
+    )
+    runtime_mlflow_env = runtime_environment.env
+
+    tmp_path = Path(tempfile.mkdtemp(prefix="neuralls_train_"))
+    try:
+        config_path = Path(config_path)
+        resolved_data_config_path = Path(data_config_path)
+        # Step 1: Load assignment configuration into temp dir
+        assignment = load_assignment(
+            job_config_path=config_path,
+            data_config_path=resolved_data_config_path,
+            neuralls_settings=settings,
+            case_config_path=resolved_case_config_path,
+            output_root=tmp_path,
+            assignment_id=assignment_id,
+            assignment_display_name=assignment_display_name,
+            dataset_registry_id=dataset_registry_id,
+            dataset_display_name=dataset_display_name,
+            job_registry_id=job_registry_id,
+            job_display_name=job_display_name,
+        )
+        workflow_settings = assignment.settings
+        workspace = assignment.workspace
+        contract = default_training_dataset_contract()
+        dataset_id = workspace.dataset_id
+        resolved_assignment_display_name = assignment.spec.assignment_display_name
+        resolved_dataset_display_name = assignment.spec.dataset_display_name or dataset_id
+
+        # Step 2: Resolve training dataset artifacts
+        _, features, targets = _load_and_prepare_data(workflow_settings, workspace, contract)
+
+        # Step 3: Build execute()-time MLflow naming and tags
+        run_config = _build_training_run_config(
+            assignment_id=assignment.spec.assignment_id,
+            assignment_display_name=resolved_assignment_display_name,
+            dataset_registry_id=assignment.spec.dataset_id,
+            job_registry_id=assignment.spec.job_id,
+            dataset_display_name=resolved_dataset_display_name,
+            mlflow_experiment_name=mlflow_experiment_name,
+            runtime_mlflow_env=runtime_mlflow_env,
+            workspace_root=workspace.root_dir,
+            include_timestamp=not batched,
+        )
+
+        # Step 4: Configure DLKit settings (dataset, paths, MLflow names)
+        workflow_settings, workspace = _configure_training_pipeline(
+            workflow_settings,
+            workspace,
+            features,
+            targets,
+            contract,
+        )
+
+        if max_epochs is not None:
+            workflow_settings = patch_model(
+                workflow_settings,
+                {"training": {"trainer": {"max_epochs": max_epochs}}},
+            )
+        tracking_backend = _resolve_tracking_backend(runtime_environment)
+        workflow_settings = patch_model(
+            workflow_settings,
+            {
+                "tracking": {
+                    "backend": tracking_backend,
+                    "uri": runtime_environment.tracking_uri,
+                }
+            },
+        )
+    except Exception:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+        raise
+
+    return PreparedTraining(
+        workflow_settings=workflow_settings,
+        run_config=run_config,
+        runtime_mlflow_env=runtime_environment,
+        tmp_path=tmp_path,
+        workspace=workspace,
+        assignment=assignment,
+        resolved_assignment_display_name=resolved_assignment_display_name,
+        dataset_id=dataset_id,
+        resolved_dataset_display_name=resolved_dataset_display_name,
+        contract=contract,
+        config_path=config_path,
+        resolved_data_config_path=resolved_data_config_path,
+    )
+
+
+def cleanup_prepared_training(prepared: PreparedTraining) -> None:
+    """Remove a prepared training run's temporary workspace directory.
+
+    Call once ``finalize_prepared_training()`` (or an earlier failure) has
+    finished needing ``prepared.tmp_path`` on disk.
+    """
+    shutil.rmtree(prepared.tmp_path, ignore_errors=True)
+
+
+def to_run_spec(prepared: PreparedTraining) -> RunSpec:
+    """Build a dlkit multirun ``RunSpec`` for one already-prepared assignment.
+
+    Reuses the same naming/tags ``execute()`` would otherwise receive via
+    ``ExecutionOverrides`` — dlkit's ``MultiRunOrchestrator`` merges
+    ``RunSpec.tags`` into the child's own ``experiment.tags`` and applies
+    ``run_name``/experiment identically to what a single ``execute()`` call
+    does today.
+    """
+    return RunSpec(
+        id=prepared.assignment.spec.assignment_id,
+        label=prepared.resolved_assignment_display_name,
+        settings=prepared.workflow_settings,
+        run_name=prepared.run_config.run_name,
+        tags=dict(prepared.run_config.tags),
+    )
+
+
+def finalize_prepared_training(
+    prepared: PreparedTraining,
+    execution_result: object,
+) -> tuple[str, str]:
+    """Finalize one dlkit ``execute()`` result: make the checkpoint durable in MLflow.
+
+    Must be called while ``prepared.tmp_path`` still exists on disk — call
+    ``cleanup_prepared_training(prepared)`` afterward regardless of outcome.
+
+    Args:
+        prepared: The assignment's prepared training inputs.
+        execution_result: Whatever dlkit's ``execute()`` (or a multirun
+            child's dispatch) returned for this assignment.
+
+    Returns:
+        Tuple of (run_id, tracking_uri) for the MLflow run the checkpoint was
+        uploaded to.
+    """
+    training_result = _unwrap_execution_result(execution_result)
+    fallback_tracking_uri, _ = resolve_runtime_tracking_config()
+    context = _TrainingFinalizationContext(
+        training_result=training_result,
+        run_config=prepared.run_config,
+        workspace=prepared.workspace,
+        assignment=prepared.assignment,
+        assignment_id=prepared.assignment.spec.assignment_id,
+        resolved_assignment_display_name=prepared.resolved_assignment_display_name,
+        dataset_id=prepared.dataset_id,
+        resolved_dataset_display_name=prepared.resolved_dataset_display_name,
+        workflow_settings=prepared.workflow_settings,
+        contract=prepared.contract,
+        config_path=prepared.config_path,
+        resolved_data_config_path=prepared.resolved_data_config_path,
+        fallback_tracking_uri=fallback_tracking_uri,
+    )
+    return _finalize_training_run(context)
 
 
 def _finalize_training_run(context: _TrainingFinalizationContext) -> tuple[str, str]:
@@ -276,163 +498,3 @@ def _finalize_training_run(context: _TrainingFinalizationContext) -> tuple[str, 
         if resolved_run_id is not None and resolved_tracking_uri is not None:
             mark_run_failed(run_id=resolved_run_id, tracking_uri=resolved_tracking_uri)
         raise
-
-
-def train_model(
-    *,
-    config_path: str | Path,
-    settings: NeurallsSettings | None = None,
-    case_config_path: str | Path | None = None,
-    data_config_path: str | Path | None = None,
-    output_root: Path | str | None = None,
-    max_epochs: int | None = None,
-    parent_run_id: str | None = None,
-    assignment_id: str | None = None,
-    assignment_display_name: str | None = None,
-    dataset_registry_id: str | None = None,
-    dataset_display_name: str | None = None,
-    job_registry_id: str | None = None,
-    job_display_name: str | None = None,
-    mlflow_experiment_name: str | None = None,
-) -> tuple[str, str]:
-    """Train a DLKit model using resolved data+config context.
-
-    This is the main entry point for model training. It orchestrates:
-    1. Load assignment configuration (model + data configs) into a temp dir
-    2. Resolve dataset artifacts (rhs/solutions/matrix_zarr)
-    3. Build execute()-time MLflow naming and tags
-    4. Configure DLKit settings (dataset, paths, MLflow names)
-    5. Execute training via DLKit
-    6. Upload the checkpoint to the MLflow run's artifact store
-    7. Return the MLflow run id
-
-    The workspace (checkpoints, figures, predictions) is created in a temporary
-    directory and deleted after training. MLflow owns the durable copy of the
-    checkpoint — nothing is kept on local disk after this function returns.
-
-    DLKit handles all MLflow operations including server startup and tracking.
-
-    Args:
-        config_path: Path to a job configuration TOML (e.g., /path/to/job.toml)
-        data_config_path: Path to a dataset configuration TOML (e.g., /path/to/dataset.toml)
-        output_root: Root directory for the training workspace. Defaults to
-            ``DEFAULT_OUTPUT_DIR`` from constants.
-        parent_run_id: Optional MLflow parent run UUID. When set, the run created by
-            dlkit is tagged with ``mlflow.parentRunId`` the instant it's created (via
-            dlkit's ``on_run_created`` lifecycle hook), nesting it under the parent
-            from the start rather than after training completes.
-
-    Returns:
-        Tuple of (run_id, tracking_uri) for the MLflow run the checkpoint was
-        uploaded to.
-
-    Raises:
-        RuntimeError: If no checkpoint found after training
-        ValueError: If config missing required sections
-    """
-    resolved_case_config_path = Path(case_config_path) if case_config_path else None
-    settings = require_settings(settings, case_config_path=resolved_case_config_path)
-    runtime_environment = build_runtime_environment(
-        output_root,
-        default_output_root=settings.output_dir,
-    )
-    runtime_mlflow_env = runtime_environment.env
-    if data_config_path is None:
-        raise ValueError("data_config_path is required for training.")
-
-    with tempfile.TemporaryDirectory(prefix="neuralls_train_") as _tmp:
-        tmp_path = Path(_tmp)
-        config_path = Path(config_path)
-        resolved_data_config_path = Path(data_config_path)
-        # Step 1: Load assignment configuration into temp dir
-        assignment = load_assignment(
-            job_config_path=config_path,
-            data_config_path=resolved_data_config_path,
-            neuralls_settings=settings,
-            case_config_path=resolved_case_config_path,
-            output_root=tmp_path,
-            assignment_id=assignment_id,
-            assignment_display_name=assignment_display_name,
-            dataset_registry_id=dataset_registry_id,
-            dataset_display_name=dataset_display_name,
-            job_registry_id=job_registry_id,
-            job_display_name=job_display_name,
-        )
-        workflow_settings = assignment.settings
-        workspace = assignment.workspace
-        contract = default_training_dataset_contract()
-        dataset_id = workspace.dataset_id
-        resolved_assignment_display_name = assignment.spec.assignment_display_name
-        resolved_dataset_display_name = assignment.spec.dataset_display_name or dataset_id
-
-        # Step 2: Resolve training dataset artifacts
-        _, features, targets = _load_and_prepare_data(workflow_settings, workspace, contract)
-
-        # Step 3: Build execute()-time MLflow naming and tags
-        run_config = _build_training_run_config(
-            assignment_id=assignment.spec.assignment_id,
-            assignment_display_name=resolved_assignment_display_name,
-            dataset_registry_id=assignment.spec.dataset_id,
-            job_registry_id=assignment.spec.job_id,
-            dataset_display_name=resolved_dataset_display_name,
-            mlflow_experiment_name=mlflow_experiment_name,
-            runtime_mlflow_env=runtime_mlflow_env,
-            workspace_root=workspace.root_dir,
-            parent_run_id=parent_run_id,
-        )
-
-        # Step 4: Configure DLKit settings (dataset, paths, MLflow names)
-        workflow_settings, workspace = _configure_training_pipeline(
-            workflow_settings,
-            workspace,
-            features,
-            targets,
-            contract,
-        )
-
-        # Step 5: Execute training via DLKit
-        if max_epochs is not None:
-            workflow_settings = patch_model(
-                workflow_settings,
-                {"training": {"trainer": {"max_epochs": max_epochs}}},
-            )
-        tracking_backend = _resolve_tracking_backend(runtime_environment)
-        workflow_settings = patch_model(
-            workflow_settings,
-            {
-                "tracking": {
-                    "backend": tracking_backend,
-                    "uri": runtime_environment.tracking_uri,
-                }
-            },
-        )
-        with scoped_mlflow_environment(runtime_mlflow_env):
-            # neuralls owns all model registration; dlkit's own registration surface is removed.
-            execution_result = execute(
-                workflow_settings,
-                overrides=ExecutionOverrides(
-                    experiment_name=run_config.experiment_name,
-                    run_name=run_config.run_name,
-                    tags=dict(run_config.tags),
-                ),
-                hooks=build_parent_link_hooks(parent_run_id),
-            )
-            training_result = _unwrap_execution_result(execution_result)
-
-            fallback_tracking_uri, _ = resolve_runtime_tracking_config()
-            context = _TrainingFinalizationContext(
-                training_result=training_result,
-                run_config=run_config,
-                workspace=workspace,
-                assignment=assignment,
-                assignment_id=assignment_id,
-                resolved_assignment_display_name=resolved_assignment_display_name,
-                dataset_id=dataset_id,
-                resolved_dataset_display_name=resolved_dataset_display_name,
-                workflow_settings=workflow_settings,
-                contract=contract,
-                config_path=config_path,
-                resolved_data_config_path=resolved_data_config_path,
-                fallback_tracking_uri=fallback_tracking_uri,
-            )
-            return _finalize_training_run(context)

@@ -12,7 +12,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from neuralls.application.models import AssignmentResult
 from neuralls.composition.assignments import training_batch
+from neuralls.composition.assignments.training import PreparedTraining
 
 
 @pytest.fixture
@@ -27,7 +29,7 @@ def run_assignment_dependencies(tmp_path: Path) -> Iterator[dict[str, MagicMock]
         patch.object(training_batch, "process_config", return_value=data_dir),
         patch.object(training_batch, "resolve_dataset_artifacts") as resolve_dataset_artifacts,
         patch.object(training_batch, "find_successful_run") as find_successful_run,
-        patch.object(training_batch, "train_model") as train_model,
+        patch.object(training_batch, "prepare_training_settings") as prepare_training_settings,
     ):
         data_cfg = MagicMock()
         data_cfg.source.matrix_path = tmp_path / "matrix.npy"
@@ -39,8 +41,11 @@ def run_assignment_dependencies(tmp_path: Path) -> Iterator[dict[str, MagicMock]
             solutions=MagicMock(path=data_dir),
             matrix=MagicMock(path=data_dir),
         )
-        train_model.return_value = ("new-run-id", "sqlite:///new.db")
-        yield {"find_successful_run": find_successful_run, "train_model": train_model}
+        prepare_training_settings.return_value = MagicMock(name="prepared-training")
+        yield {
+            "find_successful_run": find_successful_run,
+            "prepare_training_settings": prepare_training_settings,
+        }
 
 
 def _run(
@@ -49,8 +54,8 @@ def _run(
     *,
     assignment_id: str = "exp-1",
     force: bool = False,
-) -> None:
-    training_batch.run_assignment(
+) -> AssignmentResult | PreparedTraining:
+    return training_batch.run_assignment(
         settings=MagicMock(),
         job_config_path=tmp_path / "job.toml",
         data_config_path=tmp_path / "data.toml",
@@ -69,17 +74,20 @@ def test_train_skips_when_a_finished_run_already_exists(
 ) -> None:
     """A FINISHED run tagged with this exact assignment_id short-circuits training."""
     run_assignment_dependencies["find_successful_run"].return_value = "existing-run-id"
-    _run(run_assignment_dependencies, tmp_path)
-    run_assignment_dependencies["train_model"].assert_not_called()
+    result = _run(run_assignment_dependencies, tmp_path)
+    run_assignment_dependencies["prepare_training_settings"].assert_not_called()
+    assert isinstance(result, AssignmentResult)
+    assert result.status == "Success"
 
 
 def test_train_runs_when_no_finished_run_exists(
     run_assignment_dependencies: dict[str, MagicMock], tmp_path: Path
 ) -> None:
-    """No matching FINISHED run means training proceeds."""
+    """No matching FINISHED run means the assignment is prepared for the training sweep."""
     run_assignment_dependencies["find_successful_run"].return_value = None
-    _run(run_assignment_dependencies, tmp_path)
-    run_assignment_dependencies["train_model"].assert_called_once()
+    result = _run(run_assignment_dependencies, tmp_path)
+    run_assignment_dependencies["prepare_training_settings"].assert_called_once()
+    assert result is run_assignment_dependencies["prepare_training_settings"].return_value
 
 
 def test_force_always_retrains_even_with_a_finished_run(
@@ -87,9 +95,10 @@ def test_force_always_retrains_even_with_a_finished_run(
 ) -> None:
     """force=True bypasses the MLflow reuse check entirely."""
     run_assignment_dependencies["find_successful_run"].return_value = "existing-run-id"
-    _run(run_assignment_dependencies, tmp_path, force=True)
-    run_assignment_dependencies["train_model"].assert_called_once()
+    result = _run(run_assignment_dependencies, tmp_path, force=True)
+    run_assignment_dependencies["prepare_training_settings"].assert_called_once()
     run_assignment_dependencies["find_successful_run"].assert_not_called()
+    assert result is run_assignment_dependencies["prepare_training_settings"].return_value
 
 
 def test_run_assignment_returns_failed_result_on_unexpected_exception(
@@ -100,7 +109,7 @@ def test_run_assignment_returns_failed_result_on_unexpected_exception(
     "failed assignments don't stop the batch" guarantee depends on this.
     """
     run_assignment_dependencies["find_successful_run"].return_value = None
-    run_assignment_dependencies["train_model"].side_effect = Exception(
+    run_assignment_dependencies["prepare_training_settings"].side_effect = Exception(
         "Run with UUID abc123 is already active."
     )
     result = training_batch.run_assignment(
@@ -115,6 +124,7 @@ def test_run_assignment_returns_failed_result_on_unexpected_exception(
         mlflow_experiment_name="Train",
         tracking_uri="sqlite:///tracking.db",
     )
+    assert isinstance(result, AssignmentResult)
     assert result.status == "Failed"
     assert "already active" in (result.error or "")
 
@@ -137,4 +147,4 @@ def test_two_assignments_never_share_a_lookup_key(
         for call in run_assignment_dependencies["find_successful_run"].call_args_list
     ]
     assert queried_ids == ["train-job", "search-job"]
-    assert run_assignment_dependencies["train_model"].call_count == 2
+    assert run_assignment_dependencies["prepare_training_settings"].call_count == 2

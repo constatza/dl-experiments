@@ -29,7 +29,7 @@ from neuralls.composition.assignments.training import (
 )
 from neuralls.platform.config.models.experiments import ExperimentNamesConfig
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
-from neuralls.platform.config.resolution import MlflowPaths, build_sqlite_tracking_uri
+from neuralls.platform.config.resolution import MlflowPaths
 from neuralls.platform.tracking.mlflow import MlflowRunConfig
 import torch
 from tensordict import TensorDict
@@ -434,10 +434,20 @@ def test_resolve_tracking_backend_rejects_implicit_local_fallback(
         training_module._resolve_tracking_backend(runtime_environment)
 
 
-def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path) -> None:
-    """Registry-backed training passes explicit experiment/run names and structured tags."""
+def test_prepare_training_settings_builds_explicit_mlflow_run_config(tmp_path: Path) -> None:
+    """Registry-backed preparation builds explicit experiment/run names and structured tags.
+
+    Targets ``prepare_training_settings()`` directly rather than ``train_model()``
+    (removed — both batch orchestrators now call ``prepare_training_settings()``/
+    ``finalize_prepared_training()`` directly instead of the old single-shot
+    wrapper), so only the settings-building half needs exercising here; no
+    execute()/finalize mocks are needed since this function never calls either.
+    """
     from neuralls.platform.config.models.workspace import AssignmentWorkspace
-    from neuralls.composition.assignments.training import train_model
+    from neuralls.composition.assignments.training import (
+        cleanup_prepared_training,
+        prepare_training_settings,
+    )
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -451,11 +461,9 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
         data_dir=tmp_path / "workspace" / "data",
     )
     workspace.checkpoint_dir.mkdir(parents=True)
-    checkpoint_path = workspace.checkpoint_dir / "model.ckpt"
-    checkpoint_path.write_text("checkpoint")
 
     experiment = SimpleNamespace(
-        settings=object(),
+        settings=SimpleNamespace(data=None),
         workspace=workspace,
         spec=SimpleNamespace(
             assignment_id="exp-1",
@@ -466,8 +474,6 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             job_display_name="Job One",
         ),
     )
-    experiment.settings = SimpleNamespace(data=None)
-    training_result = SimpleNamespace(run_id="run-123", metrics={})
 
     with (
         patch(
@@ -482,39 +488,11 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             return_value=(experiment.settings, workspace),
         ),
         patch(
-            "neuralls.composition.assignments.training.execute", return_value=training_result
-        ) as mock_execute,
-        patch(
-            "neuralls.composition.assignments._training_artifacts.get_latest_checkpoint",
-            return_value=checkpoint_path,
-        ),
-        patch(
-            "neuralls.composition.assignments.training.resolve_runtime_tracking_config",
-            return_value=(
-                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-                str((tmp_path / "mlartifacts").resolve()),
-            ),
-        ),
-        patch(
-            "neuralls.composition.assignments.training._resolve_mlflow_run_ids",
-            return_value=(
-                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-                "mlflow-exp-1",
-                "run-123",
-            ),
-        ),
-        patch("neuralls.composition.assignments.training._log_training_context"),
-        patch("neuralls.composition.assignments.training.ensure_checkpoint_artifact"),
-        patch("neuralls.composition.assignments.training._stage_training_artifacts"),
-        patch("neuralls.composition.assignments.training._log_training_evaluation"),
-        patch("neuralls.composition.assignments.training.log_artifacts_to_mlflow"),
-        patch("neuralls.composition.assignments.training.log_extra_feature_names_tag"),
-        patch(
             "neuralls.composition.assignments.training.patch_model",
             side_effect=lambda s, _: s,
         ),
     ):
-        train_model(
+        prepared = prepare_training_settings(
             config_path=str(config_path),
             data_config_path=str(data_config_path),
             output_root=tmp_path / "output",
@@ -526,19 +504,19 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
             job_display_name="Job One",
             mlflow_experiment_name="CustomTrain",
         )
+    cleanup_prepared_training(prepared)
 
     load_kwargs = mock_load.call_args.kwargs
     assert load_kwargs["job_config_path"] == config_path
     assert load_kwargs["data_config_path"] == data_config_path
 
-    execute_kwargs = mock_execute.call_args.kwargs
-    overrides = execute_kwargs["overrides"]
-    assert overrides.experiment_name == "CustomTrain"
+    run_config = prepared.run_config
+    assert run_config.experiment_name == "CustomTrain"
     assert re.match(
         r"^Experiment One \| [A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
-        overrides.run_name,
+        run_config.run_name,
     )
-    assert overrides.tags == {
+    assert run_config.tags == {
         "phase": "training",
         "assignment_id": "exp-1",
         "dataset_id": "dataset-1",
@@ -547,12 +525,15 @@ def test_train_model_passes_explicit_mlflow_run_config_to_execute(tmp_path: Path
     }
 
 
-def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
+def test_prepare_training_settings_falls_back_to_dataset_display_name_without_structured_tags(
     tmp_path: Path,
 ) -> None:
     """Legacy callers use the config-model default experiment name and no tags."""
     from neuralls.platform.config.models.workspace import AssignmentWorkspace
-    from neuralls.composition.assignments.training import train_model
+    from neuralls.composition.assignments.training import (
+        cleanup_prepared_training,
+        prepare_training_settings,
+    )
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -566,8 +547,6 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
         data_dir=tmp_path / "workspace" / "data",
     )
     workspace.checkpoint_dir.mkdir(parents=True)
-    checkpoint_path = workspace.checkpoint_dir / "model.ckpt"
-    checkpoint_path.write_text("checkpoint")
 
     experiment = SimpleNamespace(
         settings=SimpleNamespace(data=None),
@@ -593,40 +572,11 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
             return_value=(experiment.settings, workspace),
         ),
         patch(
-            "neuralls.composition.assignments.training.execute",
-            return_value=SimpleNamespace(run_id="run-123", metrics={}),
-        ) as mock_execute,
-        patch(
-            "neuralls.composition.assignments._training_artifacts.get_latest_checkpoint",
-            return_value=checkpoint_path,
-        ),
-        patch(
-            "neuralls.composition.assignments.training.resolve_runtime_tracking_config",
-            return_value=(
-                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-                str((tmp_path / "mlartifacts").resolve()),
-            ),
-        ),
-        patch(
-            "neuralls.composition.assignments.training._resolve_mlflow_run_ids",
-            return_value=(
-                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-                "mlflow-exp-1",
-                "run-123",
-            ),
-        ),
-        patch("neuralls.composition.assignments.training._log_training_context"),
-        patch("neuralls.composition.assignments.training.ensure_checkpoint_artifact"),
-        patch("neuralls.composition.assignments.training._stage_training_artifacts"),
-        patch("neuralls.composition.assignments.training._log_training_evaluation"),
-        patch("neuralls.composition.assignments.training.log_artifacts_to_mlflow"),
-        patch("neuralls.composition.assignments.training.log_extra_feature_names_tag"),
-        patch(
             "neuralls.composition.assignments.training.patch_model",
             side_effect=lambda s, _: s,
         ),
     ):
-        train_model(
+        prepared = prepare_training_settings(
             config_path=config_path,
             data_config_path=data_config_path,
             output_root=tmp_path / "output",
@@ -635,21 +585,21 @@ def test_train_model_falls_back_to_dataset_display_name_without_structured_tags(
             dataset_registry_id="dataset-legacy",
             dataset_display_name="Dataset Display",
         )
+    cleanup_prepared_training(prepared)
 
-    execute_kwargs = mock_execute.call_args.kwargs
-    overrides = execute_kwargs["overrides"]
-    assert overrides.experiment_name == ExperimentNamesConfig().training
+    run_config = prepared.run_config
+    assert run_config.experiment_name == ExperimentNamesConfig().training
     assert re.match(
         r"^Legacy Experiment \| [A-Z][a-z]{2} \d{2} [A-Z][a-z]{2} \d{4} - \d{2}:\d{2}:\d{2}$",
-        overrides.run_name,
+        run_config.run_name,
     )
-    assert overrides.tags == {}
+    assert run_config.tags == {}
 
 
-def test_train_model_max_epochs_override_keeps_original_settings_immutable(
+def test_prepare_training_settings_max_epochs_override_keeps_original_settings_immutable(
     tmp_path: Path,
 ) -> None:
-    """`max_epochs` override patches a fresh settings object before execute()."""
+    """`max_epochs` override patches a fresh settings object, leaving the original untouched."""
     from dlkit.infrastructure.config import (
         DataModuleSelector,
         DataSettings,
@@ -662,7 +612,10 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
     from dlkit.infrastructure.config.model_components import ModelComponentSettings
     from dlkit.infrastructure.config.trainer_settings import TrainerSettings
     from neuralls.platform.config.models.workspace import AssignmentWorkspace
-    from neuralls.composition.assignments.training import train_model
+    from neuralls.composition.assignments.training import (
+        cleanup_prepared_training,
+        prepare_training_settings,
+    )
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -692,8 +645,6 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
         data_dir=tmp_path / "workspace" / "data",
     )
     workspace.checkpoint_dir.mkdir(parents=True)
-    checkpoint_path = workspace.checkpoint_dir / "model.ckpt"
-    checkpoint_path.write_text("checkpoint")
 
     experiment = SimpleNamespace(
         settings=base_settings,
@@ -718,37 +669,8 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
             "neuralls.composition.assignments.training._configure_training_pipeline",
             return_value=(base_settings, workspace),
         ),
-        patch(
-            "neuralls.composition.assignments.training.execute",
-            return_value=SimpleNamespace(run_id="run-123", metrics={}),
-        ) as mock_execute,
-        patch(
-            "neuralls.composition.assignments._training_artifacts.get_latest_checkpoint",
-            return_value=checkpoint_path,
-        ),
-        patch(
-            "neuralls.composition.assignments.training.resolve_runtime_tracking_config",
-            return_value=(
-                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-                str((tmp_path / "mlartifacts").resolve()),
-            ),
-        ),
-        patch(
-            "neuralls.composition.assignments.training._resolve_mlflow_run_ids",
-            return_value=(
-                build_sqlite_tracking_uri(tmp_path / "mlflow.db"),
-                "mlflow-exp-1",
-                "run-123",
-            ),
-        ),
-        patch("neuralls.composition.assignments.training._log_training_context"),
-        patch("neuralls.composition.assignments.training.ensure_checkpoint_artifact"),
-        patch("neuralls.composition.assignments.training._stage_training_artifacts"),
-        patch("neuralls.composition.assignments.training._log_training_evaluation"),
-        patch("neuralls.composition.assignments.training.log_artifacts_to_mlflow"),
-        patch("neuralls.composition.assignments.training.log_extra_feature_names_tag"),
     ):
-        train_model(
+        prepared = prepare_training_settings(
             config_path=config_path,
             data_config_path=data_config_path,
             output_root=tmp_path / "output",
@@ -758,11 +680,11 @@ def test_train_model_max_epochs_override_keeps_original_settings_immutable(
             dataset_display_name="Dataset One",
             max_epochs=9,
         )
+    cleanup_prepared_training(prepared)
 
-    execute_settings = mock_execute.call_args.args[0]
-    assert execute_settings.training is not None
-    assert execute_settings.training.trainer is not None
-    assert execute_settings.training.trainer.max_epochs == 9
+    assert prepared.workflow_settings.training is not None
+    assert prepared.workflow_settings.training.trainer is not None
+    assert prepared.workflow_settings.training.trainer.max_epochs == 9
     assert base_settings.training is not None
     assert base_settings.training.trainer is not None
     assert base_settings.training.trainer.max_epochs == 1

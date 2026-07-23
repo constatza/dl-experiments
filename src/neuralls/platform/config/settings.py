@@ -131,7 +131,7 @@ def _build_case_root_mapping(
 
 def get_settings(env_file: Path | None = None) -> NeurallsSettings:
     """Load settings from one explicit env file or from process env only."""
-    return NeurallsSettings(_env_file=resolve_env_file_path(env_file))  # ty: ignore[unknown-argument]
+    return NeurallsSettings(_env_file=resolve_env_file_path(env_file))
 
 
 def load_case_settings(
