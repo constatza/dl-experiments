@@ -83,6 +83,10 @@ Current checked-in example:
 - `array-default.toml` — the default `FlexibleDataset` + `ArrayDataModule`
   shape with no custom features/targets
 - `array-small-batch.toml` — the same array data shape with `batch_size = 32`
+- `deeponet-branch-trunk.toml` — maps the primary dataset feature to
+  `branch` and the first parameter stream to `trunk`
+- `film-condition.toml` — maps the primary dataset feature to `x` and the first
+  parameter stream to `condition`
 
 ### `configs/profiles/training/**/*.toml`
 
@@ -138,9 +142,18 @@ Case configs bind:
 - case-level MLflow topology
 
 The 45x15 `cg.toml` case compares the pure CG-N training dataset across Scale
-Equivariant Embedded FFNN and Scale Equivariant Constant Width FFNN variants
-(both built on the single `ScaleEquivariantEmbeddedFactorizedFFNN` class, distinguished
-by their `project`/activation/layer-count settings). The companion
+Equivariant Embedded FFNN and Scale Equivariant Constant Width FFNN variants.
+The 93x31 `cg.toml` case uses the newer embedded FFNN families: embedded
+factorized, embedded hyper, and embedded MoE. The 45x15randomE `factorized.toml`
+case is parametric and uses DeepONet variants so the residual/RHS stream is the
+`branch` input and the Young-modulus parameter stream is the `trunk` input. These
+CG cases include classical identity/Jacobi/IC0, AMG, and dataset-backed POD-2G
+preconditioners, with `solutions-cg1`, `solutions-cg10`, and `solutions-cg50`
+datasets serving as POD snapshot sources. Every randomE dataset uses the matrix glob
+`45x15randomE/stiffness/*_subdomain_1_Kaa.txt`, `enumerate_by = "name"`, and
+the matching Young-modulus parameter glob. Its comparisons mirror the 45x15 RHS
+modes on fixed individual matrix samples: matrix indices 0, 1, and 2 each get
+random RHS, sparse RHS, and raw-LHS comparisons. The companion 45x15
 `cg-search.toml` case binds one Optuna search job per network variant. Those
 search jobs tune learning rate, layer count, activation, bias, dropout, and
 scale-equivariant initialization/gain parameters.
