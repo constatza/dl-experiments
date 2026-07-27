@@ -20,6 +20,7 @@ from neuralls.composition.comparison.models import ComparisonPaths
 from neuralls.domain.analysis.spectra import plot_condition_numbers
 from neuralls.domain.solver.models.result import CGComparisonResult, PlotPaths
 from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
+from neuralls.platform.reporting.preconditioner_labels import build_preconditioner_labels
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -347,7 +348,10 @@ def test_generate_comparison_plots_includes_iterations_barplot(
         patch("neuralls.composition.comparison._plots.plot_metric_comparison"),
     ):
         result = _generate_comparison_plots(
-            two_result_entries, simple_cond_numbers, paths, two_preconditioners
+            two_result_entries,
+            simple_cond_numbers,
+            paths,
+            build_preconditioner_labels(two_preconditioners),
         )
 
     assert result.iterations_barplot is not None

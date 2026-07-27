@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from torchalg.preconditioners.base import Preconditioner
+from collections.abc import Mapping
 
 from neuralls.composition.comparison.models import ComparisonPaths
 from neuralls.domain.analysis.spectra import plot_condition_numbers
 from neuralls.domain.solver.models.result import CGComparisonResult, PlotPaths
 from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
-from neuralls.platform.reporting.preconditioner_labels import build_preconditioner_labels
 
 
 def _generate_comparison_plots(
     results: dict[str, CGComparisonResult],
     cond_numbers: dict[str, float],
     paths: ComparisonPaths,
-    preconditioners: dict[str, Preconditioner],
+    labels: Mapping[str, str],
     display_name: str | None = None,
     rtol: float | None = None,
     atol: float | None = None,
@@ -27,10 +26,10 @@ def _generate_comparison_plots(
         results: CG comparison results keyed by preconditioner name.
         cond_numbers: Effective condition numbers keyed by preconditioner name.
         paths: Resolved comparison paths (figures directory used for output).
-        preconditioners: Constructed preconditioner instances keyed by name —
-            the ground truth used to build descriptive plot labels (e.g. AMG
-            grid levels/cycle/coarsening, POD-2G fitted rank) via
-            ``build_preconditioner_labels``.
+        labels: Descriptive plot label per preconditioner name (e.g. AMG grid
+            levels/cycle/coarsening, POD-2G fitted rank), typically built via
+            ``build_preconditioner_labels`` while the preconditioner is still
+            constructed.
         display_name: Optional title shown on all plots.
         rtol: Relative tolerance displayed as a reference line.
         atol: Absolute tolerance displayed as a reference line.
@@ -40,7 +39,6 @@ def _generate_comparison_plots(
         Typed PlotPaths with paths to all generated figures.
     """
     suffix = paths.matrix.stem or "comparison"
-    labels = build_preconditioner_labels(preconditioners)
 
     cond_path = plot_condition_numbers(
         {labels.get(name, name): value for name, value in cond_numbers.items()},

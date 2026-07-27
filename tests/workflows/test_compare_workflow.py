@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from neuralls.composition.comparison.single_run import (
+from neuralls.composition.comparison.comparison_run import (
     compare_preconditioners,
 )
 from neuralls.platform.config.loaders import load_comparison_config

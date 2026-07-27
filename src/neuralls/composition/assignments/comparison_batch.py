@@ -60,7 +60,7 @@ from neuralls.platform.tracking.comparison_tracking import (
 from neuralls.platform.tracking.extra_features import fetch_extra_input_names_for_model
 from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import log_comparison_artifacts_to_mlflow
-from neuralls.composition.comparison.single_run import compare_preconditioners
+from neuralls.composition.comparison.comparison_run import compare_preconditioners
 from neuralls.composition.comparison._input_resolution import resolve_comparison_input
 from neuralls.composition.assignments.model_resolution import (
     AssignmentModelContext,

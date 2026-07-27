@@ -93,22 +93,6 @@ class PreconditionerService:
         """
         return create_preconditioner(matrix, config, adapter=self._adapter)
 
-    def create_preconditioner_set(
-        self,
-        matrix: torch.Tensor,
-        configs: Sequence[PreconditionerConfig],
-    ) -> dict[str, Preconditioner]:
-        """Create multiple preconditioners for comparison.
-
-        Args:
-            matrix: System matrix to precondition (same for all).
-            configs: Sequence of preconditioner configurations.
-
-        Returns:
-            Dictionary mapping preconditioner names to Preconditioner instances.
-        """
-        return {cfg.name: self.create_preconditioner(matrix, cfg) for cfg in configs}
-
 
 def _create_scheduled_preconditioners(
     preconditioner_configs: Sequence[PreconditionerConfig],

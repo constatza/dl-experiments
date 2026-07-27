@@ -1,4 +1,4 @@
-"""Tests for _bind_system_inputs helper in comparison single_run workflow."""
+"""Tests for _bind_system_inputs helper in comparison run workflow."""
 
 from __future__ import annotations
 

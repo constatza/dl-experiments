@@ -1,9 +1,12 @@
-"""Single preconditioner comparison run — pure orchestration entry point."""
+"""One comparison run across all configured preconditioners — pure orchestration entry point."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Sequence
+from functools import partial
 from pathlib import Path
+
+import torch
 
 from neuralls.composition.comparison._linear_system import (
     _load_linear_system,
@@ -15,22 +18,92 @@ from neuralls.composition.comparison._preconditioner_setup import (
     _create_scheduled_preconditioners,
     _load_and_bind_extra_inputs,
 )
-from neuralls.composition.comparison.models import ComparisonPaths
-from neuralls.composition.comparison.models import ResolvedComparisonInput
+from neuralls.composition.comparison.models import (
+    ComparisonPaths,
+    PreconditionerComparisonEntry,
+    ResolvedComparisonInput,
+)
 from neuralls.domain.analysis.spectra import PreconditionerCallable, compute_condition_numbers
 from neuralls.domain.solver.comparison import (
     _to_numpy,
     format_results_summary,
     run_cg_comparison,
 )
+from neuralls.domain.solver.models.config import SolverParams
 from neuralls.domain.solver.models.result import (
+    CGComparisonResult,
     ComparisonRecommendations,
     ComparisonResult,
 )
 from neuralls.platform.config.models.comparison import ComparisonGeneral
 from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.resolution import resolve_user_path
+from neuralls.platform.reporting.preconditioner_labels import build_preconditioner_labels
 from neuralls.platform.storage.filesystem import ensure_dir
+
+type PreconditionerEvaluationMapper = Callable[
+    [
+        Callable[[PreconditionerConfig], PreconditionerComparisonEntry],
+        Sequence[PreconditionerConfig],
+    ],
+    Iterable[PreconditionerComparisonEntry],
+]
+
+
+def _evaluate_preconditioner(
+    cfg: PreconditionerConfig,
+    *,
+    service: PreconditionerService,
+    matrix: torch.Tensor,
+    rhs: torch.Tensor,
+    matrix_path: Path,
+    matrix_index: int,
+    params: SolverParams,
+) -> PreconditionerComparisonEntry:
+    """Build one preconditioner, run it, and package its evaluation outcome.
+
+    The constructed preconditioner (and, for neural preconditioners, its loaded
+    checkpoint) is only referenced by locals in this call — it goes out of scope
+    on return, so the caller's loop never holds more than one model at a time.
+
+    Args:
+        cfg: Preconditioner configuration to build and evaluate.
+        service: Shared preconditioner factory service.
+        matrix: System matrix (shape: n x n).
+        rhs: Right-hand side vector (shape: n,).
+        matrix_path: Dataset directory for extra-input binding (may not be a directory).
+        matrix_index: Sample index for extra-input extraction.
+        params: Solver tolerances and iteration limits.
+
+    Returns:
+        Named result: solve outcome, condition number, and plot label for ``cfg``.
+    """
+    base_preconditioners = {cfg.name: service.create_preconditioner(matrix, cfg)}
+    scheduled = _create_scheduled_preconditioners(
+        preconditioner_configs=[cfg],
+        matrix=matrix,
+        base_preconditioners=base_preconditioners,
+    )
+    _load_and_bind_extra_inputs(
+        scheduled, matrix=matrix, matrix_path=matrix_path, matrix_index=matrix_index
+    )
+
+    cond_callables: dict[str, PreconditionerCallable] = {name: p for name, p in scheduled.items()}
+    condition_number = compute_condition_numbers(_to_numpy(matrix), cond_callables)[cfg.name]
+    label = build_preconditioner_labels(scheduled)[cfg.name]
+    result = run_cg_comparison(
+        matrix,
+        rhs,
+        preconditioners=scheduled,
+        rtol=params.rtol,
+        atol=params.atol,
+        maxiter=params.max_iterations,
+        m_max=params.m_max,
+        breakdown_tol=params.breakdown_tol,
+    )[cfg.name]
+    return PreconditionerComparisonEntry(
+        name=cfg.name, result=result, condition_number=condition_number, label=label
+    )
 
 
 def _resolve_comparison_paths(
@@ -96,20 +169,24 @@ def compare_preconditioners(
     figures_root: Path | None = None,
     display_name: str | None = None,
     resolved_input: ResolvedComparisonInput | None = None,
+    evaluation_mapper: PreconditionerEvaluationMapper = map,
 ) -> ComparisonResult:
     """Run CG comparisons and generate diagnostics.
 
-    Orchestrates an 11-step workflow:
+    Orchestrates a 7-step workflow:
     1. Validate inputs
     2. Resolve paths (matrix, rhs, output, figures)
     3. Load and validate linear system
-    4. Create preconditioners via service
-    5. Wrap preconditioners with scheduling
-    6. Bind extra inputs (neural preconditioners)
-    7. Compute condition numbers
-    8. Run CG comparison
-    9. Generate diagnostic plots
-    10. Package and return result
+    4. Evaluate each preconditioner config: build, bind, compute condition number, solve
+       (one preconditioner resident at a time — see ``evaluation_mapper``)
+    5. Add the "none" (identity) baseline if no config produced one
+    6. Generate diagnostic plots
+    7. Package and return result
+
+    Step 4 evaluates preconditioners one at a time rather than building every
+    config's preconditioner up front: each config's model (including any
+    GPU-resident neural checkpoint) is constructed, used, and released before
+    the next config is built, bounding peak memory to a single model.
 
     Args:
         general_params: Comparison general configuration.
@@ -117,6 +194,14 @@ def compare_preconditioners(
         output_root: Optional override for output root directory.
         figures_root: Optional override for figures directory.
         display_name: Optional display name for plots.
+        evaluation_mapper: Strategy for running the per-config evaluations in
+            ``preconditioner_configs``. Defaults to the builtin ``map``, i.e.
+            sequential execution with exactly one preconditioner resident at a
+            time. Matches the call signature of ``concurrent.futures.Executor.map``,
+            so passing e.g. ``ThreadPoolExecutor(max_workers=n).map`` runs up to
+            ``n`` models concurrently without any other change here — an opt-in
+            left to the caller, who is best placed to judge whether ``n`` models'
+            worth of GPU memory fit at once.
 
     Returns:
         ComparisonResult with results, summary, plot paths, and solver metadata.
@@ -153,43 +238,44 @@ def compare_preconditioners(
     )
 
     service = PreconditionerService()
-    preconditioners = service.create_preconditioner_set(system.matrix, preconditioner_configs)
-
-    scheduled_preconditioners = _create_scheduled_preconditioners(
-        preconditioner_configs=preconditioner_configs,
+    evaluate_one = partial(
+        _evaluate_preconditioner,
+        service=service,
         matrix=system.matrix,
-        base_preconditioners=preconditioners,
-    )
-
-    _load_and_bind_extra_inputs(
-        scheduled_preconditioners,
-        matrix=system.matrix,
+        rhs=system.rhs,
         matrix_path=paths.matrix,
         matrix_index=resolved_matrix_index,
+        params=general_params.params,
     )
 
-    cond_callables: dict[str, PreconditionerCallable] = {
-        name: p for name, p in scheduled_preconditioners.items()
-    }
-    cond_numbers = compute_condition_numbers(_to_numpy(system.matrix), cond_callables)
+    results: dict[str, CGComparisonResult] = {}
+    cond_numbers: dict[str, float] = {}
+    labels: dict[str, str] = {}
+    for entry in evaluation_mapper(evaluate_one, preconditioner_configs):
+        results[entry.name] = entry.result
+        cond_numbers[entry.name] = entry.condition_number
+        labels[entry.name] = entry.label
 
-    results = run_cg_comparison(
-        system.matrix,
-        system.rhs,
-        preconditioners=scheduled_preconditioners,
-        rtol=general_params.params.rtol,
-        atol=general_params.params.atol,
-        maxiter=general_params.params.max_iterations,
-        m_max=general_params.params.m_max,
-        breakdown_tol=general_params.params.breakdown_tol,
-    )
+    if "none" not in results:
+        baseline = run_cg_comparison(
+            system.matrix,
+            system.rhs,
+            preconditioners={},
+            rtol=general_params.params.rtol,
+            atol=general_params.params.atol,
+            maxiter=general_params.params.max_iterations,
+            m_max=general_params.params.m_max,
+            breakdown_tol=general_params.params.breakdown_tol,
+        )
+        results["none"] = baseline["none"]
+
     recommendations = ComparisonRecommendations()
 
     plot_paths = _generate_comparison_plots(
         results,
         cond_numbers,
         paths,
-        scheduled_preconditioners,
+        labels,
         display_name=display_name,
         rtol=general_params.params.rtol,
         atol=general_params.params.atol,
@@ -200,7 +286,7 @@ def compare_preconditioners(
         results=results,
         summary=format_results_summary(results),
         plot_paths=plot_paths,
-        preconditioners=tuple(preconditioners.keys()),
+        preconditioners=tuple(cfg.name for cfg in preconditioner_configs),
         condition_numbers=cond_numbers,
         solver_params=general_params,
         recommendations=recommendations,

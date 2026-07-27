@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from neuralls.domain.solver.models.result import ComparisonResult
+from neuralls.domain.solver.models.result import CGComparisonResult, ComparisonResult
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.storage.manifest import DatasetNormalization
 from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
@@ -20,6 +20,7 @@ __all__ = [
     "ComparisonOutcome",
     "ComparisonPaths",
     "LinearSystem",
+    "PreconditionerComparisonEntry",
     "ResolvedComparisonInput",
 ]
 
@@ -86,6 +87,23 @@ class LinearSystem:
 
     matrix: torch.Tensor
     rhs: torch.Tensor
+
+
+@dataclass(frozen=True)
+class PreconditionerComparisonEntry:
+    """Outcome of comparing one preconditioner: solve result, condition number, plot label.
+
+    Attributes:
+        name: Preconditioner config name.
+        result: CG solver outcome for this preconditioner.
+        condition_number: Effective condition number of the preconditioned system.
+        label: Descriptive plot label built from the constructed preconditioner instance.
+    """
+
+    name: str
+    result: CGComparisonResult
+    condition_number: float
+    label: str
 
 
 @dataclass(frozen=True)
