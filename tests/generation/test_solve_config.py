@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.domain.generation.strategy_configs import SolveConfig
 from neuralls.domain.generation.helpers import _solve_linear_systems
+from neuralls.domain.generation.strategy_configs import SolveConfig
 
 
 @pytest.fixture

@@ -6,10 +6,10 @@ import pytest
 
 from neuralls.platform.config.models.id_generation import (
     _build_display_lookup,
-    _infer_comparison_display_name,
-    _infer_comparison_id,
     _infer_assignment_display_name,
     _infer_assignment_id,
+    _infer_comparison_display_name,
+    _infer_comparison_id,
     _slugify,
     _validate_id_chars,
 )

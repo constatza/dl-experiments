@@ -8,9 +8,7 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
-from neuralls.shared.constants import DEFAULT_RTOL, DEFAULT_ATOL, DEFAULT_M_MAX
 from neuralls.platform.config.models.comparison import ComparisonRhsSourceModel
-from neuralls.platform.config.models.preconditioner import PreconditionerConfig
 from neuralls.platform.config.models.id_generation import (
     _build_display_lookup,
     _infer_assignment_display_name,
@@ -18,6 +16,8 @@ from neuralls.platform.config.models.id_generation import (
     _infer_comparison_display_name,
     _infer_comparison_id,
 )
+from neuralls.platform.config.models.preconditioner import PreconditionerConfig
+from neuralls.shared.constants import DEFAULT_ATOL, DEFAULT_M_MAX, DEFAULT_RTOL
 
 
 def resolve_display_name(entity_id: str, display_name: str | None) -> str:

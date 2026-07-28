@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from neuralls.domain.generation.strategies.neutral_ones import (
-    NeutralOnesStrategy,
     NeutralOnesConfig,
+    NeutralOnesStrategy,
 )
 
 
@@ -92,5 +93,5 @@ def test_neutral_ones_config_validation() -> None:
     assert config.seed == 42
 
     # Negative samples should raise validation error
-    with pytest.raises(Exception):  # Pydantic ValidationError
+    with pytest.raises(ValidationError):
         NeutralOnesConfig(samples=-2, seed=42, shuffle=True)

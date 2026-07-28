@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import inspect
 import tomllib
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_args, get_type_hints
 from unittest.mock import MagicMock, patch
 
 from typer.core import TyperGroup as Group
-from typer.models import ArgumentInfo
 from typer.main import get_command
+from typer.models import ArgumentInfo
 from typer.testing import CliRunner
 
 from neuralls.application.models import AssignmentResult
@@ -107,8 +106,7 @@ def test_generate_single_help_shows_dataset_mode() -> None:
 
 
 def test_generate_signature_uses_batch_case_argument() -> None:
-    parameters = inspect.signature(generate_case).parameters
-    config = parameters["config"].default
+    config = get_args(get_type_hints(generate_case, include_extras=True)["config"])[1]
 
     assert isinstance(config, ArgumentInfo)
     assert config.default is ...
@@ -206,8 +204,7 @@ def test_generate_fails_for_dataset_config_without_single_subcommand(
 
 
 def test_generate_single_signature_uses_dataset_argument_and_case_option() -> None:
-    parameters = inspect.signature(generate_single).parameters
-    config = parameters["config"].default
+    config = get_args(get_type_hints(generate_single, include_extras=True)["config"])[1]
 
     assert isinstance(config, ArgumentInfo)
     assert config.default is ...
@@ -320,16 +317,14 @@ def test_generate_single_preserves_enriched_storage_error_message(
 
 
 def test_train_signature_uses_batch_case_argument() -> None:
-    parameters = inspect.signature(train_case_batch).parameters
-    config = parameters["config"].default
+    config = get_args(get_type_hints(train_case_batch, include_extras=True)["config"])[1]
 
     assert isinstance(config, ArgumentInfo)
     assert config.default is ...
 
 
 def test_eval_signature_uses_batch_case_argument() -> None:
-    parameters = inspect.signature(eval_case_batch).parameters
-    config = parameters["config"].default
+    config = get_args(get_type_hints(eval_case_batch, include_extras=True)["config"])[1]
 
     assert isinstance(config, ArgumentInfo)
     assert config.default is ...
@@ -414,8 +409,7 @@ def test_eval_invokes_batch_workflow(
 
 
 def test_run_signature_uses_batch_case_argument() -> None:
-    parameters = inspect.signature(run_case_matrix).parameters
-    config = parameters["config"].default
+    config = get_args(get_type_hints(run_case_matrix, include_extras=True)["config"])[1]
 
     assert isinstance(config, ArgumentInfo)
     assert config.default is ...
@@ -449,8 +443,7 @@ def test_run_invokes_batch_workflow(
 
 
 def test_compare_signature_uses_batch_case_argument() -> None:
-    parameters = inspect.signature(compare_case).parameters
-    config = parameters["config"].default
+    config = get_args(get_type_hints(compare_case, include_extras=True)["config"])[1]
 
     assert isinstance(config, ArgumentInfo)
     assert config.default is ...

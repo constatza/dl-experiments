@@ -40,7 +40,7 @@ def test_solution_archive_shapes(
 ) -> None:
     """Loaded solutions and computed RHS have correct shapes."""
     n = spd_matrix.shape[0]
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
 
     result = run_generation(
         "solution_archive", spd_matrix, cfg={"solutions_glob": glob_pattern, "samples": 3}
@@ -58,7 +58,7 @@ def test_solution_archive_rhs_equals_ax(
     spd_matrix: np.ndarray, solution_files: tuple[list[Path], str]
 ) -> None:
     """RHS = A @ x for every loaded solution."""
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
 
     result = run_generation(
         "solution_archive", spd_matrix, cfg={"solutions_glob": glob_pattern, "samples": 3}
@@ -87,7 +87,7 @@ def test_solution_archive_deterministic_shuffle(
     spd_matrix: np.ndarray, solution_files: tuple[list[Path], str]
 ) -> None:
     """Shuffling with the same seed produces identical output on repeated calls."""
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
     cfg = {"solutions_glob": glob_pattern, "samples": 3, "shuffle": True, "seed": 42}
 
     r1 = run_generation("solution_archive", spd_matrix, cfg=cfg)
@@ -164,7 +164,7 @@ def test_solution_archive_insufficient_files_raises(
     spd_matrix: np.ndarray, solution_files: tuple[list[Path], str]
 ) -> None:
     """Requesting more files than available raises ValueError."""
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
     with pytest.raises(ValueError, match="only.*available"):
         run_generation(
             "solution_archive", spd_matrix, cfg={"solutions_glob": glob_pattern, "samples": 100}

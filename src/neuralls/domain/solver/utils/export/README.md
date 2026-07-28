@@ -128,7 +128,10 @@ Test case: 100x100 tridiagonal system with full trace (22 iterations)
 save_solver_data(
     output_dir=results_dir,
     name_stem="test_run",
-    A=A, b=b, x0=x0, x_sol=x_sol,
+    A=A,
+    b=b,
+    x0=x0,
+    x_sol=x_sol,
     result=result,
     solver_config=config,
 )
@@ -141,7 +144,10 @@ save_solver_data(
 save_solver_data(
     output_dir=results_dir,
     name_stem="test_run",
-    A=A, b=b, x0=x0, x_sol=x_sol,
+    A=A,
+    b=b,
+    x0=x0,
+    x_sol=x_sol,
     result=result,
     solver_config=config,
     format=ArrayFormat.NPZ,  # 3-10x smaller

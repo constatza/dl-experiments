@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,9 +11,6 @@ import numpy as np
 import pytest
 import tomli_w
 
-from neuralls.composition.comparison.config_assembler import resolve_comparison_config
-from neuralls.composition.comparison._input_resolution import resolve_comparison_input
-from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.composition.assignments.comparison_batch import (
     _resolve_comparison_topology,
     _resolve_neural_preconditioners,
@@ -21,6 +19,9 @@ from neuralls.composition.assignments.comparison_batch import (
     neural_specs_from_assignments,
     run_comparison_batch,
 )
+from neuralls.composition.comparison._input_resolution import resolve_comparison_input
+from neuralls.composition.comparison.config_assembler import resolve_comparison_config
+from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
 from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
 from neuralls.domain.solver.models.result import (
     CGComparisonResult,
@@ -29,11 +30,16 @@ from neuralls.domain.solver.models.result import (
     PlotPaths,
     RankedRecommendation,
 )
-from neuralls.platform.config.models.experiments import AssignmentEntry, ComparisonRegistryEntry
-from neuralls.platform.config.models.experiments import CaseConfig
+from neuralls.platform.config.models.experiments import (
+    AssignmentEntry,
+    CaseConfig,
+    ComparisonRegistryEntry,
+)
 from neuralls.platform.config.models.preconditioner import (
+    AMGPreconditionerConfig,
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
+    PODCoarseningConfig,
     PreconditionerConfig,
     PreconditionerType,
     RegisteredModelRefConfig,
@@ -55,7 +61,9 @@ from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
 def test_resolve_comparison_config_importable_from_composition() -> None:
     """resolve_comparison_config must live in composition, not platform."""
-    from neuralls.composition.comparison.config_assembler import resolve_comparison_config  # noqa: F401
+    from neuralls.composition.comparison.config_assembler import (
+        resolve_comparison_config,  # noqa: F401
+    )
 
 
 _RESOLVE_COMPARISON_CONFIG = (
@@ -150,6 +158,72 @@ def _write_dataset_config(path: Path, dataset_id: str) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def _write_train_job_config(path: Path) -> None:
+    """Write a minimal, fully-loadable `run.type = "train"` job config."""
+    path.write_text(
+        '[run]\ntype = "train"\n\n[model]\nname = "ScaleEquivariantEmbeddedFactorizedFFNN"\nnum_layers = 1\nactivation = "gelu"\n\n[data]\nname = "FlexibleDataset"\nbatch_size = 4\n\n[data.module]\nname = "ArrayDataModule"\nmodule_path = "dlkit.engine.adapters.lightning.datamodules"\n\n[training]',
+        encoding="utf-8",
+    )
+
+
+def _write_fit_job_config(path: Path, *, rank: float = 0.99) -> None:
+    """Write a minimal, fully-loadable `run.type = "fit"` (POD-2G) job config."""
+    path.write_text(
+        "\n".join(
+            [
+                "[run]",
+                'type = "fit"',
+                "",
+                "[model]",
+                'name = "PODCoarseningStrategy"',
+                'module_path = "torchalg.preconditioners.implementations.pod"',
+                f"rank = {rank}",
+                "",
+                "[data]",
+                'name = "FlexibleDataset"',
+                "batch_size = 4",
+                "",
+                "[data.module]",
+                'name = "ArrayDataModule"',
+                'module_path = "dlkit.engine.adapters.lightning.datamodules"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _case_config_with_assignment(
+    tmp_path: Path,
+    *,
+    job_writer: Callable[[Path], None],
+    assignment_id: str = "ffnn_solutions",
+    dataset_id: str = "solutions",
+    job_id: str = "ffnn",
+) -> tuple[CaseConfig, Path, NeurallsSettings]:
+    """Build a minimal case config with one dataset/job/assignment registered.
+
+    Returns the ``(cfg, config_dir, settings)`` triple `neural_specs_from_assignments`
+    needs to resolve an assignment's declared job and dataset directory.
+    """
+    datasets_dir = tmp_path / "datasets"
+    datasets_dir.mkdir(exist_ok=True)
+    _write_dataset_config(datasets_dir / f"{dataset_id}.toml", dataset_id)
+
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir(exist_ok=True)
+    job_writer(jobs_dir / f"{job_id}.toml")
+
+    settings = _make_settings(tmp_path)
+    cfg = CaseConfig.model_validate(
+        {
+            "datasets": [{"id": dataset_id, "path": f"datasets/{dataset_id}.toml"}],
+            "jobs": [{"id": job_id, "path": f"jobs/{job_id}.toml"}],
+            "assignments": [{"id": assignment_id, "dataset": dataset_id, "job": job_id}],
+        }
+    )
+    return cfg, tmp_path, settings
 
 
 def _configure_mock_mlflow(mock_mlflow: MagicMock, run_id: str = "comp-run-id") -> None:
@@ -503,30 +577,79 @@ def test_resolve_neural_preconditioners_validates_all() -> None:
     assert len(resolved) == 2
 
 
-def test_neural_specs_from_assignments_uses_logged_ref_with_assignment_tag() -> None:
-    """Auto-generated specs reference unregistered runs tagged by assignment_id."""
+def test_neural_specs_from_assignments_uses_logged_ref_with_assignment_tag(
+    tmp_path: Path,
+) -> None:
+    """A train-kind assignment yields an unresolved neural preconditioner stub."""
+    cfg, config_dir, settings = _case_config_with_assignment(
+        tmp_path, job_writer=_write_train_job_config
+    )
     entry = AssignmentEntry(id="ffnn_solutions", dataset="solutions", job="ffnn")
     client = MagicMock()
     client.search_experiments.return_value = []
 
-    specs = neural_specs_from_assignments([entry], claimed_ids=set(), client=client)
+    specs = neural_specs_from_assignments(
+        [entry], claimed_ids=set(), client=client, cfg=cfg, config_dir=config_dir, settings=settings
+    )
 
     assert len(specs) == 1
     spec = specs[0]
+    assert isinstance(spec, NeuralPreconditionerConfig)
     assert spec.assignment == "ffnn_solutions"
     assert spec.model_ref == LoggedModelRefConfig(
         latest=True, tags={"assignment_id": "ffnn_solutions"}
     )
 
 
-def test_neural_specs_from_assignments_skips_claimed_ids() -> None:
+def test_neural_specs_from_assignments_skips_claimed_ids(tmp_path: Path) -> None:
     """Assignments already covered by an explicit preconditioner are skipped."""
+    cfg, config_dir, settings = _case_config_with_assignment(
+        tmp_path, job_writer=_write_train_job_config
+    )
     entry = AssignmentEntry(id="ffnn_solutions", dataset="solutions", job="ffnn")
     client = MagicMock()
 
-    specs = neural_specs_from_assignments([entry], claimed_ids={"ffnn_solutions"}, client=client)
+    specs = neural_specs_from_assignments(
+        [entry],
+        claimed_ids={"ffnn_solutions"},
+        client=client,
+        cfg=cfg,
+        config_dir=config_dir,
+        settings=settings,
+    )
 
     assert specs == []
+
+
+def test_neural_specs_from_assignments_dispatches_fit_kind_to_pod_stub(
+    tmp_path: Path,
+) -> None:
+    """A `run.type = "fit"` assignment yields an unresolved AMG/POD stub, not neural."""
+    cfg, config_dir, settings = _case_config_with_assignment(
+        tmp_path,
+        job_writer=lambda path: _write_fit_job_config(path, rank=0.9999),
+        assignment_id="pod2g_cg1",
+        dataset_id="solutions-cg1",
+        job_id="pod2g-cg1",
+    )
+    entry = AssignmentEntry(id="pod2g_cg1", dataset="solutions-cg1", job="pod2g-cg1")
+    client = MagicMock()
+
+    specs = neural_specs_from_assignments(
+        [entry], claimed_ids=set(), client=client, cfg=cfg, config_dir=config_dir, settings=settings
+    )
+
+    assert len(specs) == 1
+    spec = specs[0]
+    assert isinstance(spec, AMGPreconditionerConfig)
+    assert isinstance(spec.coarsening, PODCoarseningConfig)
+    assert spec.coarsening.assignment == "pod2g_cg1"
+    assert spec.coarsening.rank == 0.9999
+    assert spec.coarsening.dataset_dir == settings.processed_dir / "solutions-cg1"
+    assert spec.coarsening.model_ref == LoggedModelRefConfig(
+        latest=True, tags={"assignment_id": "pod2g_cg1"}
+    )
+    client.search_experiments.assert_not_called()
 
 
 def test_extract_array_artifacts_detaches_numpy_data(tmp_path: Path) -> None:
@@ -821,7 +944,7 @@ def test_run_comparison_stages_plot_paths_before_logging(tmp_path: Path) -> None
     entry = _make_entry()
     settings = _make_settings(tmp_path)
 
-    def _capture_work_root(tracking_uri: str, run_id: str, work_root: Path) -> None:  # noqa: ARG001
+    def _capture_work_root(tracking_uri: str, run_id: str, work_root: Path) -> None:
         nonlocal logged_files, comparison_json
         logged_files = {
             item.relative_to(work_root).as_posix()
@@ -950,38 +1073,11 @@ def test_run_comparison_ignores_unrelated_broken_experiments(
         encoding="utf-8",
     )
     (tmp_path / "models" / "valid-model.toml").write_text(
-        "\n".join(
-            [
-                "[model]",
-                "name = 'NormScaledLinearFFNN'",
-                "module_path = 'dlkit.nn'",
-                "",
-                "[data]",
-                "name = 'FlexibleDataset'",
-                "",
-                "[data.module]",
-                "name = 'ArrayDataModule'",
-            ]
-        ),
+        "[model]\nname = 'NormScaledLinearFFNN'\nmodule_path = 'dlkit.nn'\n\n[data]\nname = 'FlexibleDataset'\n\n[data.module]\nname = 'ArrayDataModule'",
         encoding="utf-8",
     )
     (tmp_path / "jobs" / "valid-job.toml").write_text(
-        "\n".join(
-            [
-                "[run]",
-                'type = "train"',
-                "seed = 42",
-                'model = "../models/valid-model.toml"',
-                'data = "../models/valid-model.toml"',
-                "",
-                "[training.trainer]",
-                "max_epochs = 1",
-                "",
-                "[training.optimizer.default_optimizer]",
-                'name = "AdamW"',
-                "lr = 1e-3",
-            ]
-        ),
+        '[run]\ntype = "train"\nseed = 42\nmodel = "../models/valid-model.toml"\ndata = "../models/valid-model.toml"\n\n[training.trainer]\nmax_epochs = 1\n\n[training.optimizer.default_optimizer]\nname = "AdamW"\nlr = 1e-3',
         encoding="utf-8",
     )
     experiments_config = tmp_path / "experiments.toml"

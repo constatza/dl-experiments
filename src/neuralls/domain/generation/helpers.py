@@ -10,13 +10,13 @@ from typing import Any, Literal, cast
 import numpy as np
 from loguru import logger
 from scipy.linalg import eigh, norm
-from scipy.sparse import issparse, csc_matrix
+from scipy.sparse import csc_matrix, issparse
 from scipy.sparse.linalg import LinearOperator
 
 from neuralls.shared.constants import (
-    EIGENVECTOR_SELECT_SMALLEST,
     EIGENVECTOR_SELECT_LARGEST,
     EIGENVECTOR_SELECT_RANDOM,
+    EIGENVECTOR_SELECT_SMALLEST,
 )
 from neuralls.shared.types import ScaleMetadata
 
@@ -65,7 +65,7 @@ def rounded_counts(total: int, proportions: Mapping[str, float]) -> dict[str, in
         raise ValueError("Sum of mix weights must be positive")
 
     scaled = {key: (weight / total_weight) * total for key, weight in weights.items()}
-    counts = {key: int(math.floor(amount)) for key, amount in scaled.items()}
+    counts = {key: math.floor(amount) for key, amount in scaled.items()}
     remainders = {key: scaled[key] - counts[key] for key in scaled}
 
     remaining = total - sum(counts.values())
@@ -253,6 +253,8 @@ def _solve_linear_systems(
 
     Raises:
         ValueError: If method is invalid
+        TypeError: If a direct solve is requested with a `LinearOperator`
+            instead of a concrete matrix
     """
     rhs_array = np.asarray(rhs_vectors, dtype=np.float64)
     num_systems, n = rhs_array.shape
@@ -261,7 +263,7 @@ def _solve_linear_systems(
     match method:
         case "direct":
             if isinstance(A, LinearOperator):
-                raise ValueError("Direct solve requires a concrete matrix, got LinearOperator.")
+                raise TypeError("Direct solve requires a concrete matrix, got LinearOperator.")
             if issparse(A):
                 from scipy.sparse.linalg import factorized
 
@@ -407,9 +409,10 @@ def _compute_eigendecomposition(A: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
     Raises:
         ValueError: If matrix is not symmetric within tolerance
+        TypeError: If `A` is a `LinearOperator` instead of an explicit matrix
     """
     if isinstance(A, LinearOperator):
-        raise ValueError("Eigenvector strategies require an explicit matrix, got LinearOperator.")
+        raise TypeError("Eigenvector strategies require an explicit matrix, got LinearOperator.")
     matrix = (
         np.asarray(cast(Any, A).toarray(), dtype=np.float64)
         if issparse(A)
@@ -485,7 +488,7 @@ def _generate_eigenvector_combinations(
     Returns:
         Linear combinations, shape (num_samples, n)
     """
-    n, k = eigenvectors.shape
+    _n, k = eigenvectors.shape
     coeffs = rng.standard_normal(size=(num_samples, k), dtype=np.float64)
     norms = np.linalg.norm(coeffs, axis=1, keepdims=True)
     coeffs_normalized = coeffs / norms
@@ -710,19 +713,19 @@ def _generate_krylov_combinations(
 
 
 __all__ = [
+    "_build_trace_indices",
+    "_calculate_normalization_scale",
+    "_compute_eigendecomposition",
+    "_generate_eigenvector_combinations",
+    "_generate_krylov_combinations",
+    "_lanczos_iteration",
+    "_merge_strategy_outputs",
+    "_normalize_matrix_for_generation",
+    "_resolve_strategy_counts",
+    "_select_eigenvectors",
+    "_solve_linear_systems",
+    "_verify_solution_accuracy",
     "rng_from_seed",
     "rounded_counts",
     "select_archive_files",
-    "_calculate_normalization_scale",
-    "_normalize_matrix_for_generation",
-    "_resolve_strategy_counts",
-    "_solve_linear_systems",
-    "_build_trace_indices",
-    "_merge_strategy_outputs",
-    "_compute_eigendecomposition",
-    "_select_eigenvectors",
-    "_generate_eigenvector_combinations",
-    "_verify_solution_accuracy",
-    "_lanczos_iteration",
-    "_generate_krylov_combinations",
 ]

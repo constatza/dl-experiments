@@ -9,12 +9,12 @@ from dlkit.common.errors import ConfigValidationError
 from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
 
 from neuralls.composition.assignments.assembler import load_assignment
+from neuralls.platform.config.dlkit_bridge import load_job_config
 from neuralls.platform.config.models.workspace import (
     AssignmentSpec,
     AssignmentWorkspace,
     RunnableAssignment,
 )
-from neuralls.platform.config.dlkit_bridge import load_job_config
 
 
 def _write_model_profile(

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import os
 import tomllib
-import tomli_w
 from pathlib import Path
 from typing import Any
 
+import tomli_w
 from platformdirs import user_config_dir
 from pydantic import BaseModel, Field, field_validator, model_validator
 

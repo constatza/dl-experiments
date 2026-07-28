@@ -9,9 +9,9 @@ Each strategy specifies either:
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Mapping, Sequence
 
 from neuralls.shared.types import GenerationStrategyKind
 
@@ -241,16 +241,21 @@ def parse_generation_plan(generation_cfg: Mapping[str, Any]) -> GenerationPlan:
     specs: list[StrategySpec] = []
     for index, raw_spec in enumerate(entries):
         if not isinstance(raw_spec, Mapping):
-            raise ValueError(f"'generation.strategy' entry at index {index} must be a table")
+            # ValueError (not TypeError) to match the sibling raise above:
+            # both are TOML config validation errors reported to the user,
+            # not internal type-contract violations.
+            raise ValueError(  # noqa: TRY004
+                f"'generation.strategy' entry at index {index} must be a table"
+            )
         specs.append(_parse_strategy_entry(raw_spec, index))
 
     return plan_from_specs(specs)
 
 
 __all__ = [
-    "StrategySpec",
     "GenerationPlan",
+    "StrategySpec",
     "canonicalize_strategy_name",
-    "plan_from_specs",
     "parse_generation_plan",
+    "plan_from_specs",
 ]

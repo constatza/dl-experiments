@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from neuralls.platform.config.models.data_models import DataConfigFile, OutputConfig
 from neuralls.platform.config.resolution import (
     PathContext,
     build_sqlite_tracking_uri,
     resolve_path_context,
 )
-from neuralls.platform.config.models.data_models import DataConfigFile, OutputConfig
 from neuralls.platform.config.settings import NeurallsSettings
 from neuralls.shared.constants import DEFAULT_PROJECT_ROOT
 

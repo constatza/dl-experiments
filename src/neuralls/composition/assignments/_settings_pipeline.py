@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from dlkit.infrastructure.config.data_entries import DataEntry
 
-from neuralls.composition.assignments._job_types import TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import TrainableJobConfig
 from neuralls.composition.assignments.job_materializer import materialize_training_job
 from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
 
-def _configure_training_pipeline(
-    settings: TrainLikeJobConfig,
+def _configure_training_pipeline[T: TrainableJobConfig](
+    settings: T,
     workspace: AssignmentWorkspace,
     features: list[DataEntry],
     targets: list[DataEntry],
     contract: RuntimeDatasetContract,
-) -> tuple[TrainLikeJobConfig, AssignmentWorkspace]:
+) -> tuple[T, AssignmentWorkspace]:
     """Materialize one runnable training job through narrow patch stages."""
     return materialize_training_job(
         settings,

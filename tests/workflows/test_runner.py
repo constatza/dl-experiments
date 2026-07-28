@@ -5,19 +5,18 @@ without involving the CLI layer. These are integration tests that verify
 the full workflow logic.
 """
 
+import os
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import tomli_w
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
 from dlkit.common import ChildSuccess
 
 from neuralls.composition.assignments.training import PreparedTraining
 from neuralls.composition.assignments.training_batch import run_assignment_matrix
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
-import os
 
 
 def _fake_prepared_training(tmp_path: Path, assignment_id: str) -> PreparedTraining:

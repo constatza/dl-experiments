@@ -2,41 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
-
-from loguru import logger
-from mlflow.tracking import MlflowClient
 
 from dlkit.common import ChildFailure, ChildSuccess
 from dlkit.engine.workflows.multi_run import MultiRunSpec, RunSpec
 from dlkit.interfaces.api import run_multirun_spec
+from loguru import logger
+from mlflow.tracking import MlflowClient
 
-from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
-from neuralls.platform.config.models.experiments import (
-    CaseConfig,
-    AssignmentEntry,
-    resolve_display_name,
-)
-from neuralls.platform.config.resolution import (
-    derive_output_root_from_tracking_uri,
-    is_sqlite_tracking_uri,
-)
-from neuralls.platform.config.loaders import load_data_config
-from neuralls.platform.config.settings import NeurallsSettings, require_settings
-from neuralls.platform.reporting.plots import plot_metric_comparison
-from neuralls.platform.tracking.environment import scoped_mlflow_environment
-from neuralls.platform.tracking.mlflow import (
-    build_workflow_environment,
-    finalize_session_parent_run,
-)
-from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
-from neuralls.platform.tracking.model_registry import read_model_class_name
-from neuralls.composition.tracking.run_specs import (
-    build_registration_tags,
-    build_session_run_spec,
-)
 from neuralls.composition.assignments._registry_lookup import (
     _find_registry_entry,
     _resolve_config_paths,
@@ -48,6 +23,30 @@ from neuralls.composition.assignments.training import (
     prepare_training_settings,
     to_run_spec,
 )
+from neuralls.composition.tracking.run_specs import (
+    build_registration_tags,
+    build_session_run_spec,
+)
+from neuralls.platform.config.loaders import load_data_config
+from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
+from neuralls.platform.config.models.experiments import (
+    AssignmentEntry,
+    CaseConfig,
+    resolve_display_name,
+)
+from neuralls.platform.config.resolution import (
+    derive_output_root_from_tracking_uri,
+    is_sqlite_tracking_uri,
+)
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
+from neuralls.platform.reporting.plots import plot_metric_comparison
+from neuralls.platform.tracking.environment import scoped_mlflow_environment
+from neuralls.platform.tracking.mlflow import (
+    build_workflow_environment,
+    finalize_session_parent_run,
+)
+from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
+from neuralls.platform.tracking.model_registry import read_model_class_name
 
 
 @dataclass(frozen=True)

@@ -8,10 +8,10 @@ from typing import Any, Literal, cast
 import numpy as np
 
 from .interfaces import (
+    ArchiveData,
+    GeneratedSamples,
     MatrixGenerationStrategy,
     SingleRhsGenerationStrategy,
-    GeneratedSamples,
-    ArchiveData,
     TracingSolverCallable,
 )
 

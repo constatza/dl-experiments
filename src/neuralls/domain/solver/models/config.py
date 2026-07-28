@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from torchalg.monitoring import TraceMode
+
 from neuralls.shared.types import ComparisonRhsSourceKind
 
 

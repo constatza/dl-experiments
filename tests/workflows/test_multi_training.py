@@ -8,12 +8,8 @@ from types import SimpleNamespace
 from unittest.mock import call, patch
 
 import pytest
-
 from dlkit.common import ChildSuccess
 
-from neuralls.platform.config.models.experiments import CaseConfig, ExperimentNamesConfig
-from neuralls.platform.config.resolution import build_sqlite_tracking_uri
-from neuralls.platform.config.loaders import load_case_config, load_raw_toml
 from neuralls.composition.assignments.multi_training import (
     TrainingRunResult,
     _annotate_mlflow_run,
@@ -23,6 +19,9 @@ from neuralls.composition.assignments.multi_training import (
     train_batch,
 )
 from neuralls.composition.assignments.training import PreparedTraining
+from neuralls.platform.config.loaders import load_case_config, load_raw_toml
+from neuralls.platform.config.models.experiments import CaseConfig, ExperimentNamesConfig
+from neuralls.platform.config.resolution import build_sqlite_tracking_uri
 from neuralls.platform.tracking.mlflow import create_session_parent_run
 
 
@@ -522,22 +521,7 @@ def test_experiments_config_rejects_legacy_singular_experiment_table(
     """Master configs must use only [[assignments]]."""
     config = tmp_path / "experiments.toml"
     config.write_text(
-        "\n".join(
-            [
-                "[[jobs]]",
-                'id = "ffnn"',
-                'path = "jobs/ffnn.toml"',
-                "",
-                "[[datasets]]",
-                'id = "test-solutions"',
-                'path = "datasets/test-solutions.toml"',
-                "",
-                "[[experiment]]",
-                'id = "ffnn_test"',
-                'job = "ffnn"',
-                'dataset = "test-solutions"',
-            ]
-        )
+        '[[jobs]]\nid = "ffnn"\npath = "jobs/ffnn.toml"\n\n[[datasets]]\nid = "test-solutions"\npath = "datasets/test-solutions.toml"\n\n[[experiment]]\nid = "ffnn_test"\njob = "ffnn"\ndataset = "test-solutions"'
     )
 
     with pytest.raises(ValueError, match=r"\[\[experiment\]\]"):
@@ -548,18 +532,7 @@ def test_experiments_config_rejects_missing_dataset_id(tmp_path: Path) -> None:
     """Experiments must reference dataset ids declared in [[datasets]]."""
     config = tmp_path / "experiments.toml"
     config.write_text(
-        "\n".join(
-            [
-                "[[jobs]]",
-                'id = "ffnn"',
-                'path = "jobs/ffnn.toml"',
-                "",
-                "[[assignments]]",
-                'id = "ffnn_test"',
-                'job = "ffnn"',
-                'dataset = "missing-dataset"',
-            ]
-        )
+        '[[jobs]]\nid = "ffnn"\npath = "jobs/ffnn.toml"\n\n[[assignments]]\nid = "ffnn_test"\njob = "ffnn"\ndataset = "missing-dataset"'
     )
 
     with pytest.raises(
@@ -572,18 +545,7 @@ def test_experiments_config_rejects_missing_job_id(tmp_path: Path) -> None:
     """Experiments must reference job ids declared in [[jobs]]."""
     config = tmp_path / "experiments.toml"
     config.write_text(
-        "\n".join(
-            [
-                "[[datasets]]",
-                'id = "test-solutions"',
-                'path = "datasets/test-solutions.toml"',
-                "",
-                "[[assignments]]",
-                'id = "ffnn_test"',
-                'job = "missing-job"',
-                'dataset = "test-solutions"',
-            ]
-        )
+        '[[datasets]]\nid = "test-solutions"\npath = "datasets/test-solutions.toml"\n\n[[assignments]]\nid = "ffnn_test"\njob = "missing-job"\ndataset = "test-solutions"'
     )
 
     with pytest.raises(ValueError, match="Assignment 'ffnn_test' references job id 'missing-job'"):

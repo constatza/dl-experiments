@@ -12,7 +12,6 @@ from pathlib import Path
 
 from loguru import logger
 
-
 _WORKSPACE_ARTIFACT_DIRS: tuple[str, ...] = (
     "config",
     "figures",

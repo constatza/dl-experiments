@@ -12,19 +12,19 @@ import tomli_w
 from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
-from neuralls.composition.generation.dataset_builder import build_dataset
-from neuralls.composition.assignments.comparison_batch import run_comparison_batch
-from neuralls.composition.assignments.runtime_dataset_contract import (
-    default_training_dataset_contract,
-)
-from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
-from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
-from neuralls.composition.comparison.models import ComparisonParams
 from neuralls.composition.assignments._training_artifacts import (
     _log_training_evaluation,
     _normalize_training_numpy_payload,
 )
+from neuralls.composition.assignments.comparison_batch import run_comparison_batch
+from neuralls.composition.assignments.runtime_dataset_contract import (
+    default_training_dataset_contract,
+)
+from neuralls.composition.comparison.models import ComparisonParams
+from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.platform.config.resolution import build_sqlite_tracking_uri
+from neuralls.platform.reporting.training_diagnostics import compute_diagnostics
+from neuralls.platform.tracking.mlflow_client import log_diagnostics_to_mlflow
 
 
 def _sqlite_tracking_uri(db_path: Path) -> str:
@@ -210,23 +210,7 @@ def _write_experiments_config(
 def _write_method_config(path: Path) -> None:
     """Write a minimal comparison method override config."""
     path.write_text(
-        "\n".join(
-            [
-                "[general]",
-                "",
-                "[general.params]",
-                "rtol = 1e-6",
-                "atol = 1e-14",
-                "max_iterations = 20",
-                'stopping_criterion = "residual_norm"',
-                "m_max = 5",
-                "",
-                "[[preconditioners]]",
-                'name = "none"',
-                'type = "identity"',
-                "",
-            ]
-        ),
+        '[general]\n\n[general.params]\nrtol = 1e-6\natol = 1e-14\nmax_iterations = 20\nstopping_criterion = "residual_norm"\nm_max = 5\n\n[[preconditioners]]\nname = "none"\ntype = "identity"\n',
         encoding="utf-8",
     )
 

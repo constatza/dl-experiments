@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loguru import logger
 import numpy as np
 import zarr
+from loguru import logger
 
 from .datasets import (
+    load_dataset_manifest,
     load_dense_training_arrays,
     load_matrix_dense_sample,
-    load_dataset_manifest,
 )
 
 

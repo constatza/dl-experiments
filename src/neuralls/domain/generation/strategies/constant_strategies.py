@@ -16,7 +16,7 @@ from typing import Any
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, ArchiveData
+from ..interfaces import ArchiveData, GeneratedSamples
 from ..providers import ConstantInputProvider
 from ..runner import register_strategy
 from ..strategy_configs import ConstantForwardConfig, ConstantInverseConfig

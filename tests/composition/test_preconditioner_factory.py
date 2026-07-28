@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Self
 
 import numpy as np
 import pytest
@@ -29,9 +30,9 @@ from torchalg.preconditioners.implementations.amg import AggregationCoarsening, 
 from torchalg.preconditioners.ports import ExtraInputPredictorPort, PredictorAdapter
 
 from neuralls.composition.preconditioners.factory import (
+    PreconditionerScheduleConfig,
     create_preconditioner,
     create_scheduled_preconditioner,
-    PreconditionerScheduleConfig,
 )
 from neuralls.domain.inference_ports import InferencePredictorPort
 from neuralls.platform.config.models.preconditioner import (
@@ -71,7 +72,7 @@ class MockPredictor(ExtraInputPredictorPort):
         """Mark as cleaned up."""
         self.cleaned_up = True
 
-    def __enter__(self) -> MockPredictor:
+    def __enter__(self) -> Self:
         """Enter context manager."""
         return self
 
@@ -492,6 +493,104 @@ def test_factory_creates_amg_preconditioner_with_pod_coarsening(
     assert isinstance(precond, AMGPreconditioner)
     result = precond.apply(residual_vector)
     assert result.shape == residual_vector.shape
+
+
+@pytest.fixture
+def fitted_pod_checkpoint(tmp_path: Path, well_conditioned_matrix: torch.Tensor) -> Path:
+    """A real dlkit-shaped checkpoint for an already-fitted `PODCoarseningStrategy`.
+
+    Mirrors exactly the checkpoint dlkit's `OneShotFitExecutor` writes for a
+    `run.type = "fit"` assignment (`state_dict` + `dlkit_metadata.model_settings`),
+    so `build_model_from_checkpoint` reconstructs it the same way the factory's
+    checkpoint-reconstruction branch does at real comparison time.
+    """
+    from torchalg.preconditioners.implementations.pod import PODCoarseningStrategy
+
+    rng = np.random.default_rng(0)
+    snapshots = torch.as_tensor(
+        rng.standard_normal((4, well_conditioned_matrix.shape[0])), dtype=torch.float64
+    )
+    model = PODCoarseningStrategy(rank=2)
+    model.fit(snapshots)
+
+    checkpoint = {
+        "state_dict": model.state_dict(),
+        "dlkit_metadata": {
+            "wrapper_type": "PODCoarseningStrategy",
+            "model_settings": {
+                "name": "PODCoarseningStrategy",
+                "module_path": "torchalg.preconditioners.implementations.pod",
+                "hyper_kwargs": {"rank": 2},
+            },
+            "entry_configs": [],
+            "feature_names": [],
+            "forward_arg_map": {},
+            "predict_target_key": "",
+            "model_family": "external",
+            "input_shapes": None,
+            "output_shapes": None,
+        },
+    }
+    checkpoint_path = tmp_path / "pod-fit-checkpoint.ckpt"
+    torch.save(checkpoint, checkpoint_path)
+    return checkpoint_path
+
+
+def test_factory_creates_amg_preconditioner_from_fitted_pod_checkpoint(
+    well_conditioned_matrix: torch.Tensor,
+    residual_vector: torch.Tensor,
+    fitted_pod_checkpoint: Path,
+    tmp_path: Path,
+) -> None:
+    """When `resolved_checkpoint_path` is set, the factory reconstructs the basis
+    from the checkpoint instead of fitting inline from `dataset_dir`.
+
+    `dataset_dir` is set to a non-dataset directory to prove it is never read
+    once a checkpoint resolves — the fallback branch would raise trying to
+    read `tmp_path` as a dataset.
+    """
+    coarsening = PODCoarseningConfig(
+        dataset_dir=tmp_path,
+        rank=2,
+        resolved_checkpoint_path=fitted_pod_checkpoint,
+    )
+    config = AMGPreconditionerConfig(name="pod2g-fit", coarsening=coarsening)
+
+    precond = create_preconditioner(well_conditioned_matrix, config)
+
+    assert isinstance(precond, AMGPreconditioner)
+    result = precond.apply(residual_vector)
+    assert result.shape == residual_vector.shape
+
+
+def test_factory_pod_checkpoint_reconstruction_rejects_non_pod_model(
+    well_conditioned_matrix: torch.Tensor,
+    tmp_path: Path,
+) -> None:
+    """A checkpoint reconstructing to a non-POD model raises a clear TypeError."""
+    linear = torch.nn.Linear(2, 2, dtype=torch.float64)
+    checkpoint = {
+        "state_dict": linear.state_dict(),
+        "dlkit_metadata": {
+            "wrapper_type": "Linear",
+            "model_settings": {
+                "name": "Linear",
+                "module_path": "torch.nn",
+                "hyper_kwargs": {"in_features": 2, "out_features": 2},
+            },
+        },
+    }
+    checkpoint_path = tmp_path / "wrong-model-checkpoint.ckpt"
+    torch.save(checkpoint, checkpoint_path)
+    coarsening = PODCoarseningConfig(
+        dataset_dir=tmp_path,
+        rank=2,
+        resolved_checkpoint_path=checkpoint_path,
+    )
+    config = AMGPreconditionerConfig(name="pod2g-fit", coarsening=coarsening)
+
+    with pytest.raises(TypeError, match="expected PODCoarseningStrategy"):
+        create_preconditioner(well_conditioned_matrix, config)
 
 
 def test_factory_creates_amg_preconditioner_with_neural_pod_coarsening(

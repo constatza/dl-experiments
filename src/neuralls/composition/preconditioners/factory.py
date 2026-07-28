@@ -30,21 +30,24 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torchalg.preconditioners.base import Preconditioner
 from torchalg.preconditioners.implementations import (
-    Identity,
-    JacobiPreconditioner,
-    ILUPreconditioner,
     IC0Preconditioner,
     ICholeskyPreconditioner,
+    Identity,
+    ILUPreconditioner,
+    JacobiPreconditioner,
     NeuralPreconditioner,
 )
+
 from neuralls.platform.config.models.preconditioner import PreconditionerType
 
 if TYPE_CHECKING:
+    from torchalg.preconditioners.implementations.pod import PODCoarseningStrategy
+    from torchalg.preconditioners.ports import PredictorAdapter
+
+    from neuralls.domain.inference_ports import InferencePredictorPort
     from neuralls.platform.config.models.preconditioner import (
         ConcretePreconditionerConfig,
     )
-    from neuralls.domain.inference_ports import InferencePredictorPort
-    from torchalg.preconditioners.ports import PredictorAdapter
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,44 @@ class PreconditionerScheduleConfig:
     start_iter: int = 0
     limit_iters: int = -1
     fallback: PreconditionerType = PreconditionerType.IDENTITY
+
+
+def _load_fitted_pod_coarsening(
+    checkpoint_path: Path, matrix: torch.Tensor
+) -> PODCoarseningStrategy:
+    """Reconstruct a fitted POD-2G coarsening strategy from its checkpoint.
+
+    Loads the raw checkpoint dict and rebuilds the module via dlkit's
+    generic, trainer-agnostic checkpoint reconstruction
+    (`build_model_from_checkpoint`) — the bare `nn.Module`, not the
+    `CheckpointPredictor` inference wrapper `dlkit.load_model` returns: a
+    coarsening strategy is invoked directly (`build_transfer(A)`) once at
+    AMG setup, not through `PredictorPort`'s per-iteration `apply()`.
+
+    Args:
+        checkpoint_path: Local path to the fitted `.ckpt` file, already
+            resolved/downloaded by
+            `composition/assignments/model_resolution.py`.
+        matrix: System matrix; used only to match dtype/device.
+
+    Returns:
+        A `PODCoarseningStrategy` with its `_basis` buffer already loaded
+        from the checkpoint (no `.fit()` call needed).
+
+    Raises:
+        TypeError: If the reconstructed model is not a `PODCoarseningStrategy`.
+    """
+    from dlkit.engine.inference.model_builder import build_model_from_checkpoint
+    from torchalg.preconditioners.implementations.pod import PODCoarseningStrategy
+
+    raw_checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    model = build_model_from_checkpoint(raw_checkpoint)
+    if not isinstance(model, PODCoarseningStrategy):
+        raise TypeError(
+            f"Checkpoint at {checkpoint_path} reconstructed a {type(model).__name__}, "
+            "expected PODCoarseningStrategy."
+        )
+    return model.to(dtype=matrix.dtype, device=matrix.device)
 
 
 def create_preconditioner(
@@ -122,27 +163,40 @@ def create_preconditioner(
         )
 
         if isinstance(config.coarsening, PODCoarseningConfig):
-            from neuralls.platform.storage.dataset_readers import load_dense_training_arrays
+            pod_cfg = config.coarsening
+            ckpt = pod_cfg.resolved_checkpoint_path or pod_cfg.checkpoint_path
+            if ckpt is not None:
+                # Fitted ahead of time via a `FitJobConfig` assignment
+                # (composition/assignments/comparison_batch.py's kind
+                # dispatch) — reconstruct the fitted basis directly from its
+                # MLflow-tracked checkpoint instead of refitting inline.
+                coarsening = _load_fitted_pod_coarsening(ckpt, matrix)
+            else:
+                # Not yet migrated to an assignment: fit inline from raw
+                # snapshot files, exactly as before (backward compatible).
+                from torchalg.preconditioners.implementations.pod import (
+                    PODCoarseningStrategy,
+                )
+
+                from neuralls.platform.storage.dataset_readers import (
+                    load_dense_training_arrays,
+                )
+
+                _, solutions = load_dense_training_arrays(pod_cfg.dataset_dir)
+                if pod_cfg.n_snapshots != -1:
+                    solutions = solutions[: pod_cfg.n_snapshots]
+                coarsening = PODCoarseningStrategy(rank=pod_cfg.rank)
+                coarsening.fit(torch.as_tensor(solutions, dtype=matrix.dtype, device=matrix.device))
+        elif isinstance(config.coarsening, NeuralPODCoarseningConfig):
             from torchalg.preconditioners.implementations.pod import (
                 PODCoarseningStrategy,
             )
 
-            _, solutions = load_dense_training_arrays(config.coarsening.dataset_dir)
-            if config.coarsening.n_snapshots != -1:
-                solutions = solutions[: config.coarsening.n_snapshots]
-            coarsening = PODCoarseningStrategy(
-                snapshots=torch.as_tensor(solutions, dtype=matrix.dtype, device=matrix.device),
-                rank=config.coarsening.rank,
-            )
-        elif isinstance(config.coarsening, NeuralPODCoarseningConfig):
             from neuralls.application.inference.prediction import (
                 collect_predictions,
                 stack_predictions,
             )
             from neuralls.platform.storage.dataset_readers import load_parameter_arrays
-            from torchalg.preconditioners.implementations.pod import (
-                PODCoarseningStrategy,
-            )
 
             neural_pod_cfg = config.coarsening
             ckpt = neural_pod_cfg.resolved_checkpoint_path or neural_pod_cfg.checkpoint_path
@@ -171,10 +225,8 @@ def create_preconditioner(
             predicted = stack_predictions(raw_predictions)
             if neural_pod_cfg.n_snapshots != -1:
                 predicted = predicted[: neural_pod_cfg.n_snapshots]
-            coarsening = PODCoarseningStrategy(
-                snapshots=torch.as_tensor(predicted, dtype=matrix.dtype, device=matrix.device),
-                rank=neural_pod_cfg.rank,
-            )
+            coarsening = PODCoarseningStrategy(rank=neural_pod_cfg.rank)
+            coarsening.fit(torch.as_tensor(predicted, dtype=matrix.dtype, device=matrix.device))
         else:
             coarsening = AggregationCoarsening(
                 theta=config.coarsening.theta,

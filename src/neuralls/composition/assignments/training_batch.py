@@ -21,24 +21,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loguru import logger
-
 from dlkit.common import ChildFailure, ChildSuccess
 from dlkit.engine.workflows.multi_run import MultiRunSpec, RunSpec
 from dlkit.interfaces.api import run_multirun_spec
+from loguru import logger
 
-from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
+from neuralls.application.models import AssignmentResult
 from neuralls.composition.assignments.assembler import (
     load_assignment_batch,
     load_validated_case_config,
 )
-from neuralls.composition.tracking.run_specs import build_session_run_spec
-from neuralls.platform.config.loaders import load_data_config
-from neuralls.platform.config.settings import NeurallsSettings, require_settings
-from neuralls.platform.storage.base import load_matrix
-from neuralls.application.models import AssignmentResult
-from neuralls.platform.caching import compute_directory_hash
-from neuralls.composition.generation.processing import process_config
 from neuralls.composition.assignments.training import (
     PreparedTraining,
     cleanup_prepared_training,
@@ -46,6 +38,13 @@ from neuralls.composition.assignments.training import (
     prepare_training_settings,
     to_run_spec,
 )
+from neuralls.composition.generation.processing import process_config
+from neuralls.composition.tracking.run_specs import build_session_run_spec
+from neuralls.platform.caching import compute_directory_hash
+from neuralls.platform.config.loaders import load_data_config
+from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
+from neuralls.platform.storage.base import load_matrix
 from neuralls.platform.storage.dataset_readers import resolve_dataset_artifacts
 from neuralls.platform.tracking.environment import scoped_mlflow_environment
 from neuralls.platform.tracking.mlflow import (

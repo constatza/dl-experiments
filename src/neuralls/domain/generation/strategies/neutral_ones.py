@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, ArchiveData
+from ..interfaces import ArchiveData, GeneratedSamples
 from ..providers import ConstantInputProvider
 from ..runner import register_strategy
 from ..strategy_configs import BaseStrategyConfig
@@ -23,8 +23,6 @@ class NeutralOnesConfig(BaseStrategyConfig):
     Generates neutral test cases where x = ones and b = A @ x.
     This provides an unbiased baseline for solver comparison across experiments.
     """
-
-    pass
 
 
 @register_strategy

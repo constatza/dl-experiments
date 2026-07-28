@@ -12,7 +12,6 @@ from neuralls.application.inference.models import InferenceConfig
 from neuralls.composition.assignments.assembler import load_assignment
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
 
-
 PREDICTION_ARTIFACTS: tuple[str, ...] = ("figures", "predictions")
 
 
@@ -107,8 +106,8 @@ def _execute_inference_pipeline(
     Returns:
         Tuple of (predictions, metrics_dict, plot_paths)
     """
-    from neuralls.composition.inference.data_loading import load_inference_data
     from neuralls.application.inference.prediction import run_prediction
+    from neuralls.composition.inference.data_loading import load_inference_data
     from neuralls.platform.dlkit.inference_adapter import (
         create_inference_predictor,
         resolve_batch_size,

@@ -20,7 +20,6 @@ from neuralls.platform.storage.datasets import (
 )
 from neuralls.platform.storage.training_artifacts import Hdf5ArraySource, load_training_arrays
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

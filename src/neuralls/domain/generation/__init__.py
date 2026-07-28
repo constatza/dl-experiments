@@ -28,44 +28,40 @@ Usage:
 
 from __future__ import annotations
 
-from .orchestration import generate_mixture, build_dataset_payload
-from .payloads import GeneratedDatasetPayload
-from .types import StrategyOutput, ArchiveData, GeneratedSamples
+# SOLID Architecture (Phases 1-2 complete)
+# Import strategies to trigger registration
+from . import providers, strategies, transforms
 from .data_types import NormalizeType
 from .helpers import rng_from_seed, rounded_counts, select_archive_files
-from .runner import run_generation
+from .orchestration import build_dataset_payload, generate_mixture
+from .payloads import GeneratedDatasetPayload
 from .plan import GenerationPlan, StrategySpec, parse_generation_plan
-
-# SOLID Architecture (Phases 1-2 complete)
-from . import providers
-from . import transforms
-
-# Import strategies to trigger registration
-from . import strategies
+from .runner import run_generation
+from .types import ArchiveData, GeneratedSamples, StrategyOutput
 
 __all__ = [
-    # Main API
-    "generate_mixture",
-    "build_dataset_payload",
-    "run_generation",
-    "parse_generation_plan",
-    # Data types
-    "StrategyOutput",
     "ArchiveData",
+    "GeneratedDatasetPayload",
     "GeneratedSamples",
     "GenerationPlan",
-    "StrategySpec",
     "NormalizeType",
-    "GeneratedDatasetPayload",
+    # Data types
+    "StrategyOutput",
+    "StrategySpec",
+    "build_dataset_payload",
+    # Main API
+    "generate_mixture",
+    "parse_generation_plan",
+    # SOLID Components (Phase 1-2)
+    "providers",
     # Helpers
     "rng_from_seed",
     "rounded_counts",
+    "run_generation",
     "select_archive_files",
-    # SOLID Components (Phase 1-2)
-    "providers",
-    "transforms",
     # Strategies (for registration)
     "strategies",
+    "transforms",
 ]
 
 __version__ = "2.0.0"

@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 import pytest
 
 from neuralls.composition.assignments.assembler import load_assignment
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 

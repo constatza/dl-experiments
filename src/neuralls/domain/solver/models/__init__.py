@@ -12,14 +12,14 @@ from .result import (
 )
 
 __all__ = [
-    "SolverResult",
     "CGComparisonResult",
+    "ComparisonData",
+    "ComparisonGeneral",
+    "ComparisonRecommendations",
+    "ComparisonResult",
     "IterationContext",
     "PlotPaths",
     "RankedRecommendation",
-    "ComparisonRecommendations",
-    "ComparisonResult",
     "SolverParams",
-    "ComparisonData",
-    "ComparisonGeneral",
+    "SolverResult",
 ]

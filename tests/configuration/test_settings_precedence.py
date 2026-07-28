@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 import neuralls.platform.config.profile as profile_module
-
 from neuralls.platform.config.profile import ProfileConfig, save_profile
 from neuralls.platform.config.settings import get_settings, load_case_settings
 
@@ -120,5 +120,5 @@ def test_get_settings_does_not_scan_cwd_env_files(
     )
     monkeypatch.chdir(project)
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         get_settings()

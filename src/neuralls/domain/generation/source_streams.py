@@ -51,6 +51,37 @@ def _enumerate_files(paths: Sequence[Path], by: EnumerateBy) -> dict[int, Path]:
     return {i: p for i, p in enumerate(sorted(paths, key=lambda p: _sort_key_for(p, by)))}
 
 
+def _filter_mapping(
+    mapping: dict[int, Path],
+    *,
+    include_indices: tuple[int, ...] | None,
+    exclude_indices: tuple[int, ...],
+) -> dict[int, Path]:
+    """Restrict *mapping* to `include_indices`, or drop `exclude_indices`.
+
+    Keeps original sample ids as dict keys (no renumbering) so downstream
+    keyed lookups (`bind_sources`, `load_dense_sample`) stay correct.
+
+    # ponytail: hand-maintained id lists per dataset TOML are a crude,
+    # manual train/eval split — refine into a shared, seeded split utility
+    # (e.g. fractional or stratified) if more parametric-family cases need
+    # this, so the held-out ids aren't hardcoded and duplicated per config.
+    """
+    if include_indices is not None and exclude_indices:
+        raise ValueError("include_indices and exclude_indices are mutually exclusive.")
+    if include_indices is not None:
+        missing = set(include_indices) - mapping.keys()
+        if missing:
+            raise ValueError(f"include_indices references unknown sample ids: {sorted(missing)}")
+        return {i: mapping[i] for i in include_indices}
+    if exclude_indices:
+        missing = set(exclude_indices) - mapping.keys()
+        if missing:
+            raise ValueError(f"exclude_indices references unknown sample ids: {sorted(missing)}")
+        return {i: p for i, p in mapping.items() if i not in exclude_indices}
+    return mapping
+
+
 def _is_glob_expression(expr: str) -> bool:
     """Return True when the path expression contains glob meta characters."""
     return any(char in expr for char in _GLOB_CHARS)
@@ -261,6 +292,8 @@ class GlobMatrixStream:
         expr: str,
         sample_id_regex: str | None = None,
         enumerate_by: EnumerateBy | None = None,
+        include_indices: tuple[int, ...] | None = None,
+        exclude_indices: tuple[int, ...] = (),
     ) -> None:
         pattern_path = Path(expr)
         parent = pattern_path.parent
@@ -281,6 +314,11 @@ class GlobMatrixStream:
                         f"Duplicate matrix sample id {sample_id} for files {mapping[sample_id]} and {path}"
                     )
                 mapping[sample_id] = path
+        mapping = _filter_mapping(
+            mapping, include_indices=include_indices, exclude_indices=exclude_indices
+        )
+        if not mapping:
+            raise ValueError(f"No matrix samples remain after filtering glob: {expr}")
         self._mapping = mapping
         self._sample_ids = tuple(sorted(mapping.keys()))
 
@@ -389,6 +427,8 @@ class GlobVectorStream:
         expr: str,
         sample_id_regex: str | None = None,
         enumerate_by: EnumerateBy | None = None,
+        include_indices: tuple[int, ...] | None = None,
+        exclude_indices: tuple[int, ...] = (),
     ) -> None:
         pattern_path = Path(expr)
         parent = pattern_path.parent
@@ -409,6 +449,11 @@ class GlobVectorStream:
                         f"Duplicate vector sample id {sample_id} for files {mapping[sample_id]} and {path}"
                     )
                 mapping[sample_id] = path
+        mapping = _filter_mapping(
+            mapping, include_indices=include_indices, exclude_indices=exclude_indices
+        )
+        if not mapping:
+            raise ValueError(f"No vector samples remain after filtering glob: {expr}")
         self._mapping = mapping
         self._sample_ids = tuple(sorted(mapping.keys()))
 
@@ -438,6 +483,8 @@ def open_matrix_stream(
     matrix_path_expr: str,
     sample_id_regex: str | None = None,
     enumerate_by: EnumerateBy | None = None,
+    include_indices: tuple[int, ...] | None = None,
+    exclude_indices: tuple[int, ...] = (),
 ) -> MatrixSampleStream:
     """Create a matrix sample stream from path expression."""
     if _is_glob_expression(matrix_path_expr):
@@ -445,7 +492,11 @@ def open_matrix_stream(
             matrix_path_expr,
             sample_id_regex=sample_id_regex,
             enumerate_by=enumerate_by,
+            include_indices=include_indices,
+            exclude_indices=exclude_indices,
         )
+    if include_indices is not None or exclude_indices:
+        raise ValueError("include_indices/exclude_indices require a glob matrix source.")
     path = Path(matrix_path_expr)
     if not path.exists():
         raise FileNotFoundError(f"Matrix source not found: {path}")
@@ -462,6 +513,8 @@ def open_vector_stream(
     vector_path_expr: str,
     sample_id_regex: str | None = None,
     enumerate_by: EnumerateBy | None = None,
+    include_indices: tuple[int, ...] | None = None,
+    exclude_indices: tuple[int, ...] = (),
 ) -> VectorSampleStream:
     """Create a vector sample stream from path expression."""
     if _is_glob_expression(vector_path_expr):
@@ -469,7 +522,11 @@ def open_vector_stream(
             vector_path_expr,
             sample_id_regex=sample_id_regex,
             enumerate_by=enumerate_by,
+            include_indices=include_indices,
+            exclude_indices=exclude_indices,
         )
+    if include_indices is not None or exclude_indices:
+        raise ValueError("include_indices/exclude_indices require a glob vector source.")
     path = Path(vector_path_expr)
     if not path.exists():
         raise FileNotFoundError(f"Vector source not found: {path}")
@@ -561,17 +618,17 @@ def bind_sources(
 
 
 __all__ = [
-    "EnumerateBy",
     "DenseMatrixSample",
-    "SparseMatrixSample",
-    "VectorSample",
-    "SystemBinding",
-    "MatrixSampleStream",
-    "VectorSampleStream",
+    "EnumerateBy",
     "GlobMatrixStream",
     "GlobVectorStream",
+    "MatrixSampleStream",
+    "SparseMatrixSample",
+    "SystemBinding",
+    "VectorSample",
+    "VectorSampleStream",
+    "_enumerate_files",
+    "bind_sources",
     "open_matrix_stream",
     "open_vector_stream",
-    "bind_sources",
-    "_enumerate_files",
 ]

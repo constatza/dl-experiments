@@ -10,13 +10,13 @@ import mlflow
 import pytest
 from mlflow.tracking import MlflowClient
 
-from tests.workflows.conftest import LoggedNamedCheckpointsRunFactory, LoggedRunFactory
 from neuralls.platform.tracking.model_registry import (
     CHECKPOINT_ARTIFACT_PATH_TAG,
     assign_dataset_alias_to_registered_model,
     build_registered_model_name,
     register_logged_model,
 )
+from tests.workflows.conftest import LoggedNamedCheckpointsRunFactory, LoggedRunFactory
 
 
 def test_build_registered_model_name_uses_architecture_only() -> None:

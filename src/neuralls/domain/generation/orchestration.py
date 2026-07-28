@@ -11,18 +11,23 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
-from .data_types import NormalizeType
-from .semantics import classify_strategy_row_kind
-from neuralls.shared.types import LayoutType, ScaleMetadata
-from neuralls.shared.types import GenerationStrategyKind, RowKind
+
 from neuralls.domain.normalization import ErrorTraceSamples, IScale, ResidualTraceSamples
-from .helpers import rng_from_seed, _resolve_strategy_counts, _merge_strategy_outputs
-from .helpers import serialize_scale_metadata
 from neuralls.shared.enum_codecs import encode_row_kind_array
+from neuralls.shared.types import GenerationStrategyKind, LayoutType, RowKind, ScaleMetadata
+
+from .data_types import NormalizeType
+from .helpers import (
+    _merge_strategy_outputs,
+    _resolve_strategy_counts,
+    rng_from_seed,
+    serialize_scale_metadata,
+)
 from .interfaces import ArchiveData, TracingSolverCallable
 from .payloads import GeneratedDatasetPayload
 from .ports import DenseAccumulatorPort
 from .runner import strategy_supports_matrix_replacement
+from .semantics import classify_strategy_row_kind
 from .source_streams import (
     EnumerateBy,
     MatrixSampleStream,
@@ -229,9 +234,10 @@ def _generate_mixture_with_metadata(
         ... )
     """
     # Ensure strategy modules are registered
+    from pydantic import ValidationError
+
     from . import strategies  # noqa: F401
     from .runner import run_generation
-    from pydantic import ValidationError
 
     rng = rng_from_seed(seed)
     strategy_counts = _resolve_strategy_counts(counts, mix, total)
@@ -1180,6 +1186,7 @@ def build_dataset_payload(
     @cache
     def _get_matrix(sample_id: int) -> _CachedMatrix:
         from neuralls.domain.linalg import calculate_matrix_norm
+
         from .helpers import _normalize_matrix_for_generation
 
         dense_sample = matrix_stream.load_dense_sample(sample_id)
@@ -1252,6 +1259,6 @@ def build_dataset_payload(
 
 __all__ = [
     "_shuffle_samples",
-    "generate_mixture",
     "build_dataset_payload",
+    "generate_mixture",
 ]

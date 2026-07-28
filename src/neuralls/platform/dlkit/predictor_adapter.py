@@ -19,7 +19,6 @@ import torch
 from dlkit import load_model
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from loguru import logger
-
 from torchalg.preconditioners.ports import (
     ExtraInputPredictorPort,
     PredictorAdapter,
@@ -143,7 +142,6 @@ class DLKitPredictor(ExtraInputPredictorPort):
 
     def cleanup(self) -> None:
         """No-op — use as context manager; __exit__ handles unload."""
-        pass
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         """Delegate lifecycle to CheckpointPredictor's context manager."""

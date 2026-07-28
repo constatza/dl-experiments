@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
-from ..interfaces import GeneratedSamples, ArchiveData
+from ..interfaces import ArchiveData, GeneratedSamples
 from ..providers import PairedFileInputProvider
 from ..runner import register_strategy
 from ..strategy_configs import ValidatedArchiveConfig

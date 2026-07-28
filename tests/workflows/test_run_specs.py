@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.platform.config.resolution import MlflowPaths, build_sqlite_tracking_uri
-from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, AssignmentEntry
 from neuralls.composition.tracking.run_specs import (
     TrainingRunTags,
     build_child_comparison_tags,
@@ -14,6 +12,8 @@ from neuralls.composition.tracking.run_specs import (
     build_session_run_spec,
     build_training_run_spec,
 )
+from neuralls.platform.config.models.experiments import AssignmentEntry, ComparisonRegistryEntry
+from neuralls.platform.config.resolution import MlflowPaths, build_sqlite_tracking_uri
 
 
 def test_training_tags_contains_all_fields() -> None:

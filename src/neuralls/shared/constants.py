@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
+
 from neuralls.shared.types import MatrixNormType
 
 # =============================================================================

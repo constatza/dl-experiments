@@ -73,7 +73,7 @@ def plot_parity_and_residuals(
         transform=ax.transAxes,
         va="top",
         ha="left",
-        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
+        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.7},
     )
 
     # Residuals plot
@@ -118,7 +118,11 @@ def plot_residual_history(
         # Handle both dict and dataclass results
         residuals = None
         if hasattr(result, "residual_history_rel"):
-            residuals = getattr(result, "residual_history_rel")
+            # getattr, not direct access: result's declared type doesn't
+            # include this attribute (only some dataclass variants have it,
+            # guarded dynamically by hasattr) — direct access defeats ty's
+            # hasattr-narrowing and produces a spurious type error.
+            residuals = getattr(result, "residual_history_rel")  # noqa: B009
         elif isinstance(result, dict):
             residuals = result.get("residual_history_rel") or result.get("residuals")
         else:
@@ -311,7 +315,9 @@ def plot_noise_robustness(
                 # Handle both dict and dataclass results
                 iters = 0
                 if hasattr(result, "iterations"):
-                    iters = getattr(result, "iterations")
+                    # getattr, not direct access: same hasattr-narrowing
+                    # issue as plot_residual_history above.
+                    iters = getattr(result, "iterations")  # noqa: B009
                 elif isinstance(result, dict):
                     iters = result.get("iterations", 0)
                 else:
@@ -658,7 +664,7 @@ SCALE ANALYSIS:
         fontsize=9,
         verticalalignment="top",
         fontfamily="monospace",
-        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
+        bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.3},
     )
 
 

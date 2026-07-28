@@ -6,12 +6,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from neuralls.platform.config.resolution import resolve_registry_path
 from neuralls.platform.config.models.experiments import (
     AssignmentEntry,
     CaseConfig,
     RegistryEntry,
 )
+from neuralls.platform.config.resolution import resolve_registry_path
 
 
 @dataclass(frozen=True)

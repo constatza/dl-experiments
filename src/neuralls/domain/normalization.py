@@ -16,7 +16,6 @@ import numpy as np
 
 from neuralls.domain.linalg import compute_dim_scale, compute_spectral_bound
 
-
 # =============================================================================
 # ABC Interfaces
 # =============================================================================
@@ -252,6 +251,7 @@ def create_scale_from_config(
 
 
 __all__ = [
+    "ErrorTraceSamples",
     # Interfaces
     "IScale",
     "ITraceSamples",
@@ -259,7 +259,6 @@ __all__ = [
     "MatrixScale",
     # Traces
     "ResidualTraceSamples",
-    "ErrorTraceSamples",
     # Public API
     "create_scale_from_config",
     "load_scale_from_metadata",

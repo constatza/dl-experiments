@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 import tomli_w
 
@@ -29,32 +29,7 @@ def _write_configs(root: Path) -> tuple[Path, Path]:
 
     model_config = root / "model.toml"
     model_config.write_text(
-        "\n".join(
-            [
-                "[run]",
-                'type = "train"',
-                "seed = 42",
-                "",
-                "[experiment]",
-                'name = "debug-model"',
-                "",
-                "[model]",
-                'name = "DebugModel"',
-                "",
-                "[data]",
-                'name = "FlexibleDataset"',
-                "",
-                "[data.module]",
-                'name = "ArrayDataModule"',
-                "",
-                "[training.trainer]",
-                "max_epochs = 1",
-                "",
-                "[training.optimizer.default_optimizer]",
-                'name = "AdamW"',
-                "lr = 1e-3",
-            ]
-        ),
+        '[run]\ntype = "train"\nseed = 42\n\n[experiment]\nname = "debug-model"\n\n[model]\nname = "DebugModel"\n\n[data]\nname = "FlexibleDataset"\n\n[data.module]\nname = "ArrayDataModule"\n\n[training.trainer]\nmax_epochs = 1\n\n[training.optimizer.default_optimizer]\nname = "AdamW"\nlr = 1e-3',
         encoding="utf-8",
     )
     return model_config, data_config

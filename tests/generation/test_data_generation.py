@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from scipy.linalg import eigh
 
 from neuralls.domain.generation import generate_mixture
@@ -13,7 +12,6 @@ from neuralls.domain.generation.helpers import (
 )
 from neuralls.domain.generation.orchestration import _shuffle_samples
 from neuralls.domain.normalization import ErrorTraceSamples
-
 
 # ========================================================================
 # Tests for residuals strategy
@@ -72,7 +70,7 @@ def test_error_strategy_with_archive(
 ) -> None:
     """Residuals strategy with archive produces trace rows satisfying A @ sol = rhs."""
     cg_iters = 3
-    rhs, solutions, residuals, error_traces = generate_mixture(
+    rhs, solutions, _residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
         mix={"residuals": 1.0},
         total=2,
@@ -161,7 +159,7 @@ def test_error_strategy_mixed_with_forward_strategy(
 ) -> None:
     """Mixing neutral_ones + residuals concatenates rows; A @ sol = rhs for all."""
     cg_iters = 2
-    rhs, solutions, residuals, error_traces = generate_mixture(
+    rhs, solutions, _residuals, error_traces = generate_mixture(
         A=small_spd_matrix,
         counts={"neutral_ones": 1, "residuals": 6},
         strategy_overrides={"residuals": {"cg_iters": cg_iters}},
@@ -242,7 +240,7 @@ def test_error_strategy_validation(
     insufficient_archive = np.array([[0.5, 0.3]], dtype=np.float64)
 
     try:
-        rhs, solutions, residuals, error_traces = generate_mixture(
+        _rhs, _solutions, _residuals, _error_traces = generate_mixture(
             A=small_spd_matrix,
             mix={"residuals": 1.0},
             total=8,
@@ -342,7 +340,7 @@ def test_error_strategy_with_zero_iterations(
         solver_overrides: Default tracing solvers for single-RHS strategies
     """
     with pytest.raises(ValueError, match="(greater than or equal to 1|cg_iters)"):
-        rhs, solutions, residuals, error_traces = generate_mixture(
+        _rhs, _solutions, _residuals, _error_traces = generate_mixture(
             A=small_spd_matrix,
             mix={"residuals": 1.0},
             total=2,
@@ -498,7 +496,7 @@ def test_generate_eigenvector_combinations_vectorized(tmp_path: Path) -> None:
     """Test vectorized linear combination generation."""
     # Use 4x4 diagonal matrix for simple eigenvectors
     A = np.diag([1.0, 2.0, 3.0, 4.0])
-    eigenvalues, eigenvectors = eigh(A)
+    _eigenvalues, eigenvectors = eigh(A)
 
     # Select first 3 eigenvectors
     selected = eigenvectors[:, :3]  # Shape (4, 3)
@@ -524,7 +522,7 @@ def test_generate_eigenvector_combinations_vectorized(tmp_path: Path) -> None:
 def test_eigenvector_combinations_reproducible(tmp_path: Path) -> None:
     """Test that combinations are reproducible with same seed."""
     A = np.eye(5, dtype=np.float64) * 2.0
-    eigenvalues, eigenvectors = eigh(A)
+    _eigenvalues, eigenvectors = eigh(A)
 
     rng1 = np.random.default_rng(123)
     combinations1 = _generate_eigenvector_combinations(eigenvectors, 5, rng1)
@@ -570,7 +568,7 @@ def test_eigenvector_forward_include_eigenvectors(tmp_path: Path) -> None:
     A = np.diag([1.0, 2.0, 3.0, 4.0])
     np.ones(4, dtype=np.float64)
 
-    rhs, solutions, _, _ = generate_mixture(
+    _rhs, solutions, _, _ = generate_mixture(
         A=A,
         mix={"eigenvector_forward": 1.0},
         total=6,  # 2 eigenvectors + 4 combinations
@@ -588,7 +586,7 @@ def test_eigenvector_forward_include_eigenvectors(tmp_path: Path) -> None:
     assert solutions.shape == (6, 4)
 
     # First 2 should be eigenvectors (diagonal matrix -> standard basis)
-    eigenvalues, eigenvectors = eigh(A)
+    _eigenvalues, eigenvectors = eigh(A)
     np.testing.assert_allclose(solutions[:2], eigenvectors[:, :2].T, rtol=1e-10)
 
     # Remaining 4 should be combinations (different from eigenvectors)
@@ -715,8 +713,9 @@ def test_eigenvector_backward_compatible_defaults(tmp_path: Path) -> None:
         Note: The orchestration layer filters out unknown parameters before passing to strategies,
         so this test validates by directly instantiating the config class.
         """
-        from neuralls.domain.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
+
+        from neuralls.domain.generation.strategy_configs import KrylovConfig
 
         # Try to create a config with an unknown parameter directly
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -28,7 +28,7 @@ class InferencePredictorPort(ABC):
         """Release any runtime resources held by the predictor."""
         ...
 
-    def __enter__(self) -> InferencePredictorPort:
+    def __enter__(self) -> Self:
         """Context manager entry."""
         return self
 

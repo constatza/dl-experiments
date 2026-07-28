@@ -8,6 +8,7 @@ from dlkit.common.errors import ConfigValidationError
 from dlkit.infrastructure.config.factories import load_job
 from dlkit.infrastructure.config.job_config import (
     ConvergenceJobConfig,
+    FitJobConfig,
     InferenceJobConfig,
     MultiRunJobConfig,
     SearchJobConfig,
@@ -16,7 +17,7 @@ from dlkit.infrastructure.config.job_config import (
 
 from neuralls.platform.config.settings import NeurallsSettings
 
-type AnyJobSettings = TrainingJobConfig | InferenceJobConfig | SearchJobConfig
+type AnyJobSettings = TrainingJobConfig | InferenceJobConfig | SearchJobConfig | FitJobConfig
 
 
 def load_job_config(path: Path, settings: NeurallsSettings) -> AnyJobSettings:
@@ -29,7 +30,11 @@ def load_job_config(path: Path, settings: NeurallsSettings) -> AnyJobSettings:
     ``load_job()``'s return type also covers ``ConvergenceJobConfig``/
     ``MultiRunJobConfig`` (sweep-level configs, not one job) — rejected here
     since this function's contract is "one job", matching its callers
-    (per-assignment training/search/inference).
+    (per-assignment training/search/fit/inference). ``FitJobConfig`` (one-shot,
+    non-gradient fit jobs, e.g. POD-2G basis fitting) is a single job like any
+    other and is returned like any other — consumed via the same
+    assignment/training pipeline as ``TrainingJobConfig``/``SearchJobConfig``
+    (see ``composition/assignments/_job_types.py::TrainableJobConfig``).
 
     Raises:
         ConfigValidationError: *path* resolves to a sweep-level config
@@ -40,6 +45,6 @@ def load_job_config(path: Path, settings: NeurallsSettings) -> AnyJobSettings:
     if isinstance(loaded, (ConvergenceJobConfig, MultiRunJobConfig)):
         raise ConfigValidationError(
             f"{path} is a {type(loaded).__name__}, not a single job config — "
-            "load_job_config() only loads train/predict/search jobs."
+            "load_job_config() only loads train/predict/search/fit jobs."
         )
     return loaded

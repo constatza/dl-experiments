@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neuralls.composition.assignments._job_types import AnyJobConfig, TrainLikeJobConfig
+from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
+
+from neuralls.composition.assignments._job_types import (
+    AnyJobConfig,
+    TrainableJobConfig,
+    TrainLikeJobConfig,
+)
 
 
 def _retained_checkpoint_callback(output_dir: Path) -> dict[str, str]:
@@ -30,11 +36,11 @@ def _merge_callbacks(
     return [*callbacks, retained_callback]
 
 
-def patch_runtime_workspace(
-    settings: TrainLikeJobConfig,
+def patch_runtime_workspace[T: TrainLikeJobConfig](
+    settings: T,
     *,
     output_dir: Path,
-) -> TrainLikeJobConfig:
+) -> T:
     """Inject trainer output paths and retained-checkpoint callback wiring."""
     training_cfg = settings.training
     if training_cfg is None or training_cfg.trainer is None:
@@ -53,6 +59,26 @@ def patch_runtime_workspace(
             }
         }
     )
+
+
+def patch_runtime_workspace_for_job[T: TrainableJobConfig](
+    settings: T,
+    *,
+    output_dir: Path,
+) -> T:
+    """Apply trainer workspace patching only for job kinds that have a trainer.
+
+    `FitJobConfig` has no `training` section by design (see its docstring) —
+    there is no trainer-owned output directory or checkpoint callback to
+    redirect, so this is a no-op for that job kind rather than hitting
+    `patch_runtime_workspace`'s guard clause. Kept as a sibling dispatch
+    rather than a modification of `patch_runtime_workspace` itself, so that
+    function's contract ("training jobs require [training].trainer") stays
+    exact for its existing train-like callers.
+    """
+    if isinstance(settings, (TrainingJobConfig, SearchJobConfig)):
+        return patch_runtime_workspace(settings, output_dir=output_dir)
+    return settings
 
 
 def patch_dataloader_runtime[T: AnyJobConfig](settings: T) -> T:

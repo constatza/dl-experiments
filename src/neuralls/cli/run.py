@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import typer
 
-from neuralls.cli.options import EnvFileOption, ProfileOption
+from neuralls.cli.options import CaseConfigArgument, EnvFileOption, ProfileOption
 from neuralls.composition.assignments.training_batch import run_assignment_matrix
 from neuralls.composition.config import load_case_settings
 from neuralls.shared.constants import DEFAULT_PROJECT_ROOT, EXIT_FAILURE
 
 
 def run_case_matrix(
-    config: Path = typer.Argument(
-        ...,
-        help="Path to a case config TOML.",
-    ),
+    config: CaseConfigArgument,
     force: bool = typer.Option(
         False,
         "--force",

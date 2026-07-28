@@ -17,8 +17,7 @@ from neuralls.platform.config.profile import (
     load_profile,
     save_profile,
 )
-from neuralls.platform.config.settings import load_case_settings
-from neuralls.platform.config.settings import NeurallsSettings
+from neuralls.platform.config.settings import NeurallsSettings, load_case_settings
 
 
 def _configure_profile_path(monkeypatch: pytest.MonkeyPatch, config_file: Path) -> None:

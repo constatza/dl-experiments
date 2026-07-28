@@ -4,28 +4,29 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import zarr
+from pydantic import ValidationError
 
+from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.domain.generation.source_streams import (
     EnumerateBy,
-    bind_sources,
-    open_matrix_stream,
-    open_vector_stream,
     GlobMatrixStream,
     GlobVectorStream,
     _enumerate_files,
-)
-from neuralls.composition.generation.dataset_builder import build_dataset
-import zarr
-from neuralls.platform.storage.datasets import (
-    load_dense_training_arrays,
-    load_dataset_manifest,
-    load_matrix_dense_sample,
-    resolve_dataset_artifacts,
-    resolve_dataset_paths,
+    bind_sources,
+    open_matrix_stream,
+    open_vector_stream,
 )
 from neuralls.platform.storage.dataset_readers import (
     load_matrix_sample_index,
     load_row_kind_codes,
+)
+from neuralls.platform.storage.datasets import (
+    load_dataset_manifest,
+    load_dense_training_arrays,
+    load_matrix_dense_sample,
+    resolve_dataset_artifacts,
+    resolve_dataset_paths,
 )
 from neuralls.platform.storage.enum_codecs import decode_row_kind_array
 from neuralls.shared.types import RowKind
@@ -505,7 +506,7 @@ def test_build_dataset_honors_enumerate_by_for_globbed_matrix_files(
 def test_source_config_rejects_both_sample_id_regex_and_enumerate_by() -> None:
     from neuralls.platform.config.models.data_models import SourceConfig
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         SourceConfig(sample_id_regex=r"(\d+)", enumerate_by=EnumerateBy.NAME)
 
 

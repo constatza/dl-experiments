@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import importlib.util
+from pathlib import Path
 
 import pytest
-from neuralls.platform.config.models.workspace import AssignmentWorkspace, RunnableAssignment
+
 from neuralls.composition.assignments.assembler import load_assignment
+from neuralls.platform.config.models.workspace import AssignmentWorkspace, RunnableAssignment
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("dlkit") is None, reason="dlkit circular import issue"
@@ -26,46 +27,15 @@ def temp_config_structure(tmp_path: Path) -> Path:
 
     with open(project_root / "configs" / "models" / "exp1_model.toml", "w") as f:
         f.write(
-            "\n".join(
-                [
-                    "[model]",
-                    'name = "TestModel"',
-                    "",
-                    "[data]",
-                    'name = "FlexibleDataset"',
-                    "batch_size = 2",
-                    "",
-                    "[data.module]",
-                    'name = "ArrayDataModule"',
-                ]
-            )
+            '[model]\nname = "TestModel"\n\n[data]\nname = "FlexibleDataset"\nbatch_size = 2\n\n[data.module]\nname = "ArrayDataModule"'
         )
 
     with open(project_root / "configs" / "profiles" / "training.toml", "w") as f:
-        f.write(
-            "\n".join(
-                [
-                    "[training.trainer]",
-                    "max_epochs = 1",
-                ]
-            )
-        )
+        f.write("[training.trainer]\nmax_epochs = 1")
 
     with open(project_root / "configs" / "jobs" / "exp1_job.toml", "w") as f:
         f.write(
-            "\n".join(
-                [
-                    "[run]",
-                    'type = "train"',
-                    "seed = 42",
-                    'model = "../models/exp1_model.toml"',
-                    'data = "../models/exp1_model.toml"',
-                    'training = "../profiles/training.toml"',
-                    "",
-                    "[experiment]",
-                    'name = "exp1_job"',
-                ]
-            )
+            '[run]\ntype = "train"\nseed = 42\nmodel = "../models/exp1_model.toml"\ndata = "../models/exp1_model.toml"\ntraining = "../profiles/training.toml"\n\n[experiment]\nname = "exp1_job"'
         )
 
     # Dataset configs

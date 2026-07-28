@@ -3,7 +3,7 @@
 from .export import ArrayFormat, quick_export, save_solver_data
 
 __all__ = [
+    "ArrayFormat",
     "quick_export",
     "save_solver_data",
-    "ArrayFormat",
 ]

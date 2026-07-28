@@ -187,11 +187,11 @@ def _referenced_sample_count(sample_indices: np.ndarray) -> int:
 
 
 __all__ = [
-    "_offset_residual_traces",
+    "_merge_error_traces",
     "_merge_residual_traces",
     "_offset_error_traces",
-    "_merge_error_traces",
-    "_trim_residual_traces",
-    "_trim_error_traces",
+    "_offset_residual_traces",
     "_referenced_sample_count",
+    "_trim_error_traces",
+    "_trim_residual_traces",
 ]

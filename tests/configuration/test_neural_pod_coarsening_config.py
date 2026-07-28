@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError, TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from neuralls.platform.config.models.preconditioner import (
     AMGPreconditionerConfig,

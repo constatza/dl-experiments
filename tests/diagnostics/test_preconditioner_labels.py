@@ -76,7 +76,8 @@ def pod_amg_preconditioner(
     tridiag_spd_matrix: torch.Tensor, rank2_snapshot_ensemble: torch.Tensor
 ) -> AMGPreconditioner:
     """Constructed AMG preconditioner using POD-2G coarsening with an energy-threshold rank."""
-    coarsening = PODCoarseningStrategy(snapshots=rank2_snapshot_ensemble, rank=0.999)
+    coarsening = PODCoarseningStrategy(rank=0.999)
+    coarsening.fit(rank2_snapshot_ensemble)
     smoother = JacobiSmoother(omega=0.67)
     cycle = VCycle(smoother=smoother, n_pre=2, n_post=2)
     return AMGPreconditioner(tridiag_spd_matrix, coarsening=coarsening, cycle=cycle, n_levels=2)

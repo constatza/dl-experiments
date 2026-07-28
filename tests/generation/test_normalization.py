@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Test script to verify RHS normalization in data generation."""
 
 from __future__ import annotations
@@ -6,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.linalg import norm
 
-from neuralls.domain.generation.strategies.random_normal import RandomNormalStrategy
 from neuralls.domain.generation.strategies.krylov import KrylovStrategy
+from neuralls.domain.generation.strategies.random_normal import RandomNormalStrategy
 
 
 def test_normal_strategy_normalization():

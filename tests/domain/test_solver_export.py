@@ -1,8 +1,7 @@
 """Tests for the modular solver export package."""
 
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 import numpy as np
 import pytest

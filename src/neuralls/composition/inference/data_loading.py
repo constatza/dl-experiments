@@ -10,18 +10,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+from dlkit.io import load_array
 from loguru import logger
 
-from dlkit.io import load_array
-
+from neuralls.application.inference.models import InferenceData
 from neuralls.composition.assignments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
-from neuralls.platform.config.models.workspace import AssignmentWorkspace
-from neuralls.platform.reporting.synthetic import generate_synthetic_test_case
 from neuralls.platform.config.loaders import load_comparison_config
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.config.settings import NeurallsSettings
-from neuralls.application.inference.models import InferenceData
+from neuralls.platform.reporting.synthetic import generate_synthetic_test_case
 from neuralls.shared.constants import RHS_ZARR_FILENAME, SOLUTIONS_ZARR_FILENAME
 
 

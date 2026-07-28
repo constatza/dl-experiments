@@ -115,7 +115,7 @@ def test_residuals_multi_rhs_shapes(
     residual_solver: TracingSolverCallable,
 ) -> None:
     """Multiple-RHS mode: all output arrays have correct shapes."""
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
     n = spd_matrix.shape[0]
     requested_rows = 8
     cg_iters = 3
@@ -200,7 +200,7 @@ def test_error_equals_true_minus_current(
     residual_solver: TracingSolverCallable,
 ) -> None:
     """e_k = x_true - x_k holds for every recorded trace pair."""
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
     cfg = {
         "samples": 10,
         "cg_iters": 4,
@@ -225,7 +225,7 @@ def test_residual_equals_b_minus_ax(
     residual_solver: TracingSolverCallable,
 ) -> None:
     """r_k = b - A @ x_k: CG residual matches b - A @ current iterate."""
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
     cfg = {
         "samples": 10,
         "cg_iters": 4,
@@ -253,7 +253,7 @@ def test_residual_equals_a_times_error(
     residual_solver: TracingSolverCallable,
 ) -> None:
     """r_k = A @ e_k: holds exactly because b = A @ x_true in archive mode."""
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
     cfg = {
         "samples": 10,
         "cg_iters": 4,
@@ -392,7 +392,7 @@ def test_residuals_every_n_math_still_holds(
     residual_solver: TracingSolverCallable,
 ) -> None:
     """e_k = x_true - x_k and r_k = A @ e_k hold even after every_n downsampling."""
-    files, glob_pattern = solution_files
+    _files, glob_pattern = solution_files
     cfg = {
         "samples": 6,
         "cg_iters": 5,

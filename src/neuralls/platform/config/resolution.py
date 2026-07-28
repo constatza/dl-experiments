@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path
-from pathlib import PureWindowsPath
+from pathlib import Path, PureWindowsPath
 from urllib.parse import urlparse
 
 from dlkit.infrastructure.io import url_resolver

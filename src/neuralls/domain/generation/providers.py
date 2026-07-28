@@ -421,13 +421,13 @@ def provide_solutions(
 
 
 __all__ = [
-    "InputProvider",
-    "RandomInputProvider",
     "ConstantInputProvider",
-    "GaussianInputProvider",
-    "UniformInputProvider",
     "FileInputProvider",
+    "GaussianInputProvider",
     "HybridInputProvider",
+    "InputProvider",
     "PairedFileInputProvider",
+    "RandomInputProvider",
+    "UniformInputProvider",
     "provide_solutions",
 ]

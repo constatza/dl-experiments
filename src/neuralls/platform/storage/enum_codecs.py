@@ -6,6 +6,6 @@ from neuralls.shared.enum_codecs import (
 )
 
 __all__ = [
-    "encode_row_kind_array",
     "decode_row_kind_array",
+    "encode_row_kind_array",
 ]

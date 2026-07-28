@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from dlkit.infrastructure.config.data_entries import DataRole, NpyEntry, ValueEntry, ZarrEntry
-from dlkit.infrastructure.config.job_config import TrainingJobConfig
+from dlkit.infrastructure.config.job_config import FitJobConfig, TrainingJobConfig
 
 from neuralls.composition.assignments._dataset_assembly import (
     _create_feature_entries,
@@ -16,6 +16,10 @@ from neuralls.composition.assignments._dataset_assembly import (
     validate_runtime_dataset_contract,
 )
 from neuralls.composition.assignments._settings_pipeline import _configure_training_pipeline
+from neuralls.composition.assignments._training_artifacts import (
+    _extract_evaluation_arrays,
+    _normalize_training_numpy_payload,
+)
 from neuralls.composition.assignments.runtime_dataset_contract import (
     RuntimeDatasetContract,
     default_training_dataset_contract,
@@ -25,10 +29,7 @@ from neuralls.composition.assignments.runtime_tracking_patcher import patch_trai
 from neuralls.composition.assignments.runtime_workspace_patcher import (
     patch_dataloader_runtime,
     patch_runtime_workspace,
-)
-from neuralls.composition.assignments._training_artifacts import (
-    _extract_evaluation_arrays,
-    _normalize_training_numpy_payload,
+    patch_runtime_workspace_for_job,
 )
 from neuralls.platform.config.dataset_entries import apply_placeholder_metadata
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
@@ -91,6 +92,34 @@ def sample_arrays(tmp_path: Path) -> TrainingArrays:
 @pytest.fixture
 def training_settings(tmp_path: Path) -> TrainingJobConfig:
     return _build_training_job(tmp_path)
+
+
+def _build_fit_job() -> FitJobConfig:
+    return FitJobConfig.model_validate(
+        {
+            "run": {"type": "fit", "seed": 42},
+            "model": {
+                "name": "PODCoarseningStrategy",
+                "module_path": "torchalg.preconditioners.implementations.pod",
+                "rank": 8,
+            },
+            "data": {
+                "name": "FlexibleDataset",
+                "batch_size": 8,
+                "num_workers": 2,
+                "pin_memory": True,
+                "features": [],
+                "targets": [],
+                "module": {"name": "ArrayDataModule"},
+            },
+            "tracking": {},
+        }
+    )
+
+
+@pytest.fixture
+def fit_settings() -> FitJobConfig:
+    return _build_fit_job()
 
 
 @pytest.fixture
@@ -220,6 +249,36 @@ def test_patch_runtime_workspace_returns_new_settings(
     assert updated.training.trainer is not None
     assert updated.training.trainer.default_root_dir == output_dir
     assert updated.training.trainer.callbacks[-1].name == "RetainedCheckpointCopy"
+
+
+def test_patch_runtime_workspace_for_job_patches_train_like_jobs(
+    training_settings: TrainingJobConfig,
+    tmp_path: Path,
+) -> None:
+    """`TrainLikeJobConfig` (has a trainer) is patched exactly like the raw function."""
+    output_dir = tmp_path / "new-root"
+    output_dir.mkdir()
+
+    updated = patch_runtime_workspace_for_job(training_settings, output_dir=output_dir)
+
+    assert updated is not training_settings
+    assert updated.training is not None
+    assert updated.training.trainer is not None
+    assert updated.training.trainer.default_root_dir == output_dir
+
+
+def test_patch_runtime_workspace_for_job_is_noop_for_fit_jobs(
+    fit_settings: FitJobConfig,
+    tmp_path: Path,
+) -> None:
+    """`FitJobConfig` has no `training` section — patching it is a no-op, not a crash."""
+    output_dir = tmp_path / "new-root"
+    output_dir.mkdir()
+
+    updated = patch_runtime_workspace_for_job(fit_settings, output_dir=output_dir)
+
+    assert updated is fit_settings
+    assert updated.training is None
 
 
 def test_patch_dataloader_runtime_forces_single_process(

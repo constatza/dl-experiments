@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
-from neuralls.cli.options import EnvFileOption, ProfileOption
+from neuralls.cli.options import CaseConfigArgument, EnvFileOption, ProfileOption
 from neuralls.composition.assignments.assembler import load_validated_case_config
 from neuralls.composition.assignments.multi_training import train_batch, write_metric_report
 from neuralls.composition.config import load_case_settings
@@ -14,18 +15,16 @@ from neuralls.shared.constants import EXIT_FAILURE
 
 
 def train_case_batch(
-    config: Path = typer.Argument(
-        ...,
-        help="Path to a case config TOML.",
-    ),
-    metric: str = typer.Option(
-        "eval/mae",
-        help="MLflow metric key to plot across assignments.",
-    ),
-    output_dir: Path | None = typer.Option(
-        None,
-        help=("Directory for the batch plot and label JSON. Defaults to output_dir/training/."),
-    ),
+    config: CaseConfigArgument,
+    metric: Annotated[
+        str, typer.Option(help="MLflow metric key to plot across assignments.")
+    ] = "eval/mae",
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            help="Directory for the batch plot and label JSON. Defaults to output_dir/training/."
+        ),
+    ] = None,
     env_file: EnvFileOption = None,
     profile: ProfileOption = None,
 ) -> None:

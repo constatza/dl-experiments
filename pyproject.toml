@@ -59,6 +59,12 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["D"]
 "tests/**/__init__.py" = ["D"]
+# Explicit re-export facade (PEP 484 `X as X` idiom for mypy/ty's
+# --strict re-export checking) — PLC0414 doesn't recognize this convention
+# and would otherwise strip the entire re-export block as "useless"; isort
+# (I001) also mishandles repeated same-module `X as X` aliases, proposing
+# to split one clean block into six single-name imports.
+"src/neuralls/composition/config.py" = ["PLC0414", "I001"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

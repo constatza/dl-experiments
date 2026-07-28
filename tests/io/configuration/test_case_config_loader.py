@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import importlib.util
+from pathlib import Path
 
 import pytest
-from neuralls.platform.config.models.workspace import AssignmentWorkspace
+
 from neuralls.composition.assignments.assembler import load_assignment_batch
+from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
 # Skip all tests if dlkit has circular import issue
 pytestmark = pytest.mark.skipif(

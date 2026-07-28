@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from ..interfaces import GeneratedSamples, ArchiveData
+from ..interfaces import ArchiveData, GeneratedSamples
 from ..providers import GaussianInputProvider
 from ..runner import register_strategy
 from ..strategy_configs import GaussianForwardConfig, GaussianInverseConfig

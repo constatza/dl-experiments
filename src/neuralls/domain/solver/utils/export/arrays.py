@@ -13,7 +13,6 @@ import numpy as np
 import torch
 from torchalg.monitoring import IterationHistory, TraceMode
 
-
 from .formats import ArrayFormat
 
 

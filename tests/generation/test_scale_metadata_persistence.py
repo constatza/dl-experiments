@@ -1,17 +1,18 @@
 """Tests for scale metadata persistence in data generation."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
-from pathlib import Path
 
 from neuralls.composition.generation.dataset_builder import build_dataset
 from neuralls.domain.generation.orchestration import _resolve_final_scale
+from neuralls.domain.normalization import MatrixScale, load_scale_from_metadata
 from neuralls.platform.storage.datasets import (
     load_dataset_manifest,
     load_dense_training_arrays,
     load_matrix_dense_sample,
 )
-from neuralls.domain.normalization import load_scale_from_metadata, MatrixScale
 
 
 @pytest.fixture
@@ -50,7 +51,7 @@ def test_scale_metadata_saved_with_matrix_normalization(temp_matrix_file: Path, 
 
     # Load manifest and dense arrays
     manifest = load_dataset_manifest(output_dir)
-    rhs, _ = load_dense_training_arrays(output_dir)
+    _rhs, _ = load_dense_training_arrays(output_dir)
 
     # Check that metadata fields are present
     assert "normalization" in manifest

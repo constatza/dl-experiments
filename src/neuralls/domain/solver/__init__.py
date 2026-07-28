@@ -26,20 +26,20 @@ from .models.result import (
 )
 
 __all__ = [
-    "TraceMode",
-    "SolverConfig",
-    "SolverParams",
+    "CGComparisonResult",
     "ComparisonData",
     "ComparisonGeneral",
-    "SolverResult",
-    "CGComparisonResult",
+    "ComparisonRecommendations",
+    "ComparisonResult",
     "IterationContext",
     "PlotPaths",
     "RankedRecommendation",
-    "ComparisonRecommendations",
-    "ComparisonResult",
-    "run_cg_comparison",
+    "SolverConfig",
+    "SolverParams",
+    "SolverResult",
+    "TraceMode",
     "format_results_summary",
+    "run_cg_comparison",
     "summarize_best_combinations",
 ]
 

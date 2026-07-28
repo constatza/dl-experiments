@@ -13,12 +13,12 @@ from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.io import url_resolver
 from mlflow.tracking import MlflowClient
 
+from neuralls.composition.assignments.multi_training import TrainingRunResult
 from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
     PreconditionerType,
     StandardPreconditionerConfig,
 )
-from neuralls.composition.assignments.multi_training import TrainingRunResult
 
 _MINIMAL_TRAINING_JOB_TOML = """
 [run]
@@ -47,21 +47,7 @@ module_path = "dlkit.engine.adapters.lightning.datamodules"
 EXP_ID_ALPHA: str = "alpha-experiment"
 EXP_ID_BETA: str = "beta-experiment"
 
-_IDENTITY_MODEL_SOURCE = "\n".join(
-    [
-        "import mlflow",
-        "from typing import Dict, List",
-        "",
-        "class _IdentityModel(mlflow.pyfunc.PythonModel):",
-        "    def predict(self, context, model_input: List[Dict[str, str]], params=None) -> List[Dict[str, str]]:",
-        "        _ = context",
-        "        _ = params",
-        "        return model_input",
-        "",
-        "mlflow.models.set_model(_IdentityModel())",
-        "",
-    ]
-)
+_IDENTITY_MODEL_SOURCE = "import mlflow\nfrom typing import Dict, List\n\nclass _IdentityModel(mlflow.pyfunc.PythonModel):\n    def predict(self, context, model_input: List[Dict[str, str]], params=None) -> List[Dict[str, str]]:\n        _ = context\n        _ = params\n        return model_input\n\nmlflow.models.set_model(_IdentityModel())\n"
 
 
 def _artifact_location(path: Path) -> str:

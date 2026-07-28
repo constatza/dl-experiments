@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from neuralls.platform.config.models.experiments import ComparisonRegistryEntry, AssignmentEntry
+from neuralls.platform.config.models.experiments import AssignmentEntry, ComparisonRegistryEntry
 from neuralls.platform.config.resolution import MlflowPaths
 from neuralls.platform.tracking.mlflow import MlflowRunConfig
 
@@ -21,12 +21,14 @@ def iso_timestamp(dt: datetime | None = None) -> str:
     Returns:
         ISO 8601 formatted timestamp string at second precision.
     """
-    return (dt or datetime.now()).strftime("%Y-%m-%dT%H:%M:%S")
+    return (dt or datetime.now()).strftime("%Y-%m-%dT%H:%M:%S")  # noqa: DTZ005 -- local time intended
 
 
 def format_run_timestamp(dt: datetime | None = None) -> str:
     """Return a readable local timestamp for MLflow run names."""
-    return (dt or datetime.now()).strftime("%a %d %b %Y - %H:%M:%S")
+    return (dt or datetime.now()).strftime(  # noqa: DTZ005 -- local time intended
+        "%a %d %b %Y - %H:%M:%S"
+    )
 
 
 @dataclass(frozen=True)

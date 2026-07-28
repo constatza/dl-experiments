@@ -10,32 +10,30 @@ Covers:
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from pathlib import Path
-import re
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import patch
 
 import numpy as np
 import pytest
+import torch
+from dlkit.common.results import TrainingResult
+from tensordict import TensorDict
 
 from neuralls.composition.assignments.runtime_dataset_contract import (
     default_training_dataset_contract,
 )
 from neuralls.composition.assignments.training import (
-    _TrainingFinalizationContext,
     _finalize_training_run,
+    _TrainingFinalizationContext,
 )
 from neuralls.platform.config.models.experiments import ExperimentNamesConfig
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.config.resolution import MlflowPaths
 from neuralls.platform.tracking.mlflow import MlflowRunConfig
-import torch
-from tensordict import TensorDict
-
-from dlkit.common.results import TrainingResult
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -266,9 +264,8 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     This test documents the expected API so _log_training_evaluation() can rely on it.
     Runs a single fast_dev_run training step using DLKit programmatic settings.
     """
-    import dlkit.engine.tracking.uri_resolver as uri_resolver
     from dlkit.config import TrainingJobConfig
-    from dlkit.interfaces.api import execute
+    from dlkit.engine.tracking import uri_resolver
     from dlkit.infrastructure.config import (
         DataModuleSelector,
         DataSettings,
@@ -277,12 +274,13 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
         TrackingSettings,
         TrainingSettings,
     )
-    from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+    from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
     from dlkit.infrastructure.config.model_components import (
         MetricComponentSettings,
         ModelComponentSettings,
     )
-    from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
+    from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+    from dlkit.interfaces.api import execute
 
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)
 
@@ -443,11 +441,11 @@ def test_prepare_training_settings_builds_explicit_mlflow_run_config(tmp_path: P
     wrapper), so only the settings-building half needs exercising here; no
     execute()/finalize mocks are needed since this function never calls either.
     """
-    from neuralls.platform.config.models.workspace import AssignmentWorkspace
     from neuralls.composition.assignments.training import (
         cleanup_prepared_training,
         prepare_training_settings,
     )
+    from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -529,11 +527,11 @@ def test_prepare_training_settings_falls_back_to_dataset_display_name_without_st
     tmp_path: Path,
 ) -> None:
     """Legacy callers use the config-model default experiment name and no tags."""
-    from neuralls.platform.config.models.workspace import AssignmentWorkspace
     from neuralls.composition.assignments.training import (
         cleanup_prepared_training,
         prepare_training_settings,
     )
+    from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -611,11 +609,12 @@ def test_prepare_training_settings_max_epochs_override_keeps_original_settings_i
     from dlkit.infrastructure.config.job_config import TrainingJobConfig
     from dlkit.infrastructure.config.model_components import ModelComponentSettings
     from dlkit.infrastructure.config.trainer_settings import TrainerSettings
-    from neuralls.platform.config.models.workspace import AssignmentWorkspace
+
     from neuralls.composition.assignments.training import (
         cleanup_prepared_training,
         prepare_training_settings,
     )
+    from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
     config_path = tmp_path / "model.toml"
     data_config_path = tmp_path / "data.toml"
@@ -693,6 +692,7 @@ def test_prepare_training_settings_max_epochs_override_keeps_original_settings_i
 def test_execute_result_unwraps_optimization_result() -> None:
     """Optimization results are normalized to their nested training result."""
     from dlkit.common.results import OptimizationResult, TrialRecord
+
     from neuralls.composition.assignments.training import _unwrap_execution_result
 
     training_result = TrainingResult(

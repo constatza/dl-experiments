@@ -115,7 +115,7 @@ def _build_context(
 
     normalize_value = config.generation.normalize
     if isinstance(normalize_value, bool):
-        raise ValueError(
+        raise TypeError(
             f"Invalid normalize value in config: {normalize_value} (bool). "
             "The 'normalize' parameter expects one of 'matrix', 'rhs', or 'none'."
         )

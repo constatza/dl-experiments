@@ -5,14 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
+from dlkit.infrastructure.config.job_config import FitJobConfig, SearchJobConfig, TrainingJobConfig
 from loguru import logger
 
-from neuralls.composition.assignments._job_types import AnyJobConfig, TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import AnyJobConfig, TrainableJobConfig
 from neuralls.composition.assignments.job_loader import load_experiment_job
 from neuralls.composition.assignments.job_materializer import materialize_inference_job
 from neuralls.composition.assignments.runtime_tracking_patcher import patch_training_tracking
-from neuralls.composition.assignments.runtime_workspace_patcher import patch_runtime_workspace
+from neuralls.composition.assignments.runtime_workspace_patcher import (
+    patch_runtime_workspace_for_job,
+)
 from neuralls.platform.config.loaders import load_case_config, load_data_config
 from neuralls.platform.config.models.experiments import CaseConfig, resolve_display_name
 from neuralls.platform.config.models.workspace import (
@@ -49,12 +51,13 @@ def _base_name_from_settings(settings: AnyJobConfig, job_config_path: Path) -> s
     return job_config_path.stem
 
 
-def _require_train_like_job(settings: AnyJobConfig) -> TrainLikeJobConfig:
-    """Narrow one loaded job to the train/search family."""
-    if isinstance(settings, (TrainingJobConfig, SearchJobConfig)):
+def _require_trainable_job(settings: AnyJobConfig) -> TrainableJobConfig:
+    """Narrow one loaded job to a kind runnable via the assignment/training pipeline."""
+    if isinstance(settings, (TrainingJobConfig, SearchJobConfig, FitJobConfig)):
         return settings
     raise TypeError(
-        f"Training mode requires a DLKit training or search job, got {type(settings).__name__}."
+        f"Training mode requires a DLKit training, search, or fit job, got "
+        f"{type(settings).__name__}."
     )
 
 
@@ -222,8 +225,8 @@ def load_assignment(
         settings = materialize_inference_job(job_cfg)
         logger.debug("Loaded inference settings")
     else:
-        training_job = _require_train_like_job(job_cfg)
-        settings = patch_runtime_workspace(training_job, output_dir=workspace.root_dir)
+        trainable_job = _require_trainable_job(job_cfg)
+        settings = patch_runtime_workspace_for_job(trainable_job, output_dir=workspace.root_dir)
         settings = patch_training_tracking(
             settings,
             uri=mlflow_topology.env.get("MLFLOW_TRACKING_URI"),

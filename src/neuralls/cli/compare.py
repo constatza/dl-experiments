@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import typer
 from loguru import logger
 
-from neuralls.cli.options import EnvFileOption, ProfileOption
+from neuralls.cli.options import CaseConfigArgument, EnvFileOption, ProfileOption
+from neuralls.composition.assignments.comparison_batch import run_comparison_batch
 from neuralls.composition.comparison.models import (
     ComparisonOutcome,
     ComparisonParams,
     ComparisonResult,
 )
-from neuralls.composition.assignments.comparison_batch import run_comparison_batch
 from neuralls.composition.config import load_case_settings
 from neuralls.shared.constants import EXIT_FAILURE, SYMBOL_CHECKMARK
 
@@ -59,10 +58,7 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
 
 
 def compare_case(
-    config: Path = typer.Argument(
-        ...,
-        help="Path to a case config TOML.",
-    ),
+    config: CaseConfigArgument,
     env_file: EnvFileOption = None,
     profile: ProfileOption = None,
 ) -> None:

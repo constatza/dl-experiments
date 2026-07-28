@@ -12,18 +12,17 @@ import pytest
 from dlkit.infrastructure.io import url_resolver
 from mlflow.tracking import MlflowClient
 
+from neuralls.composition.assignments.model_resolution import resolve_model_ref
 from neuralls.platform.config.models.preconditioner import (
     NeuralPreconditionerConfig,
     PreconditionerType,
     RegisteredModelRefConfig,
 )
+from neuralls.platform.config.resolution import resolve_local_path
 from neuralls.platform.tracking.model_registry import (
     assign_dataset_alias_to_registered_model,
     register_logged_model,
 )
-from neuralls.platform.config.resolution import resolve_local_path
-from neuralls.composition.assignments.model_resolution import resolve_model_ref
-
 
 pytestmark = [
     pytest.mark.integration,
@@ -56,21 +55,7 @@ def _assert_path_within(path: Path, root: Path) -> None:
 def _write_identity_model(path: Path) -> Path:
     """Write a minimal models-from-code pyfunc model script."""
     path.write_text(
-        "\n".join(
-            [
-                "import mlflow",
-                "from typing import Dict, List",
-                "",
-                "class _IdentityModel(mlflow.pyfunc.PythonModel):",
-                "    def predict(self, context, model_input: List[Dict[str, str]], params=None) -> List[Dict[str, str]]:",
-                "        _ = context",
-                "        _ = params",
-                "        return model_input",
-                "",
-                "mlflow.models.set_model(_IdentityModel())",
-                "",
-            ]
-        ),
+        "import mlflow\nfrom typing import Dict, List\n\nclass _IdentityModel(mlflow.pyfunc.PythonModel):\n    def predict(self, context, model_input: List[Dict[str, str]], params=None) -> List[Dict[str, str]]:\n        _ = context\n        _ = params\n        return model_input\n\nmlflow.models.set_model(_IdentityModel())\n",
         encoding="utf-8",
     )
     return path

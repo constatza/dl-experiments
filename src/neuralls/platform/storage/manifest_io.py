@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from neuralls.platform.storage.manifest import (
+    _DATASET_SCHEMA,
     DatasetArtifact,
     DatasetManifest,
     DatasetNormalization,
-    _DATASET_SCHEMA,
     manifest_path_for,
 )
 from neuralls.shared.types import LayoutType

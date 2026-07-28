@@ -21,11 +21,8 @@ _DEFAULT_TRACKING_TOML = DEFAULT_PROJECT_ROOT / "configs" / "tracking.toml"
 
 def load_raw_toml(path: Path) -> dict[str, Any]:
     """Load TOML file as raw dict without validation."""
-    try:
-        with open(path, "rb") as f:
-            return tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise exc
+    with open(path, "rb") as f:
+        return tomllib.load(f)
 
 
 def load_data_config(path: Path, settings: NeurallsSettings) -> DataConfigFile:

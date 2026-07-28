@@ -42,11 +42,11 @@ from .helpers import (
     _verify_solution_accuracy,
 )
 
-TIn = TypeVar("TIn", contravariant=True)
-TOut = TypeVar("TOut", covariant=True)
+TIn_contra = TypeVar("TIn_contra", contravariant=True)
+TOut_co = TypeVar("TOut_co", covariant=True)
 
 
-class Transformation(Protocol[TIn, TOut]):
+class Transformation(Protocol[TIn_contra, TOut_co]):
     """Protocol for pure computational transformations.
 
     Transformations are deterministic functions that convert inputs to outputs
@@ -54,14 +54,14 @@ class Transformation(Protocol[TIn, TOut]):
     """
 
     @abstractmethod
-    def transform(self, inputs: TIn) -> TOut:
+    def transform(self, inputs: TIn_contra) -> TOut_co:
         """Apply transformation to inputs.
 
         Args:
-            inputs: Input data of type TIn
+            inputs: Input data of type TIn_contra
 
         Returns:
-            Transformed data of type TOut
+            Transformed data of type TOut_co
         """
         ...
 
@@ -430,11 +430,11 @@ class CGTraceTransform:
 
 
 __all__ = [
-    "Transformation",
+    "CGTraceTransform",
     "ComputeRhsTransform",
-    "SolveTransform",
-    "VerifyTransform",
     "EigenvectorCombinationTransform",
     "KrylovBasisTransform",
-    "CGTraceTransform",
+    "SolveTransform",
+    "Transformation",
+    "VerifyTransform",
 ]

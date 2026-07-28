@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Mapping
-from datetime import datetime, UTC
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -121,7 +121,7 @@ def _select_checkpoint_relative_path(
                     dst_path=scratch_dir,
                 )
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise FileNotFoundError(no_checkpoints_message) from exc
         try:
             selected = find_single_checkpoint(root)

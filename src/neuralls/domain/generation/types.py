@@ -7,7 +7,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from neuralls.domain.normalization import ErrorTraceSamples, ResidualTraceSamples
-from .interfaces import GeneratedSamples, ArchiveData
+
+from .interfaces import ArchiveData, GeneratedSamples
 
 # =============================================================================
 # CONSTANTS
@@ -60,8 +61,8 @@ class RawSamples:
 
 __all__ = [
     "EIGENVECTOR_SOLUTION_TOLERANCE",
-    "StrategyOutput",
     "ArchiveData",
     "GeneratedSamples",
     "RawSamples",
+    "StrategyOutput",
 ]

@@ -8,7 +8,15 @@ from unittest.mock import patch
 import pytest
 from mlflow.tracking import MlflowClient
 
-from tests.workflows.conftest import LoggedNamedCheckpointsRunFactory, LoggedRunFactory
+from neuralls.composition.assignments.model_resolution import (
+    ModelResolution,
+    PreconditionerResolutionResult,
+    _download_checkpoint_for_run,
+    build_neural_download_dirname,
+    resolve_model_ref,
+    resolve_preconditioner_models,
+    resolve_preconditioner_models_with_warnings,
+)
 from neuralls.platform.config.models.preconditioner import (
     AMGPreconditionerConfig,
     LoggedModelRefConfig,
@@ -20,17 +28,9 @@ from neuralls.platform.config.models.preconditioner import (
     RegisteredModelRefConfig,
     StandardPreconditionerConfig,
 )
-from neuralls.composition.assignments.model_resolution import (
-    ModelResolution,
-    PreconditionerResolutionResult,
-    _download_checkpoint_for_run,
-    build_neural_download_dirname,
-    resolve_model_ref,
-    resolve_preconditioner_models,
-    resolve_preconditioner_models_with_warnings,
-)
 from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 from neuralls.platform.tracking.model_registry import register_logged_model
+from tests.workflows.conftest import LoggedNamedCheckpointsRunFactory, LoggedRunFactory
 
 
 def _tracking_uri(tmp_path: Path) -> str:

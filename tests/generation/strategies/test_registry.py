@@ -8,7 +8,6 @@ import neuralls.domain.generation
 from neuralls.domain.generation import run_generation
 from neuralls.domain.generation.runner import _registry, strategy_supports_matrix_replacement
 
-
 EXPECTED_STRATEGIES = {
     "random",
     "normal",

@@ -7,8 +7,10 @@ import pytest
 from neuralls.domain.generation.plan import (
     GenerationPlan,
     StrategySpec,
-    canonicalize_strategy_name as _canonicalize_strategy_name,
     parse_generation_plan,
+)
+from neuralls.domain.generation.plan import (
+    canonicalize_strategy_name as _canonicalize_strategy_name,
 )
 
 
@@ -425,8 +427,9 @@ class TestPydanticValidation:
 
     def test_pydantic_rejects_unknown_parameters(self) -> None:
         """Test that unknown parameters are rejected when configs are validated."""
-        from neuralls.domain.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
+
+        from neuralls.domain.generation.strategy_configs import KrylovConfig
 
         # Try to create a config with an unknown parameter
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
@@ -434,8 +437,9 @@ class TestPydanticValidation:
 
     def test_pydantic_rejects_invalid_literal_values(self) -> None:
         """Test that invalid Literal values are rejected."""
-        from neuralls.domain.generation.strategy_configs import EigenvectorForwardConfig
         from pydantic import ValidationError
+
+        from neuralls.domain.generation.strategy_configs import EigenvectorForwardConfig
 
         # Try to pass an invalid 'which' value
         with pytest.raises(ValidationError, match="Input should be"):
@@ -478,8 +482,9 @@ class TestPydanticValidation:
 
     def test_pydantic_requires_rhs_glob(self) -> None:
         """Test that rhs_glob is required for RhsArchiveConfig."""
-        from neuralls.domain.generation.strategy_configs import RhsArchiveConfig
         from pydantic import ValidationError
+
+        from neuralls.domain.generation.strategy_configs import RhsArchiveConfig
 
         # Try to create config without rhs_glob
         with pytest.raises(ValidationError, match="Field required"):
@@ -487,8 +492,9 @@ class TestPydanticValidation:
 
     def test_pydantic_requires_solutions_glob(self) -> None:
         """Test that solutions_glob is required for SolutionArchiveConfig."""
-        from neuralls.domain.generation.strategy_configs import SolutionArchiveConfig
         from pydantic import ValidationError
+
+        from neuralls.domain.generation.strategy_configs import SolutionArchiveConfig
 
         # Try to create config without solutions_glob
         with pytest.raises(ValidationError, match="Field required"):
@@ -496,8 +502,9 @@ class TestPydanticValidation:
 
     def test_pydantic_validates_type_residual_iters(self) -> None:
         """Test that cg_iters must be int."""
-        from neuralls.domain.generation.strategy_configs import ResidualErrorConfig
         from pydantic import ValidationError
+
+        from neuralls.domain.generation.strategy_configs import ResidualErrorConfig
 
         # Try to pass a string for cg_iters
         with pytest.raises(ValidationError, match="Input should be a valid integer"):
@@ -505,8 +512,9 @@ class TestPydanticValidation:
 
     def test_pydantic_validates_type_krylov_iters(self) -> None:
         """Test that krylov_iters must be int."""
-        from neuralls.domain.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
+
+        from neuralls.domain.generation.strategy_configs import KrylovConfig
 
         # Pydantic will coerce float to int, but invalid types should fail
         with pytest.raises(ValidationError, match="Input should be a valid integer"):
@@ -514,8 +522,9 @@ class TestPydanticValidation:
 
     def test_pydantic_frozen_prevents_mutation(self) -> None:
         """Test that frozen=True prevents mutation of config objects."""
-        from neuralls.domain.generation.strategy_configs import KrylovConfig
         from pydantic import ValidationError
+
+        from neuralls.domain.generation.strategy_configs import KrylovConfig
 
         config = KrylovConfig(samples=10, seed=42, shuffle=True, krylov_iters=15)
 
@@ -526,10 +535,10 @@ class TestPydanticValidation:
     def test_pydantic_accepts_valid_configs(self) -> None:
         """Test that valid configurations are accepted."""
         from neuralls.domain.generation.strategy_configs import (
-            KrylovConfig,
-            ResidualErrorConfig,
             EigenvectorForwardConfig,
+            KrylovConfig,
             RandomNormalConfig,
+            ResidualErrorConfig,
         )
 
         # All these should succeed

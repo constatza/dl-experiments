@@ -6,6 +6,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
+from neuralls.platform.storage.manifest import DatasetArtifact, DatasetNormalization
+from neuralls.platform.storage.manifest_io import make_dataset_manifest, save_dataset_manifest
 from neuralls.platform.storage.training_artifacts import (
     NpyArraySource,
     ZarrArraySource,
@@ -13,8 +16,6 @@ from neuralls.platform.storage.training_artifacts import (
     load_training_arrays,
     parameters_zarr_paths,
 )
-from neuralls.platform.storage.manifest import DatasetArtifact, DatasetNormalization
-from neuralls.platform.storage.manifest_io import make_dataset_manifest, save_dataset_manifest
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
 
 

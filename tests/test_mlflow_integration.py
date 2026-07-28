@@ -290,8 +290,9 @@ class TestCustomArtifacts:
         output_root: Path,
     ):
         """Verify custom prediction outputs can be saved to predictions_dir."""
-        from neuralls.composition.assignments.assembler import load_assignment
         import numpy as np
+
+        from neuralls.composition.assignments.assembler import load_assignment
 
         experiment = load_assignment(
             minimal_model_config,

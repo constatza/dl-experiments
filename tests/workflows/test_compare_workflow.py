@@ -7,9 +7,9 @@ import numpy as np
 from neuralls.composition.comparison.comparison_run import (
     compare_preconditioners,
 )
+from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 from neuralls.platform.config.loaders import load_comparison_config
 from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
-from neuralls.domain.generation.payloads import GeneratedDatasetPayload
 
 
 def _assert_under(path: Path, root: Path) -> None:
@@ -85,18 +85,7 @@ def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
     """Write minimal model config for test."""
     profile_path = path.with_name(f"{path.stem}-profile.toml")
     profile_path.write_text(
-        "\n".join(
-            [
-                "[model]",
-                'name = "ScaleEquivariantFFNN"',
-                "",
-                "[data]",
-                'name = "FlexibleDataset"',
-                "",
-                "[data.module]",
-                'name = "ArrayDataModule"',
-            ]
-        ),
+        '[model]\nname = "ScaleEquivariantFFNN"\n\n[data]\nname = "FlexibleDataset"\n\n[data.module]\nname = "ArrayDataModule"',
         encoding="utf-8",
     )
     path.write_text(

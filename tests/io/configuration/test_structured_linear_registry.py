@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import importlib.util
+from pathlib import Path
 
 import pytest
-from neuralls.composition.assignments.assembler import load_assignment
-from neuralls.platform.config.registry import list_assignment_bindings
-from neuralls.composition.assignments.assembler import load_validated_case_config
+
+from neuralls.composition.assignments.assembler import load_assignment, load_validated_case_config
 from neuralls.platform.config.dlkit_bridge import load_job_config
+from neuralls.platform.config.registry import list_assignment_bindings
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("dlkit") is None,
@@ -141,27 +141,7 @@ def test_legacy_model_workflow_toml_is_rejected(tmp_path: Path, neuralls_setting
     """Legacy uppercase manifests fail fast via DLKit's own [run] validation."""
     bad_config = tmp_path / "bad.toml"
     bad_config.write_text(
-        "\n".join(
-            [
-                "[SESSION]",
-                "seed = 42",
-                'workflow = "train"',
-                "",
-                "[MODEL]",
-                'name = "NormScaledSymmetricLinear"',
-                "",
-                "[TRAINING]",
-                "[TRAINING.trainer]",
-                "max_epochs = 1",
-                "",
-                "[OPTIMIZATION]",
-                "",
-                "[[OPTIMIZATION.stages]]",
-                "[OPTIMIZATION.stages.optimizer]",
-                'name = "AdamW"',
-                "lr = 1e-3",
-            ]
-        )
+        '[SESSION]\nseed = 42\nworkflow = "train"\n\n[MODEL]\nname = "NormScaledSymmetricLinear"\n\n[TRAINING]\n[TRAINING.trainer]\nmax_epochs = 1\n\n[OPTIMIZATION]\n\n[[OPTIMIZATION.stages]]\n[OPTIMIZATION.stages.optimizer]\nname = "AdamW"\nlr = 1e-3'
     )
 
     with pytest.raises(Exception, match="run.type"):

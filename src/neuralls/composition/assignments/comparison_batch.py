@@ -9,27 +9,52 @@ from pathlib import Path
 from typing import Any
 
 import mlflow
+from dlkit.infrastructure.config.job_config import FitJobConfig
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
+from neuralls.composition.assignments._job_types import AnyJobConfig
+from neuralls.composition.assignments.assembler import load_validated_case_config
+from neuralls.composition.assignments.job_loader import load_experiment_job
+from neuralls.composition.assignments.model_resolution import (
+    AssignmentModelContext,
+    resolve_preconditioner_models_with_warnings,
+)
+from neuralls.composition.comparison._input_resolution import resolve_comparison_input
+from neuralls.composition.comparison.comparison_run import compare_preconditioners
+from neuralls.composition.comparison.config_assembler import resolve_comparison_config
+from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
+from neuralls.composition.tracking.run_specs import (
+    ComparisonRunTags,
+    build_child_comparison_tags,
+    build_comparison_run_spec,
+    build_session_run_spec,
+)
+from neuralls.domain.solver.models.result import ComparisonResult
+from neuralls.platform.config.loaders import load_data_config
+from neuralls.platform.config.models.comparison import (
+    ComparisonConfig,
+    DatasetRhsSourceModel,
+    RawLhsSourceModel,
+    RawRhsSourceModel,
+)
 from neuralls.platform.config.models.dataset_identity import resolve_dataset_identity
-from neuralls.platform.config.models.comparison import ComparisonConfig
 from neuralls.platform.config.models.experiments import (
+    AssignmentEntry,
     CaseConfig,
     ComparisonRegistryEntry,
-    AssignmentEntry,
 )
-from neuralls.platform.config.registry import get_assignment_binding
-from neuralls.composition.comparison.config_assembler import resolve_comparison_config
-from neuralls.composition.assignments.assembler import load_validated_case_config
-from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.config.models.preconditioner import (
+    AMGPreconditionerConfig,
+    CheckpointRefBearing,
     LoggedModelRefConfig,
     NeuralPreconditionerConfig,
+    PODCoarseningConfig,
     PreconditionerConfig,
     PreconditionerType,
 )
-from neuralls.platform.config.loaders import load_data_config
+from neuralls.platform.config.registry import get_assignment_binding, resolve_assignment_binding
+from neuralls.platform.config.settings import NeurallsSettings, require_settings
 from neuralls.platform.reporting.artifacts import (
     coerce_comparison_result_payload,
     write_comparison_artifacts,
@@ -43,12 +68,6 @@ from neuralls.platform.storage.validation import (
     validate_comparison_matrix_input,
     validate_comparison_rhs_input,
 )
-from neuralls.platform.config.models.comparison import (
-    DatasetRhsSourceModel,
-    RawLhsSourceModel,
-    RawRhsSourceModel,
-)
-from neuralls.shared.types import ComparisonRhsSourceKind
 from neuralls.platform.tracking.comparison_tracking import (
     log_comparison_artifact_uri,
     log_comparison_input_artifacts,
@@ -60,21 +79,8 @@ from neuralls.platform.tracking.comparison_tracking import (
 from neuralls.platform.tracking.extra_features import fetch_extra_input_names_for_model
 from neuralls.platform.tracking.mlflow import build_workflow_environment
 from neuralls.platform.tracking.mlflow_client import log_comparison_artifacts_to_mlflow
-from neuralls.composition.comparison.comparison_run import compare_preconditioners
-from neuralls.composition.comparison._input_resolution import resolve_comparison_input
-from neuralls.composition.assignments.model_resolution import (
-    AssignmentModelContext,
-    resolve_preconditioner_models_with_warnings,
-)
 from neuralls.platform.tracking.model_registry import build_registered_model_name
-from neuralls.domain.solver.models.result import ComparisonResult
-from neuralls.composition.tracking.run_specs import (
-    build_comparison_run_spec,
-    build_child_comparison_tags,
-    build_session_run_spec,
-    ComparisonRunTags,
-)
-from neuralls.composition.comparison.models import ComparisonOutcome, ComparisonParams
+from neuralls.shared.types import ComparisonRhsSourceKind
 
 
 @dataclass(frozen=True)
@@ -116,11 +122,17 @@ def _resolve_neural_preconditioners(
 
 
 def _needs_model_resolution(specs: tuple[PreconditionerConfig, ...]) -> bool:
-    """Return True when any neural preconditioner needs model_ref lookup."""
+    """Return True when any checkpoint-bearing preconditioner needs model_ref lookup.
+
+    Generic over `CheckpointRefBearing` (not `NeuralPreconditionerConfig`-only)
+    so a checkpoint-backed `AMGPreconditionerConfig` (POD-2G fitted ahead of
+    time via a `FitJobConfig` assignment) triggers resolution the same way a
+    neural preconditioner does — one dispatch point, no per-kind branching.
+    """
     for spec in specs:
-        if not isinstance(spec, NeuralPreconditionerConfig):
+        if not isinstance(spec, CheckpointRefBearing):
             continue
-        if spec.model_ref is not None:
+        if any(ref.model_ref is not None for _, ref in spec.checkpoint_refs()):
             return True
     return False
 
@@ -128,15 +140,15 @@ def _needs_model_resolution(specs: tuple[PreconditionerConfig, ...]) -> bool:
 def _referenced_assignment_ids(
     specs: tuple[PreconditionerConfig, ...],
 ) -> tuple[str, ...]:
-    """Return assignment ids explicitly referenced by neural specs."""
+    """Return assignment ids explicitly referenced by checkpoint-bearing specs."""
     ids: list[str] = []
     for spec in specs:
-        if not isinstance(spec, NeuralPreconditionerConfig):
+        if not isinstance(spec, CheckpointRefBearing):
             continue
-        assignment_id = spec.assignment
-        if assignment_id is None or assignment_id in ids:
-            continue
-        ids.append(assignment_id)
+        for _, ref in spec.checkpoint_refs():
+            if ref.assignment is None or ref.assignment in ids:
+                continue
+            ids.append(ref.assignment)
     return tuple(ids)
 
 
@@ -171,12 +183,106 @@ def _load_master_config(
 
 
 def _existing_assignment_ids(specs: tuple[PreconditionerConfig, ...]) -> set[str]:
-    """Return assignment ids already claimed by explicit neural preconditioners."""
-    return {
-        spec.assignment
-        for spec in specs
-        if isinstance(spec, NeuralPreconditionerConfig) and spec.assignment is not None
-    }
+    """Return assignment ids already claimed by explicit checkpoint-bearing preconditioners."""
+    ids: set[str] = set()
+    for spec in specs:
+        if not isinstance(spec, CheckpointRefBearing):
+            continue
+        for _, ref in spec.checkpoint_refs():
+            if ref.assignment is not None:
+                ids.add(ref.assignment)
+    return ids
+
+
+@dataclass(frozen=True)
+class _AssignmentJobContext:
+    """One assignment's resolved job settings plus its dataset directory."""
+
+    job: AnyJobConfig
+    dataset_dir: Path
+
+
+def _resolve_assignment_job_context(
+    entry: AssignmentEntry,
+    *,
+    cfg: CaseConfig,
+    config_dir: Path,
+    settings: NeurallsSettings,
+) -> _AssignmentJobContext:
+    """Load one assignment's declared job and resolve its dataset directory.
+
+    Both are needed to decide *what kind* of auto-generated preconditioner
+    spec an assignment produces (`neural_specs_from_assignments`'s kind
+    dispatch) and, for a `fit`-kind job, to populate the resulting
+    `PODCoarseningConfig`'s required `dataset_dir`/`rank` fields.
+    """
+    binding = resolve_assignment_binding(cfg, config_dir, entry)
+    job = load_experiment_job(binding.job_config_path, settings)
+    data_cfg = load_data_config(binding.data_config_path, settings)
+    dataset_id = resolve_dataset_identity(
+        data_cfg=data_cfg,
+        config_path=binding.data_config_path,
+    ).name
+    return _AssignmentJobContext(job=job, dataset_dir=settings.processed_dir / dataset_id)
+
+
+def _neural_spec_from_assignment(
+    entry: AssignmentEntry,
+    *,
+    client: MlflowClient,
+) -> NeuralPreconditionerConfig:
+    """Build an unresolved neural preconditioner stub for a train/search-kind assignment.
+
+    References the most recent unregistered training run tagged with the
+    assignment's id, rather than a registry entry — automatic model
+    consumption reads raw MLflow runs, since the registry is reserved for
+    deliberate/manual promotion. Also fetches the
+    ``neuralls.extra_feature_names`` tag from the training run so that FiLM
+    models receive their condition tensor during comparison.
+    """
+    return NeuralPreconditionerConfig(
+        name=entry.effective_display_name,
+        type=PreconditionerType.NEURAL,
+        assignment=entry.id,
+        model_ref=LoggedModelRefConfig(latest=True, tags={"assignment_id": entry.id}),
+        extra_input_names=fetch_extra_input_names_for_model(entry.id, client),
+    )
+
+
+def _pod_fit_spec_from_assignment(
+    entry: AssignmentEntry,
+    *,
+    job: FitJobConfig,
+    dataset_dir: Path,
+) -> AMGPreconditionerConfig:
+    """Build an unresolved AMG/POD stub for a `fit`-kind (POD-2G) assignment.
+
+    Mirrors `_neural_spec_from_assignment`'s "unresolved stub referencing the
+    most recent tagged run" shape, but for `AMGPreconditionerConfig(coarsening
+    =PODCoarseningConfig(...))` instead of `NeuralPreconditionerConfig` — the
+    checkpoint-shaped side of the kind dispatch in
+    `neural_specs_from_assignments`. `dataset_dir`/`rank` are populated from
+    the assignment's own job/dataset so the config stays valid (required
+    fields) even before resolution runs; once `resolved_checkpoint_path` is
+    set by `resolve_preconditioner_models_with_warnings`, the factory
+    reconstructs the fitted basis from the checkpoint and never reads these.
+    """
+    rank = getattr(job.model, "rank", None)
+    if rank is None:
+        raise ValueError(
+            f"Assignment '{entry.id}' job declares run.type='fit' but its model has no "
+            "'rank' hyperparameter — expected a PODCoarseningStrategy-shaped model."
+        )
+    return AMGPreconditionerConfig(
+        name=entry.effective_display_name,
+        type=PreconditionerType.AMG,
+        coarsening=PODCoarseningConfig(
+            dataset_dir=dataset_dir,
+            rank=rank,
+            assignment=entry.id,
+            model_ref=LoggedModelRefConfig(latest=True, tags={"assignment_id": entry.id}),
+        ),
+    )
 
 
 def neural_specs_from_assignments(
@@ -184,36 +290,51 @@ def neural_specs_from_assignments(
     claimed_ids: set[str],
     *,
     client: MlflowClient,
-) -> list[NeuralPreconditionerConfig]:
-    """Generate NeuralPreconditionerConfig stubs from assignment entries.
+    cfg: CaseConfig,
+    config_dir: Path,
+    settings: NeurallsSettings,
+) -> list[PreconditionerConfig]:
+    """Generate auto preconditioner stubs from assignment entries.
 
-    Each stub references the most recent unregistered training run tagged
-    with the assignment's id, rather than a registry entry — automatic model
-    consumption reads raw MLflow runs, since the registry is reserved for
-    deliberate/manual promotion. For each entry, also fetches the
-    ``neuralls.extra_feature_names`` tag from the training run so that FiLM
-    models receive their condition tensor during comparison.
+    Dispatches on each assignment's declared job kind: a `fit`-kind job
+    (`FitJobConfig` — e.g. POD-2G basis fitting) yields an unresolved
+    `AMGPreconditionerConfig`/`PODCoarseningConfig` stub; any other kind
+    (today: `train`/`search`) yields the existing unresolved
+    `NeuralPreconditionerConfig` stub. Both stubs reference the most recent
+    run tagged with the assignment's id and get resolved to a concrete
+    checkpoint later, symmetrically, by
+    `resolve_preconditioner_models_with_warnings` (generic over
+    `CheckpointRefBearing`). Closed for modification, open for extension: a
+    future `Fittable` artifact kind adds one more dispatch branch here, not a
+    new isinstance chain elsewhere.
 
     Args:
         entries: Assignment entries to convert.
         claimed_ids: Assignment ids already covered by explicit preconditioners.
         client: Configured MLflow client used to look up training run tags.
+        cfg: The assignments' owning case config, for job/dataset resolution.
+        config_dir: Directory `cfg`'s registry paths resolve relative to.
+        settings: Runtime settings used to load each assignment's job/dataset config.
 
     Returns:
-        List of auto-generated neural preconditioner configs with extra_input_names
-        populated from the training run tag where available.
+        List of auto-generated preconditioner configs, one per unclaimed entry.
     """
-    return [
-        NeuralPreconditionerConfig(
-            name=entry.effective_display_name,
-            type=PreconditionerType.NEURAL,
-            assignment=entry.id,
-            model_ref=LoggedModelRefConfig(latest=True, tags={"assignment_id": entry.id}),
-            extra_input_names=fetch_extra_input_names_for_model(entry.id, client),
+    specs: list[PreconditionerConfig] = []
+    for entry in entries:
+        if entry.id in claimed_ids:
+            continue
+        context = _resolve_assignment_job_context(
+            entry, cfg=cfg, config_dir=config_dir, settings=settings
         )
-        for entry in entries
-        if entry.id not in claimed_ids
-    ]
+        if isinstance(context.job, FitJobConfig):
+            specs.append(
+                _pod_fit_spec_from_assignment(
+                    entry, job=context.job, dataset_dir=context.dataset_dir
+                )
+            )
+        else:
+            specs.append(_neural_spec_from_assignment(entry, client=client))
+    return specs
 
 
 def _resolve_specs(
@@ -560,7 +681,12 @@ def run_comparison_batch(
             cfg = resolve_comparison_config(master_cfg, config_dir, entry, settings)
             claimed_ids = _existing_assignment_ids(cfg.preconditioners)
             auto_specs = neural_specs_from_assignments(
-                assignment_entries, claimed_ids, client=mlflow_client
+                assignment_entries,
+                claimed_ids,
+                client=mlflow_client,
+                cfg=master_cfg,
+                config_dir=config_dir,
+                settings=settings,
             )
             if auto_specs:
                 cfg = replace(cfg, preconditioners=cfg.preconditioners + tuple(auto_specs))

@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from dlkit.infrastructure.io import url_resolver
 import pytest
+from dlkit.infrastructure.io import url_resolver
 
 from neuralls.platform.config.resolution import resolve_local_path
 

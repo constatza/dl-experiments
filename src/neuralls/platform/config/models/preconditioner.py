@@ -7,15 +7,15 @@ They support both factory creation and scheduling/comparison concerns.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal, Any, Annotated, Protocol, Self, cast, runtime_checkable
 from pathlib import Path
+from typing import Annotated, Any, Literal, Protocol, Self, cast, runtime_checkable
 
 from pydantic import (
-    TypeAdapter,
-    BeforeValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
+    TypeAdapter,
     ValidationInfo,
     field_validator,
     model_validator,
@@ -363,7 +363,7 @@ class AggregationCoarseningConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class PODCoarseningConfig(BaseModel):
+class PODCoarseningConfig(NeuralCheckpointRef):
     """POD-2G coarsening (Nikolopoulos et al. 2022, §3.3-3.5).
 
     The prolongation/restriction operator is a POD basis fit to a snapshot
@@ -373,6 +373,16 @@ class PODCoarseningConfig(BaseModel):
     read from an already-generated dataset directory, not raw files, so the
     same validation/normalization/manifest guarantees as every other
     dataset in this repo apply.
+
+    Inherits the optional checkpoint-identity fields from
+    ``NeuralCheckpointRef`` (``assignment``, ``model_ref``, ``checkpoint_path``,
+    ``resolved_checkpoint_path``) so a POD-2G basis can *also* be fit once
+    ahead of time via a ``FitJobConfig`` assignment and reconstructed from its
+    MLflow-tracked checkpoint at comparison time, instead of being refit
+    inline from ``dataset_dir`` on every run — see
+    ``composition/preconditioners/factory.py``'s AMG branch. None of these
+    fields are required: a `PODCoarseningConfig` with no checkpoint identity
+    set behaves exactly as before (inline `dataset_dir` fit only).
     """
 
     method: Literal["pod"] = "pod"
@@ -410,7 +420,7 @@ class PODCoarseningConfig(BaseModel):
 
     @field_validator("rank")
     @classmethod
-    def _validate_rank(cls, v: int | float) -> int | float:
+    def _validate_rank(cls, v: float) -> int | float:
         """Enforce the per-mode constraint matching whichever branch was matched.
 
         Args:
@@ -505,7 +515,7 @@ class NeuralPODCoarseningConfig(NeuralCheckpointRef):
 
     @field_validator("rank")
     @classmethod
-    def _validate_rank(cls, v: int | float) -> int | float:
+    def _validate_rank(cls, v: float) -> int | float:
         """Enforce the per-mode constraint matching whichever branch was matched.
 
         Args:
@@ -532,6 +542,21 @@ CoarseningConfig = Annotated[
 ]
 
 
+def _has_checkpoint_identity(ref: NeuralCheckpointRef) -> bool:
+    """Return True when a checkpoint ref carries any resolvable identity.
+
+    Used to decide whether a ``PODCoarseningConfig`` opts into the generic
+    checkpoint-resolution pipeline: unlike a neural preconditioner (always
+    checkpoint-backed), POD coarsening is equally valid unfitted-from-scratch
+    (``dataset_dir`` + ``rank`` only, no checkpoint fields set at all) — that
+    case must stay invisible to `CheckpointRefBearing` resolution so it keeps
+    falling through to today's inline fit unchanged.
+    """
+    return (
+        ref.assignment is not None or ref.model_ref is not None or ref.checkpoint_path is not None
+    )
+
+
 class AMGPreconditionerConfig(BasePreconditionerConfig):
     """AMG-family preconditioner configuration (multigrid coarsening + cycle).
 
@@ -554,9 +579,20 @@ class AMGPreconditionerConfig(BasePreconditionerConfig):
     coarsening: CoarseningConfig
 
     def checkpoint_refs(self) -> tuple[tuple[str, NeuralCheckpointRef], ...]:
-        """Expose the coarsening's checkpoint ref, when coarsening is neural."""
-        if isinstance(self.coarsening, NeuralPODCoarseningConfig):
-            return (("coarsening", self.coarsening),)
+        """Expose the coarsening's checkpoint ref, when it carries one.
+
+        ``NeuralPODCoarseningConfig`` is always checkpoint-backed (its
+        snapshot ensemble only exists via a checkpoint). ``PODCoarseningConfig``
+        opts in only when checkpoint identity is actually set
+        (``_has_checkpoint_identity``) — a plain ``dataset_dir``+``rank`` POD
+        config (no assignment/model_ref/checkpoint_path) must stay invisible
+        to resolution so it keeps falling through to the inline fit.
+        """
+        coarsening = self.coarsening
+        if isinstance(coarsening, NeuralPODCoarseningConfig):
+            return (("coarsening", coarsening),)
+        if isinstance(coarsening, PODCoarseningConfig) and _has_checkpoint_identity(coarsening):
+            return (("coarsening", coarsening),)
         return ()
 
     def with_resolved_refs(
@@ -564,7 +600,7 @@ class AMGPreconditionerConfig(BasePreconditionerConfig):
     ) -> AMGPreconditionerConfig:
         """Rebuild with a resolved coarsening ref substituted in."""
         _, ref = resolved[0]
-        return self.model_copy(update={"coarsening": cast(NeuralPODCoarseningConfig, ref)})
+        return self.model_copy(update={"coarsening": cast(CoarseningConfig, ref)})
 
 
 class NeuralTransferConfig(NeuralCheckpointRef):

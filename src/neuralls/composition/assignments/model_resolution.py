@@ -7,17 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from mlflow.tracking import MlflowClient
 from mlflow.entities import Run
 from mlflow.exceptions import MlflowException
 from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST, ErrorCode
+from mlflow.tracking import MlflowClient
 
 from neuralls.platform.config.models.dataset_identity import normalize_registry_id
-from neuralls.platform.storage.filesystem import sanitize_identifier
-from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
-from neuralls.platform.tracking.mlflow import quote_filter_value
-from neuralls.platform.tracking.model_registry import CHECKPOINT_ARTIFACT_PATH_TAG
-
 from neuralls.platform.config.models.preconditioner import (
     CheckpointRefBearing,
     LoggedModelRefConfig,
@@ -25,6 +20,10 @@ from neuralls.platform.config.models.preconditioner import (
     PreconditionerConfig,
     RegisteredModelRefConfig,
 )
+from neuralls.platform.storage.filesystem import sanitize_identifier
+from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
+from neuralls.platform.tracking.mlflow import quote_filter_value
+from neuralls.platform.tracking.model_registry import CHECKPOINT_ARTIFACT_PATH_TAG
 
 _DATASET_ALIAS_PLACEHOLDER = "@dataset"
 
@@ -250,7 +249,7 @@ def _download_checkpoint_for_run(
                 dst_path=str(destination),
             )
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise FileNotFoundError(
             f"Could not download checkpoint artifacts for run '{run_id}' "
             f"from 'checkpoints' or '{fallback_artifact_path}'."

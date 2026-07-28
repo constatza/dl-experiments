@@ -12,9 +12,9 @@ from pathlib import Path
 
 from loguru import logger
 
+from neuralls.composition.generation.process_data import process_data_from_config
 from neuralls.platform.config.models.experiments import CaseConfig
 from neuralls.platform.config.settings import NeurallsSettings
-from neuralls.composition.generation.process_data import process_data_from_config
 
 
 @dataclass(frozen=True)

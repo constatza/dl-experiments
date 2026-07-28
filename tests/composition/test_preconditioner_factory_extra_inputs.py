@@ -35,7 +35,6 @@ class MockPredictor(ExtraInputPredictorPort):
 
     def cleanup(self) -> None:
         """No-op cleanup."""
-        pass
 
 
 class MockAdapter(PredictorAdapter):

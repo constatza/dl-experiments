@@ -13,23 +13,23 @@ from mlflow.tracking import MlflowClient
 
 from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
 from neuralls.composition.tracking.run_specs import build_training_run_spec, format_run_timestamp
-from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 from neuralls.platform.config.models.experiments import AssignmentEntry, ExperimentNamesConfig
+from neuralls.platform.reporting.training_diagnostics import (
+    compute_diagnostics,
+    write_diagnostics_figure,
+)
 from neuralls.platform.storage.checkpoints import get_latest_checkpoint
 from neuralls.platform.storage.training_artifacts import (
     coerce_jsonable,
     save_training_predictions,
 )
+from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 from neuralls.platform.tracking.mlflow import MlflowRunConfig, runtime_paths_from_env
 from neuralls.platform.tracking.mlflow_client import (
     find_mlflow_run,
     log_diagnostics_to_mlflow,
 )
 from neuralls.platform.tracking.model_registry import upload_checkpoint_artifacts
-from neuralls.platform.reporting.training_diagnostics import (
-    compute_diagnostics,
-    write_diagnostics_figure,
-)
 
 
 def _resolve_training_experiment_name(mlflow_experiment_name: str | None) -> str:
@@ -431,7 +431,7 @@ def _download_training_checkpoint(
                 dst_path=str(destination),
             )
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise RuntimeError(
             f"Could not download checkpoints for run '{run_id}' from MLflow: {exc}"
         ) from exc

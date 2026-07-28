@@ -13,7 +13,6 @@ from loguru import logger
 from neuralls.platform.config.context import ConfigContext
 from neuralls.platform.config.settings import NeurallsSettings
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -267,8 +266,8 @@ def sample_dataset_npz(tmp_path, small_spd_matrix, archive_solutions, archive_rh
     """
     dataset_dir = tmp_path / "test-dataset"
     dataset_dir.mkdir()
-    from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
     from neuralls.domain.generation.payloads import GeneratedDatasetPayload
+    from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
 
     acc = DenseZarrAccumulator(dataset_dir / "matrix.zarr")
     acc.append_dense_matrix(small_spd_matrix, repeats=1)
@@ -304,8 +303,8 @@ def sample_dataset_with_raw(tmp_path, small_spd_matrix, archive_solutions, archi
     """
     dataset_dir = tmp_path / "test-dataset-with-raw"
     dataset_dir.mkdir()
-    from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
     from neuralls.domain.generation.payloads import GeneratedDatasetPayload
+    from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
 
     acc = DenseZarrAccumulator(dataset_dir / "matrix.zarr")
     acc.append_dense_matrix(small_spd_matrix, repeats=1)

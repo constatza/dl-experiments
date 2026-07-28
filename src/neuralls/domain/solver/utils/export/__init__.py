@@ -86,17 +86,17 @@ from .formats import ArrayFormat
 from .results import save_solver_result
 
 __all__ = [
+    "ArrayFormat",
     # Level 1: Convenience
     "quick_export",
-    # Level 2: Full control
-    "save_solver_data",
-    # Level 3: Granular
-    "save_system_arrays",
+    "save_full_config",
     "save_iteration_history",
     "save_solver_config",
-    "save_full_config",
+    # Level 2: Full control
+    "save_solver_data",
     "save_solver_result",
-    "ArrayFormat",
+    # Level 3: Granular
+    "save_system_arrays",
 ]
 
 

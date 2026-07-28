@@ -14,11 +14,11 @@ from neuralls.platform.storage.manifest import DatasetNormalization
 from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
 __all__ = [
+    "ComparisonOutcome",
+    "ComparisonParams",
+    "ComparisonPaths",
     "ComparisonResult",
     "ComparisonSpec",
-    "ComparisonParams",
-    "ComparisonOutcome",
-    "ComparisonPaths",
     "LinearSystem",
     "PreconditionerComparisonEntry",
     "ResolvedComparisonInput",

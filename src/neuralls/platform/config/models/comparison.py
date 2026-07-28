@@ -4,17 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
-from neuralls.shared.constants import (
-    DEFAULT_RTOL,
-    DEFAULT_ATOL,
-    DEFAULT_M_MAX,
-)
-from neuralls.shared.types import RowKind
 from neuralls.domain.solver.models.config import (
     ComparisonData,
     ComparisonGeneral,
@@ -26,6 +19,12 @@ from neuralls.platform.config.models.preconditioner import (
     PreconditionerConfig,
     RegisteredModelRefConfig,
 )
+from neuralls.shared.constants import (
+    DEFAULT_ATOL,
+    DEFAULT_M_MAX,
+    DEFAULT_RTOL,
+)
+from neuralls.shared.types import RowKind
 
 type NormalizeSystem = Literal["none", "matrix", "rhs", "both"]
 

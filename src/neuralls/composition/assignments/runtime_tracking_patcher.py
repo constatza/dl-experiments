@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from neuralls.composition.assignments._job_types import AnyJobConfig, TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import AnyJobConfig, TrainableJobConfig
 
 
 def ensure_runtime_tracking(settings: AnyJobConfig) -> AnyJobConfig:
@@ -12,10 +12,10 @@ def ensure_runtime_tracking(settings: AnyJobConfig) -> AnyJobConfig:
     return settings.patch({"tracking": {}})
 
 
-def patch_training_tracking(
-    settings: TrainLikeJobConfig,
+def patch_training_tracking[T: TrainableJobConfig](
+    settings: T,
     *,
     uri: str | None,
-) -> TrainLikeJobConfig:
+) -> T:
     """Enable MLflow tracking with the resolved tracking URI for training jobs."""
     return settings.patch({"tracking": {"backend": "mlflow", "uri": uri}})

@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-
 from dlkit.common import ChildSuccess
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, TrainingJobConfig
 
@@ -20,9 +19,9 @@ from neuralls.composition.assignments.evaluation import (
     EvaluationConfigPaths,
     EvaluationRunResult,
     PreparedEvaluation,
+    _as_inference_job,
     _finalize_eval_child,
     _materialize_inference_settings,
-    _as_inference_job,
     _with_eval_runtime_dataset,
     eval_batch,
     to_eval_run_spec,

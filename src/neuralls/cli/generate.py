@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import typer
 
 from neuralls.cli.error_messages import format_cli_error
-from neuralls.cli.options import EnvFileOption, ProfileOption
+from neuralls.cli.options import CaseConfigArgument, EnvFileOption, ProfileOption
 from neuralls.composition.assignments.assembler import load_validated_case_config
-from neuralls.composition.generation.multi_generation import generate_batch
 from neuralls.composition.config import load_case_settings, load_raw_toml
+from neuralls.composition.generation.multi_generation import generate_batch
 from neuralls.shared.constants import EXIT_FAILURE
 
 
@@ -22,10 +21,7 @@ def _looks_like_dataset_config(raw_config: dict[str, Any]) -> bool:
 
 
 def generate_case(
-    config: Path = typer.Argument(
-        ...,
-        help="Path to a case config TOML.",
-    ),
+    config: CaseConfigArgument,
     env_file: EnvFileOption = None,
     profile: ProfileOption = None,
 ) -> None:

@@ -7,7 +7,6 @@ from typing import Annotated
 
 import typer
 
-
 ProfileOption = Annotated[
     str | None,
     typer.Option(
@@ -31,4 +30,9 @@ CaseConfigOption = Annotated[
         "--case-config",
         help="Path to case config TOML.",
     ),
+]
+
+CaseConfigArgument = Annotated[
+    Path,
+    typer.Argument(help="Path to a case config TOML."),
 ]

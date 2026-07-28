@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-import numpy as np
-from loguru import logger
-import pandas as pd
 
-from neuralls.platform.storage.datasets import load_matrix_dense_sample, load_dataset_manifest
+import numpy as np
+import pandas as pd
+from loguru import logger
+
+from neuralls.platform.storage.datasets import load_dataset_manifest, load_matrix_dense_sample
 
 
 def load_matrix(path: Path) -> np.ndarray:

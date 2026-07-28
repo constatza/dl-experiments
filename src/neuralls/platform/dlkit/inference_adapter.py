@@ -19,8 +19,8 @@ from ._prediction_outputs import (
 )
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
     from dlkit.interfaces.inference import CheckpointPredictor
+    from numpy.typing import NDArray
 
 
 class DLKitInferencePredictor(InferencePredictorPort):
@@ -66,7 +66,6 @@ class DLKitInferencePredictor(InferencePredictorPort):
 
     def cleanup(self) -> None:
         """No-op — use as context manager; __exit__ handles unload."""
-        pass
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         """Delegate lifecycle to CheckpointPredictor's context manager."""

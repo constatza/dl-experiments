@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from neuralls.shared.types import GenerationStrategyKind, RowKind
 
-
 _NON_RESIDUAL_STRATEGIES: frozenset[GenerationStrategyKind] = frozenset(
     {
         GenerationStrategyKind.RANDOM,

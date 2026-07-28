@@ -8,14 +8,14 @@ import numpy as np
 import pytest
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
+from neuralls.composition.assignments.runtime_dataset_contract import (
+    default_training_dataset_contract,
+)
 from neuralls.platform.config.models.dataset import (
     create_features_from_array,
     create_matrix_feature,
     create_targets_from_array,
     with_dataset_arrays,
-)
-from neuralls.composition.assignments.runtime_dataset_contract import (
-    default_training_dataset_contract,
 )
 
 

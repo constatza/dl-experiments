@@ -52,14 +52,14 @@ def _build_search_settings(tmp_path: Path, X: np.ndarray, Y: np.ndarray):
         TrackingSettings,
         TrainingSettings,
     )
+    from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
     from dlkit.infrastructure.config.job_config import SearchJobConfig
-    from dlkit.infrastructure.config.trainer_settings import TrainerSettings
     from dlkit.infrastructure.config.model_components import (
         MetricComponentSettings,
         ModelComponentSettings,
     )
-    from dlkit.infrastructure.config.data_entries import DataRole, ValueEntry
     from dlkit.infrastructure.config.search_settings import IntParam, SearchSettings
+    from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 
     return SearchJobConfig(
         run=RunSettings(type="search", seed=42),
@@ -115,7 +115,7 @@ def test_search_objective_reads_configured_train_loss_key(
     a disjoint train/test split — ruling out the "train/loss happens to equal test/loss"
     non-bug explanation as well as the "objective silently ignored" bug this guards.
     """
-    import dlkit.engine.tracking.uri_resolver as uri_resolver
+    from dlkit.engine.tracking import uri_resolver
     from dlkit.interfaces.api import execute
 
     monkeypatch.setattr(uri_resolver, "local_host_alive", lambda: False)

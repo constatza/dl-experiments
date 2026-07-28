@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.linalg as linalg
 import torch
 from loguru import logger
+from numpy import linalg
 
 PreconditionerCallable = Callable[[torch.Tensor], torch.Tensor]
 

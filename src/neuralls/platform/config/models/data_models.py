@@ -6,11 +6,10 @@ These models validate the structure of data generation/collection configuration 
 
 from __future__ import annotations
 
-from typing import Literal
 from pathlib import Path
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from neuralls.domain.generation.source_streams import EnumerateBy
 from neuralls.platform.config.context import ConfigContext, expand_config_glob, expand_config_path
@@ -80,6 +79,23 @@ class SourceConfig(BaseModel):
             "Written to the dataset as parameters_0.zarr, parameters_1.zarr, …"
         ),
     )
+    include_indices: tuple[int, ...] | None = Field(
+        default=None,
+        description=(
+            "Restrict glob-matched matrix/parameters samples to exactly these sample IDs "
+            "(as assigned by sample_id_regex/enumerate_by). Mutually exclusive with "
+            "exclude_indices. Use to build a comparison/holdout dataset from a subset of a "
+            "parametric matrix family."
+        ),
+    )
+    exclude_indices: tuple[int, ...] = Field(
+        default=(),
+        description=(
+            "Drop these sample IDs from glob-matched matrix/parameters samples before "
+            "generation. Use to keep a parametric matrix family's held-out members out of "
+            "training/POD-snapshot datasets. Mutually exclusive with include_indices."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -89,6 +105,16 @@ class SourceConfig(BaseModel):
         if self.sample_id_regex is not None and self.enumerate_by is not None:
             raise ValueError(
                 "sample_id_regex and enumerate_by are mutually exclusive: "
+                "use one or the other, not both."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_index_filter_exclusivity(self) -> SourceConfig:
+        """Raise when both include_indices and exclude_indices are set."""
+        if self.include_indices is not None and self.exclude_indices:
+            raise ValueError(
+                "include_indices and exclude_indices are mutually exclusive: "
                 "use one or the other, not both."
             )
         return self

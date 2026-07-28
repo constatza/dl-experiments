@@ -32,7 +32,7 @@ def _guard_format_conflict(dataset_dir: Path, intended: DatasetFormat) -> None:
         return
     try:
         manifest = read_dataset_manifest(dataset_dir)
-    except Exception:
+    except FileNotFoundError, ValueError:
         return
     existing = manifest.matrix.format
     if existing != intended:

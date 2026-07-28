@@ -15,14 +15,15 @@ from __future__ import annotations
 import numpy as np
 from torchalg.models.result import SolverResult
 
-from ..interfaces import GeneratedSamples, ArchiveData, TracingSolverCallable
+from neuralls.domain.normalization import ResidualTraceSamples
+
+from ..helpers import _build_trace_indices, resolve_trace_generation_counts
+from ..interfaces import ArchiveData, GeneratedSamples, TracingSolverCallable
+from ..providers import HybridInputProvider
 from ..runner import register_single_rhs_strategy
 from ..strategy_configs import SearchDirectionsConfig
-from ..helpers import _build_trace_indices, resolve_trace_generation_counts
-from ..providers import HybridInputProvider
-from ..transforms import ComputeRhsTransform
-from neuralls.domain.normalization import ResidualTraceSamples
 from ..trace_utils import _referenced_sample_count, _trim_residual_traces
+from ..transforms import ComputeRhsTransform
 
 
 def _direction_trace_to_numpy(info: SolverResult) -> np.ndarray:

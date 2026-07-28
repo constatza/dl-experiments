@@ -6,14 +6,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from neuralls.composition.assignments.runtime_dataset_contract import (
-    default_training_dataset_contract,
-)
 from dlkit.infrastructure.config.data_entries import ZarrEntry
 
 from neuralls.composition.assignments._dataset_assembly import (
     _create_feature_entries,
     _extra_feature_names_from_settings,
+)
+from neuralls.composition.assignments.runtime_dataset_contract import (
+    default_training_dataset_contract,
 )
 from neuralls.platform.storage.training_artifacts import (
     TrainingArrays,
@@ -21,7 +21,6 @@ from neuralls.platform.storage.training_artifacts import (
     parameters_zarr_paths,
 )
 from neuralls.shared.constants import PARAMETERS_ZARR_PREFIX
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

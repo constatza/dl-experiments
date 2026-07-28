@@ -11,9 +11,9 @@ from neuralls.shared.constants import (
     DEFAULT_RANDOM_SEED,
     DEFAULT_RESIDUAL_TRACE_ITERS,
     DEFAULT_SHUFFLE,
-    MIN_TOLERANCE,
-    MAX_ITERATIONS_UPPER_LIMIT,
     EIGENVECTOR_SELECT_SMALLEST,
+    MAX_ITERATIONS_UPPER_LIMIT,
+    MIN_TOLERANCE,
     EigenvectorSelectionMode,
 )
 
@@ -125,8 +125,6 @@ class BaseEigenvectorConfig(BaseStrategyConfig):
 
 class EigenvectorForwardConfig(BaseEigenvectorConfig):
     """Configuration for EigenvectorForwardStrategy."""
-
-    pass
 
 
 class EigenvectorInverseConfig(BaseEigenvectorConfig):
@@ -360,8 +358,6 @@ class SparseRhsConfig(BaseStrategyConfig):
 class MixedStrategyConfig(BaseModel):
     """Configuration for a mix of strategies. (Not directly used by `generate` methods)."""
 
-    pass
-
 
 class GenerationConfig(BaseModel):
     """Overall configuration for data generation."""
@@ -369,4 +365,3 @@ class GenerationConfig(BaseModel):
     # This represents the structure of the [generation] section in the config
     # Add fields as needed to match the actual data generation config structure.
     # For now, it's a placeholder.
-    pass

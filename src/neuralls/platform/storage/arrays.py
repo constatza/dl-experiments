@@ -9,17 +9,16 @@ Functions in this module perform I/O operations and are not pure.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping
 
 import numpy as np
 
-
 from neuralls.platform.storage.datasets import (
+    load_dataset_manifest,
     load_dense_training_arrays,
     load_matrix_dense_sample,
-    load_dataset_manifest,
 )
 
 

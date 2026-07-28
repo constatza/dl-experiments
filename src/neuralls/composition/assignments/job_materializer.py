@@ -4,29 +4,31 @@ from __future__ import annotations
 
 from dlkit.infrastructure.config.data_entries import DataEntry
 
-from neuralls.composition.assignments._job_types import AnyJobConfig, TrainLikeJobConfig
+from neuralls.composition.assignments._job_types import AnyJobConfig, TrainableJobConfig
 from neuralls.composition.assignments.runtime_dataset_contract import RuntimeDatasetContract
 from neuralls.composition.assignments.runtime_dataset_patcher import patch_runtime_dataset
 from neuralls.composition.assignments.runtime_tracking_patcher import ensure_runtime_tracking
 from neuralls.composition.assignments.runtime_workspace_patcher import (
     patch_dataloader_runtime,
-    patch_runtime_workspace,
+    patch_runtime_workspace_for_job,
 )
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
 
-def materialize_training_job(
-    settings: TrainLikeJobConfig,
+def materialize_training_job[T: TrainableJobConfig](
+    settings: T,
     *,
     workspace: AssignmentWorkspace,
     features: list[DataEntry],
     targets: list[DataEntry],
     contract: RuntimeDatasetContract,
-) -> tuple[TrainLikeJobConfig, AssignmentWorkspace]:
+) -> tuple[T, AssignmentWorkspace]:
     """Apply runtime dataset and workspace stages in order.
 
     Tracking is already fully resolved by ``load_assignment()`` before this
-    runs; re-patching it here would silently drop the resolved URI.
+    runs; re-patching it here would silently drop the resolved URI. Workspace
+    patching is a no-op for job kinds with no trainer (``FitJobConfig``) —
+    see ``patch_runtime_workspace_for_job``.
     """
     settings = patch_runtime_dataset(
         settings,
@@ -35,7 +37,7 @@ def materialize_training_job(
         contract=contract,
     )
     settings = patch_dataloader_runtime(settings)
-    settings = patch_runtime_workspace(
+    settings = patch_runtime_workspace_for_job(
         settings,
         output_dir=workspace.root_dir,
     )
