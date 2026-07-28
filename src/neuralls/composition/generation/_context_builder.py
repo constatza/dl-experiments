@@ -29,6 +29,8 @@ class DataGenerationContext:
         solution_path: Optional path to a single solution file.
         sample_id_regex: Optional regex for extracting sample IDs.
         enumerate_by: Optional enumeration strategy for archive sources.
+        include_indices: Restrict every glob-based stream to exactly these sample ids.
+        exclude_indices: Drop these sample ids from every glob-based stream.
         dataset_dir: Target directory for the generated dataset.
         normalize: Normalization strategy applied to each sample.
         seed: Random seed for reproducibility.
@@ -44,6 +46,8 @@ class DataGenerationContext:
     solution_path: str | None
     sample_id_regex: str | None
     enumerate_by: EnumerateBy | None
+    include_indices: tuple[int, ...] | None
+    exclude_indices: tuple[int, ...]
     dataset_dir: Path
     normalize: NormalizeType
     seed: int
@@ -130,6 +134,8 @@ def _build_context(
         solution_path=config.source.solution_path,
         sample_id_regex=config.source.sample_id_regex,
         enumerate_by=config.source.enumerate_by,
+        include_indices=config.source.include_indices,
+        exclude_indices=config.source.exclude_indices,
         dataset_dir=dataset_dir,
         normalize=normalize,
         seed=config.generation.seed,

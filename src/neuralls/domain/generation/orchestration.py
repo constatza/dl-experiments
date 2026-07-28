@@ -420,6 +420,8 @@ def _open_streams(
     enumerate_by: EnumerateBy | None,
     parameters_paths: tuple[str, ...] = (),
     solution_path: str | None = None,
+    include_indices: tuple[int, ...] | None = None,
+    exclude_indices: tuple[int, ...] = (),
 ) -> tuple[
     MatrixSampleStream,
     VectorSampleStream | None,
@@ -436,6 +438,8 @@ def _open_streams(
         enumerate_by: Optional sequential ID assignment strategy for glob sources
         parameters_paths: Tuple of path expressions for parameter vector streams
         solution_path: Optional path expression for pre-computed solution stream
+        include_indices: Restrict every glob-based stream to exactly these sample ids
+        exclude_indices: Drop these sample ids from every glob-based stream
 
     Returns:
         Tuple of (matrix_stream, rhs_stream, solution_stream, param_streams, bindings)
@@ -444,12 +448,16 @@ def _open_streams(
         matrix_path_expr=matrix_path,
         sample_id_regex=sample_id_regex,
         enumerate_by=enumerate_by,
+        include_indices=include_indices,
+        exclude_indices=exclude_indices,
     )
     rhs_stream = (
         open_vector_stream(
             rhs_path,
             sample_id_regex=sample_id_regex,
             enumerate_by=enumerate_by,
+            include_indices=include_indices,
+            exclude_indices=exclude_indices,
         )
         if rhs_path is not None
         else None
@@ -459,12 +467,20 @@ def _open_streams(
             solution_path,
             sample_id_regex=sample_id_regex,
             enumerate_by=enumerate_by,
+            include_indices=include_indices,
+            exclude_indices=exclude_indices,
         )
         if solution_path is not None
         else None
     )
     param_streams = [
-        open_vector_stream(p, sample_id_regex=sample_id_regex, enumerate_by=enumerate_by)
+        open_vector_stream(
+            p,
+            sample_id_regex=sample_id_regex,
+            enumerate_by=enumerate_by,
+            include_indices=include_indices,
+            exclude_indices=exclude_indices,
+        )
         for p in parameters_paths
     ]
     bindings = bind_sources(
@@ -847,6 +863,8 @@ def _prepare_generation_context(
     replacement: bool,
     seed: int,
     strategy_overrides: dict[str, dict[str, Any]] | None,
+    include_indices: tuple[int, ...] | None = None,
+    exclude_indices: tuple[int, ...] = (),
 ) -> tuple[
     MatrixSampleStream,
     VectorSampleStream | None,
@@ -870,6 +888,8 @@ def _prepare_generation_context(
         replacement: Whether to allow matrix replacement allocation
         seed: Random seed for reproducibility
         strategy_overrides: Per-strategy configuration overrides
+        include_indices: Restrict every glob-based stream to exactly these sample ids
+        exclude_indices: Drop these sample ids from every glob-based stream
 
     Returns:
         Tuple of (matrix_stream, rhs_stream, solution_stream, param_streams, bindings, binding_counts)
@@ -881,6 +901,8 @@ def _prepare_generation_context(
         enumerate_by,
         parameters_paths,
         solution_path,
+        include_indices=include_indices,
+        exclude_indices=exclude_indices,
     )
     binding_counts = _resolve_binding_strategy_counts(
         bindings=bindings,
@@ -1122,6 +1144,8 @@ def build_dataset_payload(
     strategy_overrides: dict[str, dict[str, Any]] | None = None,
     solver_overrides: dict[str, TracingSolverCallable] | None = None,
     accumulator: DenseAccumulatorPort,
+    include_indices: tuple[int, ...] | None = None,
+    exclude_indices: tuple[int, ...] = (),
 ) -> GeneratedDatasetPayload:
     """Build an in-memory dataset payload from streamed matrix sources.
 
@@ -1149,6 +1173,8 @@ def build_dataset_payload(
         strategy_overrides: Strategy-specific configuration overrides
         solver_overrides: Optional per-strategy solver overrides
         accumulator: Dataset accumulator for writing matrix samples
+        include_indices: Restrict every glob-based stream to exactly these sample ids
+        exclude_indices: Drop these sample ids from every glob-based stream
 
     Returns:
         Immutable generated dataset payload ready for persistence.
@@ -1176,6 +1202,8 @@ def build_dataset_payload(
             replacement=replacement,
             seed=seed,
             strategy_overrides=strategy_overrides,
+            include_indices=include_indices,
+            exclude_indices=exclude_indices,
         )
     )
     logger.info(

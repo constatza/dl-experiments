@@ -1,0 +1,28 @@
+id = "gaussian-eval-45x15randomE"
+
+# The 15 matrices excluded from every dataset in configs/datasets/train/45x15randomE/
+# (last 15 by enumerate_by="name" order). Never seen by DeepONet training or by the
+# pod2g-* POD snapshot datasets — used here so comparisons run against unseen matrices.
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_subdomain_1_Kaa.txt"
+enumerate_by = "name"
+parameters_paths = [
+  "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_YoungModuli_E1_E2_E3_E4.txt",
+]
+include_indices = [85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99]
+
+[generation]
+normalize = "matrix"
+shuffle = false
+seed = 42
+
+# samples MUST equal the number of included matrices (15) so the deterministic
+# even-allocation across bindings assigns exactly one row per matrix — otherwise
+# `matrix_index` in [[comparisons]] would not address distinct matrices (see
+# domain/generation/orchestration.py::_allocate_strategy_counts_across_bindings).
+[[generation.strategy]]
+name = "gaussian_forward"
+samples = 15
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"

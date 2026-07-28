@@ -19,6 +19,7 @@ from neuralls.domain.generation.source_streams import (
 )
 from neuralls.platform.storage.dataset_readers import (
     load_matrix_sample_index,
+    load_parameter_arrays,
     load_row_kind_codes,
 )
 from neuralls.platform.storage.datasets import (
@@ -515,6 +516,230 @@ def test_source_config_accepts_enumerate_by_without_regex() -> None:
 
     config = SourceConfig(enumerate_by=EnumerateBy.NAME)
     assert config.enumerate_by == EnumerateBy.NAME
+
+
+# ---------------------------------------------------------------------------
+# include_indices / exclude_indices tests (parametric matrix family holdout)
+# ---------------------------------------------------------------------------
+
+
+def test_glob_matrix_stream_exclude_indices_drops_sample_without_renumbering(
+    subdomain_named_txt_matrices: tuple[Path, int],
+) -> None:
+    mat_dir, _ = subdomain_named_txt_matrices
+    stream = GlobMatrixStream(
+        str(mat_dir / "*_subdomain_1_Kaa.txt"),
+        enumerate_by=EnumerateBy.NAME,
+        exclude_indices=(1,),
+    )
+
+    assert stream.sample_ids == (0, 2)
+
+
+def test_glob_matrix_stream_include_indices_restricts_to_subset(
+    subdomain_named_txt_matrices: tuple[Path, int],
+) -> None:
+    mat_dir, _ = subdomain_named_txt_matrices
+    stream = GlobMatrixStream(
+        str(mat_dir / "*_subdomain_1_Kaa.txt"),
+        enumerate_by=EnumerateBy.NAME,
+        include_indices=(0, 2),
+    )
+
+    assert stream.sample_ids == (0, 2)
+
+
+def test_glob_vector_stream_exclude_indices_drops_sample(tmp_path: Path) -> None:
+    vec_dir = tmp_path / "vecs"
+    vec_dir.mkdir()
+    rng = np.random.default_rng(42)
+    for E1, E2 in [(3000, 78000), (5000, 100000), (1000, 50000)]:
+        np.savetxt(vec_dir / f"E1_{E1}_E2_{E2}_rhs.txt", rng.standard_normal(5))
+
+    stream = GlobVectorStream(
+        str(vec_dir / "E1_*_rhs.txt"),
+        enumerate_by=EnumerateBy.NAME,
+        exclude_indices=(0,),
+    )
+
+    assert stream.sample_ids == (1, 2)
+
+
+def test_glob_matrix_stream_include_and_exclude_indices_are_mutually_exclusive(
+    subdomain_named_txt_matrices: tuple[Path, int],
+) -> None:
+    mat_dir, _ = subdomain_named_txt_matrices
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        GlobMatrixStream(
+            str(mat_dir / "*_subdomain_1_Kaa.txt"),
+            enumerate_by=EnumerateBy.NAME,
+            include_indices=(0,),
+            exclude_indices=(1,),
+        )
+
+
+def test_glob_matrix_stream_include_indices_rejects_unknown_id(
+    subdomain_named_txt_matrices: tuple[Path, int],
+) -> None:
+    mat_dir, _ = subdomain_named_txt_matrices
+    with pytest.raises(ValueError, match="unknown sample ids"):
+        GlobMatrixStream(
+            str(mat_dir / "*_subdomain_1_Kaa.txt"),
+            enumerate_by=EnumerateBy.NAME,
+            include_indices=(0, 99),
+        )
+
+
+def test_glob_matrix_stream_exclude_indices_rejects_unknown_id(
+    subdomain_named_txt_matrices: tuple[Path, int],
+) -> None:
+    """A typo'd exclude id must fail loudly, not silently leave the leak in place."""
+    mat_dir, _ = subdomain_named_txt_matrices
+    with pytest.raises(ValueError, match="unknown sample ids"):
+        GlobMatrixStream(
+            str(mat_dir / "*_subdomain_1_Kaa.txt"),
+            enumerate_by=EnumerateBy.NAME,
+            exclude_indices=(99,),
+        )
+
+
+def test_glob_matrix_stream_exclude_indices_rejects_emptying_all_samples(
+    subdomain_named_txt_matrices: tuple[Path, int],
+) -> None:
+    mat_dir, _ = subdomain_named_txt_matrices
+    with pytest.raises(ValueError, match="No matrix samples remain"):
+        GlobMatrixStream(
+            str(mat_dir / "*_subdomain_1_Kaa.txt"),
+            enumerate_by=EnumerateBy.NAME,
+            exclude_indices=(0, 1, 2),
+        )
+
+
+def test_open_matrix_stream_exclude_indices_requires_glob_source(tmp_path: Path) -> None:
+    matrix_path = tmp_path / "matrix.npy"
+    np.save(matrix_path, np.eye(3))
+
+    with pytest.raises(ValueError, match="require a glob matrix source"):
+        open_matrix_stream(str(matrix_path), exclude_indices=(0,))
+
+
+def test_source_config_rejects_both_include_and_exclude_indices() -> None:
+    from neuralls.platform.config.models.data_models import SourceConfig
+
+    with pytest.raises(ValidationError):
+        SourceConfig(include_indices=(0, 1), exclude_indices=(2,))
+
+
+def test_build_dataset_exclude_indices_removes_matrix_from_generated_dataset(
+    subdomain_named_txt_matrices: tuple[Path, int],
+    tmp_path: Path,
+) -> None:
+    """A held-out matrix id must never appear in the generated dataset's rows."""
+    mat_dir, _n = subdomain_named_txt_matrices
+    out_dir = tmp_path / "train_dataset"
+
+    build_dataset(
+        matrix_path=str(mat_dir / "*_subdomain_1_Kaa.txt"),
+        dataset_dir=str(out_dir),
+        counts={"gaussian_forward": 9},
+        enumerate_by=EnumerateBy.NAME,
+        exclude_indices=(1,),
+        normalize="none",
+        shuffle=False,
+        seed=0,
+        dataset_format="zarr",
+    )
+
+    matrix_sample_index = load_matrix_sample_index(out_dir)
+    assert 1 not in set(matrix_sample_index.tolist())
+    assert set(matrix_sample_index.tolist()) == {0, 2}
+
+
+def test_build_dataset_exclude_indices_keeps_matrix_and_parameters_streams_consistent(
+    tmp_path: Path,
+) -> None:
+    """exclude_indices must apply uniformly to matrix_path and parameters_paths.
+
+    Regression guard: if a future change threads exclude_indices to only one of the
+    glob-based streams opened from the same [source] block, bind_sources' strict
+    id-matching would raise "parameters IDs must match matrix IDs" for multi-matrix
+    sources instead of silently succeeding.
+    """
+    mat_dir = tmp_path / "matrices"
+    mat_dir.mkdir()
+    param_dir = tmp_path / "params"
+    param_dir.mkdir()
+    rng = np.random.default_rng(11)
+    parameter_sets = [
+        (10554158, 20662154, 19907116, 20715669),
+        (10846921, 25611823, 31377296, 28205425),
+        (12000001, 22000002, 32000003, 42000004),
+    ]
+    n = 4
+    for e1, e2, e3, e4 in parameter_sets:
+        A = rng.standard_normal((n, n))
+        A = A @ A.T + n * np.eye(n)
+        stem = f"E1_{e1}_E2_{e2}_E3_{e3}_E4_{e4}"
+        np.savetxt(mat_dir / f"{stem}_subdomain_1_Kaa.txt", A)
+        np.savetxt(param_dir / f"{stem}_YoungModuli_E1_E2_E3_E4.txt", [e1, e2, e3, e4])
+
+    out_dir = tmp_path / "ds_with_params"
+    build_dataset(
+        matrix_path=str(mat_dir / "*_subdomain_1_Kaa.txt"),
+        dataset_dir=str(out_dir),
+        counts={"gaussian_forward": 3},
+        parameters_paths=(str(param_dir / "*_YoungModuli_E1_E2_E3_E4.txt"),),
+        enumerate_by=EnumerateBy.NAME,
+        exclude_indices=(1,),
+        normalize="none",
+        shuffle=False,
+        seed=0,
+        dataset_format="zarr",
+    )
+
+    matrix_sample_index = load_matrix_sample_index(out_dir)
+    assert 1 not in set(matrix_sample_index.tolist())
+    (parameters,) = load_parameter_arrays(out_dir)
+    # Every row's parameters must match its own binding's matrix id (0 or 2), never the
+    # excluded matrix's (1) — proves parameters_paths was filtered in lockstep with matrix_path.
+    raw_params_by_matrix_id = {0: parameter_sets[0], 2: parameter_sets[2]}
+    for row, matrix_id in enumerate(matrix_sample_index.tolist()):
+        np.testing.assert_allclose(parameters[row], raw_params_by_matrix_id[matrix_id])
+
+
+def test_build_dataset_include_indices_builds_holdout_dataset(
+    subdomain_named_txt_matrices: tuple[Path, int],
+    tmp_path: Path,
+) -> None:
+    """A 1-row-per-matrix holdout dataset exposes exactly the included matrix ids."""
+    mat_dir, _n = subdomain_named_txt_matrices
+    out_dir = tmp_path / "holdout_dataset"
+
+    build_dataset(
+        matrix_path=str(mat_dir / "*_subdomain_1_Kaa.txt"),
+        dataset_dir=str(out_dir),
+        counts={"solution_archive": 2},
+        enumerate_by=EnumerateBy.NAME,
+        include_indices=(0, 2),
+        strategy_overrides={
+            "solution_archive": {
+                "solutions_glob": str(mat_dir / "*_subdomain_1_Kaa.txt"),
+                "samples": 2,
+            }
+        },
+        normalize="none",
+        shuffle=False,
+        seed=0,
+        dataset_format="zarr",
+    )
+
+    matrix_sample_index = load_matrix_sample_index(out_dir)
+    assert set(matrix_sample_index.tolist()) == {0, 2}
+    rhs, _solutions = load_dense_training_arrays(out_dir)
+    assert rhs.shape[0] == 2
+    # Distinct rows load distinct physical matrices.
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    assert not np.allclose(mat_arr[0], mat_arr[1])
 
 
 def test_bind_sources_pairs_solution_ids_per_matrix() -> None:

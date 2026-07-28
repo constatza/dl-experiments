@@ -7,6 +7,7 @@ import pytest
 
 from neuralls.composition.comparison._input_resolution import resolve_comparison_input
 from neuralls.composition.generation.dataset_builder import build_dataset
+from neuralls.domain.generation.source_streams import EnumerateBy
 from neuralls.shared.enum_codecs import encode_row_kind_array
 from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
 
@@ -177,6 +178,101 @@ def test_resolve_comparison_input_rejects_raw_rhs_without_row_kind(tmp_path: Pat
             rhs_source_kind=ComparisonRhsSourceKind.RAW_RHS,
             rhs_source_params={"path": rhs_path},
         )
+
+
+def _write_distinct_spd_matrices(mat_dir: Path, count: int, n: int = 3) -> list[np.ndarray]:
+    mat_dir.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(2024)
+    matrices = []
+    for i in range(count):
+        A = rng.standard_normal((n, n))
+        A = A @ A.T + n * np.eye(n)
+        np.savetxt(mat_dir / f"matrix_{i:03d}.txt", A)
+        matrices.append(A)
+    return matrices
+
+
+def test_resolve_comparison_input_matrix_index_selects_distinct_matrix_with_one_row_per_matrix(
+    tmp_path: Path,
+) -> None:
+    """A dataset built with exactly one sample per matrix must expose distinct matrix_index values.
+
+    Regression guard: a comparison/holdout dataset for a parametric matrix family only
+    identifies genuinely distinct family members via `matrix_index` when its generation
+    strategy's sample count equals the number of included matrices (deterministic
+    one-row-per-binding allocation, see `_allocate_strategy_counts_across_bindings`).
+    """
+    mat_dir = tmp_path / "matrices"
+    matrices = _write_distinct_spd_matrices(mat_dir, count=3)
+    dataset_dir = tmp_path / "holdout_dataset"
+    build_dataset(
+        matrix_path=str(mat_dir / "matrix_*.txt"),
+        dataset_dir=str(dataset_dir),
+        counts={"gaussian_forward": 3},  # == number of matrices -> exactly one row each
+        enumerate_by=EnumerateBy.NAME,
+        normalize="none",
+        shuffle=False,
+        seed=0,
+        dataset_format="npy",
+    )
+
+    for index, expected in enumerate(matrices):
+        resolved = resolve_comparison_input(
+            matrix_path=dataset_dir,
+            matrix_dataset_id="holdout-dataset",
+            matrix_index=index,
+            require_non_residual_rhs=True,
+            seed=1,
+            rhs_source_kind=ComparisonRhsSourceKind.GAUSSIAN,
+            rhs_source_params={"mean": 0.0, "std": 1.0},
+        )
+        np.testing.assert_allclose(resolved.matrix, expected)
+
+
+def test_resolve_comparison_input_matrix_index_can_collide_when_samples_are_pooled(
+    tmp_path: Path,
+) -> None:
+    """Pinning test for a real footgun: when a strategy's sample budget exceeds the number of
+    matrices, rows are grouped into per-matrix blocks (no cross-binding shuffle), so small
+    `matrix_index` values can all resolve to the SAME physical matrix instead of distinct
+    family members. A comparison/holdout dataset must set `samples == num_matrices` to avoid
+    this — see `configs/datasets/.../holdout-matrices.toml`.
+    """
+    mat_dir = tmp_path / "matrices"
+    matrices = _write_distinct_spd_matrices(mat_dir, count=3)
+    dataset_dir = tmp_path / "pooled_dataset"
+    build_dataset(
+        matrix_path=str(mat_dir / "matrix_*.txt"),
+        dataset_dir=str(dataset_dir),
+        counts={"gaussian_forward": 9},  # 3x the matrix count -> 3 rows per matrix, pooled
+        enumerate_by=EnumerateBy.NAME,
+        normalize="none",
+        shuffle=False,
+        seed=0,
+        dataset_format="npy",
+    )
+
+    resolved_0 = resolve_comparison_input(
+        matrix_path=dataset_dir,
+        matrix_dataset_id="pooled-dataset",
+        matrix_index=0,
+        require_non_residual_rhs=True,
+        seed=1,
+        rhs_source_kind=ComparisonRhsSourceKind.GAUSSIAN,
+        rhs_source_params={"mean": 0.0, "std": 1.0},
+    )
+    resolved_1 = resolve_comparison_input(
+        matrix_path=dataset_dir,
+        matrix_dataset_id="pooled-dataset",
+        matrix_index=1,
+        require_non_residual_rhs=True,
+        seed=1,
+        rhs_source_kind=ComparisonRhsSourceKind.GAUSSIAN,
+        rhs_source_params={"mean": 0.0, "std": 1.0},
+    )
+    # Both positions fall inside the first matrix's 3-row block: same physical matrix.
+    np.testing.assert_allclose(resolved_0.matrix, resolved_1.matrix)
+    np.testing.assert_allclose(resolved_0.matrix, matrices[0])
 
 
 def test_resolve_comparison_input_loads_explicit_dataset_triplet(tmp_path: Path) -> None:

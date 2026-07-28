@@ -47,6 +47,51 @@ stream = GlobMatrixStream("data/E1_*_E2_*.txt", enumerate_by=EnumerateBy.NAME)
 # stream.sample_ids → (0, 1, 2, …)
 ```
 
+## Holding Out Matrices From a Parametric Family
+
+When a `[source]` glob spans a parametric matrix family (many distinct matrices,
+e.g. randomized material parameters) and you need some of them excluded from
+training/POD-snapshot generation — so a separate comparison dataset can evaluate
+against matrices nothing has been fit on — set `include_indices` or
+`exclude_indices` in `[source]` (mutually exclusive):
+
+```toml
+[source]
+matrix_path = "/data/matrices/E1_*_E2_*.txt"
+enumerate_by = "name"
+exclude_indices = [85, 86, 87]   # or: include_indices = [85, 86, 87]
+```
+
+Both are plain lists of the ids `enumerate_by`/`sample_id_regex` assigned — no
+computation needed, just decide which ids to keep or drop. The same filter is
+applied uniformly to every glob-based stream opened from that `[source]` block
+(`matrix_path`, `rhs_path`, `solution_path`, `parameters_paths`), so a
+multi-matrix source's existing id-matching validation (`bind_sources`) keeps
+holding. Referencing an id that doesn't exist in a given stream raises
+immediately rather than silently doing nothing.
+
+**`matrix_index` is a row position, not a raw family id.** Code that later reads
+a generated dataset by `matrix_index` (e.g. `[[comparisons]]` in a case TOML) is
+indexing that dataset's own stored matrix array — physically laid out as one
+block of rows per matrix binding, in ascending raw-id order — not the original
+`enumerate_by` id. Two consequences:
+
+- After filtering, `matrix_index = 0` means "the first *included* matrix," not
+  "raw id 0."
+- `matrix_index` values only address genuinely distinct matrices when the
+  dataset's generation strategy emits **exactly one row per included matrix**
+  (set `[[generation.strategy]].samples` equal to the number of included
+  matrices). If a strategy pools more samples than matrices across the family
+  (the common case for training data), small `matrix_index` values can all fall
+  inside the same matrix's row block and resolve to the identical physical
+  matrix — see `_allocate_strategy_counts_across_bindings` in `orchestration.py`.
+
+`configs/cases/45x15randomE/default.toml` and its
+`configs/datasets/{train,test}/45x15randomE/*.toml` datasets are a worked
+example of both: train datasets `exclude_indices` a held-back subset, and
+`gaussian-eval.toml` `include_indices`s the same subset with `samples` set to
+its exact size so every comparison `matrix_index` is a distinct matrix.
+
 ## User Path
 
 ### Basic
