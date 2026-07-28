@@ -128,6 +128,16 @@ Dataset storage is split by responsibility:
   writers/accumulators plus backend-neutral artifact replacement helpers
 - `storage/dataset_readers.py`: manifest-driven read helpers and explicit resolved dataset contracts
 
+`storage/manifest_io.py::load_dataset_manifest` and
+`storage/dataset_readers.py::load_matrix_dense_sample` are `functools.lru_cache`-memoized
+(keyed on `dataset_dir`, and `(dataset_dir, sample_index)` respectively). Every other
+manifest-driven reader (`resolve_dataset_artifacts`, `list_available_matrix_indices`,
+`load_dense_training_arrays`, etc.) routes through these two, so a batch of comparison
+entries that share one `matrix_dataset` reads its manifest and matrix samples once per
+process instead of once per entry. Caveat: because the cache is keyed only on the path,
+mutating a dataset's files on disk mid-process (rare — datasets are normally
+write-once/read-many) will not be picked up without a process restart.
+
 Safe comparison selection relies on manifest-declared metadata artifacts stored
 in the dataset's native format. Mature datasets may expose:
 

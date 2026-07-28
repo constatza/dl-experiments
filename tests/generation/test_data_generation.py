@@ -252,8 +252,8 @@ def test_error_strategy_validation(
         )
         assert False, "Should have raised ValueError for insufficient archive"
     except ValueError as e:
-        assert "Not enough archive solutions" in str(e), (
-            "Error message should mention insufficient archive solutions"
+        assert "Not enough archive lhs" in str(e), (
+            "Error message should mention insufficient archive lhs vectors"
         )
 
 

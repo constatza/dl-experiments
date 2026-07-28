@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
@@ -40,19 +41,26 @@ class GeneratedSamples:
     error_traces: ErrorTraceSamples | None = None
 
 
+class ArchiveField(StrEnum):
+    """Closed set of ArchiveData field names, addressable via getattr-based dispatch."""
+
+    LHS = "lhs"
+    RHS = "rhs"
+
+
 @dataclass(frozen=True)
 class ArchiveData:
-    """Container for pre-computed solutions and RHS vectors.
+    """Container for pre-computed LHS solution and RHS vectors.
 
     Used when loading from solution archives instead of generating random data.
 
     Attributes:
-        solutions: Solution vectors, shape (N, n)
-        rhs_vectors: Optional pre-computed RHS vectors, shape (N, n)
+        lhs: Solution vectors (x in A @ x = b), shape (N, n)
+        rhs: Optional pre-computed RHS vectors (b), shape (N, n)
     """
 
-    solutions: np.ndarray
-    rhs_vectors: np.ndarray | None = None
+    lhs: np.ndarray
+    rhs: np.ndarray | None = None
 
 
 @runtime_checkable

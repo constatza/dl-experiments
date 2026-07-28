@@ -18,7 +18,7 @@ from torchalg.models.result import SolverResult
 from neuralls.domain.normalization import ResidualTraceSamples
 
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
-from ..interfaces import ArchiveData, GeneratedSamples, TracingSolverCallable
+from ..interfaces import ArchiveData, ArchiveField, GeneratedSamples, TracingSolverCallable
 from ..providers import HybridInputProvider
 from ..runner import register_single_rhs_strategy
 from ..strategy_configs import SearchDirectionsConfig
@@ -84,10 +84,10 @@ class SearchDirectionsStrategy:
         available_systems: int | None = None
 
         if single_rhs is None and archive is not None:
-            if archive.solutions is not None:
-                available_systems = int(archive.solutions.shape[0])
-            elif archive.rhs_vectors is not None:
-                available_systems = int(archive.rhs_vectors.shape[0])
+            if archive.lhs is not None:
+                available_systems = int(archive.lhs.shape[0])
+            elif archive.rhs is not None:
+                available_systems = int(archive.rhs.shape[0])
 
         num_base_systems, final_rows = resolve_trace_generation_counts(
             config.samples,
@@ -109,15 +109,17 @@ class SearchDirectionsStrategy:
         else:
             # Mode 2: Multiple RHS - generate N different RHS vectors (SOLID pattern)
             # Layer 1: Input provision (archive with random fallback)
-            solution_provider = HybridInputProvider(archive=archive, field="solutions", scale=1.0)
+            solution_provider = HybridInputProvider(
+                archive=archive, field=ArchiveField.LHS, scale=1.0
+            )
             sols = solution_provider.provide(matrix, count=num_base_systems, rng=rng)
 
             # Layer 2: Transform (compute RHS or load from archive)
-            rhs_provider = HybridInputProvider(archive=archive, field="rhs_vectors", scale=1.0)
+            rhs_provider = HybridInputProvider(archive=archive, field=ArchiveField.RHS, scale=1.0)
             rhs_from_archive = (
                 archive is not None
-                and archive.rhs_vectors is not None
-                and archive.rhs_vectors.shape[0] >= num_base_systems
+                and archive.rhs is not None
+                and archive.rhs.shape[0] >= num_base_systems
             )
 
             if rhs_from_archive:

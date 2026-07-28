@@ -18,7 +18,7 @@ import torch
 from neuralls.domain.normalization import ErrorTraceSamples
 
 from ..helpers import _build_trace_indices, resolve_trace_generation_counts
-from ..interfaces import ArchiveData, GeneratedSamples, TracingSolverCallable
+from ..interfaces import ArchiveData, ArchiveField, GeneratedSamples, TracingSolverCallable
 from ..providers import HybridInputProvider, RandomInputProvider, provide_solutions
 from ..runner import register_single_rhs_strategy
 from ..strategy_configs import ResidualErrorConfig
@@ -56,8 +56,8 @@ class _BaseResidualsStrategy:
                     strategy_name=self.name,
                 )
             )
-        if archive is not None and archive.solutions is not None:
-            return int(archive.solutions.shape[0])
+        if archive is not None and archive.lhs is not None:
+            return int(archive.lhs.shape[0])
         return None
 
     def _provide_true_solutions(
@@ -110,7 +110,7 @@ class _BaseResidualsStrategy:
         rng = np.random.default_rng(config.seed)
         available_systems: int | None = None
 
-        if single_rhs is None:
+        if single_rhs is None and config.samples == -1:
             available_systems = self._resolve_available_systems(matrix, config, archive, rng)
 
         num_base_systems, final_rows = resolve_trace_generation_counts(
@@ -142,11 +142,11 @@ class _BaseResidualsStrategy:
             )
 
             # Layer 2: Transform (compute RHS or load from archive)
-            rhs_provider = HybridInputProvider(archive=archive, field="rhs_vectors", scale=1.0)
+            rhs_provider = HybridInputProvider(archive=archive, field=ArchiveField.RHS, scale=1.0)
             rhs_from_archive = (
                 archive is not None
-                and archive.rhs_vectors is not None
-                and archive.rhs_vectors.shape[0] >= num_base_systems
+                and archive.rhs is not None
+                and archive.rhs.shape[0] >= num_base_systems
             )
 
             if rhs_from_archive:

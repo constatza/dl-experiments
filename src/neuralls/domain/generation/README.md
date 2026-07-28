@@ -159,6 +159,16 @@ This is useful when combining a residual strategy with `solution_archive`: set
 `solution_archive.skip` to the number of base systems consumed by the residual
 block to avoid reusing the same `(b, x)` pairs.
 
+`FileInputProvider` (in `providers.py`) memoizes its file reads with
+`functools.lru_cache`, keyed on `(glob_pattern, count, shuffle, seed, skip)`. Every
+archive-backed strategy (`solution_archive`, `rhs_archive`, `scaled_solutions`,
+`validated_archive`, and `residuals`/`gaussian_residuals` when `solutions_glob` is set)
+routes through it, so an archive shared across many matrix bindings — or across several
+dataset configs in one `generate-all` batch that point at the same glob — is read from
+disk once per distinct selection, not once per binding or per dataset file. `ArchiveData`
+(pre-loaded in-memory archives, e.g. from `single_solution`) always takes priority over
+`solutions_glob` when both are available for a strategy.
+
 ## Package Map
 
 - `orchestration.py`: mixed-strategy payload assembly; `build_dataset_payload()` requires an

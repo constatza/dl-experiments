@@ -5,13 +5,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neuralls.domain.generation.interfaces import ArchiveData
+from neuralls.domain.generation.interfaces import ArchiveData, ArchiveField
 from neuralls.domain.generation.providers import (
     ConstantInputProvider,
     FileInputProvider,
     HybridInputProvider,
     PairedFileInputProvider,
     RandomInputProvider,
+    _load_archive_files_cached,
+    provide_solutions,
 )
 
 
@@ -97,6 +99,26 @@ def test_file_input_provider_loads_from_files(tmp_path) -> None:
     assert solutions.dtype == np.float64
 
 
+def test_file_input_provider_caches_repeated_identical_calls(tmp_path) -> None:
+    """Two calls with identical (glob, count, shuffle, seed, skip) hit disk only once."""
+    _load_archive_files_cached.cache_clear()
+    for i in range(5):
+        np.savetxt(tmp_path / f"sol_{i}.txt", np.full(10, i, dtype=np.float64))
+
+    provider = FileInputProvider(glob_pattern=str(tmp_path / "sol_*.txt"), shuffle=False, seed=None)
+    matrix = np.eye(10)
+    rng = np.random.default_rng(42)
+
+    first = provider.provide(matrix=matrix, count=3, rng=rng)
+
+    # Mutate a file on disk; a cached second call must not see the change.
+    np.savetxt(tmp_path / "sol_0.txt", np.full(10, 999.0, dtype=np.float64))
+    second = provider.provide(matrix=matrix, count=3, rng=rng)
+
+    assert np.array_equal(first, second)
+    assert _load_archive_files_cached.cache_info().hits == 1
+
+
 def test_file_input_provider_with_shuffling(tmp_path) -> None:
     """Test file provider shuffles files deterministically."""
     # Create test files
@@ -122,8 +144,8 @@ def test_file_input_provider_with_shuffling(tmp_path) -> None:
 def test_hybrid_input_provider_uses_archive_when_available() -> None:
     """Test hybrid provider uses archive when available."""
     archive_data = np.random.randn(20, 10)
-    archive = ArchiveData(solutions=archive_data, rhs_vectors=None)
-    provider = HybridInputProvider(archive, field="solutions", scale=1.0)
+    archive = ArchiveData(lhs=archive_data, rhs=None)
+    provider = HybridInputProvider(archive, field=ArchiveField.LHS, scale=1.0)
 
     matrix = np.eye(10)
     rng = np.random.default_rng(42)
@@ -136,7 +158,7 @@ def test_hybrid_input_provider_uses_archive_when_available() -> None:
 
 def test_hybrid_input_provider_fallback_to_random() -> None:
     """Test hybrid provider falls back to random when archive missing."""
-    provider = HybridInputProvider(archive=None, field="solutions", scale=1.0)
+    provider = HybridInputProvider(archive=None, field=ArchiveField.LHS, scale=1.0)
 
     matrix = np.eye(10)
     rng = np.random.default_rng(42)
@@ -151,8 +173,8 @@ def test_hybrid_input_provider_fallback_to_random() -> None:
 def test_hybrid_input_provider_raises_on_insufficient_archive() -> None:
     """Test hybrid provider raises when archive has too few vectors."""
     archive_data = np.random.randn(3, 10)  # Only 3 vectors
-    archive = ArchiveData(solutions=archive_data, rhs_vectors=None)
-    provider = HybridInputProvider(archive, field="solutions", scale=1.0)
+    archive = ArchiveData(lhs=archive_data, rhs=None)
+    provider = HybridInputProvider(archive, field=ArchiveField.LHS, scale=1.0)
 
     matrix = np.eye(10)
     rng = np.random.default_rng(42)
@@ -185,3 +207,27 @@ def test_paired_file_input_provider_loads_pairs(tmp_path) -> None:
     assert rhs.shape == (5, 10)
     assert solutions.dtype == np.float64
     assert rhs.dtype == np.float64
+
+
+def test_provide_solutions_prefers_archive_over_glob(tmp_path) -> None:
+    """When both an archive and a solutions_glob are available, archive wins."""
+    for i in range(5):
+        np.savetxt(tmp_path / f"sol_{i}.txt", np.full(10, -1.0, dtype=np.float64))
+
+    archive_data = np.random.randn(5, 10)
+    archive = ArchiveData(lhs=archive_data, rhs=None)
+    matrix = np.eye(10)
+    rng = np.random.default_rng(42)
+
+    result = provide_solutions(
+        matrix,
+        3,
+        rng,
+        solutions_glob=str(tmp_path / "sol_*.txt"),
+        archive=archive,
+        shuffle=False,
+        seed=None,
+        strategy_name="residuals",
+    )
+
+    assert np.array_equal(result, archive_data[:3])

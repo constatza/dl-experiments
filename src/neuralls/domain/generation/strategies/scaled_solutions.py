@@ -78,8 +78,8 @@ class ScaledSolutionsStrategy:
             FileNotFoundError: If no files match pattern.
         """
         # When archive is provided (per-binding pre-loaded solution), skip glob loading
-        if archive is not None and archive.solutions is not None:
-            solutions = archive.solutions
+        if archive is not None and archive.lhs is not None:
+            solutions = archive.lhs
             logger.info(f"Using pre-loaded solution archive ({len(solutions)} vector(s))")
             rhs = ComputeRhsTransform(matrix).transform(solutions)
             scale = cfg.get("scale", 5.0)

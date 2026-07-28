@@ -87,8 +87,8 @@ class SolutionArchiveStrategy:
             FileNotFoundError: If no files match pattern
         """
         # When archive is provided (per-binding pre-loaded solution), skip glob loading
-        if archive is not None and archive.solutions is not None:
-            solutions = archive.solutions  # shape (1, n) for single-binding case
+        if archive is not None and archive.lhs is not None:
+            solutions = archive.lhs  # shape (1, n) for single-binding case
             logger.info(f"Using pre-loaded solution archive ({len(solutions)} vector(s))")
             rhs = ComputeRhsTransform(matrix).transform(solutions)
             return GeneratedSamples(

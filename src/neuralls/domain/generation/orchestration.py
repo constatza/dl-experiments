@@ -263,9 +263,7 @@ def _generate_mixture_with_metadata(
 
         archive_data: ArchiveData | None = None
         if effective_archive_solutions is not None:
-            archive_data = ArchiveData(
-                solutions=effective_archive_solutions, rhs_vectors=archive_rhs
-            )
+            archive_data = ArchiveData(lhs=effective_archive_solutions, rhs=archive_rhs)
 
         cfg["samples"] = count
 

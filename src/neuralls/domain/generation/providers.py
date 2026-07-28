@@ -26,12 +26,13 @@ Examples:
 from __future__ import annotations
 
 from abc import abstractmethod
+from functools import lru_cache
 from typing import Protocol, TypeVar
 
 import numpy as np
 
 from .helpers import select_archive_files
-from .interfaces import ArchiveData
+from .interfaces import ArchiveData, ArchiveField
 
 T_co = TypeVar("T_co", covariant=True)
 
@@ -182,6 +183,26 @@ class UniformInputProvider:
         return rng.uniform(self.a, self.b, size=(count, n)).astype(np.float64, copy=False)
 
 
+@lru_cache(maxsize=128)
+def _load_archive_files_cached(
+    glob_pattern: str, count: int, shuffle: bool, seed: int | None, skip: int
+) -> tuple[np.ndarray, ...]:
+    """Load and cache solution files for a given glob/selection key.
+
+    Args:
+        glob_pattern: Pattern like "/data/sols_*.npy".
+        count: Number of vectors (-1 for all available).
+        shuffle: Whether to shuffle files before selection.
+        seed: Random seed for shuffling.
+        skip: Number of files to skip after ordering/shuffling.
+
+    Returns:
+        Loaded vectors as a tuple (hashable/immutable for caching).
+    """
+    files = select_archive_files(glob_pattern, count=count, shuffle=shuffle, seed=seed, skip=skip)
+    return tuple(np.loadtxt(f) for f in files)
+
+
 class FileInputProvider:
     """Load vectors from files matching glob pattern.
 
@@ -232,14 +253,9 @@ class FileInputProvider:
             FileNotFoundError: If no files match pattern
             ValueError: If insufficient files available
         """
-        files = select_archive_files(
-            self.glob_pattern,
-            count=count,
-            shuffle=self.shuffle,
-            seed=self.seed,
-            skip=self.skip,
+        vectors = _load_archive_files_cached(
+            self.glob_pattern, count, self.shuffle, self.seed, self.skip
         )
-        vectors = [np.loadtxt(f) for f in files]
         return np.array(vectors, dtype=np.float64)
 
 
@@ -251,14 +267,14 @@ class HybridInputProvider:
 
     Examples:
         >>> # With archive
-        >>> archive = ArchiveData(solutions=np.random.randn(20, 10))
-        >>> provider = HybridInputProvider(archive, field="solutions")
+        >>> archive = ArchiveData(lhs=np.random.randn(20, 10))
+        >>> provider = HybridInputProvider(archive, field=ArchiveField.LHS)
         >>> solutions = provider.provide(matrix=np.eye(10), count=5, rng=rng)
         >>> solutions.shape
         (5, 10)
 
         >>> # Without archive (fallback to random)
-        >>> provider = HybridInputProvider(None, field="solutions", scale=1.0)
+        >>> provider = HybridInputProvider(None, field=ArchiveField.LHS, scale=1.0)
         >>> solutions = provider.provide(matrix=np.eye(10), count=5, rng=rng)
         >>> solutions.shape
         (5, 10)
@@ -267,14 +283,14 @@ class HybridInputProvider:
     def __init__(
         self,
         archive: ArchiveData | None,
-        field: str = "solutions",
+        field: ArchiveField = ArchiveField.LHS,
         scale: float = 1.0,
     ) -> None:
         """Initialize hybrid provider.
 
         Args:
             archive: Optional archive data
-            field: Field to extract from archive ("solutions" or "rhs_vectors")
+            field: Field to extract from archive (ArchiveField.LHS or ArchiveField.RHS)
             scale: Scale for random fallback
         """
         self.archive = archive
@@ -393,8 +409,8 @@ def provide_solutions(
         matrix: System matrix (used for dimension validation by providers).
         count: Number of solution vectors to return.
         rng: Random number generator for providers that need it.
-        solutions_glob: Optional glob pattern. When set, files are loaded directly.
-        archive: Optional in-memory archive. Used when glob is absent.
+        solutions_glob: Optional glob pattern. Used only when no archive is available.
+        archive: Optional in-memory archive. Preferred over solutions_glob when present.
         shuffle: Whether to shuffle the loaded files (passed to FileInputProvider).
         seed: Random seed for shuffling (passed to FileInputProvider).
         strategy_name: Name used in the error message when no source is available.
@@ -406,12 +422,12 @@ def provide_solutions(
     Raises:
         ValueError: If neither solutions_glob nor archive solutions are available.
     """
-    if solutions_glob is not None:
-        return FileInputProvider(solutions_glob, shuffle=shuffle, seed=seed, skip=skip).provide(
+    if archive is not None and archive.lhs is not None:
+        return HybridInputProvider(archive=archive, field=ArchiveField.LHS, scale=1.0).provide(
             matrix, count=count, rng=rng
         )
-    if archive is not None and archive.solutions is not None:
-        return HybridInputProvider(archive=archive, field="solutions", scale=1.0).provide(
+    if solutions_glob is not None:
+        return FileInputProvider(solutions_glob, shuffle=shuffle, seed=seed, skip=skip).provide(
             matrix, count=count, rng=rng
         )
     raise ValueError(

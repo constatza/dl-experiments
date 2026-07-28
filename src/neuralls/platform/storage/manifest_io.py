@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,7 @@ def save_dataset_manifest(dataset_dir: str | Path, manifest: DatasetManifest) ->
     )
 
 
+@lru_cache(maxsize=128)
 def load_dataset_manifest(dataset_dir: str | Path) -> dict[str, Any]:
     """Load the raw manifest dictionary and validate the schema marker.
 

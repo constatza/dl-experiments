@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import h5py
@@ -326,6 +327,7 @@ def load_dense_training_arrays(dataset_dir: str | Path) -> tuple[np.ndarray, np.
     return _load_resolved(artifacts.rhs), _load_resolved(artifacts.solutions)
 
 
+@lru_cache(maxsize=128)
 def load_matrix_dense_sample(dataset_dir: str | Path, sample_index: int = 0) -> np.ndarray:
     """Load one dense matrix sample from a manifest-driven dataset directory."""
     return _load_sample(resolve_dataset_artifacts(dataset_dir).matrix, sample_index)

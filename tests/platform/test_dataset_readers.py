@@ -7,7 +7,11 @@ import numpy as np
 import pytest
 
 from neuralls.composition.generation.dataset_builder import build_dataset
-from neuralls.platform.storage.dataset_readers import resolve_canonical_training_triplet
+from neuralls.platform.storage.dataset_readers import (
+    load_matrix_dense_sample,
+    resolve_canonical_training_triplet,
+)
+from neuralls.platform.storage.manifest_io import load_dataset_manifest
 from neuralls.shared.constants import DATASET_MANIFEST_FILENAME
 from neuralls.shared.enum_codecs import encode_row_kind_array
 from neuralls.shared.types import RowKind
@@ -85,3 +89,27 @@ def test_resolve_canonical_training_triplet_allows_explicit_legacy_matrix_index(
 
     assert triplet.matrix_index == 0
     assert triplet.matrix_binding_enforced is False
+
+
+def test_load_dataset_manifest_caches_repeated_calls(tmp_path: Path) -> None:
+    """Two reads of the same dataset dir hit disk only once (shared across comparisons)."""
+    load_dataset_manifest.cache_clear()
+    dataset_dir = _build_dataset(tmp_path)
+
+    first = load_dataset_manifest(dataset_dir)
+    second = load_dataset_manifest(dataset_dir)
+
+    assert first == second
+    assert load_dataset_manifest.cache_info().hits == 1
+
+
+def test_load_matrix_dense_sample_caches_repeated_calls(tmp_path: Path) -> None:
+    """Two reads of the same (dataset_dir, sample_index) hit disk only once."""
+    load_matrix_dense_sample.cache_clear()
+    dataset_dir = _build_dataset(tmp_path)
+
+    first = load_matrix_dense_sample(dataset_dir, sample_index=0)
+    second = load_matrix_dense_sample(dataset_dir, sample_index=0)
+
+    assert np.array_equal(first, second)
+    assert load_matrix_dense_sample.cache_info().hits == 1
