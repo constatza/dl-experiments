@@ -102,6 +102,7 @@ class ScaledSolutionsStrategy:
             glob_pattern=config.solutions_glob,
             shuffle=config.shuffle,
             seed=config.seed,
+            skip=config.skip,
         )
         rng = np.random.default_rng(config.seed)
         solutions = provider.provide(matrix, count=config.samples, rng=rng)

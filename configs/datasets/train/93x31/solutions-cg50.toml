@@ -2,7 +2,6 @@ id = "solutions-cg50-93x31"
 
 [source]
 matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/93x31-displacements/stiffness/subdomain_1_Kaa.txt"
-solutions_path = "${NEURALLS_RAW_DIR}/SpectralData/93x31-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [generation]
 normalize = "matrix"
@@ -10,10 +9,9 @@ shuffle = true
 seed = 42
 
 [[generation.strategy]]
-name = "residuals"
+name = "gaussian_residuals"
 samples = 10000
 cg_iters = 50
-solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/93x31-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"

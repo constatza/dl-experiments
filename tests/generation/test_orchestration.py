@@ -252,3 +252,59 @@ def test_resolve_binding_strategy_counts_rejects_single_multi_matrix_mix(
             has_rhs_source=False,
             num_matrix_samples=3,
         )
+
+
+def test_resolve_binding_strategy_counts_divides_all_samples_across_bindings(
+    tmp_path: Path,
+    three_bindings: list[SystemBinding],
+) -> None:
+    """samples=-1 ("all") must resolve to the real archive size and divide across bindings.
+
+    Regression test: before this fix, -1 was replicated unchanged to every binding
+    (`_allocate_strategy_counts_across_bindings`'s `count == _ALL_SAMPLES` branch), so
+    each binding loaded the *entire* archive independently instead of the archive being
+    split across bindings the way an explicit positive count already is — a
+    cartesian-product blowup (num_bindings x archive_size RHS computations).
+    """
+    for idx in range(5):
+        np.savetxt(tmp_path / f"solution_{idx:03d}.txt", np.full(4, float(idx)))
+    glob_pattern = str(tmp_path / "solution_*.txt")
+
+    counts_by_binding, skips_by_binding = _resolve_binding_strategy_counts(
+        bindings=three_bindings,
+        counts={"solution_archive": -1},
+        mix=None,
+        total=None,
+        replacement=False,
+        seed=0,
+        strategy_overrides={"solution_archive": {"solutions_glob": glob_pattern}},
+        has_rhs_source=False,
+        num_matrix_samples=3,
+    )
+
+    allocated = [counts.get("solution_archive", 0) for counts in counts_by_binding]
+    assert allocated == [2, 2, 1]
+    assert sum(allocated) == 5  # the real archive size, not -1 replicated per binding
+
+    # Cumulative, disjoint offsets into one shared shuffle — binding 0 takes files
+    # [0:2], binding 1 takes [2:4], binding 2 takes [4:5]; no binding reuses another's slice.
+    skips = [skip.get("solution_archive", 0) for skip in skips_by_binding]
+    assert skips == [0, 2, 4]
+
+
+def test_resolve_binding_strategy_counts_rejects_unresolvable_all_samples(
+    three_bindings: list[SystemBinding],
+) -> None:
+    """samples=-1 across multiple bindings must fail fast without a resolvable glob."""
+    with pytest.raises(ValueError, match="has no 'solutions_glob'"):
+        _resolve_binding_strategy_counts(
+            bindings=three_bindings,
+            counts={"gaussian_forward": -1},
+            mix=None,
+            total=None,
+            replacement=False,
+            seed=0,
+            strategy_overrides=None,
+            has_rhs_source=False,
+            num_matrix_samples=3,
+        )

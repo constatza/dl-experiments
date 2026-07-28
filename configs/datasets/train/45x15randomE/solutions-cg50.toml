@@ -3,7 +3,6 @@ id = "solutions-cg50-45x15randomE"
 [source]
 matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_subdomain_1_Kaa.txt"
 enumerate_by = "name"
-solutions_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 parameters_paths = [
   "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_YoungModuli_E1_E2_E3_E4.txt",
 ]
@@ -17,10 +16,9 @@ shuffle = true
 seed = 42
 
 [[generation.strategy]]
-name = "residuals"
+name = "gaussian_residuals"
 samples = 12500
 cg_iters = 50
-solutions_glob = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_*.txt"
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"

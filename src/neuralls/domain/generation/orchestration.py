@@ -21,6 +21,7 @@ from .helpers import (
     _merge_strategy_outputs,
     _resolve_strategy_counts,
     rng_from_seed,
+    select_archive_files,
     serialize_scale_metadata,
 )
 from .interfaces import ArchiveData, TracingSolverCallable
@@ -550,6 +551,27 @@ def _validate_replacement_support(
             )
 
 
+def _archive_glob_for_strategy(
+    strategy_name: str,
+    strategy_overrides: Mapping[str, Mapping[str, Any]] | None,
+) -> str | None:
+    """Return the strategy's configured ``solutions_glob``, or ``None`` if it has none."""
+    overrides = (strategy_overrides or {}).get(strategy_name, {})
+    glob_pattern = overrides.get("solutions_glob")
+    return glob_pattern if isinstance(glob_pattern, str) else None
+
+
+def _resolve_all_samples_total(glob_pattern: str) -> int:
+    """Resolve the ``_ALL_SAMPLES`` sentinel to the real file count behind a glob.
+
+    A cheap directory listing (no ``np.loadtxt``) — used so a multi-binding
+    dataset can divide "all available archive files" across its bindings the
+    same way an explicit positive count is divided, instead of handing every
+    binding the full archive (a cartesian-product blowup).
+    """
+    return len(select_archive_files(glob_pattern, count=-1, shuffle=False, seed=None, skip=0))
+
+
 def _append_binding_count(
     counts_by_binding: list[dict[str, int]],
     binding_idx: int,
@@ -606,8 +628,26 @@ def _resolve_binding_strategy_counts(
     strategy_overrides: Mapping[str, Mapping[str, Any]] | None,
     has_rhs_source: bool,
     num_matrix_samples: int,
-) -> list[dict[str, int]]:
-    """Resolve global strategy counts into per-binding count maps."""
+    has_solution_source: bool = False,
+) -> tuple[list[dict[str, int]], list[dict[str, int]]]:
+    """Resolve global strategy counts into per-binding count and archive-skip maps.
+
+    Args:
+        has_solution_source: Whether a per-binding ``solution_path`` stream is
+            configured. When it is, archive-backed strategies receive their
+            solution pre-loaded per binding (one vector, no glob read at all —
+            see ``SolutionArchiveStrategy.generate``'s ``archive.lhs`` branch),
+            so ``samples=-1`` is inert rather than a cartesian-product risk and
+            is left as-is instead of being resolved against a glob.
+
+    Returns:
+        Tuple of ``(counts_by_binding, skips_by_binding)``. ``skips_by_binding``
+        only carries entries for archive-glob-backed strategies (those with a
+        ``solutions_glob`` override) — a per-binding cumulative offset into one
+        shared shuffled file ordering, so each binding draws a distinct,
+        non-overlapping slice of the archive instead of every binding reusing
+        the same first-N files.
+    """
     strategy_counts = _resolve_strategy_counts(counts, mix, total)
     _validate_replacement_support(
         strategy_counts,
@@ -618,20 +658,38 @@ def _resolve_binding_strategy_counts(
     )
 
     if num_matrix_samples <= 1:
-        return [dict(strategy_counts) for _ in bindings]
+        return [dict(strategy_counts) for _ in bindings], [{} for _ in bindings]
 
     rng = rng_from_seed(seed)
-    counts_by_binding = [{} for _ in bindings]
+    counts_by_binding: list[dict[str, int]] = [{} for _ in bindings]
+    skips_by_binding: list[dict[str, int]] = [{} for _ in bindings]
     for strategy_name, count in strategy_counts.items():
+        glob_pattern = _archive_glob_for_strategy(strategy_name, strategy_overrides)
+        resolved_count = count
+        if count == _ALL_SAMPLES and not has_solution_source:
+            if glob_pattern is None:
+                raise ValueError(
+                    f"Strategy '{strategy_name}' requested samples=-1 (\"all\") across "
+                    f"{len(bindings)} matrix bindings, but has no 'solutions_glob' to "
+                    "resolve a real total from. Replicating -1 to every binding would "
+                    "load the full archive once per binding (a cartesian-product "
+                    "blowup) — set an explicit positive 'samples' count instead."
+                )
+            resolved_count = _resolve_all_samples_total(glob_pattern)
+
         allocations = _allocate_strategy_counts_across_bindings(
-            count=count,
+            count=resolved_count,
             bindings=bindings,
             replacement=replacement,
             rng=rng,
         )
+        cumulative_skip = 0
         for binding_idx, allocated_count in enumerate(allocations):
             _append_binding_count(counts_by_binding, binding_idx, strategy_name, allocated_count)
-    return counts_by_binding
+            if glob_pattern is not None and allocated_count > 0:
+                skips_by_binding[binding_idx][strategy_name] = cumulative_skip
+            cumulative_skip += allocated_count
+    return counts_by_binding, skips_by_binding
 
 
 @dataclass(frozen=True)
@@ -657,6 +715,23 @@ class _BindingResult:
     scale_params: ScaleMetadata | None
 
 
+def _merge_binding_skip_overrides(
+    strategy_overrides: Mapping[str, Mapping[str, Any]] | None,
+    strategy_skips: Mapping[str, int] | None,
+) -> Mapping[str, Mapping[str, Any]] | None:
+    """Add each strategy's per-binding archive skip on top of its configured base skip.
+
+    Never mutates ``strategy_overrides`` — it's shared across every binding's call.
+    """
+    if not strategy_skips:
+        return strategy_overrides
+    merged = {name: dict(opts) for name, opts in (strategy_overrides or {}).items()}
+    for strategy_name, binding_skip in strategy_skips.items():
+        opts = merged.setdefault(strategy_name, {})
+        opts["skip"] = opts.get("skip", 0) + binding_skip
+    return merged
+
+
 def _process_binding(
     binding: SystemBinding,
     rhs_stream: VectorSampleStream | None,
@@ -669,6 +744,7 @@ def _process_binding(
     strategy_overrides: dict[str, dict[str, Any]] | None,
     solver_overrides: dict[str, TracingSolverCallable] | None = None,
     solution_stream: VectorSampleStream | None = None,
+    strategy_skips: dict[str, int] | None = None,
 ) -> _BindingResult:
     """Process one matrix-RHS binding and generate samples.
 
@@ -684,6 +760,7 @@ def _process_binding(
         strategy_overrides: Strategy-specific overrides
         solver_overrides: Optional per-strategy solver overrides
         solution_stream: Optional opened solution stream for per-binding pre-computed solutions
+        strategy_skips: Optional per-strategy archive-file skip offset for this binding
 
     Returns:
         BindingResult with generated data blocks
@@ -721,7 +798,7 @@ def _process_binding(
         total=total,
         seed=seed,
         shuffle=shuffle,
-        strategy_overrides=strategy_overrides,
+        strategy_overrides=_merge_binding_skip_overrides(strategy_overrides, strategy_skips),
         solver_overrides=solver_overrides,
         single_rhs=single_rhs,
         single_solution=single_solution,
@@ -870,6 +947,7 @@ def _prepare_generation_context(
     list[VectorSampleStream],
     list[SystemBinding],
     list[dict[str, int]],
+    list[dict[str, int]],
 ]:
     """Open all source streams, bind them, and resolve per-binding strategy counts.
 
@@ -890,7 +968,8 @@ def _prepare_generation_context(
         exclude_indices: Drop these sample ids from every glob-based stream
 
     Returns:
-        Tuple of (matrix_stream, rhs_stream, solution_stream, param_streams, bindings, binding_counts)
+        Tuple of (matrix_stream, rhs_stream, solution_stream, param_streams, bindings,
+        binding_counts, binding_skips)
     """
     matrix_stream, rhs_stream, solution_stream, param_streams, bindings = _open_streams(
         matrix_path,
@@ -902,7 +981,7 @@ def _prepare_generation_context(
         include_indices=include_indices,
         exclude_indices=exclude_indices,
     )
-    binding_counts = _resolve_binding_strategy_counts(
+    binding_counts, binding_skips = _resolve_binding_strategy_counts(
         bindings=bindings,
         counts=counts,
         mix=mix,
@@ -912,14 +991,24 @@ def _prepare_generation_context(
         strategy_overrides=strategy_overrides,
         has_rhs_source=rhs_stream is not None,
         num_matrix_samples=len(matrix_stream.sample_ids),
+        has_solution_source=solution_stream is not None,
     )
-    return matrix_stream, rhs_stream, solution_stream, param_streams, bindings, binding_counts
+    return (
+        matrix_stream,
+        rhs_stream,
+        solution_stream,
+        param_streams,
+        bindings,
+        binding_counts,
+        binding_skips,
+    )
 
 
 def _accumulate_bindings(
     *,
     bindings: list[SystemBinding],
     binding_counts: list[dict[str, int]],
+    binding_skips: list[dict[str, int]],
     rhs_stream: VectorSampleStream | None,
     solution_stream: VectorSampleStream | None,
     param_streams: list[VectorSampleStream],
@@ -946,6 +1035,7 @@ def _accumulate_bindings(
     Args:
         bindings: Ordered list of system bindings to process
         binding_counts: Per-binding strategy count maps (parallel to bindings)
+        binding_skips: Per-binding archive-skip maps (parallel to bindings)
         rhs_stream: Optional opened RHS stream
         solution_stream: Optional opened solution stream
         param_streams: Opened parameter vector streams
@@ -973,7 +1063,9 @@ def _accumulate_bindings(
     scale_metadata_values: list[ScaleMetadata | None] = []
     emitted_binding_count = 0
 
-    for binding, binding_strategy_counts in zip(bindings, binding_counts, strict=True):
+    for binding, binding_strategy_counts, binding_strategy_skips in zip(
+        bindings, binding_counts, binding_skips, strict=True
+    ):
         if not binding_strategy_counts:
             continue
         result = _process_binding(
@@ -988,6 +1080,7 @@ def _accumulate_bindings(
             strategy_overrides,
             solver_overrides=solver_overrides,
             solution_stream=solution_stream,
+            strategy_skips=binding_strategy_skips,
         )
 
         n_samples = result.rhs_block.shape[0]
@@ -1186,23 +1279,29 @@ def build_dataset_payload(
     for i, pp in enumerate(parameters_paths):
         logger.info(f"  Parameters stream [{i}]: {pp}")
 
-    matrix_stream, rhs_stream, solution_stream, param_streams, bindings, binding_counts = (
-        _prepare_generation_context(
-            matrix_path=matrix_path,
-            rhs_path=rhs_path,
-            solution_path=solution_path,
-            parameters_paths=parameters_paths,
-            sample_id_regex=sample_id_regex,
-            enumerate_by=enumerate_by,
-            counts=counts,
-            mix=mix,
-            total=total,
-            replacement=replacement,
-            seed=seed,
-            strategy_overrides=strategy_overrides,
-            include_indices=include_indices,
-            exclude_indices=exclude_indices,
-        )
+    (
+        matrix_stream,
+        rhs_stream,
+        solution_stream,
+        param_streams,
+        bindings,
+        binding_counts,
+        binding_skips,
+    ) = _prepare_generation_context(
+        matrix_path=matrix_path,
+        rhs_path=rhs_path,
+        solution_path=solution_path,
+        parameters_paths=parameters_paths,
+        sample_id_regex=sample_id_regex,
+        enumerate_by=enumerate_by,
+        counts=counts,
+        mix=mix,
+        total=total,
+        replacement=replacement,
+        seed=seed,
+        strategy_overrides=strategy_overrides,
+        include_indices=include_indices,
+        exclude_indices=exclude_indices,
     )
     logger.info(
         f"  Matrix samples: {len(matrix_stream.sample_ids)} | System bindings: {len(bindings)}"
@@ -1249,6 +1348,7 @@ def build_dataset_payload(
     ) = _accumulate_bindings(
         bindings=bindings,
         binding_counts=binding_counts,
+        binding_skips=binding_skips,
         rhs_stream=rhs_stream,
         solution_stream=solution_stream,
         param_streams=param_streams,

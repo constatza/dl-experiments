@@ -311,6 +311,7 @@ class ScaledSolutionsConfig(BaseStrategyConfig):
     Attributes:
         solutions_glob: Glob pattern for solution files.
         scale: Fixed scalar multiplier applied to all (x, b) pairs.
+        skip: Number of solution files to skip after deterministic ordering/shuffling.
     """
 
     solutions_glob: str = Field(..., description="Glob pattern for solution files.")
@@ -318,6 +319,11 @@ class ScaledSolutionsConfig(BaseStrategyConfig):
         5.0,
         description="Fixed scalar multiplier applied to all (x, b) pairs.",
         gt=0.0,
+    )
+    skip: int = Field(
+        0,
+        description="Number of solution files to skip after deterministic ordering/shuffling.",
+        ge=0,
     )
 
 
