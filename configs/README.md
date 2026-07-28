@@ -150,7 +150,7 @@ matrices with randomized Young's moduli (E1-E4), not one fixed matrix — and
 uses DeepONet variants so the residual/RHS stream is the `branch` input and the
 Young-modulus parameter stream is the `trunk` input. These CG cases include
 classical identity/Jacobi/IC0, AMG, and dataset-backed POD-2G preconditioners,
-with `solutions-cg1`, `solutions-cg10`, and `solutions-cg50` datasets serving as
+with `gaussian-cg1`, `gaussian-cg10`, and `gaussian-cg50` datasets serving as
 POD snapshot sources. Every randomE dataset uses the matrix glob
 `45x15randomE/stiffness/*_subdomain_1_Kaa.txt`, `enumerate_by = "name"`, and
 the matching Young-modulus parameter glob.

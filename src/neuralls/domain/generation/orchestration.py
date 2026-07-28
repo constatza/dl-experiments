@@ -525,7 +525,10 @@ def _validate_replacement_support(
             else strategy_supports_matrix_replacement(name)
         )
 
-    active = [name for name, count in strategy_counts.items() if count > 0]
+    # count != 0 (not "> 0") so _ALL_SAMPLES (-1, "emit everything") is still
+    # treated as active — otherwise a strategy requesting -1 would be invisible
+    # to the mixing/replacement guards below, regardless of its actual output.
+    active = [name for name, count in strategy_counts.items() if count != 0]
     multi_matrix = [name for name in active if _supports(name)]
     single_matrix = [name for name in active if not _supports(name)]
 

@@ -32,17 +32,17 @@ coarsening = { method = "aggregation", theta = 0.05 }
 [[comparison_defaults.preconditioners]]
 name = "pod2g-cg1"
 type = "amg"
-coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/solutions-cg1-93x31", n_snapshots = -1, rank = 0.9999 }
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg1-93x31", n_snapshots = -1, rank = 0.9999 }
 
 [[comparison_defaults.preconditioners]]
 name = "pod2g-cg10"
 type = "amg"
-coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/solutions-cg10-93x31", n_snapshots = -1, rank = 0.9999 }
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg10-93x31", n_snapshots = -1, rank = 0.9999 }
 
 [[comparison_defaults.preconditioners]]
 name = "pod2g-cg50"
 type = "amg"
-coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/solutions-cg50-93x31", n_snapshots = -1, rank = 0.9999 }
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg50-93x31", n_snapshots = -1, rank = 0.9999 }
 
 [[datasets]]
 id = "gaussian-cg100-93x31"
@@ -50,24 +50,19 @@ path = "../../datasets/train/93x31/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 93x31"
 
 [[datasets]]
-id = "solutions-cg1-93x31"
-path = "../../datasets/train/93x31/solutions-cg1.toml"
-display_name = "Solutions (plain, 0 CG iterations) 93x31 (POD-2G snapshot source)"
+id = "gaussian-cg1-93x31"
+path = "../../datasets/train/93x31/gaussian-cg1.toml"
+display_name = "Gaussian (plain, 0 CG iterations) 93x31 (POD-2G snapshot source)"
 
 [[datasets]]
-id = "solutions-cg10-93x31"
-path = "../../datasets/train/93x31/solutions-cg10.toml"
-display_name = "Solutions CG-10 93x31 (POD-2G snapshot source)"
+id = "gaussian-cg10-93x31"
+path = "../../datasets/train/93x31/gaussian-cg10.toml"
+display_name = "Gaussian CG-10 93x31 (POD-2G snapshot source)"
 
 [[datasets]]
-id = "solutions-cg50-93x31"
-path = "../../datasets/train/93x31/solutions-cg50.toml"
-display_name = "Solutions CG-50 93x31 (POD-2G snapshot source)"
-
-[[datasets]]
-id = "sparse-rhs-93x31"
-path = "../../datasets/test/93x31/sparse-rhs.toml"
-display_name = "Sparse RHS 93x31"
+id = "gaussian-cg50-93x31"
+path = "../../datasets/train/93x31/gaussian-cg50.toml"
+display_name = "Gaussian CG-50 93x31 (POD-2G snapshot source)"
 
 [[jobs]]
 id = "scale-equivariant-embedded-factorized"

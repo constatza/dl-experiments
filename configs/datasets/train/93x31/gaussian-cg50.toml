@@ -1,4 +1,4 @@
-id = "solutions-cg10-93x31"
+id = "gaussian-cg50-93x31"
 
 [source]
 matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/93x31-displacements/stiffness/subdomain_1_Kaa.txt"
@@ -10,8 +10,8 @@ seed = 42
 
 [[generation.strategy]]
 name = "gaussian_residuals"
-samples = 10000
-cg_iters = 10
+samples = 20000
+cg_iters = 50
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"

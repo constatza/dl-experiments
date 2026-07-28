@@ -41,19 +41,19 @@ path = "../../datasets/train/45x15/gaussian-cg100.toml"
 display_name = "Gaussian CG-100 45x15"
 
 [[datasets]]
-id = "solutions-cg1-45x15"
-path = "../../datasets/train/45x15/solutions-cg1.toml"
-display_name = "Solutions (plain, 0 CG iterations) 45x15 (POD-2G snapshot source)"
+id = "gaussian-cg1-45x15"
+path = "../../datasets/train/45x15/gaussian-cg1.toml"
+display_name = "Gaussian (plain, 0 CG iterations) 45x15 (POD-2G snapshot source)"
 
 [[datasets]]
-id = "solutions-cg10-45x15"
-path = "../../datasets/train/45x15/solutions-cg10.toml"
-display_name = "Solutions CG-10 45x15 (POD-2G snapshot source)"
+id = "gaussian-cg10-45x15"
+path = "../../datasets/train/45x15/gaussian-cg10.toml"
+display_name = "Gaussian CG-10 45x15 (POD-2G snapshot source)"
 
 [[datasets]]
-id = "solutions-cg50-45x15"
-path = "../../datasets/train/45x15/solutions-cg50.toml"
-display_name = "Solutions CG-50 45x15 (POD-2G snapshot source)"
+id = "gaussian-cg50-45x15"
+path = "../../datasets/train/45x15/gaussian-cg50.toml"
+display_name = "Gaussian CG-50 45x15 (POD-2G snapshot source)"
 
 [[jobs]]
 id = "scale-equivariant-constant-width-factorized"
@@ -146,13 +146,13 @@ dataset = "gaussian-cg100-45x15"
 job = "scale-equivariant-embedded-moe"
 
 [[assignments]]
-dataset = "solutions-cg1-45x15"
+dataset = "gaussian-cg1-45x15"
 job = "pod2g-cg1"
 
 [[assignments]]
-dataset = "solutions-cg10-45x15"
+dataset = "gaussian-cg10-45x15"
 job = "pod2g-cg10"
 
 [[assignments]]
-dataset = "solutions-cg50-45x15"
+dataset = "gaussian-cg50-45x15"
 job = "pod2g-cg50"

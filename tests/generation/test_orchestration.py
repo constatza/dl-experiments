@@ -254,6 +254,30 @@ def test_resolve_binding_strategy_counts_rejects_single_multi_matrix_mix(
         )
 
 
+def test_resolve_binding_strategy_counts_rejects_all_samples_with_replacement(
+    three_bindings: list[SystemBinding],
+) -> None:
+    """samples=-1 must not be invisible to the replacement guard.
+
+    Regression test: `_ALL_SAMPLES` (-1) used to be excluded from the `active`
+    strategy list (`count > 0` filter), so `solution_archive: -1` combined with
+    `replacement=True` silently skipped the "does not support matrix
+    replacement allocation" guard instead of raising.
+    """
+    with pytest.raises(ValueError, match="does not support matrix replacement"):
+        _resolve_binding_strategy_counts(
+            bindings=three_bindings,
+            counts={"solution_archive": -1},
+            mix=None,
+            total=None,
+            replacement=True,
+            seed=0,
+            strategy_overrides={"solution_archive": {"solutions_glob": "/fake/*.txt"}},
+            has_rhs_source=False,
+            num_matrix_samples=3,
+        )
+
+
 def test_resolve_binding_strategy_counts_divides_all_samples_across_bindings(
     tmp_path: Path,
     three_bindings: list[SystemBinding],

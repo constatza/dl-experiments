@@ -1,4 +1,4 @@
-id = "solutions-cg1-93x31"
+id = "gaussian-cg1-93x31"
 
 [source]
 matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/93x31-displacements/stiffness/subdomain_1_Kaa.txt"
@@ -13,7 +13,7 @@ seed = 42
 # archived displacement solutions - solution archives are comparison-only.
 [[generation.strategy]]
 name = "gaussian_forward"
-samples = 10000
+samples = 20000
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"
