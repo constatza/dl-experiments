@@ -29,6 +29,7 @@ from torchalg.preconditioners.implementations import (
 )
 
 from neuralls.domain.solver.comparison import (
+    _relative_exact_error,
     format_results_summary,
     run_cg_comparison,
     summarize_best_combinations,
@@ -68,6 +69,82 @@ def rhs_vector(spd_matrix: Tensor) -> Tensor:
         RHS vector with same dimension as matrix
     """
     return torch.as_tensor(np.random.RandomState(42).rand(spd_matrix.shape[0]), dtype=torch.float64)
+
+
+@pytest.fixture(params=[torch.float32, torch.float64], ids=["float32", "float64"])
+def precision_dtype(request: pytest.FixtureRequest) -> torch.dtype:
+    """Dtype under test for input/output precision-fidelity coverage."""
+    return request.param
+
+
+@pytest.fixture
+def spd_matrix_precision(precision_dtype: torch.dtype) -> Tensor:
+    """Small SPD matrix built directly at the parametrized dtype.
+
+    Args:
+        precision_dtype: Dtype to build the matrix at.
+
+    Returns:
+        Well-conditioned SPD matrix at ``precision_dtype``.
+    """
+    n = 10
+    a = np.random.RandomState(42).rand(n, n)
+    spd = a.T @ a + np.eye(n) * 2.0
+    return torch.as_tensor(spd, dtype=precision_dtype)
+
+
+@pytest.fixture
+def rhs_vector_precision(spd_matrix_precision: Tensor, precision_dtype: torch.dtype) -> Tensor:
+    """RHS vector matching ``spd_matrix_precision``'s shape and dtype.
+
+    Args:
+        spd_matrix_precision: Matrix fixture to match the shape of.
+        precision_dtype: Dtype to build the vector at.
+
+    Returns:
+        RHS vector at ``precision_dtype``.
+    """
+    return torch.as_tensor(
+        np.random.RandomState(42).rand(spd_matrix_precision.shape[0]), dtype=precision_dtype
+    )
+
+
+@pytest.fixture
+def precision_tolerances(precision_dtype: torch.dtype) -> tuple[float, float]:
+    """(rtol, atol) sized to each dtype's headroom - loose for float32, tight for float64.
+
+    Args:
+        precision_dtype: Dtype under test.
+
+    Returns:
+        Tuple of (rtol, atol).
+    """
+    if precision_dtype == torch.float32:
+        return 1e-4, 1e-6
+    return 1e-8, 1e-10
+
+
+@pytest.fixture(params=[torch.float32, torch.float64], ids=["float32", "float64"])
+def close_solution_pair(request: pytest.FixtureRequest) -> tuple[Tensor, Tensor]:
+    """A solved-vs-exact pair with a known, nonzero relative error, at a given dtype.
+
+    Returns:
+        Tuple of (x_sol, x_exact) tensors at the parametrized dtype.
+    """
+    dtype = request.param
+    x_sol = torch.tensor([1.0, 2.0, 3.0], dtype=dtype)
+    x_exact = torch.tensor([1.0, 2.0, 4.0], dtype=dtype)
+    return x_sol, x_exact
+
+
+@pytest.fixture
+def zero_exact_solution_pair() -> tuple[Tensor, Tensor]:
+    """A solved-vs-exact pair where the exact solution is the zero vector.
+
+    Returns:
+        Tuple of (x_sol, x_exact) exercising the zero-norm guard clause.
+    """
+    return torch.tensor([1.0, 0.0]), torch.zeros(2)
 
 
 @pytest.fixture
@@ -304,6 +381,58 @@ def test_run_cg_comparison_computes_exact_error(spd_matrix: Tensor, rhs_vector: 
     expected_error = np.linalg.norm(result.x - x_exact) / exact_norm
 
     assert_allclose(result.exact_error, expected_error, rtol=1e-7)
+
+
+def test_run_cg_comparison_preserves_input_dtype(
+    spd_matrix_precision: Tensor,
+    rhs_vector_precision: Tensor,
+    precision_dtype: torch.dtype,
+    precision_tolerances: tuple[float, float],
+) -> None:
+    """CGComparisonResult.x keeps the input dtype through the full comparison pipeline.
+
+    Device auto-placement in run_cg_comparison must never coerce precision -
+    float32 in stays float32 out, float64 in stays float64 out.
+    """
+    rtol, atol = precision_tolerances
+
+    results = run_cg_comparison(
+        spd_matrix_precision,
+        rhs_vector_precision,
+        preconditioners={"identity": Identity()},
+        rtol=rtol,
+        atol=atol,
+        maxiter=200,
+    )
+
+    result = results["identity"]
+    expected_numpy_dtype = torch.empty(0, dtype=precision_dtype).numpy().dtype
+    assert result.x.dtype == expected_numpy_dtype
+    assert result.exact_error is not None
+    assert np.isfinite(result.exact_error)
+
+
+def test_relative_exact_error_preserves_dtype_and_computes_correctly(
+    close_solution_pair: tuple[Tensor, Tensor],
+) -> None:
+    """_relative_exact_error computes the correct ratio at both float32 and float64."""
+    x_sol, x_exact = close_solution_pair
+
+    error = _relative_exact_error(x_sol, x_exact)
+
+    expected = float(torch.linalg.vector_norm(x_sol - x_exact) / torch.linalg.vector_norm(x_exact))
+    assert error == pytest.approx(expected, rel=1e-5)
+
+
+def test_relative_exact_error_zero_exact_norm_returns_absolute_diff(
+    zero_exact_solution_pair: tuple[Tensor, Tensor],
+) -> None:
+    """The guard clause returns the absolute diff norm when x_exact is the zero vector."""
+    x_sol, x_exact = zero_exact_solution_pair
+
+    error = _relative_exact_error(x_sol, x_exact)
+
+    assert error == pytest.approx(1.0)
 
 
 # ==============================================================================

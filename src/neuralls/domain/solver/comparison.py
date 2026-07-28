@@ -13,6 +13,7 @@ import torch
 from torchalg import flexible_cg
 from torchalg.preconditioners.base import Preconditioner
 from torchalg.preconditioners.implementations import Identity
+from torchalg.utils.device import resolve_device
 
 from neuralls.domain.solver.models.result import (
     CGComparisonResult,
@@ -63,8 +64,10 @@ def run_cg_comparison(
         ... }
         >>> results = run_cg_comparison(A, b, preconditioners=preconditioners)
     """
-    if x0 is None:
-        x0 = torch.zeros_like(b, dtype=A.dtype, device=A.device)
+    device = resolve_device()
+    A = A.to(device)
+    b = b.to(device)
+    x0 = torch.zeros_like(b, dtype=A.dtype, device=A.device) if x0 is None else x0.to(device)
     x0_base = x0.detach().clone()
 
     if "none" not in preconditioners:
@@ -105,12 +108,7 @@ def run_cg_comparison(
                 error=f"CG solver failed: {solver_exc}",
             )
         else:
-            exact_norm = float(torch.linalg.vector_norm(x_exact))
-            exact_error = (
-                float(torch.linalg.vector_norm(x_sol - x_exact)) / exact_norm
-                if exact_norm != 0
-                else float(torch.linalg.vector_norm(x_sol - x_exact))
-            )
+            exact_error = _relative_exact_error(x_sol, x_exact)
 
             rhs_norm = info.rhs_norm
             residual: list[float] = list(info.residual_history_abs or (info.residual_abs,))
@@ -141,6 +139,21 @@ def run_cg_comparison(
 def _to_numpy(value: torch.Tensor) -> np.ndarray:
     """Convert solver tensors at the reporting DTO boundary."""
     return value.detach().cpu().numpy()
+
+
+def _relative_exact_error(x_sol: torch.Tensor, x_exact: torch.Tensor) -> float:
+    """Relative error ``||x_sol - x_exact|| / ||x_exact||``, or absolute if ``x_exact`` is ~0.
+
+    Aligns ``x_exact`` to ``x_sol``'s device before combining them — device
+    only, never dtype, so a real precision mismatch stays visible instead of
+    being silently downcast.
+    """
+    x_exact_matched = x_exact.to(device=x_sol.device)
+    exact_norm = float(torch.linalg.vector_norm(x_exact_matched))
+    diff_norm = float(torch.linalg.vector_norm(x_sol - x_exact_matched))
+    if exact_norm == 0:
+        return diff_norm
+    return diff_norm / exact_norm
 
 
 def _requires_flexible_cg(preconditioner: Preconditioner) -> bool:
