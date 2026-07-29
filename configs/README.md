@@ -141,17 +141,15 @@ Case configs bind:
 - comparison ids, inferred when omitted
 - case-level MLflow topology
 
-The 45x15 `default.toml` case compares the pure CG-N training dataset across Scale
-Equivariant Embedded FFNN and Scale Equivariant Constant Width FFNN variants.
-The 93x31 `default.toml` case uses the newer embedded FFNN families: embedded
-factorized, embedded hyper, and embedded MoE. The 45x15randomE `default.toml`
-case is parametric — the underlying problem is a family of ~100 stiffness
-matrices with randomized Young's moduli (E1-E4), not one fixed matrix — and
-uses DeepONet variants so the residual/RHS stream is the `branch` input and the
-Young-modulus parameter stream is the `trunk` input. These CG cases include
-classical identity/Jacobi/IC0, AMG, and dataset-backed POD-2G preconditioners,
-with `gaussian-cg1`, `gaussian-cg10`, and `gaussian-cg50` datasets serving as
-POD snapshot sources. Every randomE dataset uses the matrix glob
+The 45x15, 93x31, and 45x15randomE `default.toml` cases compare classical
+identity/Jacobi/IC0, AMG, and dataset-backed POD-2G preconditioners. Neural
+network jobs are kept in explicit training/search variants, not the default
+cases. The 45x15randomE `default.toml` case is parametric — the underlying
+problem is a family of ~100 stiffness matrices with randomized Young's moduli
+(E1-E4), not one fixed matrix. These CG cases use `gaussian-cg1`,
+`gaussian-cg10`, and `gaussian-cg50` datasets as POD snapshot sources, with
+`gaussian-cg50` also serving as the default matrix dataset where a train dataset
+backs comparisons. Every randomE dataset uses the matrix glob
 `45x15randomE/stiffness/*_subdomain_1_Kaa.txt`, `enumerate_by = "name"`, and
 the matching Young-modulus parameter glob.
 
@@ -161,7 +159,7 @@ and the comparisons, every train dataset in `datasets/train/45x15randomE/` sets
 `[source].exclude_indices` to the last 15 matrix ids (85-99, by
 `enumerate_by = "name"` order), and `datasets/test/45x15randomE/gaussian-eval.toml`
 sets `[source].include_indices` to that same list — so comparisons only ever run
-against matrices no neural preconditioner or POD basis has seen. `include_indices`/
+against matrices no POD basis has seen. `include_indices`/
 `exclude_indices` are plain `[source]`-level id lists (see
 `domain/generation/README.md`); they don't require computing anything — the two
 lists are just the same 15 ids, used as an exclude on the train side and an
@@ -194,7 +192,7 @@ comparison = "Comparisons"
 
 [[datasets]]
 id = "train-dataset"
-path = "../../datasets/train/45x15/gaussian-cg100.toml"
+path = "../../datasets/train/45x15/gaussian-cg50.toml"
 
 [[jobs]]
 id = "scale-equivariant-embedded-factorized"

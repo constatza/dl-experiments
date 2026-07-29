@@ -31,14 +31,7 @@ coarsening = { method = "aggregation", theta = 0.05 }
 
 # pod2g-cg1/10/50 are no longer declared here: they are now [[assignments]]
 # bound to [[jobs]] pod2g-cg1/10/50 below (a `run.type = "fit"` job per
-# dataset), fitted once ahead of time and MLflow-tracked, same as neural
-# preconditioners. See docs/plan.md's "Persist data-fitted preconditioners
-# (pod2g-*) as MLflow-tracked artifacts" entry.
-
-[[datasets]]
-id = "gaussian-cg100-45x15randomE"
-path = "../../datasets/train/45x15randomE/gaussian-cg100.toml"
-display_name = "Gaussian CG-100 45x15randomE"
+# dataset), fitted once ahead of time and MLflow-tracked.
 
 [[datasets]]
 id = "gaussian-cg1-45x15randomE"
@@ -59,21 +52,6 @@ display_name = "Gaussian CG-50 45x15randomE (POD-2G snapshot source)"
 id = "gaussian-eval-45x15randomE"
 path = "../../datasets/test/45x15randomE/gaussian-eval.toml"
 display_name = "Gaussian Eval 45x15randomE (matrices excluded from training and POD-2G snapshotting)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-factorized"
-path = "../../jobs/45x15randomE/scale-equivariant-embedded-factorized.toml"
-display_name = "Embedded DeepONet (branch=RHS, trunk=Young moduli)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-hyper"
-path = "../../jobs/45x15randomE/scale-equivariant-embedded-hyper.toml"
-display_name = "Hyper DeepONet (branch=RHS, trunk=Young moduli)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-moe"
-path = "../../jobs/45x15randomE/scale-equivariant-embedded-moe.toml"
-display_name = "MoE DeepONet (branch=RHS, trunk=Young moduli)"
 
 [[jobs]]
 id = "pod2g-cg1"
@@ -159,18 +137,6 @@ display_name = "Eval matrix 14 | Raw LHS"
 matrix_dataset = "gaussian-eval-45x15randomE"
 matrix_index = 14
 rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 1.0 }
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15randomE"
-job = "scale-equivariant-embedded-factorized"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15randomE"
-job = "scale-equivariant-embedded-hyper"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15randomE"
-job = "scale-equivariant-embedded-moe"
 
 [[assignments]]
 dataset = "gaussian-cg1-45x15randomE"

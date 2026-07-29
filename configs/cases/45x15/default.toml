@@ -31,14 +31,7 @@ coarsening = { method = "aggregation", theta = 0.05 }
 
 # pod2g-cg1/10/50 are no longer declared here: they are now [[assignments]]
 # bound to [[jobs]] pod2g-cg1/10/50 below (a `run.type = "fit"` job per
-# dataset), fitted once ahead of time and MLflow-tracked, same as neural
-# preconditioners. See docs/plan.md's "Persist data-fitted preconditioners
-# (pod2g-*) as MLflow-tracked artifacts" entry.
-
-[[datasets]]
-id = "gaussian-cg100-45x15"
-path = "../../datasets/train/45x15/gaussian-cg100.toml"
-display_name = "Gaussian CG-100 45x15"
+# dataset), fitted once ahead of time and MLflow-tracked.
 
 [[datasets]]
 id = "gaussian-cg1-45x15"
@@ -56,36 +49,6 @@ path = "../../datasets/train/45x15/gaussian-cg50.toml"
 display_name = "Gaussian CG-50 45x15 (POD-2G snapshot source)"
 
 [[jobs]]
-id = "scale-equivariant-constant-width-factorized"
-path = "../../jobs/45x15/scale-equivariant-constant-width-factorized.toml"
-display_name = "Scale Equivariant Constant Width FFNN (SiLU, 6L, bias)"
-
-[[jobs]]
-id = "scale-equivariant-constant-width-factorized-relu"
-path = "../../jobs/45x15/scale-equivariant-constant-width-factorized-relu.toml"
-display_name = "Scale Equivariant Constant Width FFNN (ReLU)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-factorized"
-path = "../../jobs/45x15/scale-equivariant-embedded-factorized.toml"
-display_name = "Scale Equivariant Embedded FFNN (GELU, 4L, bias)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-factorized-silu"
-path = "../../jobs/45x15/scale-equivariant-embedded-factorized-silu.toml"
-display_name = "Scale Equivariant Embedded FFNN (SiLU, 4L)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-hyper"
-path = "../../jobs/45x15/scale-equivariant-embedded-hyper.toml"
-display_name = "Scale Equivariant Embedded Hyper FFNN (GELU, 4L, 2 lanes)"
-
-[[jobs]]
-id = "scale-equivariant-embedded-moe"
-path = "../../jobs/45x15/scale-equivariant-embedded-moe.toml"
-display_name = "Scale Equivariant Embedded MoE FFNN (GELU, 4L, 4 experts, top-2)"
-
-[[jobs]]
 id = "pod2g-cg1"
 path = "../../jobs/45x15/pod2g-cg1.toml"
 display_name = "POD-2G basis (0 CG iterations)"
@@ -101,12 +64,12 @@ path = "../../jobs/45x15/pod2g-cg50.toml"
 display_name = "POD-2G basis (CG-50)"
 
 [[comparisons]]
-matrix_dataset = "gaussian-cg100-45x15"
+matrix_dataset = "gaussian-cg50-45x15"
 rhs_source = { kind = "gaussian" }
 seed = 42
 
 [[comparisons]]
-matrix_dataset = "gaussian-cg100-45x15"
+matrix_dataset = "gaussian-cg50-45x15"
 rhs_source = { kind = "sparse", indices = [
     0,
     1,
@@ -118,32 +81,8 @@ rhs_source = { kind = "sparse", indices = [
 ] }
 
 [[comparisons]]
-matrix_dataset = "gaussian-cg100-45x15"
+matrix_dataset = "gaussian-cg50-45x15"
 rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-displacements/UaVectorsFromSpectral/ua_vector from_spectral_no_realization_0.txt", row_kind = "standard", scale = 1.0 }
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-constant-width-factorized"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-constant-width-factorized-relu"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-factorized"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-factorized-silu"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-hyper"
-
-[[assignments]]
-dataset = "gaussian-cg100-45x15"
-job = "scale-equivariant-embedded-moe"
 
 [[assignments]]
 dataset = "gaussian-cg1-45x15"
