@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from dlkit.engine.workflows.multi_run import RunSpec
 from dlkit.infrastructure.config.core.patching import patch_model
+from loguru import logger
+from mlflow.tracking import MlflowClient
 
 from neuralls.composition.assignments._dataset_assembly import (
     _extra_feature_names_from_settings,
@@ -22,6 +25,7 @@ from neuralls.composition.assignments._training_artifacts import (
     _get_normalized_training_numpy_payload,
     _log_training_context,
     _log_training_evaluation,
+    _resolve_local_training_checkpoint,
     _resolve_mlflow_run_ids,
     _resolve_training_checkpoint,
     _stage_training_artifacts,
@@ -35,6 +39,11 @@ from neuralls.composition.assignments.runtime_dataset_contract import (
 from neuralls.platform.config.loaders import load_tracking_config
 from neuralls.platform.config.models.workspace import AssignmentWorkspace, RunnableAssignment
 from neuralls.platform.config.settings import NeurallsSettings, require_settings
+from neuralls.platform.tracking.artifact_access import (
+    ArtifactLeaseManager,
+    MlflowArtifactLeaseManager,
+    NoopArtifactLeaseManager,
+)
 from neuralls.platform.tracking.extra_features import log_extra_feature_names_tag
 from neuralls.platform.tracking.mlflow import (
     MlflowRunConfig,
@@ -67,6 +76,121 @@ class TrainingResult:
 def _unwrap_execution_result(result: object) -> object:
     """Normalize DLKit execute() results to the underlying training result."""
     return getattr(result, "training_result", result)
+
+
+def _training_artifact_lease_scope(
+    *,
+    tracking_uri: str | None,
+    run_id: str | None,
+) -> AbstractContextManager[ArtifactLeaseManager]:
+    """Return an MLflow-backed lease scope, or a no-op one with no source run."""
+    if not tracking_uri or not run_id:
+        return NoopArtifactLeaseManager()
+    client = MlflowClient(tracking_uri=tracking_uri)
+    return MlflowArtifactLeaseManager(client=client)
+
+
+def _resolve_finalization_checkpoint(
+    *,
+    context: _TrainingFinalizationContext,
+    run_id: str | None,
+    artifact_leases: ArtifactLeaseManager,
+) -> Path:
+    """Resolve a checkpoint for finalization, falling back to MLflow when run_id is known."""
+    if run_id is None:
+        local_checkpoint = _resolve_local_training_checkpoint(
+            training_result=context.training_result,
+            workspace=context.workspace,
+        )
+        if local_checkpoint is not None:
+            return local_checkpoint
+        raise RuntimeError(f"No checkpoint found in {context.workspace.checkpoint_dir}")
+    return _resolve_training_checkpoint(
+        training_result=context.training_result,
+        workspace=context.workspace,
+        run_id=run_id,
+        artifact_leases=artifact_leases,
+    )
+
+
+def _finalize_existing_mlflow_run(
+    *,
+    context: _TrainingFinalizationContext,
+    mlflow_coords: tuple[str, str, str],
+    checkpoint_path: Path,
+) -> tuple[str, str, str]:
+    """Make an existing DLKit MLflow run durable."""
+    tracking_uri, _, run_id = mlflow_coords
+    _log_training_context(
+        tracking_uri=tracking_uri,
+        run_id=run_id,
+        assignment_id=context.assignment.spec.assignment_id,
+        assignment_display_name=context.resolved_assignment_display_name,
+        resolved_dataset_id=context.dataset_id,
+        dataset_display_name=context.resolved_dataset_display_name,
+        dataset_registry_id=context.assignment.spec.dataset_id,
+        job_registry_id=context.assignment.spec.job_id,
+        job_display_name=context.assignment.spec.job_display_name or context.workspace.run_id,
+    )
+    log_extra_feature_names_tag(
+        tracking_uri,
+        run_id,
+        _extra_feature_names_from_settings(context.workflow_settings, context.contract),
+    )
+    ensure_checkpoint_artifact(
+        tracking_uri=tracking_uri,
+        run_id=run_id,
+        checkpoint_path=checkpoint_path,
+    )
+    normalized_numpy = _get_normalized_training_numpy_payload(
+        context.training_result,
+        context.contract,
+    )
+    _stage_training_artifacts(
+        workspace=context.workspace,
+        training_result=context.training_result,
+        numpy_payload=normalized_numpy,
+        job_config_path=context.config_path,
+        data_config_path=context.resolved_data_config_path,
+    )
+    _log_training_evaluation(
+        tracking_uri,
+        run_id,
+        normalized_numpy,
+        context.workspace.figures_dir,
+        context.contract,
+    )
+    log_artifacts_to_mlflow(
+        tracking_uri=tracking_uri,
+        run_id=run_id,
+        workspace_root=context.workspace.root_dir,
+    )
+    return mlflow_coords
+
+
+def _finalize_fallback_mlflow_run(
+    *,
+    context: _TrainingFinalizationContext,
+    checkpoint_path: Path,
+) -> tuple[str, str, str] | None:
+    """Create a fallback MLflow run when DLKit left no run metadata."""
+    logger.warning("Training completed without MLflow run metadata; creating fallback run.")
+    try:
+        fallback_exp_id, fallback_run_id = create_fallback_training_run(
+            tracking_uri=context.fallback_tracking_uri or "",
+            experiment_name=context.run_config.experiment_name,
+            run_name=context.run_config.run_name,
+            tags=dict(context.run_config.tags),
+            checkpoint_path=checkpoint_path,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not create fallback MLflow run: {}", exc)
+        return None
+    return (
+        context.fallback_tracking_uri or "",
+        fallback_exp_id,
+        fallback_run_id,
+    )
 
 
 def _resolve_tracking_backend(runtime_environment: MlflowRuntimeEnvironment) -> str:
@@ -409,83 +533,29 @@ def _finalize_training_run(context: _TrainingFinalizationContext) -> tuple[str, 
             resolved_run_id = getattr(context.training_result, "mlflow_run_id", None) or getattr(
                 context.training_result, "run_id", None
             )
-        local_checkpoint = _resolve_training_checkpoint(
-            training_result=context.training_result,
-            workspace=context.workspace,
+        with _training_artifact_lease_scope(
             tracking_uri=resolved_tracking_uri,
             run_id=resolved_run_id,
-        )
-
-        # Step 7: Stage artifacts and upload them to MLflow while temp files still exist
-        if mlflow_coords is not None:
-            tracking_uri, _, run_id = mlflow_coords
-            _log_training_context(
-                tracking_uri=tracking_uri,
-                run_id=run_id,
-                assignment_id=context.assignment.spec.assignment_id,
-                assignment_display_name=context.resolved_assignment_display_name,
-                resolved_dataset_id=context.dataset_id,
-                dataset_display_name=context.resolved_dataset_display_name,
-                dataset_registry_id=context.assignment.spec.dataset_id,
-                job_registry_id=context.assignment.spec.job_id,
-                job_display_name=context.assignment.spec.job_display_name
-                or context.workspace.run_id,
+        ) as artifact_leases:
+            local_checkpoint = _resolve_finalization_checkpoint(
+                context=context,
+                run_id=resolved_run_id,
+                artifact_leases=artifact_leases,
             )
-            log_extra_feature_names_tag(
-                tracking_uri,
-                run_id,
-                _extra_feature_names_from_settings(context.workflow_settings, context.contract),
-            )
-            # Step 8: Make the checkpoint durable in MLflow — this is the only
-            # copy that survives the tempdir being deleted below. Idempotent:
-            # no-ops if the artifact is already present under this run.
-            ensure_checkpoint_artifact(
-                tracking_uri=tracking_uri,
-                run_id=run_id,
-                checkpoint_path=local_checkpoint,
-            )
-            normalized_numpy = _get_normalized_training_numpy_payload(
-                context.training_result,
-                context.contract,
-            )
-            _stage_training_artifacts(
-                workspace=context.workspace,
-                training_result=context.training_result,
-                numpy_payload=normalized_numpy,
-                job_config_path=context.config_path,
-                data_config_path=context.resolved_data_config_path,
-            )
-            _log_training_evaluation(
-                tracking_uri,
-                run_id,
-                normalized_numpy,
-                context.workspace.figures_dir,
-                context.contract,
-            )
-            log_artifacts_to_mlflow(
-                tracking_uri=tracking_uri,
-                run_id=run_id,
-                workspace_root=context.workspace.root_dir,
-            )
-        else:
-            from loguru import logger
-
-            logger.warning("Training completed without MLflow run metadata; creating fallback run.")
-            try:
-                fallback_exp_id, fallback_run_id = create_fallback_training_run(
-                    tracking_uri=context.fallback_tracking_uri or "",
-                    experiment_name=context.run_config.experiment_name,
-                    run_name=context.run_config.run_name,
-                    tags=dict(context.run_config.tags),
-                    checkpoint_path=local_checkpoint,
-                )
-                mlflow_coords = (
-                    context.fallback_tracking_uri or "",
-                    fallback_exp_id,
-                    fallback_run_id,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Could not create fallback MLflow run: {}", exc)
+            match mlflow_coords:
+                case (str(), str(), str()) as existing_coords:
+                    mlflow_coords = _finalize_existing_mlflow_run(
+                        context=context,
+                        mlflow_coords=existing_coords,
+                        checkpoint_path=local_checkpoint,
+                    )
+                case None:
+                    mlflow_coords = _finalize_fallback_mlflow_run(
+                        context=context,
+                        checkpoint_path=local_checkpoint,
+                    )
+                case _:
+                    raise RuntimeError(f"Invalid MLflow coordinates: {mlflow_coords!r}")
 
         if mlflow_coords is None:
             raise RuntimeError(

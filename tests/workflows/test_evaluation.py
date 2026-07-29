@@ -39,6 +39,8 @@ from neuralls.platform.tracking.evaluation_artifacts import (
     TrainingEvaluationArtifacts,
 )
 
+SPLIT_ARTIFACT_PATH = "splits/split.json"
+
 
 def _write_split(path: Path) -> None:
     path.write_text(
@@ -123,6 +125,7 @@ def test_write_eval_metric_report_accepts_plain_and_prefixed_metric(tmp_path: Pa
                 evaluation_run_id="eval-1",
                 metrics={"mae": 0.2, "eval/rmse": 0.4},
                 split_file=tmp_path / "split.json",
+                split_artifact_path=SPLIT_ARTIFACT_PATH,
                 figures_dir=tmp_path / "figures",
             )
         ],
@@ -198,6 +201,7 @@ def test_materialize_inference_settings_uses_staged_config_paths(
         artifacts=TrainingEvaluationArtifacts(
             checkpoint_path=checkpoint,
             split_file=split_file,
+            split_artifact_path=SPLIT_ARTIFACT_PATH,
             config_artifacts=TrainingConfigArtifacts(config_dir=None),
         ),
         config_paths=EvaluationConfigPaths(
@@ -277,6 +281,7 @@ def _fake_prepared_evaluation(tmp_path: Path, assignment_id: str) -> PreparedEva
         training_run_id="train-1",
         client=MagicMock(),
         split_file=tmp_path / "split.json",
+        split_artifact_path=SPLIT_ARTIFACT_PATH,
         output_root=tmp_path,
         label="1",
         run_name=assignment_id,
@@ -393,6 +398,7 @@ def test_to_eval_run_spec_builds_run_spec_from_prepared_evaluation(tmp_path: Pat
         training_run_id="train-1",
         client=MagicMock(),
         split_file=tmp_path / "split.json",
+        split_artifact_path=SPLIT_ARTIFACT_PATH,
         output_root=tmp_path,
         label="1",
         run_name="Assign OK",

@@ -1,4 +1,4 @@
-"""MLflow artifact downloads required for eval-only workflows."""
+"""MLflow artifact resolution required for eval-only workflows."""
 
 from __future__ import annotations
 
@@ -8,17 +8,23 @@ from pathlib import Path
 from dlkit.infrastructure.io.index import load_split_indices
 from mlflow.tracking import MlflowClient
 
+from neuralls.platform.tracking.artifact_access import ArtifactLeaseManager
+from neuralls.platform.tracking.artifact_selection import (
+    CHECKPOINT_ARTIFACT_DIR,
+    select_config_artifact_dir,
+    select_split_artifact_path,
+)
 from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 
 
 @dataclass(frozen=True)
 class TrainingConfigArtifacts:
-    """Downloaded config artifacts from a completed training run."""
+    """Resolved config artifacts from a completed training run."""
 
     config_dir: Path | None
 
     def find_named(self, fallback: Path) -> Path:
-        """Return the downloaded config with the fallback basename when present."""
+        """Return the resolved config with the fallback basename when present."""
         if self.config_dir is None:
             return fallback
         candidate = self.config_dir / fallback.name
@@ -27,10 +33,11 @@ class TrainingConfigArtifacts:
 
 @dataclass(frozen=True)
 class TrainingEvaluationArtifacts:
-    """Downloaded artifacts required to evaluate one completed training run."""
+    """Resolved artifacts required to evaluate one completed training run."""
 
     checkpoint_path: Path
     split_file: Path
+    split_artifact_path: str
     config_artifacts: TrainingConfigArtifacts
 
 
@@ -38,7 +45,7 @@ class CheckpointArtifactError(RuntimeError):
     """Base for any checkpoint-artifact problem on a training run.
 
     Lets callers narrow to "any checkpoint issue" (missing, corrupt, or otherwise
-    undownloadable) without enumerating every subclass.
+    unresolvable) without enumerating every subclass.
     """
 
 
@@ -47,123 +54,117 @@ class MissingCheckpointArtifactError(CheckpointArtifactError):
 
 
 class CorruptCheckpointArtifactError(CheckpointArtifactError):
-    """Raised when a run's checkpoint artifact is registered but fails to download.
+    """Raised when a run's checkpoint artifact is registered but fails to resolve.
 
     Distinct from ``MissingCheckpointArtifactError``: the artifact IS listed under
-    ``checkpoints/`` (confirmed via ``list_artifacts``), but the actual byte transfer
-    failed. MLflow's own client swallows the real underlying cause at DEBUG log
-    level and raises a generic, uninformative exception regardless of cause — this
-    wraps that exception with a message that at least states which failure mode
-    this is, so it isn't confused with a genuinely absent checkpoint.
+    ``checkpoints/`` (confirmed via ``list_artifacts``), but local resolution or
+    remote materialization failed. MLflow's own client can hide the real
+    underlying cause at DEBUG log level and raise a generic exception regardless
+    of cause; this wraps that exception with a message that states which failure
+    mode this is, so it isn't confused with a genuinely absent checkpoint.
     """
 
 
-def download_training_checkpoint(
+def resolve_training_checkpoint(
+    *,
     client: MlflowClient,
     run_id: str,
-    dst_dir: Path,
-    *,
+    artifact_leases: ArtifactLeaseManager,
     assignment_id: str,
 ) -> Path:
-    """Download training checkpoint artifacts and return the selected checkpoint.
+    """Resolve training checkpoint artifacts and return the selected checkpoint.
 
     Args:
         client: MLflow client bound to the target tracking URI.
-        run_id: FINISHED training run to download the checkpoint from.
-        dst_dir: Local directory to download artifacts into.
+        run_id: FINISHED training run to resolve the checkpoint from.
+        artifact_leases: Lease manager that provides local artifact paths.
         assignment_id: Assignment id the run belongs to, for the error message.
 
     Raises:
-        MissingCheckpointArtifactError: If the run has no ``checkpoints/`` artifact —
-            typically a run trained before dlkit's checkpoint-deletion fix (dlkit
-            commit 46107a9), whose checkpoint was never actually uploaded before the
-            local copy was deleted. Unrecoverable; the assignment must be retrained.
-        CorruptCheckpointArtifactError: If the run has a ``checkpoints/`` artifact
-            listed, but MLflow fails to download it. Distinct from a missing
-            checkpoint — the artifact is registered but the transfer itself failed.
+        MissingCheckpointArtifactError: If the run has no checkpoint artifact.
+        CorruptCheckpointArtifactError: If checkpoint artifacts are listed but
+            cannot be resolved to a valid local path.
     """
-    if not client.list_artifacts(run_id, "checkpoints"):
+    if not client.list_artifacts(run_id, CHECKPOINT_ARTIFACT_DIR):
         raise MissingCheckpointArtifactError(
             f"Training run '{run_id}' for assignment '{assignment_id}' has no "
-            "'checkpoints/' artifact and cannot be evaluated. This is typically a "
-            "stale run trained before dlkit's checkpoint-deletion fix (dlkit commit "
-            "46107a9); the checkpoint is unrecoverable — retrain this assignment."
+            f"'{CHECKPOINT_ARTIFACT_DIR}/' artifact and cannot be evaluated. This "
+            "is typically a stale run trained before dlkit's checkpoint-deletion "
+            "fix (dlkit commit 46107a9); the checkpoint is unrecoverable — "
+            "retrain this assignment."
         )
     try:
-        checkpoint_root = Path(
-            client.download_artifacts(
-                run_id=run_id,
-                path="checkpoints",
-                dst_path=str(dst_dir),
-            )
-        )
+        checkpoint_root = artifact_leases.resolve_dir(run_id, CHECKPOINT_ARTIFACT_DIR).path
     except Exception as exc:
         raise CorruptCheckpointArtifactError(
             f"Training run '{run_id}' for assignment '{assignment_id}' has a "
-            "'checkpoints/' artifact listed, but MLflow could not download it — "
-            f"this is NOT a missing checkpoint. Underlying error: {exc}"
+            f"'{CHECKPOINT_ARTIFACT_DIR}/' artifact listed, but MLflow could not "
+            f"resolve it — this is NOT a missing checkpoint. Underlying error: {exc}"
         ) from exc
     return find_single_checkpoint(checkpoint_root)
 
 
-def download_training_split_file(
-    client: MlflowClient,
-    run_id: str,
-    dst_dir: Path,
-) -> Path:
-    """Download and validate the single split JSON artifact for a training run."""
-    split_dir = Path(
-        client.download_artifacts(
-            run_id=run_id,
-            path="splits",
-            dst_path=str(dst_dir),
-        )
-    )
-    split_files = sorted(split_dir.glob("*.json"))
-    if not split_files:
-        raise FileNotFoundError(
-            f"Training run '{run_id}' has no split JSON artifact under 'splits/'."
-        )
-    if len(split_files) > 1:
-        joined = ", ".join(path.name for path in split_files)
-        raise ValueError(
-            f"Training run '{run_id}' has multiple split JSON artifacts under 'splits/': {joined}."
-        )
-    split_file = split_files[0]
-    load_split_indices(split_file)
-    return split_file
+@dataclass(frozen=True)
+class TrainingSplitArtifact:
+    """Resolved training split file plus its MLflow artifact-relative identity."""
+
+    file: Path
+    artifact_path: str
 
 
-def download_training_config_artifacts(
-    client: MlflowClient,
-    run_id: str,
-    dst_dir: Path,
-) -> TrainingConfigArtifacts:
-    """Download optional staged config artifacts from a training run."""
-    if not client.list_artifacts(run_id, "config"):
-        return TrainingConfigArtifacts(config_dir=None)
-    config_dir = Path(
-        client.download_artifacts(
-            run_id=run_id,
-            path="config",
-            dst_path=str(dst_dir),
-        )
-    )
-    return TrainingConfigArtifacts(config_dir=config_dir)
-
-
-def download_training_evaluation_artifacts(
-    client: MlflowClient,
-    run_id: str,
-    dst_dir: Path,
+def resolve_training_split_artifact(
     *,
+    client: MlflowClient,
+    run_id: str,
+    artifact_leases: ArtifactLeaseManager,
+) -> TrainingSplitArtifact:
+    """Resolve and validate the single split JSON artifact for a training run."""
+    split_artifact_path = select_split_artifact_path(client, run_id=run_id)
+    split_file = artifact_leases.resolve_file(run_id, split_artifact_path).path
+    load_split_indices(split_file)
+    return TrainingSplitArtifact(file=split_file, artifact_path=split_artifact_path)
+
+
+def resolve_training_config_artifacts(
+    *,
+    client: MlflowClient,
+    run_id: str,
+    artifact_leases: ArtifactLeaseManager,
+) -> TrainingConfigArtifacts:
+    """Resolve optional staged config artifacts from a training run."""
+    config_artifact_dir = select_config_artifact_dir(client, run_id=run_id)
+    if config_artifact_dir is None:
+        return TrainingConfigArtifacts(config_dir=None)
+    return TrainingConfigArtifacts(
+        config_dir=artifact_leases.resolve_dir(run_id, config_artifact_dir).path
+    )
+
+
+def resolve_training_evaluation_artifacts(
+    *,
+    client: MlflowClient,
+    run_id: str,
+    artifact_leases: ArtifactLeaseManager,
     assignment_id: str,
 ) -> TrainingEvaluationArtifacts:
-    """Download all MLflow artifacts required for eval-only execution."""
+    """Resolve all MLflow artifacts required for eval-only execution."""
+    split_artifact = resolve_training_split_artifact(
+        client=client,
+        run_id=run_id,
+        artifact_leases=artifact_leases,
+    )
     return TrainingEvaluationArtifacts(
-        checkpoint_path=download_training_checkpoint(
-            client, run_id, dst_dir, assignment_id=assignment_id
+        checkpoint_path=resolve_training_checkpoint(
+            client=client,
+            run_id=run_id,
+            artifact_leases=artifact_leases,
+            assignment_id=assignment_id,
         ),
-        split_file=download_training_split_file(client, run_id, dst_dir),
-        config_artifacts=download_training_config_artifacts(client, run_id, dst_dir),
+        split_file=split_artifact.file,
+        split_artifact_path=split_artifact.artifact_path,
+        config_artifacts=resolve_training_config_artifacts(
+            client=client,
+            run_id=run_id,
+            artifact_leases=artifact_leases,
+        ),
     )

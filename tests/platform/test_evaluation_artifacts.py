@@ -1,38 +1,86 @@
-"""Tests for eval-only MLflow artifact recovery."""
+"""Tests for eval-only MLflow artifact resolution."""
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+from neuralls.platform.tracking.artifact_access import ArtifactLease
+from neuralls.platform.tracking.artifact_selection import (
+    CHECKPOINT_ARTIFACT_DIR,
+    CONFIG_ARTIFACT_DIR,
+    SPLIT_ARTIFACT_DIR,
+)
 from neuralls.platform.tracking.evaluation_artifacts import (
     CheckpointArtifactError,
     CorruptCheckpointArtifactError,
     MissingCheckpointArtifactError,
-    download_training_checkpoint,
-    download_training_config_artifacts,
-    download_training_split_file,
+    resolve_training_checkpoint,
+    resolve_training_config_artifacts,
+    resolve_training_evaluation_artifacts,
+    resolve_training_split_artifact,
 )
+
+RUN_ID = "run-1"
+ASSIGNMENT_ID = "assignment-1"
+SOURCE_URI = "file:///mlartifacts/run-1/artifacts"
+CHECKPOINT_FILE = "best.ckpt"
+SPLIT_FILE = "run_4_split.json"
+CONFIG_FILE = "job.toml"
+WEIGHTS_PAYLOAD = b"weights"
+ARTIFACT_IS_DIR = True
+ARTIFACT_IS_FILE = False
+
+
+@dataclass(frozen=True)
+class FakeArtifact:
+    """Minimal MLflow FileInfo-shaped object."""
+
+    path: str
+    is_dir: bool = ARTIFACT_IS_FILE
 
 
 class FakeArtifactClient:
-    """Minimal MLflowClient double for artifact download tests."""
+    """Minimal MLflowClient double for artifact resolution tests."""
 
-    def __init__(self, artifact_dir: Path):
-        self.artifact_dir = artifact_dir
+    def __init__(self, listings: dict[str, tuple[FakeArtifact, ...]]):
+        self._listings = listings
 
-    def download_artifacts(self, run_id: str, path: str, dst_path: str) -> str:
-        del run_id, dst_path
-        return str(self.artifact_dir / path)
-
-    def list_artifacts(self, run_id: str, path: str):
+    def list_artifacts(self, run_id: str, path: str) -> list[FakeArtifact]:
         del run_id
-        target = self.artifact_dir / path
-        if not target.exists():
-            return []
-        return [object()]
+        return list(self._listings.get(path, ()))
+
+
+class FakeLeaseManager:
+    """Lease manager double that returns prebuilt local artifact paths."""
+
+    def __init__(self, paths: dict[str, Path], broken_artifacts: set[str] | None = None) -> None:
+        self._paths = paths
+        self._broken_artifacts = broken_artifacts or set()
+        self.file_calls: list[tuple[str, str]] = []
+        self.dir_calls: list[tuple[str, str]] = []
+
+    def resolve_file(self, run_id: str, artifact_path: str) -> ArtifactLease:
+        self.file_calls.append((run_id, artifact_path))
+        return self._resolve(run_id=run_id, artifact_path=artifact_path)
+
+    def resolve_dir(self, run_id: str, artifact_path: str) -> ArtifactLease:
+        self.dir_calls.append((run_id, artifact_path))
+        return self._resolve(run_id=run_id, artifact_path=artifact_path)
+
+    def _resolve(self, *, run_id: str, artifact_path: str) -> ArtifactLease:
+        if artifact_path in self._broken_artifacts:
+            raise RuntimeError("lease failed")
+        return ArtifactLease(
+            path=self._paths[artifact_path],
+            run_id=run_id,
+            artifact_path=artifact_path,
+            source_uri=SOURCE_URI,
+            local_copy=False,
+        )
 
 
 def _write_split(path: Path) -> None:
@@ -49,124 +97,176 @@ def _write_split(path: Path) -> None:
     )
 
 
-def test_download_training_split_file_validates_single_json(tmp_path: Path) -> None:
-    split_dir = tmp_path / "artifacts" / "splits"
-    split_dir.mkdir(parents=True)
-    split_file = split_dir / "run_4_split.json"
+def _checkpoint_listing() -> tuple[FakeArtifact, ...]:
+    return (FakeArtifact(f"{CHECKPOINT_ARTIFACT_DIR}/{CHECKPOINT_FILE}"),)
+
+
+def _split_listing() -> tuple[FakeArtifact, ...]:
+    return (FakeArtifact(f"{SPLIT_ARTIFACT_DIR}/{SPLIT_FILE}"),)
+
+
+def test_resolve_training_split_file_validates_single_json(tmp_path: Path) -> None:
+    split_file = tmp_path / SPLIT_FILE
     _write_split(split_file)
-    client = FakeArtifactClient(tmp_path / "artifacts")
+    client = FakeArtifactClient({SPLIT_ARTIFACT_DIR: _split_listing()})
+    leases = FakeLeaseManager({f"{SPLIT_ARTIFACT_DIR}/{SPLIT_FILE}": split_file})
 
-    result = download_training_split_file(client, "run-1", tmp_path / "downloads")  # type: ignore[arg-type]
+    result = resolve_training_split_artifact(client=client, run_id=RUN_ID, artifact_leases=leases)  # type: ignore[arg-type]
 
-    assert result == split_file
+    assert result.file == split_file
+    assert result.artifact_path == f"{SPLIT_ARTIFACT_DIR}/{SPLIT_FILE}"
+    assert leases.file_calls == [(RUN_ID, f"{SPLIT_ARTIFACT_DIR}/{SPLIT_FILE}")]
 
 
-def test_download_training_split_file_rejects_missing_json(tmp_path: Path) -> None:
-    (tmp_path / "artifacts" / "splits").mkdir(parents=True)
-    client = FakeArtifactClient(tmp_path / "artifacts")
+def test_resolve_training_split_file_rejects_missing_json() -> None:
+    client = FakeArtifactClient({SPLIT_ARTIFACT_DIR: ()})
+    leases = FakeLeaseManager({})
 
     with pytest.raises(FileNotFoundError, match="no split JSON artifact"):
-        download_training_split_file(client, "run-1", tmp_path / "downloads")  # type: ignore[arg-type]
+        resolve_training_split_artifact(client=client, run_id=RUN_ID, artifact_leases=leases)  # type: ignore[arg-type]
+
+    assert leases.file_calls == []
 
 
-def test_download_training_split_file_rejects_multiple_json_files(tmp_path: Path) -> None:
-    split_dir = tmp_path / "artifacts" / "splits"
-    split_dir.mkdir(parents=True)
-    _write_split(split_dir / "first.json")
-    _write_split(split_dir / "second.json")
-    client = FakeArtifactClient(tmp_path / "artifacts")
+def test_resolve_training_split_file_rejects_multiple_json_files() -> None:
+    client = FakeArtifactClient(
+        {
+            SPLIT_ARTIFACT_DIR: (
+                FakeArtifact(f"{SPLIT_ARTIFACT_DIR}/first.json"),
+                FakeArtifact(f"{SPLIT_ARTIFACT_DIR}/second.json"),
+            )
+        }
+    )
+    leases = FakeLeaseManager({})
 
     with pytest.raises(ValueError, match="multiple split JSON artifacts"):
-        download_training_split_file(client, "run-1", tmp_path / "downloads")  # type: ignore[arg-type]
+        resolve_training_split_artifact(client=client, run_id=RUN_ID, artifact_leases=leases)  # type: ignore[arg-type]
+
+    assert leases.file_calls == []
 
 
-def test_download_training_checkpoint_raises_when_no_checkpoint_artifact(tmp_path: Path) -> None:
-    """A FINISHED run with no 'checkpoints/' artifact (e.g. a stale pre-fix run) must
-    fail with a clear, actionable error instead of MLflow's generic download exception.
-    """
-    (tmp_path / "artifacts").mkdir()
-    client = FakeArtifactClient(tmp_path / "artifacts")
+def test_resolve_training_checkpoint_raises_when_no_checkpoint_artifact() -> None:
+    """A FINISHED run with no checkpoint artifact must fail with an actionable error."""
+    client = FakeArtifactClient({})
+    leases = FakeLeaseManager({})
 
-    with pytest.raises(MissingCheckpointArtifactError, match="run-1.*assignment-1"):
-        download_training_checkpoint(
-            client,  # type: ignore[arg-type]
-            "run-1",
-            tmp_path / "downloads",
-            assignment_id="assignment-1",
+    with pytest.raises(MissingCheckpointArtifactError, match=f"{RUN_ID}.*{ASSIGNMENT_ID}"):
+        resolve_training_checkpoint(
+            client=client,  # type: ignore[arg-type]
+            run_id=RUN_ID,
+            artifact_leases=leases,
+            assignment_id=ASSIGNMENT_ID,
         )
 
+    assert leases.dir_calls == []
 
-def test_download_training_checkpoint_returns_checkpoint_when_present(tmp_path: Path) -> None:
-    checkpoint_dir = tmp_path / "artifacts" / "checkpoints"
-    checkpoint_dir.mkdir(parents=True)
-    checkpoint_file = checkpoint_dir / "best.ckpt"
-    checkpoint_file.write_bytes(b"weights")
-    client = FakeArtifactClient(tmp_path / "artifacts")
 
-    result = download_training_checkpoint(
-        client,  # type: ignore[arg-type]
-        "run-1",
-        tmp_path / "downloads",
-        assignment_id="assignment-1",
+def test_resolve_training_checkpoint_returns_checkpoint_when_present(tmp_path: Path) -> None:
+    checkpoint_dir = tmp_path / CHECKPOINT_ARTIFACT_DIR
+    checkpoint_dir.mkdir()
+    checkpoint_file = checkpoint_dir / CHECKPOINT_FILE
+    checkpoint_file.write_bytes(WEIGHTS_PAYLOAD)
+    client = FakeArtifactClient({CHECKPOINT_ARTIFACT_DIR: _checkpoint_listing()})
+    leases = FakeLeaseManager({CHECKPOINT_ARTIFACT_DIR: checkpoint_dir})
+
+    result = resolve_training_checkpoint(
+        client=client,  # type: ignore[arg-type]
+        run_id=RUN_ID,
+        artifact_leases=leases,
+        assignment_id=ASSIGNMENT_ID,
     )
 
     assert result == checkpoint_file
+    assert leases.dir_calls == [(RUN_ID, CHECKPOINT_ARTIFACT_DIR)]
 
 
-def test_download_training_checkpoint_raises_corrupt_error_when_download_fails(
+def test_resolve_training_checkpoint_raises_corrupt_error_when_lease_fails(
     tmp_path: Path,
 ) -> None:
-    """A run whose 'checkpoints/' artifact IS listed but fails to download must raise
-    CorruptCheckpointArtifactError (not the generic MLflow error), distinct from a
-    genuinely missing checkpoint, with the original MLflow exception chained.
-    """
-    checkpoint_dir = tmp_path / "artifacts" / "checkpoints"
-    checkpoint_dir.mkdir(parents=True)
-    (checkpoint_dir / "best.ckpt").write_bytes(b"weights")
+    checkpoint_dir = tmp_path / CHECKPOINT_ARTIFACT_DIR
+    checkpoint_dir.mkdir()
+    client = FakeArtifactClient({CHECKPOINT_ARTIFACT_DIR: _checkpoint_listing()})
+    leases = FakeLeaseManager(
+        {CHECKPOINT_ARTIFACT_DIR: checkpoint_dir},
+        broken_artifacts={CHECKPOINT_ARTIFACT_DIR},
+    )
 
-    original_error = RuntimeError("please ensure that the path is correct")
-
-    class BrokenDownloadClient(FakeArtifactClient):
-        def download_artifacts(self, run_id: str, path: str, dst_path: str) -> str:
-            del run_id, path, dst_path
-            raise original_error
-
-    client = BrokenDownloadClient(tmp_path / "artifacts")
-
-    with pytest.raises(CorruptCheckpointArtifactError, match="run-1.*assignment-1") as excinfo:
-        download_training_checkpoint(
-            client,  # type: ignore[arg-type]
-            "run-1",
-            tmp_path / "downloads",
-            assignment_id="assignment-1",
+    with pytest.raises(
+        CorruptCheckpointArtifactError, match=f"{RUN_ID}.*{ASSIGNMENT_ID}"
+    ) as excinfo:
+        resolve_training_checkpoint(
+            client=client,  # type: ignore[arg-type]
+            run_id=RUN_ID,
+            artifact_leases=leases,
+            assignment_id=ASSIGNMENT_ID,
         )
 
-    assert excinfo.value.__cause__ is original_error
+    assert isinstance(excinfo.value.__cause__, RuntimeError)
 
 
 def test_checkpoint_artifact_errors_share_common_base() -> None:
-    """Both checkpoint-artifact exceptions must narrow to CheckpointArtifactError so
-    callers can catch 'any checkpoint issue' without enumerating every subclass.
-    """
+    """Both checkpoint-artifact exceptions must narrow to CheckpointArtifactError."""
     assert issubclass(MissingCheckpointArtifactError, CheckpointArtifactError)
     assert issubclass(CorruptCheckpointArtifactError, CheckpointArtifactError)
 
 
-def test_download_training_config_artifacts_returns_none_when_absent(tmp_path: Path) -> None:
-    client = FakeArtifactClient(tmp_path / "artifacts")
+def test_resolve_training_config_artifacts_returns_none_when_absent() -> None:
+    client = FakeArtifactClient({})
+    leases = FakeLeaseManager({})
 
-    result = download_training_config_artifacts(client, "run-1", tmp_path / "downloads")  # type: ignore[arg-type]
+    result = resolve_training_config_artifacts(client=client, run_id=RUN_ID, artifact_leases=leases)  # type: ignore[arg-type]
 
     assert result.config_dir is None
+    assert leases.dir_calls == []
 
 
-def test_download_training_config_artifacts_propagates_listing_errors(tmp_path: Path) -> None:
-    class BrokenClient(FakeArtifactClient):
-        def list_artifacts(self, run_id: str, path: str):
-            del run_id, path
-            raise RuntimeError("mlflow is unavailable")
+def test_resolve_training_config_artifacts_uses_config_dir_when_present(tmp_path: Path) -> None:
+    config_dir = tmp_path / CONFIG_ARTIFACT_DIR
+    config_dir.mkdir()
+    (config_dir / CONFIG_FILE).write_text("run = {}", encoding="utf-8")
+    client = FakeArtifactClient(
+        {CONFIG_ARTIFACT_DIR: (FakeArtifact(f"{CONFIG_ARTIFACT_DIR}/{CONFIG_FILE}"),)}
+    )
+    leases = FakeLeaseManager({CONFIG_ARTIFACT_DIR: config_dir})
 
-    client = BrokenClient(tmp_path / "artifacts")
+    result = resolve_training_config_artifacts(client=client, run_id=RUN_ID, artifact_leases=leases)  # type: ignore[arg-type]
 
-    with pytest.raises(RuntimeError, match="mlflow is unavailable"):
-        download_training_config_artifacts(client, "run-1", tmp_path / "downloads")  # type: ignore[arg-type]
+    assert result.config_dir == config_dir
+    assert leases.dir_calls == [(RUN_ID, CONFIG_ARTIFACT_DIR)]
+
+
+def test_resolve_training_evaluation_artifacts_resolves_all_required_paths(tmp_path: Path) -> None:
+    checkpoint_dir = tmp_path / CHECKPOINT_ARTIFACT_DIR
+    checkpoint_dir.mkdir()
+    checkpoint_file = checkpoint_dir / CHECKPOINT_FILE
+    checkpoint_file.write_bytes(WEIGHTS_PAYLOAD)
+    split_file = tmp_path / SPLIT_FILE
+    _write_split(split_file)
+    config_dir = tmp_path / CONFIG_ARTIFACT_DIR
+    config_dir.mkdir()
+    client = FakeArtifactClient(
+        {
+            CHECKPOINT_ARTIFACT_DIR: _checkpoint_listing(),
+            SPLIT_ARTIFACT_DIR: _split_listing(),
+            CONFIG_ARTIFACT_DIR: (FakeArtifact(f"{CONFIG_ARTIFACT_DIR}/{CONFIG_FILE}"),),
+        }
+    )
+    leases = FakeLeaseManager(
+        {
+            CHECKPOINT_ARTIFACT_DIR: checkpoint_dir,
+            f"{SPLIT_ARTIFACT_DIR}/{SPLIT_FILE}": split_file,
+            CONFIG_ARTIFACT_DIR: config_dir,
+        }
+    )
+
+    result = resolve_training_evaluation_artifacts(
+        client=client,  # type: ignore[arg-type]
+        run_id=RUN_ID,
+        artifact_leases=leases,
+        assignment_id=ASSIGNMENT_ID,
+    )
+
+    assert result.checkpoint_path == checkpoint_file
+    assert result.split_file == split_file
+    assert result.split_artifact_path == f"{SPLIT_ARTIFACT_DIR}/{SPLIT_FILE}"
+    assert result.config_artifacts.config_dir == config_dir

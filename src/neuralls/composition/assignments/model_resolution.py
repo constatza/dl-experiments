@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from loguru import logger
@@ -20,7 +20,11 @@ from neuralls.platform.config.models.preconditioner import (
     PreconditionerConfig,
     RegisteredModelRefConfig,
 )
-from neuralls.platform.storage.filesystem import sanitize_identifier
+from neuralls.platform.tracking.artifact_access import ArtifactLeaseManager
+from neuralls.platform.tracking.artifact_selection import (
+    CHECKPOINT_ARTIFACT_DIR,
+    CHECKPOINT_FILE_EXTENSION,
+)
 from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 from neuralls.platform.tracking.mlflow import quote_filter_value
 from neuralls.platform.tracking.model_registry import CHECKPOINT_ARTIFACT_PATH_TAG
@@ -59,26 +63,6 @@ class LoggedModelSearchResult:
 
     run_id: str
     model_uri: str
-
-
-def _sanitize_download_dirname(value: str) -> str:
-    """Convert one arbitrary label into a filesystem-safe directory name."""
-    return sanitize_identifier(value, default="neural-model")
-
-
-def build_neural_download_dirname(ref: NeuralCheckpointRef, *, fallback_name: str) -> str:
-    """Build a stable local artifact directory name for one checkpoint ref.
-
-    Args:
-        ref: The checkpoint ref being resolved.
-        fallback_name: Name to use when the ref has no `assignment` — callers
-            resolving more than one ref per spec (e.g. prolongation and
-            restriction) must pass a name unique per ref, not just the
-            spec's own name, or their downloads collide into one directory.
-    """
-    if ref.assignment is not None:
-        return _sanitize_download_dirname(ref.assignment)
-    return _sanitize_download_dirname(fallback_name)
 
 
 def build_logged_model_uri(*, run_id: str, artifact_path: str) -> str:
@@ -208,52 +192,73 @@ def search_logged_models(
     ]
 
 
-def _download_checkpoint_for_run(
+def _resolve_checkpoint_for_run(
     *,
-    client: MlflowClient,
     run_id: str,
-    destination: Path,
+    artifact_leases: ArtifactLeaseManager,
     fallback_artifact_path: str,
 ) -> Path:
-    """Download run artifacts and return a concrete checkpoint path."""
-    primary_root: Path | None = None
+    """Resolve run artifacts and return a concrete checkpoint path."""
     try:
-        primary_root = Path(
-            client.download_artifacts(
-                run_id=run_id,
-                path="checkpoints",
-                dst_path=str(destination),
-            )
-        )
+        checkpoint_root = artifact_leases.resolve_dir(run_id, CHECKPOINT_ARTIFACT_DIR).path
     except Exception as exc:  # noqa: BLE001
         logger.debug(
-            "Could not download 'checkpoints' artifacts for run {}: {}",
+            "Could not resolve '{}' artifacts for run {}: {}",
+            CHECKPOINT_ARTIFACT_DIR,
             run_id,
             exc,
         )
-    if primary_root is not None:
-        try:
-            return find_single_checkpoint(primary_root)
-        except FileNotFoundError:
-            logger.debug(
-                "No checkpoint under 'checkpoints' for run {}. Falling back to '{}'.",
-                run_id,
-                fallback_artifact_path,
-            )
-
-    try:
-        fallback_root = Path(
-            client.download_artifacts(
-                run_id=run_id,
-                path=fallback_artifact_path,
-                dst_path=str(destination),
-            )
+        return _resolve_fallback_checkpoint_for_run(
+            artifact_leases=artifact_leases,
+            run_id=run_id,
+            fallback_artifact_path=fallback_artifact_path,
         )
+    try:
+        return find_single_checkpoint(checkpoint_root)
+    except FileNotFoundError:
+        return _resolve_fallback_checkpoint_for_run(
+            artifact_leases=artifact_leases,
+            run_id=run_id,
+            fallback_artifact_path=fallback_artifact_path,
+        )
+
+
+def _resolve_fallback_checkpoint_for_run(
+    *,
+    artifact_leases: ArtifactLeaseManager,
+    run_id: str,
+    fallback_artifact_path: str,
+) -> Path:
+    logger.debug(
+        "No checkpoint under '{}' for run {}. Falling back to '{}'.",
+        CHECKPOINT_ARTIFACT_DIR,
+        run_id,
+        fallback_artifact_path,
+    )
+    try:
+        return _resolve_fallback_checkpoint(
+            artifact_leases=artifact_leases,
+            run_id=run_id,
+            fallback_artifact_path=fallback_artifact_path,
+        )
+    except ValueError:
+        raise
     except Exception as exc:
         raise FileNotFoundError(
-            f"Could not download checkpoint artifacts for run '{run_id}' "
-            f"from 'checkpoints' or '{fallback_artifact_path}'."
+            f"Could not resolve checkpoint artifacts for run '{run_id}' "
+            f"from '{CHECKPOINT_ARTIFACT_DIR}' or '{fallback_artifact_path}'."
         ) from exc
+
+
+def _resolve_fallback_checkpoint(
+    *,
+    artifact_leases: ArtifactLeaseManager,
+    run_id: str,
+    fallback_artifact_path: str,
+) -> Path:
+    if PurePosixPath(fallback_artifact_path).suffix == CHECKPOINT_FILE_EXTENSION:
+        return artifact_leases.resolve_file(run_id, fallback_artifact_path).path
+    fallback_root = artifact_leases.resolve_dir(run_id, fallback_artifact_path).path
     return find_single_checkpoint(fallback_root)
 
 
@@ -262,7 +267,7 @@ def _resolve_registered_ref(
     ref: RegisteredModelRefConfig,
     tracking_uri: str,
     client: MlflowClient,
-    destination: Path,
+    artifact_leases: ArtifactLeaseManager,
     dataset_alias: str | None,
     model_name: str | None,
 ) -> ModelResolution:
@@ -329,9 +334,7 @@ def _resolve_registered_ref(
             "checkpoint pinning and cannot be resolved — re-register it (register_logged_model) "
             "to pin an exact checkpoint before it can be used."
         )
-    checkpoint_path = Path(
-        client.download_artifacts(run_id=run_id, path=pinned_path, dst_path=str(destination))
-    )
+    checkpoint_path = artifact_leases.resolve_file(run_id, pinned_path).path
     return ModelResolution(
         model_uri=model_uri,
         run_id=run_id,
@@ -357,7 +360,7 @@ def _resolve_logged_ref(
     ref: LoggedModelRefConfig,
     tracking_uri: str,
     client: MlflowClient,
-    destination: Path,
+    artifact_leases: ArtifactLeaseManager,
 ) -> ModelResolution:
     """Resolve a logged-model reference."""
     if ref.run_id is not None:
@@ -383,10 +386,9 @@ def _resolve_logged_ref(
             artifact_path=ref.artifact_path,
         )
 
-    checkpoint_path = _download_checkpoint_for_run(
-        client=client,
+    checkpoint_path = _resolve_checkpoint_for_run(
         run_id=run_id,
-        destination=destination,
+        artifact_leases=artifact_leases,
         fallback_artifact_path=ref.artifact_path,
     )
     return ModelResolution(
@@ -400,21 +402,24 @@ def resolve_model_ref(
     *,
     spec: NeuralCheckpointRef,
     tracking_uri: str,
-    destination: Path,
+    artifact_leases: ArtifactLeaseManager,
     dataset_alias: str | None = None,
     model_name: str | None = None,
 ) -> ModelResolution:
     """Resolve one checkpoint ref's `model_ref` to a concrete checkpoint."""
     ref = spec.model_ref
+    _validate_artifact_lease_tracking_uri(
+        tracking_uri=tracking_uri,
+        artifact_leases=artifact_leases,
+    )
     client = MlflowClient(tracking_uri=tracking_uri)
-    destination.mkdir(parents=True, exist_ok=True)
 
     if isinstance(ref, RegisteredModelRefConfig):
         return _resolve_registered_ref(
             ref=ref,
             tracking_uri=tracking_uri,
             client=client,
-            destination=destination,
+            artifact_leases=artifact_leases,
             dataset_alias=dataset_alias,
             model_name=model_name,
         )
@@ -423,16 +428,30 @@ def resolve_model_ref(
             ref=ref,
             tracking_uri=tracking_uri,
             client=client,
-            destination=destination,
+            artifact_leases=artifact_leases,
         )
     raise TypeError(f"Unsupported model_ref type: {type(ref)}")
+
+
+def _validate_artifact_lease_tracking_uri(
+    *,
+    tracking_uri: str,
+    artifact_leases: ArtifactLeaseManager,
+) -> None:
+    lease_tracking_uri = artifact_leases.tracking_uri
+    if lease_tracking_uri is None or lease_tracking_uri == tracking_uri:
+        return
+    raise ValueError(
+        "Model metadata tracking URI and artifact lease tracking URI must match: "
+        f"{tracking_uri!r} != {lease_tracking_uri!r}."
+    )
 
 
 def resolve_preconditioner_models(
     *,
     specs: list[PreconditionerConfig],
     tracking_uri: str,
-    download_root: Path,
+    artifact_leases: ArtifactLeaseManager,
     dataset_alias: str | None = None,
     assignment_contexts: dict[str, AssignmentModelContext] | None = None,
 ) -> list[PreconditionerConfig]:
@@ -440,7 +459,7 @@ def resolve_preconditioner_models(
     return resolve_preconditioner_models_with_warnings(
         specs=specs,
         tracking_uri=tracking_uri,
-        download_root=download_root,
+        artifact_leases=artifact_leases,
         dataset_alias=dataset_alias,
         assignment_contexts=assignment_contexts,
     ).specs
@@ -452,7 +471,7 @@ def _resolve_checkpoint_ref(
     name: str,
     label: str,
     tracking_uri: str,
-    download_root: Path,
+    artifact_leases: ArtifactLeaseManager,
     dataset_alias: str | None,
     assignment_contexts: dict[str, AssignmentModelContext] | None,
     skip_unresolved: bool,
@@ -478,13 +497,11 @@ def _resolve_checkpoint_ref(
         if assignment_contexts is not None and ref.assignment is not None
         else None
     )
-    fallback_name = f"{name}-{label}" if label else name
-    destination = download_root / build_neural_download_dirname(ref, fallback_name=fallback_name)
     try:
         resolution = resolve_model_ref(
             spec=ref,
             tracking_uri=tracking_uri,
-            destination=destination,
+            artifact_leases=artifact_leases,
             dataset_alias=context.dataset_alias if context is not None else dataset_alias,
             model_name=context.model_name if context is not None else None,
         )
@@ -506,7 +523,7 @@ def resolve_preconditioner_models_with_warnings(
     *,
     specs: list[PreconditionerConfig],
     tracking_uri: str,
-    download_root: Path,
+    artifact_leases: ArtifactLeaseManager,
     dataset_alias: str | None = None,
     assignment_contexts: dict[str, AssignmentModelContext] | None = None,
     skip_unresolved: bool = False,
@@ -536,7 +553,7 @@ def resolve_preconditioner_models_with_warnings(
                 name=spec.name,
                 label=label,
                 tracking_uri=tracking_uri,
-                download_root=download_root,
+                artifact_leases=artifact_leases,
                 dataset_alias=dataset_alias,
                 assignment_contexts=assignment_contexts,
                 skip_unresolved=skip_unresolved,

@@ -23,6 +23,8 @@ from neuralls.platform.storage.training_artifacts import (
     coerce_jsonable,
     save_training_predictions,
 )
+from neuralls.platform.tracking.artifact_access import ArtifactLeaseManager
+from neuralls.platform.tracking.artifact_selection import CHECKPOINT_ARTIFACT_DIR
 from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
 from neuralls.platform.tracking.mlflow import MlflowRunConfig, runtime_paths_from_env
 from neuralls.platform.tracking.mlflow_client import (
@@ -30,6 +32,10 @@ from neuralls.platform.tracking.mlflow_client import (
     log_diagnostics_to_mlflow,
 )
 from neuralls.platform.tracking.model_registry import upload_checkpoint_artifacts
+
+BEST_CHECKPOINT_ARTIFACT_KEY = "best_checkpoint"
+LAST_CHECKPOINT_ARTIFACT_KEY = "last_checkpoint"
+RETAINED_CHECKPOINTS_DIR_NAME = "retained-checkpoints"
 
 
 def _resolve_training_experiment_name(mlflow_experiment_name: str | None) -> str:
@@ -403,64 +409,48 @@ def _stage_training_artifacts(
     )
 
 
-def _download_training_checkpoint(
+def _resolve_mlflow_training_checkpoint(
     *,
-    tracking_uri: str,
     run_id: str,
-    destination: Path,
+    artifact_leases: ArtifactLeaseManager,
 ) -> Path:
-    """Download checkpoint artifacts for a completed MLflow run.
+    """Resolve checkpoint artifacts for a completed MLflow run.
 
     Args:
-        tracking_uri: MLflow tracking URI.
-        run_id: MLflow run ID whose checkpoints to download.
-        destination: Local directory to download artifacts into.
+        run_id: MLflow run ID whose checkpoints to resolve.
+        artifact_leases: Lease manager that owns any temporary materialization.
 
     Returns:
-        Path to the single checkpoint file found under the downloaded artifacts.
+        Path to the single checkpoint file found under the resolved artifacts.
 
     Raises:
-        RuntimeError: If the MLflow download fails.
+        RuntimeError: If MLflow artifact resolution fails.
     """
-    client = MlflowClient(tracking_uri=tracking_uri)
     try:
-        downloaded_root = Path(
-            client.download_artifacts(
-                run_id=run_id,
-                path="checkpoints",
-                dst_path=str(destination),
-            )
-        )
+        checkpoint_root = artifact_leases.resolve_dir(run_id, CHECKPOINT_ARTIFACT_DIR).path
     except Exception as exc:
         raise RuntimeError(
-            f"Could not download checkpoints for run '{run_id}' from MLflow: {exc}"
+            f"Could not resolve checkpoints for run '{run_id}' from MLflow: {exc}"
         ) from exc
-    return find_single_checkpoint(downloaded_root)
+    return find_single_checkpoint(checkpoint_root)
 
 
-def _resolve_training_checkpoint(
+def _resolve_local_training_checkpoint(
     *,
     training_result: Any,
     workspace: Any,
-    tracking_uri: str | None,
-    run_id: str | None,
-) -> Path:
-    """Resolve the produced checkpoint from local artifacts or MLflow.
+) -> Path | None:
+    """Resolve the produced checkpoint from local artifacts only.
 
     Tries in order: checkpoint_path attribute, artifacts dict, local checkpoint dir,
-    then downloads from MLflow if tracking coordinates are available.
+    then retained checkpoint dir.
 
     Args:
         training_result: DLKit training result object.
         workspace: Assignment workspace (provides checkpoint_dir, root_dir).
-        tracking_uri: MLflow tracking URI for remote download fallback.
-        run_id: MLflow run ID for remote download fallback.
 
     Returns:
-        Path to the resolved checkpoint file.
-
-    Raises:
-        RuntimeError: If no checkpoint is found through any mechanism.
+        Path to the resolved checkpoint file, or None when no local checkpoint exists.
     """
     checkpoint_path = getattr(training_result, "checkpoint_path", None)
     if checkpoint_path is not None:
@@ -469,7 +459,7 @@ def _resolve_training_checkpoint(
             return direct_checkpoint
 
     artifacts = getattr(training_result, "artifacts", {}) or {}
-    for key in ("best_checkpoint", "last_checkpoint"):
+    for key in (BEST_CHECKPOINT_ARTIFACT_KEY, LAST_CHECKPOINT_ARTIFACT_KEY):
         candidate = artifacts.get(key)
         if candidate is None:
             continue
@@ -481,21 +471,46 @@ def _resolve_training_checkpoint(
     if local_checkpoint is not None and local_checkpoint.exists():
         return local_checkpoint
 
-    retained_checkpoint = get_latest_checkpoint(workspace.root_dir / "retained-checkpoints")
+    retained_checkpoint = get_latest_checkpoint(workspace.root_dir / RETAINED_CHECKPOINTS_DIR_NAME)
     if retained_checkpoint is not None and retained_checkpoint.exists():
         return retained_checkpoint
 
-    if tracking_uri and run_id:
-        download_root = workspace.root_dir / "mlflow-downloads"
-        logger.info(
-            "Checkpoint missing locally for run {}. Downloading from MLflow artifacts into {}.",
-            run_id,
-            download_root,
-        )
-        return _download_training_checkpoint(
-            tracking_uri=tracking_uri,
-            run_id=run_id,
-            destination=download_root,
-        )
+    return None
 
-    raise RuntimeError(f"No checkpoint found in {workspace.checkpoint_dir}")
+
+def _resolve_training_checkpoint(
+    *,
+    training_result: Any,
+    workspace: Any,
+    run_id: str,
+    artifact_leases: ArtifactLeaseManager,
+) -> Path:
+    """Resolve the produced checkpoint from local artifacts or a concrete MLflow lease.
+
+    Args:
+        training_result: DLKit training result object.
+        workspace: Assignment workspace (provides checkpoint_dir, root_dir).
+        run_id: MLflow run ID for artifact fallback.
+        artifact_leases: Required lease manager for MLflow artifact fallback.
+
+    Returns:
+        Path to the resolved checkpoint file.
+
+    Raises:
+        RuntimeError: If no checkpoint is found through any mechanism.
+    """
+    local_checkpoint = _resolve_local_training_checkpoint(
+        training_result=training_result,
+        workspace=workspace,
+    )
+    if local_checkpoint is not None:
+        return local_checkpoint
+
+    logger.info(
+        "Checkpoint missing locally for run {}. Resolving from MLflow artifacts.",
+        run_id,
+    )
+    return _resolve_mlflow_training_checkpoint(
+        run_id=run_id,
+        artifact_leases=artifact_leases,
+    )

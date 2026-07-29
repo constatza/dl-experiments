@@ -14,7 +14,7 @@ import re
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Self, cast
 from unittest.mock import patch
 
 import numpy as np
@@ -33,7 +33,40 @@ from neuralls.composition.assignments.training import (
 from neuralls.platform.config.models.experiments import ExperimentNamesConfig
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.config.resolution import MlflowPaths
+from neuralls.platform.tracking.artifact_access import ArtifactLease
 from neuralls.platform.tracking.mlflow import MlflowRunConfig
+
+
+class _CheckpointLeaseManager:
+    """Minimal artifact lease manager for training checkpoint fallback tests."""
+
+    def __init__(self, checkpoint_root: Path) -> None:
+        self.checkpoint_root = checkpoint_root
+        self.dir_calls: list[tuple[str, str]] = []
+
+    @property
+    def tracking_uri(self) -> str | None:
+        return None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+    def resolve_file(self, run_id: str, artifact_path: str) -> ArtifactLease:
+        raise RuntimeError(f"Unexpected file lease for {run_id}:{artifact_path}")
+
+    def resolve_dir(self, run_id: str, artifact_path: str) -> ArtifactLease:
+        self.dir_calls.append((run_id, artifact_path))
+        return ArtifactLease(
+            path=self.checkpoint_root,
+            run_id=run_id,
+            artifact_path=artifact_path,
+            source_uri="file:///artifacts",
+            local_copy=False,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -344,10 +377,10 @@ def test_fast_dev_run_predict_returns_list_of_dicts(
     assert output.ndim >= 1
 
 
-def test_resolve_training_checkpoint_downloads_into_scratch_dir(
+def test_resolve_training_checkpoint_leases_mlflow_artifacts(
     tmp_path: Path,
 ) -> None:
-    """MLflow fallback checkpoint download must not create checkpoints/checkpoints."""
+    """MLflow fallback checkpoint resolution must not create workspace downloads."""
     from neuralls.composition.assignments.training import _resolve_training_checkpoint
     from neuralls.platform.config.models.workspace import AssignmentWorkspace
 
@@ -359,32 +392,26 @@ def test_resolve_training_checkpoint_downloads_into_scratch_dir(
     )
     workspace.checkpoint_dir.mkdir(parents=True)
     training_result = SimpleNamespace(checkpoint_path=None, artifacts={})
-    downloaded = tmp_path / "scratch" / "checkpoints" / "model.ckpt"
-    downloaded.parent.mkdir(parents=True)
-    downloaded.write_text("checkpoint")
+    checkpoint_root = tmp_path / "mlflow-artifacts" / "checkpoints"
+    checkpoint_root.mkdir(parents=True)
+    resolved_checkpoint = checkpoint_root / "model.ckpt"
+    resolved_checkpoint.write_text("checkpoint")
+    artifact_leases = _CheckpointLeaseManager(checkpoint_root)
 
-    with (
-        patch(
-            "neuralls.composition.assignments._training_artifacts.get_latest_checkpoint",
-            return_value=None,
-        ),
-        patch(
-            "neuralls.composition.assignments._training_artifacts._download_training_checkpoint",
-            return_value=downloaded,
-        ) as mock_download,
+    with patch(
+        "neuralls.composition.assignments._training_artifacts.get_latest_checkpoint",
+        return_value=None,
     ):
         resolved = _resolve_training_checkpoint(
             training_result=training_result,
             workspace=workspace,
-            tracking_uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}",
             run_id="run-1",
+            artifact_leases=artifact_leases,
         )
 
-    assert resolved == downloaded
-    download_destination = Path(mock_download.call_args.kwargs["destination"])
-    assert download_destination != workspace.checkpoint_dir
-    assert download_destination.parent == workspace.root_dir
-    assert download_destination.name != "checkpoints"
+    assert resolved == resolved_checkpoint
+    assert artifact_leases.dir_calls == [("run-1", "checkpoints")]
+    assert not (workspace.root_dir / "mlflow-downloads").exists()
 
 
 def test_resolve_tracking_backend_returns_configured_backend(
@@ -882,7 +909,7 @@ def test_finalize_training_run_raises_without_marking_when_no_run_established(
             return_value=None,
         ),
         patch(
-            "neuralls.composition.assignments.training._resolve_training_checkpoint",
+            "neuralls.composition.assignments.training._resolve_finalization_checkpoint",
             return_value=checkpoint_path,
         ),
         patch(

@@ -93,11 +93,14 @@ such as `mmap_mode`.
 
 Eval-only assembly reuses the same supervised dataset contract as training but
 does not recreate split policy. For each assignment it resolves the latest
-finished training run, downloads that run's checkpoint and `splits/*.json`
-artifact from MLflow, and patches the downloaded split file into
-`data.splits.filepath` — producing one fully-resolved, assignment-specific
-`InferenceJobConfig` per child. Missing or ambiguous split artifacts are hard
-failures because regenerating ratios would evaluate a different test set.
+finished training run, asks platform tracking for lease-backed local paths to
+that run's checkpoint and `splits/*.json` artifact, and patches the resolved
+split file into `data.splits.filepath` — producing one fully-resolved,
+assignment-specific `InferenceJobConfig` per child. Missing or ambiguous split
+artifacts are hard failures because regenerating ratios would evaluate a
+different test set. The lease scope spans both settings preparation and the
+DLKit sweep, so remote artifact scratch files stay alive only for the execution
+window and no persistent `_downloads` tree is created under eval outputs.
 
 Eval assembly delegates sweep orchestration to DLKit the same way training
 does: every prepared assignment becomes one DLKit multirun `RunSpec`, and the
@@ -180,7 +183,7 @@ reconstruct the exact system that was compared.
 Comparison model resolution treats one resolved MLflow `run_id` as the hard
 boundary for checkpoint discovery — but that scan-and-select contract now
 applies only to raw run references (`LoggedModelRefConfig`, used for "latest
-trained model" lookups). When downloaded run artifacts contain multiple
+trained model" lookups). When resolved run artifacts contain multiple
 `.ckpt` files, composition canonicalizes byte-identical duplicate copies,
 prefers a unique `best.ckpt`, and raises on remaining ambiguity instead of
 silently picking the first path.
@@ -189,7 +192,7 @@ Registered model versions (`RegisteredModelRefConfig`) do not go through that
 scan: `register_logged_model` (`platform/tracking/model_registry.py`) pins one
 unambiguous checkpoint file once, at registration time, recording it in the
 `checkpoint_artifact_path` version tag alongside the version's `source`.
-Resolution then downloads that exact artifact directly — an O(1) lookup with
+Resolution then leases that exact artifact directly — an O(1) lookup with
 no scanning, deduping, or best-checkpoint fallback. A version registered
 before this pinning existed has no `checkpoint_artifact_path` tag and cannot
 be resolved; it must be re-registered. Registration itself is a deliberate,

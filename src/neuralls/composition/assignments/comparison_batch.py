@@ -68,6 +68,10 @@ from neuralls.platform.storage.validation import (
     validate_comparison_matrix_input,
     validate_comparison_rhs_input,
 )
+from neuralls.platform.tracking.artifact_access import (
+    ArtifactLeaseManager,
+    MlflowArtifactLeaseManager,
+)
 from neuralls.platform.tracking.comparison_tracking import (
     log_comparison_artifact_uri,
     log_comparison_input_artifacts,
@@ -339,10 +343,10 @@ def neural_specs_from_assignments(
 
 def _resolve_specs(
     cfg: ComparisonConfig,
-    work_root: Path,
     case_config_path: Path,
     model_store_tracking_uri: str,
     settings: NeurallsSettings,
+    artifact_leases: ArtifactLeaseManager,
 ) -> tuple[list[PreconditionerConfig], tuple[str, ...]]:
     """Resolve model_ref preconditioners into concrete checkpoint paths."""
     specs = _resolve_neural_preconditioners(list(cfg.preconditioners))
@@ -358,7 +362,7 @@ def _resolve_specs(
     resolution = resolve_preconditioner_models_with_warnings(
         specs=specs,
         tracking_uri=model_store_tracking_uri,
-        download_root=work_root / "models",
+        artifact_leases=artifact_leases,
         dataset_alias=cfg.general.data.dataset_alias,
         assignment_contexts=assignment_contexts,
         skip_unresolved=True,
@@ -418,15 +422,34 @@ def _run_comparison_body(
     Raises:
         ValueError: When all preconditioners fail to resolve.
     """
-    resolved_specs, warnings = _resolve_specs(
-        cfg,
-        work_root,
-        case_config_path,
-        topology.model_store_tracking_uri,
-        settings,
-    )
-    if not resolved_specs:
-        raise ValueError("No runnable preconditioners remain after model resolution.")
+    model_client = MlflowClient(tracking_uri=topology.model_store_tracking_uri)
+    with MlflowArtifactLeaseManager(client=model_client) as artifact_leases:
+        resolved_specs, warnings = _resolve_specs(
+            cfg,
+            case_config_path,
+            topology.model_store_tracking_uri,
+            settings,
+            artifact_leases,
+        )
+        if not resolved_specs:
+            raise ValueError("No runnable preconditioners remain after model resolution.")
+        raw_result = _run_comparison_with_resolved_specs(
+            cfg=cfg,
+            entry=entry,
+            work_root=work_root,
+            resolved_specs=resolved_specs,
+        )
+    return raw_result, warnings
+
+
+def _run_comparison_with_resolved_specs(
+    *,
+    cfg: ComparisonConfig,
+    entry: ComparisonRegistryEntry,
+    work_root: Path,
+    resolved_specs: list[PreconditionerConfig],
+) -> ComparisonResult:
+    """Run comparison with already-resolved preconditioner checkpoint paths."""
     rhs_source_kind = _require_rhs_source_kind(cfg)
     resolved_input = resolve_comparison_input(
         matrix_path=Path(cfg.general.data.matrix_path),
@@ -466,7 +489,7 @@ def _run_comparison_body(
         comparison_config=entry.method,
     )
     log_comparison_input_artifacts(staged_input_dir)
-    return raw_result, warnings
+    return raw_result
 
 
 def _execute_comparison_in_run(

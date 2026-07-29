@@ -119,13 +119,18 @@ a unique `best.ckpt` is preferred, while interval-style checkpoint names remain
 ambiguous.
 
 MLflow-specific policy also belongs here: safe metric-key sanitization, search
-filter escaping, workflow tracking-environment resolution, and comparison-run
-metric logging all stay under `platform.tracking` so orchestration code does
-not reimplement third-party rules.
-Eval-only artifact recovery follows the same boundary. Platform tracking
-helpers download and validate the checkpoint, split JSON, and staged config
-artifacts from an existing training run, while composition decides which
-assignment should be evaluated and how those artifacts are wired into DLKit.
+filter escaping, workflow tracking-environment resolution, artifact path
+selection, lease-backed artifact access, and comparison-run metric logging all
+stay under `platform.tracking` so orchestration code does not reimplement
+third-party rules.
+MLflow artifact recovery follows the same boundary. Platform tracking helpers
+resolve and validate checkpoints, split JSON, and staged config artifacts
+through an `ArtifactLeaseManager` protocol with explicit abstract methods.
+Local MLflow artifact stores are borrowed in place; remote stores are
+materialized into scoped scratch storage owned by the lease manager. Composition
+decides which assignment or model ref should be evaluated and how those local
+paths are wired into DLKit, but it does not choose persistent download
+directories.
 When runtime `MLFLOW_TRACKING_URI` or `MLFLOW_ARTIFACT_URI` values are already
 exported, platform tracking helpers preserve them verbatim instead of
 re-normalizing them against the local operating system.

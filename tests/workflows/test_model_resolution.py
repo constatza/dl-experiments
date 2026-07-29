@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Self
 from unittest.mock import patch
 
 import pytest
@@ -11,8 +13,7 @@ from mlflow.tracking import MlflowClient
 from neuralls.composition.assignments.model_resolution import (
     ModelResolution,
     PreconditionerResolutionResult,
-    _download_checkpoint_for_run,
-    build_neural_download_dirname,
+    _resolve_checkpoint_for_run,
     resolve_model_ref,
     resolve_preconditioner_models,
     resolve_preconditioner_models_with_warnings,
@@ -28,8 +29,17 @@ from neuralls.platform.config.models.preconditioner import (
     RegisteredModelRefConfig,
     StandardPreconditionerConfig,
 )
+from neuralls.platform.tracking.artifact_access import (
+    ArtifactLease,
+    ArtifactLeaseManager,
+    MlflowArtifactLeaseManager,
+    NoopArtifactLeaseManager,
+)
 from neuralls.platform.tracking.checkpoint_selection import find_single_checkpoint
-from neuralls.platform.tracking.model_registry import register_logged_model
+from neuralls.platform.tracking.model_registry import (
+    CHECKPOINT_ARTIFACT_PATH_TAG,
+    register_logged_model,
+)
 from tests.workflows.conftest import LoggedNamedCheckpointsRunFactory, LoggedRunFactory
 
 
@@ -38,49 +48,80 @@ def _tracking_uri(tmp_path: Path) -> str:
     return f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
 
 
-def test_resolve_preconditioner_models_keeps_non_neural_specs(tmp_path: Path) -> None:
+@pytest.fixture
+def noop_artifact_leases() -> ArtifactLeaseManager:
+    """Lease manager for tests that must not resolve MLflow artifacts."""
+    return NoopArtifactLeaseManager()
+
+
+@pytest.fixture
+def artifact_leases(mlflow_tracking_uri: str) -> Iterator[ArtifactLeaseManager]:
+    """Lease manager backed by the test MLflow store."""
+    client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+    with MlflowArtifactLeaseManager(client=client) as leases:
+        yield leases
+
+
+class _CheckpointLeaseManager:
+    """Minimal lease manager for checkpoint selection unit tests."""
+
+    def __init__(self, checkpoint_root: Path, fallback_root: Path | None = None) -> None:
+        self._checkpoint_root = checkpoint_root
+        self._fallback_root = fallback_root or checkpoint_root
+        self.file_calls: list[tuple[str, str]] = []
+        self.dir_calls: list[tuple[str, str]] = []
+
+    @property
+    def tracking_uri(self) -> str | None:
+        return None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+    def resolve_file(self, run_id: str, artifact_path: str) -> ArtifactLease:
+        self.file_calls.append((run_id, artifact_path))
+        return ArtifactLease(
+            path=self._fallback_root / artifact_path,
+            run_id=run_id,
+            artifact_path=artifact_path,
+            source_uri="file:///artifacts",
+            local_copy=False,
+        )
+
+    def resolve_dir(self, run_id: str, artifact_path: str) -> ArtifactLease:
+        self.dir_calls.append((run_id, artifact_path))
+        root = self._checkpoint_root if artifact_path == "checkpoints" else self._fallback_root
+        return ArtifactLease(
+            path=root,
+            run_id=run_id,
+            artifact_path=artifact_path,
+            source_uri="file:///artifacts",
+            local_copy=False,
+        )
+
+
+def test_resolve_preconditioner_models_keeps_non_neural_specs(
+    tmp_path: Path,
+    noop_artifact_leases: ArtifactLeaseManager,
+) -> None:
     """Non-neural preconditioners pass through unchanged."""
     jacobi = StandardPreconditionerConfig(name="jacobi", type=PreconditionerType.JACOBI)
     resolved = resolve_preconditioner_models(
         specs=[jacobi],
         tracking_uri=_tracking_uri(tmp_path),
-        download_root=tmp_path,
+        artifact_leases=noop_artifact_leases,
     )
     assert resolved == [jacobi]
-
-
-def test_build_neural_download_dirname_prefers_assignment_id() -> None:
-    """Stable assignment ids should drive local artifact directory naming."""
-    neural = NeuralPreconditionerConfig(
-        name="Residual-Error 100 | Embedded SPD",
-        type=PreconditionerType.NEURAL,
-        assignment="residuals-100-embedded-spd",
-        model_ref=LoggedModelRefConfig(run_id="run-1"),
-    )
-    assert (
-        build_neural_download_dirname(neural, fallback_name=neural.name)
-        == "residuals-100-embedded-spd"
-    )
-
-
-def test_build_neural_download_dirname_sanitizes_display_name_when_needed() -> None:
-    """Fallback naming should strip Windows-invalid punctuation from labels."""
-    neural = NeuralPreconditionerConfig(
-        name='Residual-Error 100 Gaussian | Embedded SPD:?"<>',
-        type=PreconditionerType.NEURAL,
-        model_ref=LoggedModelRefConfig(run_id="run-1"),
-    )
-    dirname = build_neural_download_dirname(neural, fallback_name=neural.name)
-    assert dirname == "Residual-Error_100_Gaussian_Embedded_SPD"
-    assert "|" not in dirname
-    assert ":" not in dirname
-    assert '"' not in dirname
 
 
 @patch("neuralls.composition.assignments.model_resolution.resolve_model_ref")
 def test_resolve_preconditioner_models_sets_resolved_checkpoint(
     mock_resolve_model_ref,
     tmp_path: Path,
+    noop_artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """Neural specs receive resolved_checkpoint_path from resolver."""
     checkpoint = tmp_path / "resolved.ckpt"
@@ -100,7 +141,7 @@ def test_resolve_preconditioner_models_sets_resolved_checkpoint(
     resolved = resolve_preconditioner_models(
         specs=[neural],
         tracking_uri=_tracking_uri(tmp_path),
-        download_root=tmp_path,
+        artifact_leases=noop_artifact_leases,
     )
     assert len(resolved) == 1
     resolved_neural = resolved[0]
@@ -114,6 +155,7 @@ def test_resolve_preconditioner_models_sets_resolved_checkpoint(
 def test_resolve_preconditioner_models_keeps_explicit_checkpoint(
     mock_resolve_model_ref,
     tmp_path: Path,
+    noop_artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """Neural specs with explicit checkpoint_path bypass model_ref resolution."""
     checkpoint = tmp_path / "explicit.ckpt"
@@ -127,7 +169,7 @@ def test_resolve_preconditioner_models_keeps_explicit_checkpoint(
     resolved = resolve_preconditioner_models(
         specs=[neural],
         tracking_uri=_tracking_uri(tmp_path),
-        download_root=tmp_path,
+        artifact_leases=noop_artifact_leases,
     )
 
     mock_resolve_model_ref.assert_not_called()
@@ -138,7 +180,10 @@ def test_resolve_preconditioner_models_keeps_explicit_checkpoint(
     assert resolved_neural.resolved_checkpoint_path == checkpoint
 
 
-def test_resolve_preconditioner_models_requires_model_source(tmp_path: Path) -> None:
+def test_resolve_preconditioner_models_requires_model_source(
+    tmp_path: Path,
+    noop_artifact_leases: ArtifactLeaseManager,
+) -> None:
     """Neural specs without checkpoint_path/model_ref are invalid for resolution."""
     neural = NeuralPreconditionerConfig(
         name="neural",
@@ -149,7 +194,7 @@ def test_resolve_preconditioner_models_requires_model_source(tmp_path: Path) -> 
         resolve_preconditioner_models(
             specs=[neural],
             tracking_uri=_tracking_uri(tmp_path),
-            download_root=tmp_path,
+            artifact_leases=noop_artifact_leases,
         )
 
 
@@ -157,6 +202,7 @@ def test_resolve_preconditioner_models_requires_model_source(tmp_path: Path) -> 
 def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
     mock_resolve_model_ref,
     tmp_path: Path,
+    noop_artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """Comparison-specific resolution can skip unresolved neural specs."""
     mock_resolve_model_ref.side_effect = ValueError("Registered model 'MissingFFNN' not found")
@@ -170,7 +216,7 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_neural(
     resolved = resolve_preconditioner_models_with_warnings(
         specs=[jacobi, neural],
         tracking_uri=_tracking_uri(tmp_path),
-        download_root=tmp_path,
+        artifact_leases=noop_artifact_leases,
         skip_unresolved=True,
     )
 
@@ -186,6 +232,7 @@ def test_resolve_model_ref_dataset_placeholder_requires_dataset_alias(
     mock_client_cls,
     mock_search_registered_models,
     tmp_path: Path,
+    noop_artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """Using alias=@dataset requires a provided dataset alias context."""
     mock_client_cls.return_value = object()
@@ -202,24 +249,47 @@ def test_resolve_model_ref_dataset_placeholder_requires_dataset_alias(
         resolve_model_ref(
             spec=neural,
             tracking_uri=_tracking_uri(tmp_path),
-            destination=tmp_path,
+            artifact_leases=noop_artifact_leases,
         )
 
 
-@patch("neuralls.composition.assignments.model_resolution._download_checkpoint_for_run")
+def test_resolve_model_ref_rejects_mismatched_artifact_lease_store(tmp_path: Path) -> None:
+    """Model metadata and artifact leases must come from the same tracking store."""
+
+    class MismatchedLeaseManager(NoopArtifactLeaseManager):
+        @property
+        def tracking_uri(self) -> str | None:
+            return "sqlite:////tmp/other-mlflow.db"
+
+    neural = NeuralPreconditionerConfig(
+        name="neural",
+        type=PreconditionerType.NEURAL,
+        model_ref=LoggedModelRefConfig(run_id="run-1"),
+    )
+
+    with pytest.raises(ValueError, match="must match"):
+        resolve_model_ref(
+            spec=neural,
+            tracking_uri=_tracking_uri(tmp_path),
+            artifact_leases=MismatchedLeaseManager(),
+        )
+
+
 @patch("neuralls.composition.assignments.model_resolution.search_registered_models")
 @patch("neuralls.composition.assignments.model_resolution.MlflowClient")
 def test_resolve_model_ref_normalizes_explicit_at_alias(
     mock_client_cls,
     mock_search_registered_models,
-    mock_download_checkpoint,
     tmp_path: Path,
 ) -> None:
     """Registered alias values strip @ prefix before MLflow lookup."""
     mock_search_registered_models.return_value = [object()]
-    mock_download_checkpoint.return_value = tmp_path / "resolved.ckpt"
     client = mock_client_cls.return_value
-    client.get_model_version_by_alias.return_value.run_id = "run-1"
+    version = client.get_model_version_by_alias.return_value
+    version.run_id = "run-1"
+    version.version = "1"
+    version.tags = {CHECKPOINT_ARTIFACT_PATH_TAG: "checkpoints/best.ckpt"}
+    artifact_leases = _CheckpointLeaseManager(checkpoint_root=tmp_path)
 
     neural = NeuralPreconditionerConfig(
         name="neural",
@@ -232,13 +302,14 @@ def test_resolve_model_ref_normalizes_explicit_at_alias(
     resolve_model_ref(
         spec=neural,
         tracking_uri=_tracking_uri(tmp_path),
-        destination=tmp_path,
+        artifact_leases=artifact_leases,
     )
 
     client.get_model_version_by_alias.assert_called_once_with(
         "NormScaledLinearFFNN",
         "solutions",
     )
+    assert artifact_leases.file_calls == [("run-1", "checkpoints/best.ckpt")]
 
 
 def test_find_single_checkpoint_collapses_nested_duplicate_copy(tmp_path: Path) -> None:
@@ -317,50 +388,40 @@ def test_find_single_checkpoint_stays_within_provided_root(tmp_path: Path) -> No
     assert resolved == expected
 
 
-@patch("neuralls.composition.assignments.model_resolution.MlflowClient")
-def test_download_checkpoint_for_run_collapses_nested_duplicate_artifacts(
-    mock_client_cls,
+def test_resolve_checkpoint_for_run_collapses_nested_duplicate_artifacts(
     tmp_path: Path,
 ) -> None:
-    """Downloaded duplicate trees from one run should resolve to one checkpoint."""
-    download_root = tmp_path / "download"
-    nested = download_root / "checkpoints"
+    """Duplicate artifact trees from one run should resolve to one checkpoint."""
+    artifact_root = tmp_path / "artifacts"
+    nested = artifact_root / "checkpoints"
     nested.mkdir(parents=True)
-    primary = download_root / "model.ckpt"
+    primary = artifact_root / "model.ckpt"
     duplicate = nested / "model.ckpt"
     primary.write_bytes(b"same-checkpoint")
     duplicate.write_bytes(b"same-checkpoint")
-    client = mock_client_cls.return_value
-    client.download_artifacts.return_value = str(download_root)
 
-    resolved = _download_checkpoint_for_run(
-        client=client,
+    resolved = _resolve_checkpoint_for_run(
+        artifact_leases=_CheckpointLeaseManager(checkpoint_root=artifact_root),
         run_id="run-1",
-        destination=tmp_path / "out",
         fallback_artifact_path="model",
     )
 
     assert resolved == primary
 
 
-@patch("neuralls.composition.assignments.model_resolution.MlflowClient")
-def test_download_checkpoint_for_run_raises_on_ambiguous_distinct_artifacts(
-    mock_client_cls,
+def test_resolve_checkpoint_for_run_raises_on_ambiguous_distinct_artifacts(
     tmp_path: Path,
 ) -> None:
-    """Downloaded distinct checkpoint candidates from one run should raise."""
-    download_root = tmp_path / "download"
-    download_root.mkdir(parents=True)
-    (download_root / "first.ckpt").write_bytes(b"first")
-    (download_root / "second.ckpt").write_bytes(b"second")
-    client = mock_client_cls.return_value
-    client.download_artifacts.return_value = str(download_root)
+    """Distinct checkpoint candidates from one run should raise."""
+    artifact_root = tmp_path / "artifacts"
+    artifact_root.mkdir(parents=True)
+    (artifact_root / "first.ckpt").write_bytes(b"first")
+    (artifact_root / "second.ckpt").write_bytes(b"second")
 
     with pytest.raises(ValueError, match="Multiple distinct checkpoints found"):
-        _download_checkpoint_for_run(
-            client=client,
+        _resolve_checkpoint_for_run(
+            artifact_leases=_CheckpointLeaseManager(checkpoint_root=artifact_root),
             run_id="run-1",
-            destination=tmp_path / "out",
             fallback_artifact_path="model",
         )
 
@@ -369,6 +430,7 @@ def test_resolve_registered_ref_latest_picks_highest_version(
     tmp_path: Path,
     mlflow_tracking_uri: str,
     log_run_with_checkpoint: LoggedRunFactory,
+    artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """latest=True must select the highest registered version, not run order.
 
@@ -401,7 +463,7 @@ def test_resolve_registered_ref_latest_picks_highest_version(
     resolution = resolve_model_ref(
         spec=spec,
         tracking_uri=mlflow_tracking_uri,
-        destination=tmp_path / "downloads",
+        artifact_leases=artifact_leases,
     )
 
     assert resolution.run_id == run_a
@@ -413,6 +475,7 @@ def test_resolve_logged_ref_latest_picks_most_recently_started_run(
     mlflow_tracking_uri: str,
     mlflow_experiment: str,
     log_run_with_checkpoint: LoggedRunFactory,
+    artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """latest=True for a logged-model ref selects the most-recently-started run.
 
@@ -434,7 +497,7 @@ def test_resolve_logged_ref_latest_picks_most_recently_started_run(
     resolution = resolve_model_ref(
         spec=spec,
         tracking_uri=mlflow_tracking_uri,
-        destination=tmp_path / "downloads",
+        artifact_leases=artifact_leases,
     )
 
     assert resolution.run_id == run_new
@@ -445,6 +508,7 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_and_contin
     tmp_path: Path,
     mlflow_tracking_uri: str,
     log_run_with_checkpoint: LoggedRunFactory,
+    artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """skip_unresolved=True keeps a batch going and records one warning per failure.
 
@@ -465,7 +529,7 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_and_contin
     result = resolve_preconditioner_models_with_warnings(
         specs=[resolvable, unresolvable],
         tracking_uri=mlflow_tracking_uri,
-        download_root=tmp_path / "downloads",
+        artifact_leases=artifact_leases,
         skip_unresolved=True,
     )
 
@@ -482,7 +546,7 @@ def test_resolve_preconditioner_models_with_warnings_skips_unresolved_and_contin
         resolve_preconditioner_models_with_warnings(
             specs=[resolvable, unresolvable],
             tracking_uri=mlflow_tracking_uri,
-            download_root=tmp_path / "downloads",
+            artifact_leases=artifact_leases,
         )
 
 
@@ -490,6 +554,7 @@ def test_resolve_registered_ref_uses_pinned_checkpoint_without_rescanning(
     tmp_path: Path,
     mlflow_tracking_uri: str,
     log_run_with_named_checkpoints: LoggedNamedCheckpointsRunFactory,
+    artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """Resolution downloads the pinned artifact directly, ignoring later ambiguity.
 
@@ -524,7 +589,7 @@ def test_resolve_registered_ref_uses_pinned_checkpoint_without_rescanning(
     resolution = resolve_model_ref(
         spec=spec,
         tracking_uri=mlflow_tracking_uri,
-        destination=tmp_path / "downloads",
+        artifact_leases=artifact_leases,
     )
 
     assert resolution.checkpoint_path.name == "best.ckpt"
@@ -535,6 +600,7 @@ def test_resolve_registered_ref_without_pinned_tag_raises_actionable_error(
     tmp_path: Path,
     mlflow_tracking_uri: str,
     log_run_with_checkpoint: LoggedRunFactory,
+    artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """A registered version created before checkpoint pinning cannot be resolved."""
     run_id = log_run_with_checkpoint("marker-legacy")
@@ -553,7 +619,7 @@ def test_resolve_registered_ref_without_pinned_tag_raises_actionable_error(
         resolve_model_ref(
             spec=spec,
             tracking_uri=mlflow_tracking_uri,
-            destination=tmp_path / "downloads",
+            artifact_leases=artifact_leases,
         )
 
 
@@ -566,6 +632,7 @@ def test_resolve_preconditioner_models_resolves_neural_pod_coarsening_ref(
     tmp_path: Path,
     mlflow_tracking_uri: str,
     log_run_with_checkpoint: LoggedRunFactory,
+    artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """A checkpoint ref nested in AMGPreconditionerConfig.coarsening gets resolved.
 
@@ -586,7 +653,7 @@ def test_resolve_preconditioner_models_resolves_neural_pod_coarsening_ref(
     resolved = resolve_preconditioner_models(
         specs=[spec],
         tracking_uri=mlflow_tracking_uri,
-        download_root=tmp_path / "downloads",
+        artifact_leases=artifact_leases,
     )
 
     assert len(resolved) == 1
@@ -602,6 +669,7 @@ def test_resolve_preconditioner_models_resolves_neural_amg_prolongation_and_rest
     tmp_path: Path,
     mlflow_tracking_uri: str,
     log_run_with_checkpoint: LoggedRunFactory,
+    artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """Prolongation and restriction refs resolve independently to distinct checkpoints.
 
@@ -620,7 +688,7 @@ def test_resolve_preconditioner_models_resolves_neural_amg_prolongation_and_rest
     resolved = resolve_preconditioner_models(
         specs=[spec],
         tracking_uri=mlflow_tracking_uri,
-        download_root=tmp_path / "downloads",
+        artifact_leases=artifact_leases,
     )
 
     assert len(resolved) == 1
@@ -640,6 +708,7 @@ def test_resolve_preconditioner_models_resolves_neural_amg_prolongation_and_rest
 def test_resolve_preconditioner_models_with_warnings_labels_failed_nested_ref(
     tmp_path: Path,
     mlflow_tracking_uri: str,
+    artifact_leases: ArtifactLeaseManager,
 ) -> None:
     """A failed nested ref's warning names its label, not just the spec name."""
     spec = NeuralAMGPreconditionerConfig(
@@ -652,7 +721,7 @@ def test_resolve_preconditioner_models_with_warnings_labels_failed_nested_ref(
     result = resolve_preconditioner_models_with_warnings(
         specs=[spec],
         tracking_uri=mlflow_tracking_uri,
-        download_root=tmp_path / "downloads",
+        artifact_leases=artifact_leases,
         skip_unresolved=True,
     )
 

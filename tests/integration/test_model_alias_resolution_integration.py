@@ -19,6 +19,7 @@ from neuralls.platform.config.models.preconditioner import (
     RegisteredModelRefConfig,
 )
 from neuralls.platform.config.resolution import resolve_local_path
+from neuralls.platform.tracking.artifact_access import MlflowArtifactLeaseManager
 from neuralls.platform.tracking.model_registry import (
     assign_dataset_alias_to_registered_model,
     register_logged_model,
@@ -115,16 +116,16 @@ def test_registered_alias_resolution_with_local_sqlite_tracking(tmp_path: Path) 
         model_ref=RegisteredModelRefConfig(name=model_name, alias="@solutions"),
     )
 
-    download_root = tmp_path / "downloads"
-    resolution = resolve_model_ref(
-        spec=spec,
-        tracking_uri=tracking_uri,
-        destination=download_root,
-    )
+    with MlflowArtifactLeaseManager(client=client) as artifact_leases:
+        resolution = resolve_model_ref(
+            spec=spec,
+            tracking_uri=tracking_uri,
+            artifact_leases=artifact_leases,
+        )
     assert resolution.run_id == run_id
     assert resolution.checkpoint_path.exists()
     assert resolution.checkpoint_path.suffix == ".ckpt"
-    _assert_path_within(resolution.checkpoint_path, download_root)
+    _assert_path_within(resolution.checkpoint_path, artifacts_dir)
 
 
 def test_experiment_id_registration_resolves_via_latest(tmp_path: Path) -> None:
@@ -173,17 +174,17 @@ def test_experiment_id_registration_resolves_via_latest(tmp_path: Path) -> None:
         model_ref=RegisteredModelRefConfig(latest=True),
     )
 
-    download_root = tmp_path / "downloads"
-    resolution = resolve_model_ref(
-        spec=spec,
-        tracking_uri=tracking_uri,
-        destination=download_root,
-        model_name=experiment_id,
-    )
+    with MlflowArtifactLeaseManager(client=client) as artifact_leases:
+        resolution = resolve_model_ref(
+            spec=spec,
+            tracking_uri=tracking_uri,
+            artifact_leases=artifact_leases,
+            model_name=experiment_id,
+        )
     assert resolution.run_id == run_id
     assert resolution.checkpoint_path.exists()
     assert resolution.checkpoint_path.suffix == ".ckpt"
-    _assert_path_within(resolution.checkpoint_path, download_root)
+    _assert_path_within(resolution.checkpoint_path, artifacts_dir)
 
 
 def test_two_experiments_same_dataset_no_alias_collision(tmp_path: Path) -> None:
