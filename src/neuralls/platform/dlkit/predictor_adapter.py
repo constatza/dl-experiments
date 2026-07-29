@@ -98,8 +98,9 @@ class DLKitPredictor(ExtraInputPredictorPort):
     manager.
 
     Lifecycle:
-        Use as a context manager — `__exit__` delegates to CheckpointPredictor,
-        which calls `unload()` automatically. Do NOT call `cleanup()` directly.
+        `cleanup()` and context-manager exit both release the wrapped DLKit
+        CheckpointPredictor exactly once. This satisfies torchalg's predictor
+        port without leaking DLKit lifecycle details into solver code.
 
     Error Handling:
         - GPU OOM → RuntimeError with helpful message
@@ -124,6 +125,7 @@ class DLKitPredictor(ExtraInputPredictorPort):
         self._predictor: DLKitCheckpointPredictor = predictor
         self._device: str = device
         self._required_inputs: tuple[str, ...] = required_inputs
+        self._closed = False
 
     @property
     def required_inputs(self) -> tuple[str, ...]:
@@ -185,11 +187,20 @@ class DLKitPredictor(ExtraInputPredictorPort):
             ) from e
 
     def cleanup(self) -> None:
-        """No-op — use as context manager; __exit__ handles unload."""
+        """Release the underlying DLKit predictor exactly once."""
+        if self._closed:
+            return
+        self._closed = True
+        unload = getattr(self._predictor, "unload", None)
+        if callable(unload):
+            unload()
+            return
+        self._predictor.__exit__(None, None, None)
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        """Delegate lifecycle to CheckpointPredictor's context manager."""
-        self._predictor.__exit__(exc_type, exc_val, exc_tb)
+        """Delegate lifecycle cleanup to the idempotent cleanup hook."""
+        del exc_type, exc_val, exc_tb
+        self.cleanup()
 
 
 class DLKitAdapter(PredictorAdapter):

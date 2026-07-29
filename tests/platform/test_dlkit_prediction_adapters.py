@@ -32,6 +32,7 @@ class FakeCheckpointPredictor:
         self.feature_names = feature_names
         self.calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
         self.closed = False
+        self.close_count = 0
 
     def predict(self, *args: Any, **kwargs: Any) -> Any:
         self.calls.append((args, kwargs))
@@ -39,6 +40,15 @@ class FakeCheckpointPredictor:
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         self.closed = True
+        self.close_count += 1
+
+
+class FakeUnloadCheckpointPredictor(FakeCheckpointPredictor):
+    """Predictor stub exposing DLKit's explicit unload lifecycle."""
+
+    def unload(self) -> None:
+        self.closed = True
+        self.close_count += 1
 
 
 class FakeModel(torch.nn.Module):
@@ -128,6 +138,56 @@ def test_dlkit_inference_predictor_accepts_supported_result_shapes(
     assert args == ()
     assert set(kwargs) == {"x", "rhs"}
     assert all(value.dtype == torch.float64 for value in kwargs.values())
+
+
+def test_dlkit_predictor_cleanup_unloads_checkpoint_once(
+    solver_prediction_tensor: torch.Tensor,
+) -> None:
+    checkpoint_predictor = FakeUnloadCheckpointPredictor(
+        FakePredictionOutput(predictions=solver_prediction_tensor)
+    )
+    predictor = DLKitPredictor(checkpoint_predictor, device="cpu")
+
+    # Exercise idempotency: owner cleanup and context/GC cleanup can both run.
+    predictor.cleanup()
+    predictor.cleanup()
+    predictor.__exit__(None, None, None)
+
+    assert checkpoint_predictor.closed is True
+    assert checkpoint_predictor.close_count == 1
+
+
+def test_dlkit_predictor_cleanup_falls_back_to_context_exit(
+    solver_prediction_tensor: torch.Tensor,
+) -> None:
+    checkpoint_predictor = FakeCheckpointPredictor(
+        FakePredictionOutput(predictions=solver_prediction_tensor)
+    )
+    predictor = DLKitPredictor(checkpoint_predictor, device="cpu")
+
+    # Exercise idempotency for structural predictors without explicit unload().
+    predictor.cleanup()
+    predictor.cleanup()
+
+    assert checkpoint_predictor.closed is True
+    assert checkpoint_predictor.close_count == 1
+
+
+def test_dlkit_inference_predictor_cleanup_unloads_checkpoint_once(
+    prediction_tensor: torch.Tensor,
+) -> None:
+    checkpoint_predictor = FakeUnloadCheckpointPredictor(
+        FakePredictionOutput(predictions=prediction_tensor)
+    )
+    predictor = DLKitInferencePredictor(checkpoint_predictor, device="cpu")
+
+    # Exercise idempotency: owner cleanup and context/GC cleanup can both run.
+    predictor.cleanup()
+    predictor.cleanup()
+    predictor.__exit__(None, None, None)
+
+    assert checkpoint_predictor.closed is True
+    assert checkpoint_predictor.close_count == 1
 
 
 def test_dlkit_predictor_reports_unsupported_result_type(

@@ -30,6 +30,7 @@ class DLKitInferencePredictor(InferencePredictorPort):
     def __init__(self, predictor: CheckpointPredictor, device: str) -> None:
         self._predictor: CheckpointPredictor = predictor
         self._device: str = device
+        self._closed = False
 
     def predict_batch(self, feature_batch: dict[str, NDArray]) -> NDArray:
         """Predict one batch from named numpy feature arrays."""
@@ -66,11 +67,20 @@ class DLKitInferencePredictor(InferencePredictorPort):
             ) from e
 
     def cleanup(self) -> None:
-        """No-op — use as context manager; __exit__ handles unload."""
+        """Release the underlying DLKit predictor exactly once."""
+        if self._closed:
+            return
+        self._closed = True
+        unload = getattr(self._predictor, "unload", None)
+        if callable(unload):
+            unload()
+            return
+        self._predictor.__exit__(None, None, None)
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        """Delegate lifecycle to CheckpointPredictor's context manager."""
-        self._predictor.__exit__(exc_type, exc_val, exc_tb)
+        """Delegate lifecycle cleanup to the idempotent cleanup hook."""
+        del exc_type, exc_val, exc_tb
+        self.cleanup()
 
 
 def create_inference_predictor(checkpoint_path: Path, settings: Any) -> InferencePredictorPort:

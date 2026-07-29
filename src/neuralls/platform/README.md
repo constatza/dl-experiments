@@ -77,6 +77,11 @@ The adapter layer also owns compatibility shims for checkpoint inference when
 DLKit metadata serializes constructor hyperparameters under a nested `params`
 object; that flattening stays local to platform code rather than leaking into
 solver or comparison orchestration.
+The same adapter boundary owns lifecycle translation: solver-facing predictors
+implement torchalg's idempotent `cleanup()` port by delegating to DLKit's
+`CheckpointPredictor.unload()`/context-manager release path exactly once. This
+keeps comparison orchestration free of DLKit-specific cleanup calls while still
+making one-model-at-a-time evaluation deterministic for GPU memory.
 
 `DLKitPredictor` exposes a `required_inputs: tuple[str, ...]` property so that
 the solver layer can derive which extra arrays a neural model needs without

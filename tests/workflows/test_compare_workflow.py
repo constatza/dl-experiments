@@ -1,14 +1,25 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+import pytest
+import torch
 
+from neuralls.composition.comparison import comparison_run
 from neuralls.composition.comparison.comparison_run import (
     compare_preconditioners,
 )
+from neuralls.composition.comparison.models import LinearSystem
 from neuralls.domain.generation.payloads import GeneratedDatasetPayload
+from neuralls.domain.solver.models.config import ComparisonData, ComparisonGeneral, SolverParams
+from neuralls.domain.solver.models.result import CGComparisonResult, PlotPaths
 from neuralls.platform.config.loaders import load_comparison_config
+from neuralls.platform.config.models.preconditioner import (
+    PreconditionerType,
+    StandardPreconditionerConfig,
+)
 from neuralls.platform.storage.datasets import DenseDatasetWriter, DenseZarrAccumulator
 
 
@@ -110,6 +121,128 @@ def _write_model_config(path: Path, checkpoint_dir: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def _cg_result(name: str) -> CGComparisonResult:
+    return CGComparisonResult(
+        x=np.array([1.0, 2.0]),
+        converged=True,
+        iterations=1,
+        residual=0.0,
+        residual_abs=0.0,
+        residual_history_rel=[1.0, 0.0],
+        residual_history_abs=[1.0, 0.0],
+        preconditioner=name,
+        initial_guess=np.zeros(2),
+        exact_error=None,
+        rhs_norm=1.0,
+        breakdown=False,
+    )
+
+
+def test_compare_preconditioners_evaluates_configs_one_at_a_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Comparison orchestration must not construct all live preconditioners up front."""
+    events: list[str] = []
+    active: set[str] = set()
+
+    class TrackedPreconditioner:
+        def __init__(self, name: str) -> None:
+            if active:
+                raise AssertionError(f"constructed {name} while {active} still active")
+            self.name = name
+            active.add(name)
+            events.append(f"create:{name}")
+
+        def cleanup(self) -> None:
+            active.discard(self.name)
+            events.append(f"cleanup:{self.name}")
+
+    class TrackedService:
+        def create_preconditioner(
+            self,
+            matrix: torch.Tensor,
+            config: StandardPreconditionerConfig,
+        ) -> TrackedPreconditioner:
+            del matrix
+            return TrackedPreconditioner(config.name)
+
+    def fake_condition_numbers(
+        matrix: np.ndarray,
+        preconditioners: dict[str, TrackedPreconditioner],
+    ) -> dict[str, float]:
+        del matrix
+        assert set(preconditioners) == set(active)
+        return {name: 1.0 for name in preconditioners}
+
+    def fake_run_cg_comparison(
+        matrix: torch.Tensor,
+        rhs: torch.Tensor,
+        *,
+        preconditioners: dict[str, TrackedPreconditioner],
+        **kwargs: Any,
+    ) -> dict[str, CGComparisonResult]:
+        del matrix, rhs, kwargs
+        assert set(preconditioners) == set(active)
+        name = next(iter(preconditioners))
+        result = {name: _cg_result(name)}
+        preconditioners[name].cleanup()
+        return result
+
+    monkeypatch.setattr(
+        comparison_run,
+        "_load_linear_system",
+        lambda *args, **kwargs: LinearSystem(
+            matrix=torch.eye(2, dtype=torch.float64),
+            rhs=torch.ones(2, dtype=torch.float64),
+        ),
+    )
+    monkeypatch.setattr(comparison_run, "_ensure_comparison_directories", lambda paths: None)
+    monkeypatch.setattr(
+        comparison_run, "_log_matrix_condition_number", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(comparison_run, "PreconditionerService", TrackedService)
+    monkeypatch.setattr(comparison_run, "compute_condition_numbers", fake_condition_numbers)
+    monkeypatch.setattr(
+        comparison_run,
+        "build_preconditioner_labels",
+        lambda preconditioners: {name: name for name in preconditioners},
+    )
+    monkeypatch.setattr(comparison_run, "run_cg_comparison", fake_run_cg_comparison)
+    monkeypatch.setattr(
+        comparison_run,
+        "_generate_comparison_plots",
+        lambda *args, **kwargs: PlotPaths(),
+    )
+
+    general = ComparisonGeneral(
+        params=SolverParams(
+            rtol=1.0e-6,
+            atol=1.0e-14,
+            max_iterations=2,
+            stopping_criterion="residual_norm",
+            m_max=2,
+            breakdown_tol=None,
+        ),
+        data=ComparisonData(
+            matrix_path=Path("unused-matrix.npy"),
+            rhs_path=Path("unused-rhs.npy"),
+        ),
+    )
+    specs = (
+        StandardPreconditionerConfig(name="none", type=PreconditionerType.IDENTITY),
+        StandardPreconditionerConfig(name="second", type=PreconditionerType.JACOBI),
+    )
+
+    compare_preconditioners(
+        general_params=general,
+        preconditioner_configs=specs,
+        output_root=Path("unused-output"),
+    )
+
+    assert events == ["create:none", "cleanup:none", "create:second", "cleanup:second"]
+    assert not active
 
 
 def test_compare_preconditioners_workflow(tmp_path: Path, neuralls_settings) -> None:
