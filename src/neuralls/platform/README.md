@@ -84,6 +84,21 @@ consulting the comparison TOML. The DLKit model config is the single source of
 truth; the comparison TOML's `extra_input_names` field is an optional override
 kept for backward compatibility.
 
+When extra inputs are bound, `DLKitPredictor.apply()` resolves the primary
+(residual) tensor's `forward()` kwarg name from the checkpoint's own
+`CheckpointPredictor.feature_names` (training-order truth persisted at save
+time) instead of assuming it is always named `x`. This lets multi-input
+architectures like DeepONet (`forward(branch, trunk)`) resolve correctly: the
+primary name is whichever declared feature isn't already bound as an extra
+input. It falls back to `x` only for legacy checkpoints with no persisted
+`feature_names`, and raises a clear error if the checkpoint's declared inputs
+and the bound extra inputs don't leave exactly one candidate.
+DLKit itself also validates the resolved name against the checkpoint's
+persisted `forward_arg_map` before calling the model, raising
+`dlkit.common.errors.ForwardContractError` on a mismatch; the adapter's error
+boundary translates that into `RuntimeError` alongside every other DLKit
+framework failure.
+
 ## Boundary
 
 Platform code may depend on domain protocols and domain data structures, but it

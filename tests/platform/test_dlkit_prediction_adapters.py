@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
+from dlkit.common.errors import DLKitError
 from numpy.testing import assert_array_equal
 
 from neuralls.platform.dlkit.inference_adapter import (
@@ -26,8 +27,9 @@ class FakePredictionOutput:
 class FakeCheckpointPredictor:
     """Minimal predictor stub for adapter boundary tests."""
 
-    def __init__(self, result: Any) -> None:
+    def __init__(self, result: Any, feature_names: tuple[str, ...] = ()) -> None:
         self._result = result
+        self.feature_names = feature_names
         self.calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
         self.closed = False
 
@@ -269,6 +271,72 @@ def test_extra_tensor_has_batch_dimension(
     _, kwargs = checkpoint_predictor.calls[0]
     assert kwargs["matrix"].shape == (1, 3, 3)
     assert kwargs["x"].shape == (1, 3)
+
+
+@pytest.mark.parametrize("variant", ["prediction_output"])
+def test_apply_with_deeponet_feature_names_uses_checkpoint_primary_name(
+    variant: str,
+    residual_vector: torch.Tensor,
+    matrix_array: torch.Tensor,
+    solver_prediction_tensor: torch.Tensor,
+) -> None:
+    checkpoint_predictor = FakeCheckpointPredictor(
+        _make_supported_result(solver_prediction_tensor, variant),
+        feature_names=("branch", "trunk"),
+    )
+    predictor = DLKitPredictor(checkpoint_predictor, device="cpu")
+
+    predictor.apply(residual_vector, trunk=matrix_array)
+
+    args, kwargs = checkpoint_predictor.calls[0]
+    assert len(args) == 0
+    assert "branch" in kwargs
+    assert "trunk" in kwargs
+    assert "x" not in kwargs
+
+
+def test_apply_with_mismatched_feature_names_raises_clear_runtime_error(
+    residual_vector: torch.Tensor,
+    matrix_array: torch.Tensor,
+    solver_prediction_tensor: torch.Tensor,
+) -> None:
+    checkpoint_predictor = FakeCheckpointPredictor(
+        FakePredictionOutput(predictions=solver_prediction_tensor),
+        feature_names=("branch", "trunk"),
+    )
+    predictor = DLKitPredictor(checkpoint_predictor, device="cpu")
+
+    with pytest.raises(RuntimeError, match="Cannot resolve primary input name"):
+        predictor.apply(residual_vector, matrix=matrix_array)
+
+
+class FakeForwardContractError(DLKitError):
+    """Stand-in for dlkit.common.errors.ForwardContractError in adapter tests."""
+
+
+class RaisingCheckpointPredictor(FakeCheckpointPredictor):
+    """Predictor stub whose predict() raises a dlkit-native contract error."""
+
+    def predict(self, *args: Any, **kwargs: Any) -> Any:
+        raise FakeForwardContractError("predict() received unexpected keyword argument(s)")
+
+
+def test_apply_translates_dlkit_forward_contract_error_to_runtime_error(
+    residual_vector: torch.Tensor,
+) -> None:
+    predictor = DLKitPredictor(RaisingCheckpointPredictor(None), device="cpu")
+
+    with pytest.raises(RuntimeError, match="Unexpected error during neural inference"):
+        predictor.apply(residual_vector)
+
+
+def test_predict_batch_translates_dlkit_forward_contract_error_to_runtime_error(
+    feature_batch: dict[str, np.ndarray],
+) -> None:
+    predictor = DLKitInferencePredictor(RaisingCheckpointPredictor(None), device="cpu")
+
+    with pytest.raises(RuntimeError, match="Unexpected error during inference batch prediction"):
+        predictor.predict_batch(feature_batch)
 
 
 def test_solver_factory_fails_when_loaded_predictor_has_no_model(

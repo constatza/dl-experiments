@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 from dlkit import load_model
+from dlkit.common.errors import DLKitError
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 from loguru import logger
 
@@ -59,7 +60,7 @@ class DLKitInferencePredictor(InferencePredictorPort):
                 f"Model device: {self._device}, Feature keys: {tuple(feature_batch.keys())}"
             ) from e
 
-        except (TypeError, AttributeError, ValueError) as e:
+        except (TypeError, AttributeError, ValueError, DLKitError) as e:
             raise RuntimeError(
                 f"Unexpected error during inference batch prediction: {type(e).__name__}: {e}"
             ) from e
