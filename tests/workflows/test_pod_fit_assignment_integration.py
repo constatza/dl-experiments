@@ -5,9 +5,8 @@ against a self-contained synthetic case config: a small SPD matrix, a "random"
 generation strategy (needs no pre-existing solution files), and a
 `pod2g`-style `FitJobConfig` job binding `PODCoarseningFittable`. Verifies the
 assignment succeeds, an MLflow run tagged with its assignment_id exists, and
-that run carries a `checkpoints/` artifact — the concrete claim
-`docs/plan.md`'s Phase B verification section asks for, not just "the code
-imports without error."
+that run carries a `checkpoints/` artifact — a concrete, end-to-end claim,
+not just "the code imports without error."
 """
 
 from __future__ import annotations

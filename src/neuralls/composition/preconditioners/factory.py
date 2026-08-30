@@ -41,13 +41,37 @@ from torchalg.preconditioners.implementations import (
 from neuralls.platform.config.models.preconditioner import PreconditionerType
 
 if TYPE_CHECKING:
+    from torchalg.preconditioners.implementations.amg.protocols import CoarseningStrategy
     from torchalg.preconditioners.implementations.pod import PODCoarseningStrategy
     from torchalg.preconditioners.ports import PredictorAdapter
 
     from neuralls.domain.inference_ports import InferencePredictorPort
     from neuralls.platform.config.models.preconditioner import (
+        AMGPreconditionerConfig,
         ConcretePreconditionerConfig,
     )
+
+
+@dataclass(frozen=True)
+class AMGBuild:
+    """An assembled `AMGPreconditioner` plus the coarsening strategy that built it.
+
+    `AMGPreconditioner` keeps its `coarsening` as a private attribute (it is
+    runtime state, not part of its public API), so diagnostics code that
+    needs the coarsening strategy itself (e.g. to read back the realized
+    coarse dimension via its public `build_transfer`) cannot get it from the
+    preconditioner after the fact without reaching into private state.
+    Returning both from the same build call means diagnostics reuse the
+    exact coarsening object already used to build the hierarchy — no
+    duplicate POD fit, no duplicate checkpoint load.
+
+    Attributes:
+        preconditioner: The assembled `AMGPreconditioner`.
+        coarsening: The coarsening strategy used to build it.
+    """
+
+    preconditioner: Preconditioner
+    coarsening: CoarseningStrategy
 
 
 @dataclass(frozen=True)
@@ -107,6 +131,129 @@ def _load_fitted_pod_coarsening(
     return model.to(dtype=matrix.dtype, device=matrix.device)
 
 
+def _build_amg_coarsening(
+    matrix: torch.Tensor,
+    config: AMGPreconditionerConfig,
+    inference_predictor_factory: Callable[[Path, Any], InferencePredictorPort] | None = None,
+) -> CoarseningStrategy:
+    """Build the coarsening strategy selected by an AMG config's ``coarsening`` field.
+
+    Args:
+        matrix: System matrix A; used to match dtype/device of fitted snapshots.
+        config: AMG preconditioner configuration.
+        inference_predictor_factory: Optional batch-inference predictor factory
+            for neural POD-2G coarsening (DI for testing); defaults to
+            `create_inference_predictor` from `platform.dlkit.inference_adapter`.
+
+    Returns:
+        A ready-to-use coarsening strategy (already fit, if applicable).
+    """
+    from torchalg.preconditioners.implementations.amg import AggregationCoarsening
+
+    from neuralls.platform.config.models.preconditioner import (
+        NeuralPODCoarseningConfig,
+        PODCoarseningConfig,
+    )
+
+    if isinstance(config.coarsening, PODCoarseningConfig):
+        pod_cfg = config.coarsening
+        ckpt = pod_cfg.resolved_checkpoint_path or pod_cfg.checkpoint_path
+        if ckpt is not None:
+            # Fitted ahead of time via a `FitJobConfig` assignment
+            # (composition/assignments/comparison_batch.py's kind
+            # dispatch) — reconstruct the fitted basis directly from its
+            # MLflow-tracked checkpoint instead of refitting inline.
+            return _load_fitted_pod_coarsening(ckpt, matrix)
+
+        # Not yet migrated to an assignment: fit inline from raw
+        # snapshot files, exactly as before (backward compatible).
+        from torchalg.preconditioners.implementations.pod import PODCoarseningStrategy
+
+        from neuralls.platform.storage.dataset_readers import load_dense_training_arrays
+
+        _, solutions = load_dense_training_arrays(pod_cfg.dataset_dir)
+        if pod_cfg.n_snapshots != -1:
+            solutions = solutions[: pod_cfg.n_snapshots]
+        coarsening = PODCoarseningStrategy(rank=pod_cfg.rank)
+        coarsening.fit(torch.as_tensor(solutions, dtype=matrix.dtype, device=matrix.device))
+        return coarsening
+
+    if isinstance(config.coarsening, NeuralPODCoarseningConfig):
+        from torchalg.preconditioners.implementations.pod import PODCoarseningStrategy
+
+        from neuralls.application.inference.prediction import (
+            collect_predictions,
+            stack_predictions,
+        )
+        from neuralls.platform.storage.dataset_readers import load_parameter_arrays
+
+        neural_pod_cfg = config.coarsening
+        ckpt = neural_pod_cfg.resolved_checkpoint_path or neural_pod_cfg.checkpoint_path
+        if ckpt is None:
+            raise ValueError(
+                "NeuralPODCoarseningConfig requires checkpoint_path or resolved_checkpoint_path"
+            )
+        if inference_predictor_factory is None:
+            from neuralls.platform.dlkit.inference_adapter import create_inference_predictor
+
+            inference_predictor_factory = create_inference_predictor
+
+        param_arrays = load_parameter_arrays(neural_pod_cfg.dataset_dir)
+        input_names = neural_pod_cfg.input_names
+        if len(input_names) != len(param_arrays):
+            raise ValueError(
+                f"NeuralPODCoarseningConfig.input_names has {len(input_names)} name(s) but "
+                f"dataset_dir={neural_pod_cfg.dataset_dir!r} has {len(param_arrays)} `params` "
+                "array(s) — one name per array, in matching order, is required."
+            )
+        feature_batch = dict(zip(input_names, param_arrays))
+        with inference_predictor_factory(ckpt, None) as predictor:
+            raw_predictions, _ = collect_predictions(predictor, feature_batch, batch_size=256)
+        predicted = stack_predictions(raw_predictions)
+        if neural_pod_cfg.n_snapshots != -1:
+            predicted = predicted[: neural_pod_cfg.n_snapshots]
+        coarsening = PODCoarseningStrategy(rank=neural_pod_cfg.rank)
+        coarsening.fit(torch.as_tensor(predicted, dtype=matrix.dtype, device=matrix.device))
+        return coarsening
+
+    return AggregationCoarsening(theta=config.coarsening.theta, omega=config.coarsening.omega)
+
+
+def _build_amg(
+    matrix: torch.Tensor,
+    config: AMGPreconditionerConfig,
+    inference_predictor_factory: Callable[[Path, Any], InferencePredictorPort] | None = None,
+) -> AMGBuild:
+    """Assemble an `AMGPreconditioner` and return it alongside its coarsening strategy.
+
+    Args:
+        matrix: System matrix A.
+        config: AMG preconditioner configuration.
+        inference_predictor_factory: Optional batch-inference predictor factory
+            for neural POD-2G coarsening (DI for testing).
+
+    Returns:
+        The assembled preconditioner and the coarsening strategy used to build it.
+    """
+    from torchalg.preconditioners.implementations.amg import (
+        AMGPreconditioner,
+        JacobiSmoother,
+        VCycle,
+    )
+
+    coarsening = _build_amg_coarsening(matrix, config, inference_predictor_factory)
+    smoother = JacobiSmoother(omega=config.smoother_omega)
+    cycle = VCycle(
+        smoother=smoother,
+        n_pre=config.pre_smoothing_steps,
+        n_post=config.post_smoothing_steps,
+    )
+    preconditioner = AMGPreconditioner(
+        matrix, coarsening=coarsening, cycle=cycle, n_levels=config.n_levels, linear=True
+    )
+    return AMGBuild(preconditioner=preconditioner, coarsening=coarsening)
+
+
 def create_preconditioner(
     matrix: torch.Tensor,
     config: ConcretePreconditionerConfig,
@@ -144,9 +291,7 @@ def create_preconditioner(
         AMGPreconditionerConfig,
         IC0PreconditionerConfig,
         NeuralAMGPreconditionerConfig,
-        NeuralPODCoarseningConfig,
         NeuralPreconditionerConfig,
-        PODCoarseningConfig,
     )
 
     # AMG family: config.coarsening selects the strategy that builds the
@@ -155,93 +300,7 @@ def create_preconditioner(
     if config.type == PreconditionerType.AMG:
         if not isinstance(config, AMGPreconditionerConfig):
             raise TypeError(f"AMG type requires AMGPreconditionerConfig, got {type(config)}")
-        from torchalg.preconditioners.implementations.amg import (
-            AggregationCoarsening,
-            AMGPreconditioner,
-            JacobiSmoother,
-            VCycle,
-        )
-
-        if isinstance(config.coarsening, PODCoarseningConfig):
-            pod_cfg = config.coarsening
-            ckpt = pod_cfg.resolved_checkpoint_path or pod_cfg.checkpoint_path
-            if ckpt is not None:
-                # Fitted ahead of time via a `FitJobConfig` assignment
-                # (composition/assignments/comparison_batch.py's kind
-                # dispatch) — reconstruct the fitted basis directly from its
-                # MLflow-tracked checkpoint instead of refitting inline.
-                coarsening = _load_fitted_pod_coarsening(ckpt, matrix)
-            else:
-                # Not yet migrated to an assignment: fit inline from raw
-                # snapshot files, exactly as before (backward compatible).
-                from torchalg.preconditioners.implementations.pod import (
-                    PODCoarseningStrategy,
-                )
-
-                from neuralls.platform.storage.dataset_readers import (
-                    load_dense_training_arrays,
-                )
-
-                _, solutions = load_dense_training_arrays(pod_cfg.dataset_dir)
-                if pod_cfg.n_snapshots != -1:
-                    solutions = solutions[: pod_cfg.n_snapshots]
-                coarsening = PODCoarseningStrategy(rank=pod_cfg.rank)
-                coarsening.fit(torch.as_tensor(solutions, dtype=matrix.dtype, device=matrix.device))
-        elif isinstance(config.coarsening, NeuralPODCoarseningConfig):
-            from torchalg.preconditioners.implementations.pod import (
-                PODCoarseningStrategy,
-            )
-
-            from neuralls.application.inference.prediction import (
-                collect_predictions,
-                stack_predictions,
-            )
-            from neuralls.platform.storage.dataset_readers import load_parameter_arrays
-
-            neural_pod_cfg = config.coarsening
-            ckpt = neural_pod_cfg.resolved_checkpoint_path or neural_pod_cfg.checkpoint_path
-            if ckpt is None:
-                raise ValueError(
-                    "NeuralPODCoarseningConfig requires checkpoint_path or resolved_checkpoint_path"
-                )
-            if inference_predictor_factory is None:
-                from neuralls.platform.dlkit.inference_adapter import (
-                    create_inference_predictor,
-                )
-
-                inference_predictor_factory = create_inference_predictor
-
-            param_arrays = load_parameter_arrays(neural_pod_cfg.dataset_dir)
-            input_names = neural_pod_cfg.input_names
-            if len(input_names) != len(param_arrays):
-                raise ValueError(
-                    f"NeuralPODCoarseningConfig.input_names has {len(input_names)} name(s) but "
-                    f"dataset_dir={neural_pod_cfg.dataset_dir!r} has {len(param_arrays)} `params` "
-                    "array(s) — one name per array, in matching order, is required."
-                )
-            feature_batch = dict(zip(input_names, param_arrays))
-            with inference_predictor_factory(ckpt, None) as predictor:
-                raw_predictions, _ = collect_predictions(predictor, feature_batch, batch_size=256)
-            predicted = stack_predictions(raw_predictions)
-            if neural_pod_cfg.n_snapshots != -1:
-                predicted = predicted[: neural_pod_cfg.n_snapshots]
-            coarsening = PODCoarseningStrategy(rank=neural_pod_cfg.rank)
-            coarsening.fit(torch.as_tensor(predicted, dtype=matrix.dtype, device=matrix.device))
-        else:
-            coarsening = AggregationCoarsening(
-                theta=config.coarsening.theta,
-                omega=config.coarsening.omega,
-            )
-
-        smoother = JacobiSmoother(omega=config.smoother_omega)
-        cycle = VCycle(
-            smoother=smoother,
-            n_pre=config.pre_smoothing_steps,
-            n_post=config.post_smoothing_steps,
-        )
-        return AMGPreconditioner(
-            matrix, coarsening=coarsening, cycle=cycle, n_levels=config.n_levels, linear=True
-        )
+        return _build_amg(matrix, config, inference_predictor_factory).preconditioner
 
     # Neural AMG (neural prolongation/restriction, stub)
     if config.type == PreconditionerType.NEURAL_AMG:
@@ -321,6 +380,42 @@ def create_preconditioner(
         return ICholeskyPreconditioner(matrix)
 
     raise ValueError(f"Unsupported preconditioner type: {config.type}")
+
+
+def create_preconditioner_with_coarsening(
+    matrix: torch.Tensor,
+    config: ConcretePreconditionerConfig,
+    adapter: PredictorAdapter | None = None,
+    inference_predictor_factory: Callable[[Path, Any], InferencePredictorPort] | None = None,
+) -> tuple[Preconditioner, CoarseningStrategy | None]:
+    """Create a preconditioner, also returning its coarsening strategy when it has one.
+
+    AMG's realized coarse dimension is only knowable from the coarsening
+    strategy actually used to build the hierarchy, not from config alone
+    (POD's ``rank`` is often an energy threshold; AMG's ``theta`` yields an
+    emergent aggregate count). Diagnostics that need the realized dimension
+    must reuse this coarsening object rather than fitting a second one.
+
+    Args:
+        matrix: System matrix A.
+        config: Preconditioner configuration from TOML.
+        adapter: Optional adapter for neural preconditioner (DI for testing).
+        inference_predictor_factory: Optional batch-inference predictor
+            factory for neural POD-2G coarsening (DI for testing).
+
+    Returns:
+        The preconditioner, and its coarsening strategy if `config.type` is
+        `PreconditionerType.AMG` (`None` for every other preconditioner type).
+    """
+    from neuralls.platform.config.models.preconditioner import AMGPreconditionerConfig
+
+    if config.type == PreconditionerType.AMG:
+        if not isinstance(config, AMGPreconditionerConfig):
+            raise TypeError(f"AMG type requires AMGPreconditionerConfig, got {type(config)}")
+        build = _build_amg(matrix, config, inference_predictor_factory)
+        return build.preconditioner, build.coarsening
+
+    return create_preconditioner(matrix, config, adapter, inference_predictor_factory), None
 
 
 def _extract_schedule(cfg: ConcretePreconditionerConfig) -> PreconditionerScheduleConfig:
