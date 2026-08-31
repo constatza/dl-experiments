@@ -25,9 +25,19 @@ name = "ic0"
 type = "ic0"
 
 [[comparison_defaults.preconditioners]]
-name = "amg"
+name = "amg-small-theta"
 type = "amg"
-coarsening = { method = "aggregation", theta = 0.05 }
+coarsening = { method = "aggregation", theta = 0.1 }
+
+[[comparison_defaults.preconditioners]]
+name = "amg-medium-theta"
+type = "amg"
+coarsening = { method = "aggregation", theta = 0.25 }
+
+[[comparison_defaults.preconditioners]]
+name = "amg-large-theta"
+type = "amg"
+coarsening = { method = "aggregation", theta = 0.5 }
 
 # pod2g-cg1/10/50 are no longer declared here: they are now [[assignments]]
 # bound to [[jobs]] pod2g-cg1/10/50 below (a `run.type = "fit"` job per
