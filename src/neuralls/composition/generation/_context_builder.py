@@ -54,7 +54,7 @@ class DataGenerationContext:
     shuffle: bool
     replacement: bool
     parameters_paths: tuple[str, ...] = ()
-    dataset_format: DatasetFormat = "zarr"
+    dataset_format: DatasetFormat = "hdf5"
 
 
 def _plan_from_generation_config(

@@ -19,7 +19,10 @@ from dlkit.interfaces.api import run_multirun_spec
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
-from neuralls.composition.assignments._dataset_assembly import _load_and_prepare_data
+from neuralls.composition.assignments._dataset_assembly import (
+    _load_and_prepare_data,
+    resolve_dataset_format,
+)
 from neuralls.composition.assignments._job_types import AnyJobConfig
 from neuralls.composition.assignments._registry_lookup import (
     _find_registry_entry,
@@ -191,6 +194,7 @@ def _with_eval_runtime_dataset(
     checkpoint_path: Path,
     features: list[DataEntry],
     targets: list[DataEntry],
+    dataset_format: str,
 ) -> AnyJobConfig:
     contract = default_training_dataset_contract()
     settings = patch_runtime_dataset(
@@ -199,7 +203,7 @@ def _with_eval_runtime_dataset(
         targets=targets,
         contract=contract,
     )
-    settings = patch_dataloader_runtime(settings)
+    settings = patch_dataloader_runtime(settings, dataset_format=dataset_format)
     return settings.patch(
         {
             "run": {"type": "predict"},
@@ -329,13 +333,14 @@ def _materialize_inference_settings(
     )
     job_settings = load_experiment_job(context.config_paths.staged_job_config_path, settings)
     contract = default_training_dataset_contract()
-    _, features, targets = _load_and_prepare_data(job_settings, runnable.workspace, contract)
+    arrays, features, targets = _load_and_prepare_data(job_settings, runnable.workspace, contract)
     eval_settings = _with_eval_runtime_dataset(
         job_settings,
         split_file=context.artifacts.split_file,
         checkpoint_path=context.artifacts.checkpoint_path,
         features=features,
         targets=targets,
+        dataset_format=resolve_dataset_format(arrays),
     )
     eval_settings = eval_settings.patch({"experiment": {"name": cfg.names.training}})
     return _as_inference_job(eval_settings)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import h5py
 import numpy as np
 import zarr
 from loguru import logger
@@ -13,6 +14,7 @@ from .datasets import (
     load_dense_training_arrays,
     load_matrix_dense_sample,
 )
+from .generation_formats import HDF5_FILENAME
 
 
 def resolve_system_paths(
@@ -39,6 +41,7 @@ def load_system_extras(
 ) -> dict[str, np.ndarray]:
     """Load optional named side-channel arrays from a comparison dataset directory."""
     extras: dict[str, np.ndarray] = {}
+    hdf5_path = dataset_dir / HDF5_FILENAME
     for name in names:
         zarr_path = dataset_dir / f"{name}.zarr"
         npy_path = dataset_dir / f"{name}.npy"
@@ -49,6 +52,12 @@ def load_system_extras(
         if npy_path.exists():
             arr = np.load(npy_path)
             extras[name] = np.asarray(arr[sample_index] if arr.ndim > 1 else arr)
+            continue
+        if hdf5_path.exists():
+            with h5py.File(str(hdf5_path), "r") as f:
+                if name in f:
+                    ds = f[name]
+                    extras[name] = np.asarray(ds[sample_index] if ds.ndim > 1 else ds[:])  # type: ignore[index]
     return extras
 
 

@@ -66,9 +66,7 @@ depends_on = ["neuralls.application.**", "neuralls.domain", "neuralls.domain.**"
 
 [[modules]]
 paths = [
-    "neuralls.application.comparison",
     "neuralls.application.inference",
-    "neuralls.application.training",
 ]
 layer = "application"
 depends_on = ["neuralls.application.**", "neuralls.domain", "neuralls.domain.**", "neuralls.shared", "neuralls.shared.**"]

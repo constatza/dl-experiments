@@ -506,7 +506,11 @@ def test_prepare_training_settings_builds_explicit_mlflow_run_config(tmp_path: P
         ) as mock_load,
         patch(
             "neuralls.composition.assignments.training._load_and_prepare_data",
-            return_value=(None, [], []),
+            return_value=(
+                SimpleNamespace(rhs_source=SimpleNamespace(path=Path("rhs.npy"))),
+                [],
+                [],
+            ),
         ),
         patch(
             "neuralls.composition.assignments.training._configure_training_pipeline",
@@ -590,7 +594,11 @@ def test_prepare_training_settings_falls_back_to_dataset_display_name_without_st
         patch("neuralls.composition.assignments.training.load_assignment", return_value=experiment),
         patch(
             "neuralls.composition.assignments.training._load_and_prepare_data",
-            return_value=(None, [], []),
+            return_value=(
+                SimpleNamespace(rhs_source=SimpleNamespace(path=Path("rhs.npy"))),
+                [],
+                [],
+            ),
         ),
         patch(
             "neuralls.composition.assignments.training._configure_training_pipeline",
@@ -689,7 +697,11 @@ def test_prepare_training_settings_max_epochs_override_keeps_original_settings_i
         patch("neuralls.composition.assignments.training.load_assignment", return_value=experiment),
         patch(
             "neuralls.composition.assignments.training._load_and_prepare_data",
-            return_value=(None, [], []),
+            return_value=(
+                SimpleNamespace(rhs_source=SimpleNamespace(path=Path("rhs.npy"))),
+                [],
+                [],
+            ),
         ),
         patch(
             "neuralls.composition.assignments.training._configure_training_pipeline",

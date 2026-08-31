@@ -1,1 +1,0 @@
-"""Training application layer package."""

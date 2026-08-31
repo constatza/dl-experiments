@@ -64,7 +64,7 @@ def _raise_storage_error(operation: str, path: Path, exc: OSError) -> Never:
     permission_hint = ""
     if isinstance(exc, PermissionError) or winerror == 5:
         permission_hint = (
-            " This usually means the filesystem blocked an atomic Zarr metadata rename, "
+            " This usually means the filesystem blocked an atomic rename or file lock, "
             "which is common on network shares or when another process is holding the file."
         )
     message = f"{operation} at {path} failed. {', '.join(details)}{permission_hint}"
@@ -538,7 +538,7 @@ class NpyGenerationStorage:
         )
 
 
-_HDF5_FILENAME = "dataset.h5"
+HDF5_FILENAME = "dataset.h5"
 _HDF5_MATRIX_STAGING_KEY = "matrix"
 
 
@@ -622,7 +622,7 @@ class Hdf5GenerationStorage:
 
     def write_dataset(self, dataset_dir: Path, payload: GeneratedDatasetPayload) -> None:
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        h5_path = dataset_dir / _HDF5_FILENAME
+        h5_path = dataset_dir / HDF5_FILENAME
         staging_path = Path(payload.matrix_artifact_path)
 
         n_samples = int(payload.rhs.shape[0])
@@ -658,7 +658,7 @@ class Hdf5GenerationStorage:
                     out.create_dataset(key, data=params_arr.astype(np.float64))
                     params_manifest.append(
                         DatasetArtifact(
-                            path=_HDF5_FILENAME,
+                            path=HDF5_FILENAME,
                             format=self.format_name,
                             dtype="float64",
                             shape=tuple(int(d) for d in params_arr.shape),
@@ -679,7 +679,7 @@ class Hdf5GenerationStorage:
             dataset_dir,
             make_dataset_manifest(
                 matrix=DatasetArtifact(
-                    path=_HDF5_FILENAME,
+                    path=HDF5_FILENAME,
                     format=self.format_name,
                     dtype="float64",
                     shape=mat_shape,
@@ -690,14 +690,14 @@ class Hdf5GenerationStorage:
                     key="matrix",
                 ),
                 rhs=DatasetArtifact(
-                    path=_HDF5_FILENAME,
+                    path=HDF5_FILENAME,
                     format=self.format_name,
                     dtype="float64",
                     shape=tuple(int(d) for d in payload.rhs.shape),
                     key="rhs",
                 ),
                 solutions=DatasetArtifact(
-                    path=_HDF5_FILENAME,
+                    path=HDF5_FILENAME,
                     format=self.format_name,
                     dtype="float64",
                     shape=tuple(int(d) for d in payload.solutions.shape),
@@ -711,7 +711,7 @@ class Hdf5GenerationStorage:
                 ),
                 params=tuple(params_manifest),
                 row_kind=DatasetArtifact(
-                    path=_HDF5_FILENAME,
+                    path=HDF5_FILENAME,
                     format=self.format_name,
                     dtype="uint8",
                     shape=tuple(int(d) for d in payload.row_kind_codes.shape),
@@ -720,7 +720,7 @@ class Hdf5GenerationStorage:
                 if payload.row_kind_codes is not None
                 else None,
                 matrix_sample_index=DatasetArtifact(
-                    path=_HDF5_FILENAME,
+                    path=HDF5_FILENAME,
                     format=self.format_name,
                     dtype="int64",
                     shape=tuple(int(d) for d in payload.matrix_sample_index.shape),

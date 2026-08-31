@@ -16,6 +16,7 @@ def _configure_training_pipeline[T: TrainableJobConfig](
     features: list[DataEntry],
     targets: list[DataEntry],
     contract: RuntimeDatasetContract,
+    dataset_format: str,
 ) -> tuple[T, AssignmentWorkspace]:
     """Materialize one runnable training job through narrow patch stages."""
     return materialize_training_job(
@@ -24,4 +25,5 @@ def _configure_training_pipeline[T: TrainableJobConfig](
         features=features,
         targets=targets,
         contract=contract,
+        dataset_format=dataset_format,
     )

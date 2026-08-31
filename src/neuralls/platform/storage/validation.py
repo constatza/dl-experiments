@@ -5,11 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from neuralls.platform.storage.datasets import load_dataset_manifest, resolve_dataset_artifacts
-from neuralls.shared.constants import (
-    DATASET_MANIFEST_FILENAME,
-    MATRIX_ZARR_DIRNAME,
-    RHS_ZARR_FILENAME,
-)
+from neuralls.shared.constants import DATASET_MANIFEST_FILENAME
 
 _SUPPORTED_COMPARISON_FILE_SUFFIXES = {"", ".npy", ".txt"}
 
@@ -71,7 +67,7 @@ def validate_comparison_matrix_input(path: Path) -> None:
     matrix_artifact = resolve_dataset_artifacts(path).matrix
     if not matrix_artifact.path.exists():
         raise ValueError(
-            f"Comparison matrix dataset directory is missing {MATRIX_ZARR_DIRNAME}: {path}"
+            f"Comparison matrix dataset directory is missing {matrix_artifact.path.name}: {path}"
         )
 
 
@@ -89,7 +85,9 @@ def validate_comparison_rhs_input(path: Path) -> None:
     load_dataset_manifest(path)
     rhs_artifact = resolve_dataset_artifacts(path).rhs
     if not rhs_artifact.path.exists():
-        raise ValueError(f"Comparison RHS dataset directory is missing {RHS_ZARR_FILENAME}: {path}")
+        raise ValueError(
+            f"Comparison RHS dataset directory is missing {rhs_artifact.path.name}: {path}"
+        )
 
 
 def validate_comparison_inputs(

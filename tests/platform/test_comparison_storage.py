@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pytest
 import zarr
 
 from neuralls.platform.storage.comparison import load_system_extras
+from neuralls.platform.storage.generation_formats import HDF5_FILENAME
 
 
 @pytest.fixture
@@ -17,6 +19,14 @@ def dataset_dir(tmp_path: Path) -> Path:
     coords = np.arange(18.0, dtype=np.float64).reshape(3, 2, 3)
     zarr.save(str(tmp_path / "coordinates.zarr"), coords)
     np.save(tmp_path / "params.npy", np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
+    return tmp_path
+
+
+@pytest.fixture
+def hdf5_dataset_dir(tmp_path: Path) -> Path:
+    """Dataset directory with a single dataset.h5 holding a named "weights" array."""
+    with h5py.File(str(tmp_path / HDF5_FILENAME), "w") as f:
+        f.create_dataset("weights", data=np.arange(15.0, dtype=np.float64).reshape(3, 5))
     return tmp_path
 
 
@@ -33,6 +43,13 @@ def test_load_npy_extra_by_name(dataset_dir: Path) -> None:
     result = load_system_extras(dataset_dir, frozenset({"params"}), sample_index=0)
     assert "params" in result
     np.testing.assert_allclose(result["params"], [1.0, 2.0, 3.0, 4.0, 5.0])
+
+
+def test_load_hdf5_extra_by_name(hdf5_dataset_dir: Path) -> None:
+    """Load a named dataset out of a single-file dataset.h5 extra."""
+    result = load_system_extras(hdf5_dataset_dir, frozenset({"weights"}), sample_index=1)
+    assert "weights" in result
+    np.testing.assert_allclose(result["weights"], np.arange(5.0, 10.0))
 
 
 def test_missing_extra_silently_absent(dataset_dir: Path) -> None:

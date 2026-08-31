@@ -22,6 +22,7 @@ def materialize_training_job[T: TrainableJobConfig](
     features: list[DataEntry],
     targets: list[DataEntry],
     contract: RuntimeDatasetContract,
+    dataset_format: str,
 ) -> tuple[T, AssignmentWorkspace]:
     """Apply runtime dataset and workspace stages in order.
 
@@ -36,7 +37,7 @@ def materialize_training_job[T: TrainableJobConfig](
         targets=targets,
         contract=contract,
     )
-    settings = patch_dataloader_runtime(settings)
+    settings = patch_dataloader_runtime(settings, dataset_format=dataset_format)
     settings = patch_runtime_workspace_for_job(
         settings,
         output_dir=workspace.root_dir,

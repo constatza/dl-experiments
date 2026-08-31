@@ -81,18 +81,17 @@ def patch_runtime_workspace_for_job[T: TrainableJobConfig](
     return settings
 
 
-def patch_dataloader_runtime[T: AnyJobConfig](settings: T) -> T:
-    """Force conservative dataloader runtime settings for dense zarr execution."""
-    data_cfg = settings.data
-    if data_cfg is None:
-        return settings
+def patch_dataloader_runtime[T: AnyJobConfig](settings: T, *, dataset_format: str) -> T:
+    """Clamp DataLoader workers to 0 for zarr datasets to avoid local-store multiprocessing hangs.
 
-    return settings.patch(
-        {
-            "data": {
-                "num_workers": 0,
-                "persistent_workers": False,
-                "pin_memory": False,
-            }
-        }
-    )
+    No-op for every other format, and a no-op if the job already has no workers
+    configured — dlkit's own ``DataSettings`` defaults (``num_workers=0``) and its
+    ``persistent_workers``-requires-workers safety net are otherwise left as-is,
+    so an explicit non-zero ``num_workers`` for a non-zarr dataset is respected.
+    """
+    if dataset_format != "zarr":
+        return settings
+    data_cfg = settings.data
+    if data_cfg is None or data_cfg.num_workers == 0:
+        return settings
+    return settings.patch({"data": {"num_workers": 0}})

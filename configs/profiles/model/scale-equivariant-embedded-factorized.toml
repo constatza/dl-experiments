@@ -1,0 +1,6 @@
+[model]
+name = "ScaleEquivariantEmbeddedFactorizedFFNN"
+num_layers = 4
+activation = "gelu"
+bias = true
+dropout = 0.0

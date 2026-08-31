@@ -60,11 +60,6 @@ class DatasetPaths:
     matrix_path: Path
     parameter_paths: tuple[Path, ...]
 
-    @property
-    def matrix_zarr_dir(self) -> Path:
-        """Compatibility alias for older zarr-specific callers."""
-        return self.matrix_path
-
 
 @dataclass(frozen=True)
 class CanonicalTrainingTriplet:

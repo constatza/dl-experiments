@@ -143,6 +143,11 @@ def _create_target_entries(
     return [_target_entry_from_source(source, name=contract.target_name)]
 
 
+def resolve_dataset_format(arrays: TrainingArrays) -> str:
+    """Return the on-disk format of the training arrays (e.g. "zarr", "npy", "hdf5")."""
+    return arrays.rhs_source.path.suffix.lstrip(".") or "zarr"
+
+
 def _load_and_prepare_data(
     settings: AnyJobConfig,
     workspace: AssignmentWorkspace,
@@ -150,7 +155,7 @@ def _load_and_prepare_data(
 ) -> tuple[TrainingArrays, list[DataEntry], list[DataEntry]]:
     """Resolve training data artifacts and build DLKit entries."""
     arrays = load_training_arrays(workspace.data_dir)
-    fmt = arrays.rhs_source.path.suffix.lstrip(".") or "zarr"
+    fmt = resolve_dataset_format(arrays)
     logger.info(
         "Resolved training artifact sources ({} samples, format={}) from {}",
         arrays.sample_count,

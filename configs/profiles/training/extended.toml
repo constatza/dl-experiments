@@ -9,6 +9,14 @@ max_epochs = 400
 accelerator = "auto"
 enable_checkpointing = true
 
+[[training.trainer.callbacks]]
+name = "EarlyStopping"
+monitor = "val/loss"
+min_delta = 0.0001
+patience = 30
+mode = "min"
+check_finite = true
+
 [training.optimizer.default_optimizer]
 name = "AdamW"
 lr = 0.001

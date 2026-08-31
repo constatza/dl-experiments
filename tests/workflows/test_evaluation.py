@@ -100,6 +100,7 @@ def test_eval_materialization_injects_split_file_and_array_datamodule(
         checkpoint_path=checkpoint,
         features=features,
         targets=targets,
+        dataset_format="npy",
     )
     inference_job = _as_inference_job(eval_job)
 
@@ -193,7 +194,11 @@ def test_materialize_inference_settings_uses_staged_config_paths(
     ]
     monkeypatch.setattr(
         "neuralls.composition.assignments.evaluation._load_and_prepare_data",
-        lambda settings, workspace, contract: (None, features, targets),
+        lambda settings, workspace, contract: (
+            SimpleNamespace(rhs_source=SimpleNamespace(path=Path("rhs.npy"))),
+            features,
+            targets,
+        ),
     )
     context = EvaluationAssignmentContext(
         client=MagicMock(),

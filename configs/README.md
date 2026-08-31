@@ -72,6 +72,13 @@ The checked-in model profiles pin `activation = "gelu"` wherever the target
 network exposes an activation kwarg. `ScaleEquivariantSiren` is the exception:
 its constructor does not accept a configurable activation.
 
+Current checked-in examples (each family's `-optuna`/`-overfit` job siblings
+reference the same profile so the architecture stays defined once):
+
+- `scale-equivariant-constant-width-factorized.toml` — 6 layers, `silu`, `l2` norm
+- `scale-equivariant-constant-width-factorized-relu.toml` — 3 layers, `relu`, no bias
+- `scale-equivariant-embedded-factorized.toml` — 4 layers, `gelu`
+
 ### `configs/profiles/data/**/*.toml`
 
 Shared data profiles for the common case: any number of model families with
@@ -110,8 +117,6 @@ Current checked-in examples:
 - `extended.toml` — deviates by epoch count: 400 epochs
 - `extended-conservative-plateau.toml` — 400 epochs with LR plateau patience
   10 / cooldown 5 / threshold 1e-4
-- `limited-200.toml` — deviates by epoch count: 200 epochs
-- `high-max-lr.toml` — deviates by LR tuner ceiling: `max_lr = 1e-2`
 - `debug-overfit.toml` — 500 epochs, checkpointing disabled, `overfit_batches = 1`,
   and no early-stopping callback for expected validation divergence
 - `strict-early-stopping.toml` — deviates by early stopping: patience 10,
@@ -195,8 +200,8 @@ id = "train-dataset"
 path = "../../datasets/train/45x15/gaussian-cg50.toml"
 
 [[jobs]]
-id = "scale-equivariant-embedded-factorized"
-path = "../../jobs/ffnn/scale-equivariant-embedded-factorized.toml"
+id = "scale-equivariant-constant-width-factorized"
+path = "../../jobs/45x15/scale-equivariant-constant-width-factorized-optuna.toml"
 
 [[comparisons]]
 id = "scaled"
@@ -205,7 +210,7 @@ rhs_source = { kind = "raw_lhs", path = "${NEURALLS_RAW_DIR}/SpectralData/45x15-
 
 [[assignments]]
 dataset = "train-dataset"
-job = "scale-equivariant-embedded-factorized"
+job = "scale-equivariant-constant-width-factorized"
 ```
 
 `[names].training` controls the MLflow experiment bucket for training runs.

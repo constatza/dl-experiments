@@ -105,7 +105,7 @@ def test_build_dataset_streams_matrix_stack_without_dense_batch(tmp_path: Path) 
     assert rhs.shape == (2, 2)
     assert solutions.shape == (2, 2)
 
-    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_path), mode="r")
     assert mat_arr.shape[0] == 2
     dense0 = load_matrix_dense_sample(out_dir, 0)
     dense1 = load_matrix_dense_sample(out_dir, 1)
@@ -179,7 +179,7 @@ def test_single_matrix_stored_once_in_zarr(tmp_path: Path) -> None:
     assert saved_rhs.shape == (3, 2)
     assert saved_solutions.shape == (3, 2)
 
-    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_path), mode="r")
     assert mat_arr.shape[0] == 1
     dense_last = load_matrix_dense_sample(out_dir, 0)
     np.testing.assert_allclose(dense_last, matrix)
@@ -309,7 +309,7 @@ def test_glob_matrix_gaussian_uses_global_sample_budget(
     assert rhs.shape == (total_samples, n)
     assert solutions.shape == (total_samples, n)
 
-    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_path), mode="r")
     assert mat_arr.shape[0] == total_samples
 
 
@@ -347,7 +347,7 @@ def test_glob_matrix_solution_archive_uses_global_sample_budget(
     assert rhs.shape == (n_solutions, n)
     assert solutions.shape == (n_solutions, n)
 
-    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_path), mode="r")
     assert mat_arr.shape[0] == n_solutions
 
 
@@ -500,7 +500,7 @@ def test_build_dataset_honors_enumerate_by_for_globbed_matrix_files(
     assert rhs.shape == (3, n)
     assert solutions.shape == (3, n)
 
-    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_path), mode="r")
     assert mat_arr.shape[0] == 3
 
 
@@ -738,7 +738,7 @@ def test_build_dataset_include_indices_builds_holdout_dataset(
     rhs, _solutions = load_dense_training_arrays(out_dir)
     assert rhs.shape[0] == 2
     # Distinct rows load distinct physical matrices.
-    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_zarr_dir), mode="r")
+    mat_arr = zarr.open_array(str(resolve_dataset_paths(out_dir).matrix_path), mode="r")
     assert not np.allclose(mat_arr[0], mat_arr[1])
 
 

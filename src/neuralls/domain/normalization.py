@@ -47,25 +47,6 @@ class IScale(ABC):
         ...
 
 
-class ITraceSamples(ABC):
-    """Base interface for all trace sample types.
-
-    Traces capture intermediate states during iterative solver runs.
-    Concrete implementations should have sample_indices and iteration_indices fields.
-    """
-
-    @property
-    def num_traces(self) -> int:
-        """Total number of trace points.
-
-        Requires concrete class to have sample_indices attribute.
-        """
-        sample_indices = getattr(self, "sample_indices", None)
-        if not isinstance(sample_indices, np.ndarray):
-            raise TypeError("Trace samples must expose numpy sample_indices")
-        return len(sample_indices)
-
-
 # =============================================================================
 # Frozen Dataclasses: Scaling Strategy
 # =============================================================================
@@ -110,7 +91,7 @@ class MatrixScale(IScale):
 
 
 @dataclass(frozen=True)
-class ResidualTraceSamples(ITraceSamples):
+class ResidualTraceSamples:
     """Residual → solution trace pairs from CG iterations.
 
     Captures residuals r_k and corresponding solutions x_k at iteration k.
@@ -124,11 +105,9 @@ class ResidualTraceSamples(ITraceSamples):
     search_directions: np.ndarray | None = None
     search_direction_products: np.ndarray | None = None
 
-    # ITraceSamples interface is automatically satisfied by dataclass fields
-
 
 @dataclass(frozen=True)
-class ErrorTraceSamples(ITraceSamples):
+class ErrorTraceSamples:
     """Error correction traces: r_k → (x* - x_k).
 
     Training mapping: N(r_k) → (x* - x_k) where r_k is the network input.
@@ -141,8 +120,6 @@ class ErrorTraceSamples(ITraceSamples):
     true_solutions: np.ndarray  # x* per sample
     sample_indices: np.ndarray
     iteration_indices: np.ndarray
-
-    # ITraceSamples interface is automatically satisfied by dataclass fields
 
 
 # =============================================================================
@@ -254,7 +231,6 @@ __all__ = [
     "ErrorTraceSamples",
     # Interfaces
     "IScale",
-    "ITraceSamples",
     # Scale
     "MatrixScale",
     # Traces

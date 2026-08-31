@@ -239,7 +239,7 @@ def test_append_dense_matrix_reports_create_failure(tmp_path: Path) -> None:
             acc.append_dense_matrix(np.eye(2, dtype=np.float64), repeats=1)
 
     assert "winerror=5" in str(exc_info.value)
-    assert "filesystem blocked an atomic Zarr metadata rename" in str(exc_info.value)
+    assert "filesystem blocked an atomic rename or file lock" in str(exc_info.value)
 
 
 def test_append_dense_matrix_reports_update_failure(

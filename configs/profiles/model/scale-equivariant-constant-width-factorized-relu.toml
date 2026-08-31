@@ -1,5 +1,7 @@
 [model]
 name = "ScaleEquivariantEmbeddedFactorizedFFNN"
 project = false
-skip = false
-num_layers = 1
+num_layers = 3
+activation = "relu"
+bias = false
+dropout = 0.0

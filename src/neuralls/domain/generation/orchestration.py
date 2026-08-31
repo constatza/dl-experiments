@@ -1044,7 +1044,7 @@ def _accumulate_bindings(
         param_streams: Opened parameter vector streams
         matrix_stream: Opened matrix stream (used to detect single-matrix mode)
         get_matrix: Callable that loads and caches a normalized matrix by sample ID
-        accumulator: Zarr accumulator for writing matrix samples
+        accumulator: Dataset accumulator for writing matrix samples
         seed: Random seed
         shuffle: Whether to shuffle samples within each binding
         strategy_overrides: Per-strategy configuration overrides
@@ -1151,7 +1151,7 @@ def _finalize_payload(
         matrix_norm_values: Matrix norm values from each binding
         matrix_value_scale_values: Matrix value scale factors from each binding
         scale_metadata_values: Scale metadata from each binding
-        accumulator: Zarr accumulator to finalize
+        accumulator: Dataset accumulator to finalize
         normalize: Normalization type applied
         matrix_norm_type: Type of norm used
         emitted_binding_count: Number of bindings that emitted samples

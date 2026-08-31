@@ -17,6 +17,7 @@ from mlflow.tracking import MlflowClient
 from neuralls.composition.assignments._dataset_assembly import (
     _extra_feature_names_from_settings,
     _load_and_prepare_data,
+    resolve_dataset_format,
 )
 from neuralls.composition.assignments._job_types import AnyJobConfig
 from neuralls.composition.assignments._settings_pipeline import _configure_training_pipeline
@@ -370,7 +371,8 @@ def prepare_training_settings(
         resolved_dataset_display_name = assignment.spec.dataset_display_name or dataset_id
 
         # Step 2: Resolve training dataset artifacts
-        _, features, targets = _load_and_prepare_data(workflow_settings, workspace, contract)
+        arrays, features, targets = _load_and_prepare_data(workflow_settings, workspace, contract)
+        dataset_format = resolve_dataset_format(arrays)
 
         # Step 3: Build execute()-time MLflow naming and tags
         run_config = _build_training_run_config(
@@ -392,6 +394,7 @@ def prepare_training_settings(
             features,
             targets,
             contract,
+            dataset_format,
         )
 
         if max_epochs is not None:

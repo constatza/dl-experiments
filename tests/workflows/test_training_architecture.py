@@ -281,19 +281,27 @@ def test_patch_runtime_workspace_for_job_is_noop_for_fit_jobs(
     assert updated.training is None
 
 
-def test_patch_dataloader_runtime_forces_single_process(
+def test_patch_dataloader_runtime_clamps_workers_for_zarr(
     training_settings: TrainingJobConfig,
 ) -> None:
-    updated = patch_dataloader_runtime(training_settings)
+    updated = patch_dataloader_runtime(training_settings, dataset_format="zarr")
 
     assert updated is not training_settings
     assert updated.data is not None
     assert updated.data.num_workers == 0
-    assert updated.data.persistent_workers is False
-    assert updated.data.pin_memory is False
+    assert updated.data.pin_memory is True
     assert training_settings.data is not None
     assert training_settings.data.num_workers == 2
-    assert training_settings.data.pin_memory is True
+
+
+def test_patch_dataloader_runtime_leaves_non_zarr_untouched(
+    training_settings: TrainingJobConfig,
+) -> None:
+    updated = patch_dataloader_runtime(training_settings, dataset_format="npy")
+
+    assert updated is training_settings
+    assert updated.data is not None
+    assert updated.data.num_workers == 2
 
 
 def test_patch_training_tracking_returns_new_settings(
@@ -351,6 +359,7 @@ def test_contract_override_drives_injection_and_validation(
         features=features,
         targets=targets,
         contract=contract,
+        dataset_format="npy",
     )
 
     assert updated.data is not None

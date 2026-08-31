@@ -31,6 +31,7 @@ def _log_comparison_results(result: ComparisonResult) -> None:
 def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
     successful = [outcome for outcome in outcomes if outcome.success]
     failed = [outcome for outcome in outcomes if not outcome.success]
+    partial = [outcome for outcome in successful if outcome.warnings]
 
     for outcome in outcomes:
         logger.info("=" * 80)
@@ -54,6 +55,12 @@ def _log_outcomes(outcomes: list[ComparisonOutcome]) -> None:
         for item in failed:
             logger.error(f"  x {item.comparison_id}: {item.error}")
         raise typer.Exit(code=EXIT_FAILURE)
+    if partial:
+        logger.warning(
+            f"{len(partial)}/{len(successful)} comparisons completed with skipped "
+            "preconditioners — see warnings above for what was dropped."
+        )
+        return
     logger.info(f"{SYMBOL_CHECKMARK} All comparisons completed successfully!")
 
 
