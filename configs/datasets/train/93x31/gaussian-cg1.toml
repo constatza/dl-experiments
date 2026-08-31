@@ -13,7 +13,7 @@ seed = 42
 # archived displacement solutions - solution archives are comparison-only.
 [[generation.strategy]]
 name = "gaussian_forward"
-samples = 20000
+samples = 1000
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"

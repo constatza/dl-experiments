@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training = "Train-45x15-Scale-Equivariant-CG"
-comparison = "Compare-45x15-Scale-Equivariant-CG"
+training = "Train-45x15-POD-CG"
+comparison = "Compare-45x15-POD-CG"
 
 [comparison_defaults]
 rtol = 1.0e-6
@@ -27,7 +27,7 @@ type = "ic0"
 [[comparison_defaults.preconditioners]]
 name = "amg-small-theta"
 type = "amg"
-coarsening = { method = "aggregation", theta = 0.1 }
+coarsening = { method = "aggregation", theta = 0.05 }
 
 [[comparison_defaults.preconditioners]]
 name = "amg-medium-theta"

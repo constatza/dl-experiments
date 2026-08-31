@@ -17,7 +17,7 @@ seed = 42
 
 [[generation.strategy]]
 name = "gaussian_residuals"
-samples = 20000
+samples = 1000
 cg_iters = 10
 
 [output]
