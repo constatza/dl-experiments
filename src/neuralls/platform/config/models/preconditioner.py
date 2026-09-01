@@ -363,6 +363,29 @@ class AggregationCoarseningConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class TargetDimCoarseningConfig(BaseModel):
+    """AMG-aggregation coarsening parameterized by target coarse dimension, not theta.
+
+    `theta` is a strength-of-connection threshold; the coarse dimension it
+    produces is emergent, not chosen, and (confirmed against real stiffness
+    matrices, see `docs/plan.md`) a step function of `theta` rather than a
+    smooth or monotonic one. This gives AMG-aggregation the same "set the
+    coarse dimension directly" ergonomics `PODCoarseningConfig.rank` already
+    has, by exhaustively searching `theta` for the closest realized match
+    (`composition/preconditioners/target_dimension_coarsening.py::TargetDimensionCoarsening`
+    — a wrapper external to `AggregationCoarsening`/`AMGPreconditioner`,
+    never modifying either).
+    """
+
+    method: Literal["target_dim"] = "target_dim"
+    target_coarse_dim: int = Field(gt=0, description="Desired realized coarse dimension.")
+    theta_min: float = Field(default=0.01, gt=0.0, lt=1.0, description="Lower theta search bound.")
+    theta_max: float = Field(default=0.99, gt=0.0, lt=1.0, description="Upper theta search bound.")
+    step: float = Field(default=0.01, gt=0.0, description="Theta search grid spacing.")
+    omega: float = Field(default=0.67, gt=0.0, description="Prolongation Jacobi-smoothing damping.")
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
 class PODCoarseningConfig(NeuralCheckpointRef):
     """POD-2G coarsening (Nikolopoulos et al. 2022, §3.3-3.5).
 
@@ -537,7 +560,10 @@ class NeuralPODCoarseningConfig(NeuralCheckpointRef):
 
 
 CoarseningConfig = Annotated[
-    AggregationCoarseningConfig | PODCoarseningConfig | NeuralPODCoarseningConfig,
+    AggregationCoarseningConfig
+    | PODCoarseningConfig
+    | NeuralPODCoarseningConfig
+    | TargetDimCoarseningConfig,
     Field(discriminator="method"),
 ]
 

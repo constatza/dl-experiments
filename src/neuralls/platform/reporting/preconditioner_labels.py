@@ -3,11 +3,17 @@
 Builds short, human-readable structural descriptions of live ``torchalg``
 preconditioner instances (grid levels; coarsening strategy: threshold +
 prolongation-smoothing damping + realized coarse dimension, or fitted POD
-rank) for use in comparison plot legends and axis labels. Cycle type is
-deliberately excluded — see :func:`_describe_coarsening` — and Greek/math
-symbols (``L``, ``θ``, ``ω``, ``c``) are used throughout rather than
-spelled-out words, matching the notation the study's own plots put on their
-axes.
+rank as that same coarse dimension) for use in comparison plot legends and
+axis labels. Cycle type is deliberately excluded — see
+:func:`_describe_coarsening` — and Greek/math symbols (``L``, ``θ``, ``ω``,
+``c``) are used throughout rather than spelled-out words, matching the
+notation the study's own plots put on their axes. Every coarsening strategy
+renders its coarse dimension as ``c=`` — POD-2G's fitted rank and
+target-dimension coarsening's realized dimension are each that same
+coarse dimension — so all methods read consistently side by side; grid
+level count (``L=``) is shown for every strategy except POD-2G, which is
+architecturally single-basis two-grid (a level count there would be
+constant noise, not signal).
 
 Detail is read from the constructed object's own attributes, never from the
 TOML config that produced it: the object is the ground truth for what was
@@ -22,13 +28,18 @@ from dataclasses import dataclass
 import torch
 from torchalg.preconditioners.base import Preconditioner
 from torchalg.preconditioners.implementations import IC0Preconditioner, ScheduledPreconditioner
-from torchalg.preconditioners.implementations.amg import AggregationCoarsening, AMGPreconditioner
+from torchalg.preconditioners.implementations.amg import (
+    AggregationCoarsening,
+    AMGPreconditioner,
+    TargetDimensionCoarsening,
+)
 from torchalg.preconditioners.implementations.pod import PODCoarseningStrategy
 
 __all__ = [
     "MAX_LABEL_LENGTH",
     "AggregationCoarseningDetail",
     "PODCoarseningDetail",
+    "TargetDimensionCoarseningDetail",
     "build_preconditioner_labels",
     "coarsening_detail",
     "describe_preconditioner",
@@ -78,7 +89,25 @@ class PODCoarseningDetail:
     rank: int
 
 
-type CoarseningDetail = AggregationCoarseningDetail | PODCoarseningDetail | None
+@dataclass(frozen=True)
+class TargetDimensionCoarseningDetail:
+    """Structured facts about a coarsening strategy driven by a target dimension.
+
+    Attributes:
+        target_coarse_dim (int): The requested coarse dimension.
+        realized_coarse_dim (int): The actual coarse dimension the closest-
+            matching `theta` produced — may differ slightly from
+            `target_coarse_dim`, since realized dimension vs. `theta` is a
+            step function (see `TargetDimensionCoarsening`'s docstring).
+    """
+
+    target_coarse_dim: int
+    realized_coarse_dim: int
+
+
+type CoarseningDetail = (
+    AggregationCoarseningDetail | PODCoarseningDetail | TargetDimensionCoarseningDetail | None
+)
 
 
 def coarsening_detail(coarsening: object, matrix: torch.Tensor) -> CoarseningDetail:
@@ -106,6 +135,20 @@ def coarsening_detail(coarsening: object, matrix: torch.Tensor) -> CoarseningDet
             theta=coarsening._theta,
             omega=coarsening._omega,
             coarse_dimension=coarse_matrix.shape[0],
+        )
+    if isinstance(coarsening, TargetDimensionCoarsening):
+        if coarsening._realized_coarse_dim is None:
+            # Not yet built (no CG solve has triggered the hierarchy's
+            # lazy build yet) — build once now rather than leave the
+            # label with nothing to report; the search result is cached
+            # afterward, so this never repeats the search.
+            coarse_matrix, _ = coarsening.build_transfer(matrix)
+            realized_coarse_dim = coarse_matrix.shape[0]
+        else:
+            realized_coarse_dim = coarsening._realized_coarse_dim
+        return TargetDimensionCoarseningDetail(
+            target_coarse_dim=coarsening._target_coarse_dim,
+            realized_coarse_dim=realized_coarse_dim,
         )
     return None
 
@@ -175,18 +218,26 @@ def build_preconditioner_labels(
 def _describe_amg(precond: AMGPreconditioner) -> str:
     """Describe an AMG preconditioner's grid levels plus coarsening detail.
 
-    Cycle type is left out — see :func:`_describe_coarsening` — but
-    ``n_levels`` stays, written as ``L={n}`` (the standard multigrid symbol
-    for level count, mirroring ``θ``/``ω``/``c`` rather than an English
-    abbreviation): it is a real config knob that can differ between runs.
+    Cycle type is left out — see :func:`_describe_coarsening` — and so is
+    ``n_levels`` for POD-2G coarsening: ``PODCoarseningStrategy`` is
+    architecturally a single-basis two-grid method, so its own docstring
+    notes level count isn't a meaningful variant there. For aggregation
+    coarsening, ``n_levels`` stays, written as ``L={n}`` (the standard
+    multigrid symbol for level count, mirroring ``θ``/``ω``/``c`` rather
+    than an English abbreviation): it is a real config knob that can differ
+    between runs.
 
     Args:
         precond (AMGPreconditioner): Constructed AMG preconditioner instance.
 
     Returns:
-        str: ``"L={n}, {coarsening detail}"``.
+        str: ``"L={n}, {coarsening detail}"`` for aggregation coarsening, or
+            just the coarsening detail for POD-2G.
     """
-    return f"L={precond._n_levels}, {_describe_coarsening(precond._coarsening, precond._matrix)}"
+    detail = _describe_coarsening(precond._coarsening, precond._matrix)
+    if isinstance(precond._coarsening, PODCoarseningStrategy):
+        return detail
+    return f"L={precond._n_levels}, {detail}"
 
 
 def _describe_coarsening(coarsening: object, matrix: torch.Tensor) -> str:
@@ -200,6 +251,8 @@ def _describe_coarsening(coarsening: object, matrix: torch.Tensor) -> str:
     the notation the study's own plots already use on their axes (e.g.
     "Realized coarse dimension c"), so the legend stays consistent with the
     figure instead of introducing new shorthand a reader has to decode.
+    ``c`` is used for both methods' coarse dimension — POD-2G's fitted rank
+    *is* its coarse dimension, so there is no separate symbol for it.
 
     Args:
         coarsening (object): The AMG preconditioner's coarsening strategy
@@ -208,13 +261,17 @@ def _describe_coarsening(coarsening: object, matrix: torch.Tensor) -> str:
             :func:`coarsening_detail`.
 
     Returns:
-        str: ``"POD rank={n}"``, ``"θ={theta}, ω={omega}, c={n}"`` (``c``
-            being the realized coarse dimension), or the class name as a
-            fallback for unrecognized ``CoarseningStrategy`` implementations.
+        str: ``"c={n}"`` for POD-2G or target-dimension coarsening,
+            ``"θ={theta}, ω={omega}, c={n}"`` for aggregation coarsening
+            (``c`` being the realized coarse dimension in every case), or
+            the class name as a fallback for unrecognized
+            ``CoarseningStrategy`` implementations.
     """
     match coarsening_detail(coarsening, matrix):
         case PODCoarseningDetail(rank=rank):
-            return f"POD rank={rank}"
+            return f"c={rank}"
+        case TargetDimensionCoarseningDetail(realized_coarse_dim=c):
+            return f"c={c}"
         case AggregationCoarseningDetail(theta=theta, omega=omega, coarse_dimension=c):
             return f"θ={theta:.2g}, ω={omega:.2g}, c={c}"
         case None:

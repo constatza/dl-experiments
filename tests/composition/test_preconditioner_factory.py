@@ -26,7 +26,11 @@ from torchalg.preconditioners.implementations import (
     NeuralPreconditioner,
     ScheduledPreconditioner,
 )
-from torchalg.preconditioners.implementations.amg import AggregationCoarsening, AMGPreconditioner
+from torchalg.preconditioners.implementations.amg import (
+    AggregationCoarsening,
+    AMGPreconditioner,
+    TargetDimensionCoarsening,
+)
 from torchalg.preconditioners.ports import ExtraInputPredictorPort, PredictorAdapter
 
 from neuralls.composition.preconditioners.factory import (
@@ -43,6 +47,7 @@ from neuralls.platform.config.models.preconditioner import (
     PODCoarseningConfig,
     PreconditionerType,
     StandardPreconditionerConfig,
+    TargetDimCoarseningConfig,
 )
 
 # ==============================================================================
@@ -470,6 +475,35 @@ def test_factory_creates_amg_preconditioner_with_aggregation_coarsening(
     assert isinstance(precond, AMGPreconditioner)
     assert isinstance(precond._coarsening, AggregationCoarsening)
     assert precond._coarsening._theta == 0.05
+    assert precond._coarsening._omega == 0.5
+    result = precond.apply(residual_vector)
+    assert result.shape == residual_vector.shape
+
+
+def test_factory_creates_amg_preconditioner_with_target_dim_coarsening(
+    well_conditioned_matrix: torch.Tensor, residual_vector: torch.Tensor
+) -> None:
+    """Factory creates AMGPreconditioner for AMG type with target-dimension coarsening.
+
+    Wiring only — TargetDimensionCoarsening's own search behavior is
+    covered by torchalg's ``TestTargetDimensionCoarsening``; this just
+    confirms the config's fields reach the constructed strategy unchanged.
+    """
+    config = AMGPreconditionerConfig(
+        name="amg-target-dim",
+        coarsening=TargetDimCoarseningConfig(
+            target_coarse_dim=2, theta_min=0.1, theta_max=0.9, step=0.1, omega=0.5
+        ),
+    )
+
+    precond = create_preconditioner(well_conditioned_matrix, config)
+
+    assert isinstance(precond, AMGPreconditioner)
+    assert isinstance(precond._coarsening, TargetDimensionCoarsening)
+    assert precond._coarsening._target_coarse_dim == 2
+    assert precond._coarsening._theta_min == 0.1
+    assert precond._coarsening._theta_max == 0.9
+    assert precond._coarsening._step == 0.1
     assert precond._coarsening._omega == 0.5
     result = precond.apply(residual_vector)
     assert result.shape == residual_vector.shape

@@ -19,6 +19,7 @@ from torchalg.preconditioners.implementations.amg import (
     AggregationCoarsening,
     AMGPreconditioner,
     JacobiSmoother,
+    TargetDimensionCoarsening,
     VCycle,
 )
 from torchalg.preconditioners.implementations.pod import PODCoarseningStrategy
@@ -27,6 +28,7 @@ from neuralls.platform.reporting.preconditioner_labels import (
     MAX_LABEL_LENGTH,
     AggregationCoarseningDetail,
     PODCoarseningDetail,
+    TargetDimensionCoarseningDetail,
     build_preconditioner_labels,
     coarsening_detail,
     describe_preconditioner,
@@ -87,6 +89,17 @@ def pod_amg_preconditioner(
     return AMGPreconditioner(tridiag_spd_matrix, coarsening=coarsening, cycle=cycle, n_levels=2)
 
 
+@pytest.fixture
+def target_dim_amg_preconditioner(tridiag_spd_matrix: torch.Tensor) -> AMGPreconditioner:
+    """Constructed AMG preconditioner using target-coarse-dimension coarsening."""
+    coarsening = TargetDimensionCoarsening(
+        target_coarse_dim=3, theta_min=0.05, theta_max=0.5, step=0.05, omega=0.67
+    )
+    smoother = JacobiSmoother(omega=0.67)
+    cycle = VCycle(smoother=smoother, n_pre=2, n_post=2)
+    return AMGPreconditioner(tridiag_spd_matrix, coarsening=coarsening, cycle=cycle, n_levels=2)
+
+
 # ==============================================================================
 # coarsening_detail — structured facts, no string parsing required to verify
 # ==============================================================================
@@ -115,6 +128,21 @@ def test_coarsening_detail_reports_fitted_rank_for_pod(
     detail = coarsening_detail(pod_amg_preconditioner._coarsening, pod_amg_preconditioner._matrix)
 
     assert detail == PODCoarseningDetail(rank=2)
+
+
+def test_coarsening_detail_reports_realized_dimension_for_target_dim(
+    target_dim_amg_preconditioner: AMGPreconditioner,
+) -> None:
+    """Target-dimension coarsening's detail carries both the target and what was realized."""
+    detail = coarsening_detail(
+        target_dim_amg_preconditioner._coarsening, target_dim_amg_preconditioner._matrix
+    )
+
+    coarsening = target_dim_amg_preconditioner._coarsening
+    assert isinstance(coarsening, TargetDimensionCoarsening)
+    assert isinstance(detail, TargetDimensionCoarseningDetail)
+    assert detail.target_coarse_dim == 3
+    assert detail.realized_coarse_dim == coarsening._realized_coarse_dim
 
 
 # ==============================================================================
@@ -148,6 +176,28 @@ def test_describe_preconditioner_amg_pod_coarsening_has_detail(
     ``test_coarsening_detail_reports_fitted_rank_for_pod``.
     """
     assert describe_preconditioner(pod_amg_preconditioner) != ""
+
+
+# ==============================================================================
+# describe_preconditioner — AMG with target-coarse-dimension coarsening
+# ==============================================================================
+
+
+def test_describe_preconditioner_target_dim_coarsening_has_detail(
+    target_dim_amg_preconditioner: AMGPreconditioner,
+) -> None:
+    """AMG with target-dimension coarsening reports non-empty structural detail."""
+    assert describe_preconditioner(target_dim_amg_preconditioner) != ""
+
+
+def test_describe_preconditioner_target_dim_keeps_level_count(
+    target_dim_amg_preconditioner: AMGPreconditioner,
+) -> None:
+    """Unlike POD-2G, target-dimension coarsening keeps L= — n_levels is a real knob for it too."""
+    detail = describe_preconditioner(target_dim_amg_preconditioner)
+
+    assert "L=" in detail
+    assert "c=" in detail
 
 
 # ==============================================================================
@@ -242,6 +292,41 @@ def test_preconditioner_label_stays_within_length_budget_for_pod(
     label = preconditioner_label("pod2g-cg50", pod_amg_preconditioner)
 
     assert len(label) <= MAX_LABEL_LENGTH
+
+
+def test_preconditioner_label_stays_within_length_budget_for_target_dim(
+    target_dim_amg_preconditioner: AMGPreconditioner,
+) -> None:
+    """Target-dimension-coarsening legend entries stay within the same length budget."""
+    label = preconditioner_label("amg-target-dim", target_dim_amg_preconditioner)
+
+    assert len(label) <= MAX_LABEL_LENGTH
+
+
+def test_describe_preconditioner_pod_uses_c_not_rank_or_level_count(
+    pod_amg_preconditioner: AMGPreconditioner,
+) -> None:
+    """POD-2G's coarse dimension is rendered as ``c=``, matching AMG's terminology.
+
+    ``L=`` is also omitted: ``PODCoarseningStrategy`` is architecturally a
+    single-basis two-grid method, so a constant level count would be noise,
+    not signal, in a legend comparing POD-2G variants against each other or
+    against AMG.
+    """
+    detail = describe_preconditioner(pod_amg_preconditioner)
+
+    assert "c=" in detail
+    assert "rank=" not in detail
+    assert "L=" not in detail
+
+
+def test_describe_preconditioner_amg_aggregation_still_shows_level_count(
+    aggregation_amg_preconditioner: AMGPreconditioner,
+) -> None:
+    """AMG-aggregation keeps ``L=`` — it's a real, independently-tunable knob there."""
+    detail = describe_preconditioner(aggregation_amg_preconditioner)
+
+    assert "L=" in detail
 
 
 def test_build_preconditioner_labels_maps_each_name(

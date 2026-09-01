@@ -35,9 +35,9 @@ type = "amg"
 coarsening = { method = "aggregation", theta = 0.25 }
 
 [[comparison_defaults.preconditioners]]
-name = "amg-large-theta"
+name = "amg-target-dim"
 type = "amg"
-coarsening = { method = "aggregation", theta = 0.5 }
+coarsening = { method = "target_dim", target_coarse_dim = 175 }
 
 # pod2g-cg1/10/50 are no longer declared here: they are now [[assignments]]
 # bound to [[jobs]] pod2g-cg1/10/50 below (a `run.type = "fit"` job per

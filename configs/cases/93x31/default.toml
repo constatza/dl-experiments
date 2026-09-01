@@ -35,9 +35,9 @@ type = "amg"
 coarsening = { method = "aggregation", theta = 0.25 }
 
 [[comparison_defaults.preconditioners]]
-name = "amg-large-theta"
+name = "amg-target-dim"
 type = "amg"
-coarsening = { method = "aggregation", theta = 0.5 }
+coarsening = { method = "target_dim", target_coarse_dim = 700 }
 
 [[comparison_defaults.preconditioners]]
 name = "pod2g-cg1"

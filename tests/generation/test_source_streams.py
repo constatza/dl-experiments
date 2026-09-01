@@ -712,7 +712,12 @@ def test_build_dataset_include_indices_builds_holdout_dataset(
     tmp_path: Path,
 ) -> None:
     """A 1-row-per-matrix holdout dataset exposes exactly the included matrix ids."""
-    mat_dir, _n = subdomain_named_txt_matrices
+    mat_dir, n = subdomain_named_txt_matrices
+    sol_dir = tmp_path / "solutions"
+    sol_dir.mkdir()
+    rng = np.random.default_rng(0)
+    for j in range(2):
+        np.savetxt(sol_dir / f"sol_{j:03d}.txt", rng.standard_normal(n))
     out_dir = tmp_path / "holdout_dataset"
 
     build_dataset(
@@ -723,7 +728,7 @@ def test_build_dataset_include_indices_builds_holdout_dataset(
         include_indices=(0, 2),
         strategy_overrides={
             "solution_archive": {
-                "solutions_glob": str(mat_dir / "*_subdomain_1_Kaa.txt"),
+                "solutions_glob": str(sol_dir / "sol_*.txt"),
                 "samples": 2,
             }
         },

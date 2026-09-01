@@ -55,6 +55,7 @@ from neuralls.platform.config.models.preconditioner import (
     AggregationCoarseningConfig,
     AMGPreconditionerConfig,
     PODCoarseningConfig,
+    TargetDimCoarseningConfig,
 )
 from neuralls.platform.storage.comparison import load_system_arrays
 from neuralls.platform.storage.dataset_readers import load_dense_training_arrays
@@ -365,6 +366,23 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smoother-omega", type=float, default=0.67)
     parser.add_argument("--n-levels", type=int, default=2)
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/pod2g_amg_study"))
+    parser.add_argument(
+        "--match-pod-rank",
+        type=int,
+        default=None,
+        help=(
+            "If set, fit POD2G at this rank, read its realized coarse dimension, "
+            "then use TargetDimensionCoarsening (torchalg) to brute-force search a "
+            "theta grid for the AMG-aggregation theta whose realized c is closest, "
+            "and print the matched pair."
+        ),
+    )
+    parser.add_argument(
+        "--theta-step",
+        type=float,
+        default=0.01,
+        help="Grid spacing for --match-pod-rank's brute-force theta search.",
+    )
     return parser
 
 
@@ -421,6 +439,43 @@ def main() -> int:
         _parse_int_list(args.k_values),
         args.output_dir / "walltime_amortized_vs_k.png",
     )
+
+    if args.match_pod_rank is not None:
+        pod_config = AMGPreconditionerConfig(
+            name=f"pod2g (rank={args.match_pod_rank})",
+            n_levels=args.n_levels,
+            pre_smoothing_steps=args.n_pre,
+            post_smoothing_steps=args.n_post,
+            smoother_omega=args.smoother_omega,
+            coarsening=PODCoarseningConfig(
+                dataset_dir=args.snapshot_dir,
+                rank=args.match_pod_rank,
+                n_snapshots=args.n_snapshots,
+            ),
+        )
+        _, pod_coarsening = create_preconditioner_with_coarsening(A, pod_config)
+        assert pod_coarsening is not None
+        target_c = _realized_coarse_dimension(pod_coarsening, A)
+
+        target_dim_config = AMGPreconditionerConfig(
+            name=f"amg (target_dim={target_c})",
+            n_levels=args.n_levels,
+            pre_smoothing_steps=args.n_pre,
+            post_smoothing_steps=args.n_post,
+            smoother_omega=args.smoother_omega,
+            coarsening=TargetDimCoarseningConfig(
+                target_coarse_dim=target_c, step=args.theta_step, omega=args.smoother_omega
+            ),
+        )
+        _, matched_coarsening = create_preconditioner_with_coarsening(A, target_dim_config)
+        assert matched_coarsening is not None
+        matched_c = _realized_coarse_dimension(matched_coarsening, A)
+        theta = matched_coarsening._theta
+        print(
+            f"Brute-force match: pod2g rank={args.match_pod_rank} (c={target_c}) "
+            f"<-> amg theta={theta:g} (c={matched_c})"
+        )
+
     return 0
 
 
