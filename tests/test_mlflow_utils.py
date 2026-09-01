@@ -28,7 +28,7 @@ from neuralls.platform.tracking.mlflow import (
 )
 from neuralls.platform.tracking.mlflow_client import (
     log_artifacts_to_mlflow,
-    log_eval_batch_artifacts_to_mlflow,
+    log_batch_artifacts_to_mlflow,
 )
 
 
@@ -433,7 +433,7 @@ def test_log_artifacts_to_mlflow_excludes_checkpoints(tmp_path: Path) -> None:
     assert set(logged_paths) == {"figures", "metrics", "predictions", "config"}
 
 
-def test_log_eval_batch_artifacts_to_mlflow_uploads_only_existing_files(tmp_path: Path) -> None:
+def test_log_batch_artifacts_to_mlflow_uploads_only_existing_files(tmp_path: Path) -> None:
     """No plot is produced when a metric is missing for every result — that file
     must simply be skipped, not uploaded as missing/empty.
     """
@@ -444,7 +444,7 @@ def test_log_eval_batch_artifacts_to_mlflow_uploads_only_existing_files(tmp_path
 
     with patch("mlflow.tracking.MlflowClient") as mock_client_cls:
         client = mock_client_cls.return_value
-        log_eval_batch_artifacts_to_mlflow(
+        log_batch_artifacts_to_mlflow(
             tracking_uri=f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}",
             run_id="run-1",
             work_root=work_root,

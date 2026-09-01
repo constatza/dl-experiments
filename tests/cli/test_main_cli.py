@@ -346,12 +346,10 @@ def test_train_invokes_batch_workflow(
     settings = MagicMock()
     cfg = MagicMock()
     batch = MagicMock()
-    report_dir = tmp_path / "training"
-    report_dir.mkdir()
     mock_load_settings.return_value = settings
     mock_load_case_config.return_value = (cfg, MagicMock())
     mock_train_batch.return_value = batch
-    mock_write_metric_report.return_value = report_dir
+    mock_write_metric_report.return_value = True
 
     result = runner.invoke(app, ["train", str(config)])
 
@@ -365,7 +363,7 @@ def test_train_invokes_batch_workflow(
         output_root=None,
         case_config_path=config.resolve(),
     )
-    mock_write_metric_report.assert_called_once_with(batch, metric="eval/mae", output_dir=None)
+    mock_write_metric_report.assert_called_once_with(batch, metric="eval/mae")
 
 
 @patch("neuralls.cli.eval.write_eval_metric_report")

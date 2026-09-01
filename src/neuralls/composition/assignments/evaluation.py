@@ -65,7 +65,7 @@ from neuralls.platform.tracking.mlflow import (
 )
 from neuralls.platform.tracking.mlflow_client import (
     find_successful_run,
-    log_eval_batch_artifacts_to_mlflow,
+    log_batch_artifacts_to_mlflow,
 )
 
 type MlflowClientFactory = Callable[..., MlflowClient]
@@ -707,7 +707,7 @@ def write_eval_metric_report(
     """Build eval-batch summary artifacts and log them to the batch's MLflow parent run.
 
     Stages the comparison barplot and label map in a scratch directory and
-    uploads them via ``log_eval_batch_artifacts_to_mlflow`` — nothing is left
+    uploads them via ``log_batch_artifacts_to_mlflow`` — nothing is left
     on local disk, matching the batch's other artifacts, which all live under
     the session parent run rather than a non-MLflow output directory.
 
@@ -759,7 +759,7 @@ def write_eval_metric_report(
             encoding="utf-8",
         )
 
-        log_eval_batch_artifacts_to_mlflow(
+        log_batch_artifacts_to_mlflow(
             tracking_uri=batch.tracking_uri,
             run_id=batch.parent_run_id,
             work_root=work_root,

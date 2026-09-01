@@ -102,13 +102,13 @@ _COMPARISON_FLAT_FILES: tuple[str, ...] = (
 )
 
 
-def log_eval_batch_artifacts_to_mlflow(
+def log_batch_artifacts_to_mlflow(
     tracking_uri: str,
     run_id: str,
     work_root: Path,
     flat_files: Sequence[str],
 ) -> None:
-    """Upload eval-batch summary artifacts (barplot + label map) to an existing MLflow run.
+    """Upload batch summary artifacts (barplot + label map) to an existing MLflow run.
 
     Args:
         tracking_uri: MLflow tracking URI.

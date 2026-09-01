@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,7 +46,10 @@ from neuralls.platform.tracking.mlflow import (
     build_workflow_environment,
     finalize_session_parent_run,
 )
-from neuralls.platform.tracking.mlflow_client import fetch_mlflow_metrics
+from neuralls.platform.tracking.mlflow_client import (
+    fetch_mlflow_metrics,
+    log_batch_artifacts_to_mlflow,
+)
 from neuralls.platform.tracking.model_registry import read_model_class_name
 
 
@@ -83,12 +87,19 @@ class BatchResult:
     Attributes:
         results: Ordered list of per-assignment results (same order as TOML).
         label_map: Maps short label → assignment metadata.
-        output_dir: Directory where batch artefacts (plot, label JSON) are saved.
+        output_dir: Directory where per-assignment local staging is rooted.
+        tracking_uri: MLflow tracking URI used for the session parent run, or
+            ``None`` if every assignment failed to prepare and no parent run
+            was ever created.
+        parent_run_id: MLflow run id of the session parent run, or ``None``
+            under the same no-run condition as ``tracking_uri``.
     """
 
     results: list[TrainingRunResult]
     label_map: dict[str, dict[str, str | None]]
     output_dir: Path
+    tracking_uri: str | None
+    parent_run_id: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -422,10 +433,14 @@ def train_batch(
                 finally:
                     cleanup_prepared_training(prepared)
 
+        resolved_tracking_uri: str | None = None
+        parent_run_id: str | None = None
         if sweep_result is not None:
+            resolved_tracking_uri = sweep_result.tracking_uri or training_mlflow_env.tracking_uri
+            parent_run_id = sweep_result.parent_run_id
             finalize_session_parent_run(
-                tracking_uri=sweep_result.tracking_uri or training_mlflow_env.tracking_uri,
-                run_id=sweep_result.parent_run_id,
+                tracking_uri=resolved_tracking_uri,
+                run_id=parent_run_id,
                 status="FAILED" if session_failed else "FINISHED",
             )
 
@@ -435,6 +450,8 @@ def train_batch(
         results=results,
         label_map=label_map,
         output_dir=output_dir,
+        tracking_uri=resolved_tracking_uri,
+        parent_run_id=parent_run_id,
     )
 
 
@@ -442,12 +459,21 @@ def write_metric_report(
     batch: BatchResult,
     *,
     metric: str,
-    output_dir: Path | None = None,
-) -> Path:
-    """Write aggregate batch-training artifacts for one metric."""
-    report_dir = output_dir if output_dir is not None else batch.output_dir
-    report_dir.mkdir(parents=True, exist_ok=True)
+) -> bool:
+    """Build batch-training summary artifacts and log them to the batch's MLflow parent run.
 
+    Stages the comparison barplot and label map in a scratch directory and
+    uploads them via ``log_batch_artifacts_to_mlflow`` — nothing is left on
+    local disk, matching the batch's other artifacts, which all live under
+    the session parent run rather than a non-MLflow output directory.
+
+    Args:
+        batch: Completed training batch result.
+        metric: Metric key to plot across assignments.
+
+    Returns:
+        True if a comparison plot was produced (metric present for >=1 result).
+    """
     labels: list[str] = []
     values: list[float] = []
     missing: list[str] = []
@@ -462,6 +488,12 @@ def write_metric_report(
     if missing:
         logger.warning("Metric '{}' missing for assignments: {}", metric, ", ".join(missing))
 
+    if batch.tracking_uri is None or batch.parent_run_id is None:
+        logger.warning(
+            "No MLflow session parent run for this batch; skipping metric report upload."
+        )
+        return False
+
     legend = {
         result.label: (
             f"{result.assignment_display_name} (run: {result.mlflow_run_id})"
@@ -472,17 +504,29 @@ def write_metric_report(
         if result.label in labels
     }
 
-    if labels:
-        plot_metric_comparison(
-            labels=labels,
-            values=values,
-            metric_name=metric,
-            legend=legend,
-            save_path=report_dir / f"batch_metric_{metric.replace('/', '_')}.png",
+    plot_name = f"batch_metric_{metric.replace('/', '_')}.png"
+    with tempfile.TemporaryDirectory() as tmp:
+        work_root = Path(tmp)
+        plotted = bool(labels)
+        if plotted:
+            plot_metric_comparison(
+                labels=labels,
+                values=values,
+                metric_name=metric,
+                legend=legend,
+                save_path=work_root / plot_name,
+            )
+
+        (work_root / "batch_training_labels.json").write_text(
+            json.dumps(batch.label_map, indent=2),
+            encoding="utf-8",
         )
 
-    (report_dir / "batch_training_labels.json").write_text(
-        json.dumps(batch.label_map, indent=2),
-        encoding="utf-8",
-    )
-    return report_dir
+        log_batch_artifacts_to_mlflow(
+            tracking_uri=batch.tracking_uri,
+            run_id=batch.parent_run_id,
+            work_root=work_root,
+            flat_files=(plot_name, "batch_training_labels.json"),
+        )
+
+    return plotted
