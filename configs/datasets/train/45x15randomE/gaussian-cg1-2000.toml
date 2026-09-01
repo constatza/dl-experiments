@@ -1,4 +1,4 @@
-id = "gaussian-cg1-45x15randomE"
+id = "gaussian-cg1-45x15randomE-2000"
 
 [source]
 matrix_path = "${NEURALLS_RAW_DIR}/SpectralData/45x15randomE/stiffness/*_subdomain_1_Kaa.txt"
@@ -20,7 +20,7 @@ seed = 42
 # archived displacement solutions — solution archives are comparison-only.
 [[generation.strategy]]
 name = "gaussian_forward"
-samples = 500
+samples = 2000
 
 [output]
 data_dir = "${NEURALLS_PROCESSED_DIR}"
