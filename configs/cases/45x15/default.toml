@@ -59,7 +59,7 @@ path = "../../datasets/train/45x15/gaussian-cg50.toml"
 display_name = "Gaussian CG-50 45x15 (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-cg50-2000-45x15"
+id = "gaussian-cg50-45x15-2000"
 path = "../../datasets/train/45x15/gaussian-cg50-2000.toml"
 display_name = "Gaussian CG-50 45x15, 2000 samples (POD-2G snapshot source)"
 
@@ -117,5 +117,5 @@ dataset = "gaussian-cg50-45x15"
 job = "pod2g-cg50"
 
 [[assignments]]
-dataset = "gaussian-cg50-2000-45x15"
+dataset = "gaussian-cg50-45x15-2000"
 job = "pod2g-cg50-2000"
