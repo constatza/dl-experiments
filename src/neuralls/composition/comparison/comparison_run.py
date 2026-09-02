@@ -7,6 +7,8 @@ from functools import partial
 from pathlib import Path
 
 import torch
+from loguru import logger
+from torchalg.utils.device import resolve_device
 
 from neuralls.composition.comparison._linear_system import (
     _load_linear_system,
@@ -112,6 +114,16 @@ def _evaluate_preconditioner(
         label=label,
         family=preconditioner_family(cfg),
     )
+
+
+def _log_solver_device(display_name: str | None) -> None:
+    """Log which torch device the CG solver used for this comparison run.
+
+    Args:
+        display_name: Optional human-readable comparison label.
+    """
+    device = resolve_device()
+    logger.info(f"CG solver device: comparison={display_name or 'unnamed'} device={device}")
 
 
 def _resolve_comparison_paths(
@@ -293,6 +305,8 @@ def compare_preconditioners(
         atol=general_params.params.atol,
         max_iterations=general_params.params.max_iterations,
     )
+
+    _log_solver_device(display_name)
 
     return ComparisonResult(
         results=results,
