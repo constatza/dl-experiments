@@ -7,4 +7,4 @@ data = "../../profiles/data/array-default.toml"
 [model]
 name = "PODCoarseningFittable"
 module_path = "neuralls.composition.preconditioners.pod_fittable"
-rank = 0.9999
+rank = 300

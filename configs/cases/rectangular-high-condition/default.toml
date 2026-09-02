@@ -25,19 +25,19 @@ name = "ic0"
 type = "ic0"
 
 [[comparison_defaults.preconditioners]]
-name = "amg-small-theta"
+name = "amg-dim100"
 type = "amg"
-coarsening = { method = "aggregation", theta = 0.05 }
+coarsening = { method = "target_dim", target_coarse_dim = 100 }
 
 [[comparison_defaults.preconditioners]]
-name = "amg-medium-theta"
+name = "amg-dim200"
 type = "amg"
-coarsening = { method = "aggregation", theta = 0.25 }
+coarsening = { method = "target_dim", target_coarse_dim = 200 }
 
 [[comparison_defaults.preconditioners]]
-name = "amg-target-dim"
+name = "amg-dim300"
 type = "amg"
-coarsening = { method = "target_dim", target_coarse_dim = 175 }
+coarsening = { method = "target_dim", target_coarse_dim = 300 }
 
 # pod2g-cg1/10/50 are no longer declared here: they are now [[assignments]]
 # bound to [[jobs]] pod2g-cg1/10/50 below (a `run.type = "fit"` job per
@@ -58,6 +58,11 @@ id = "gaussian-cg50-rectangular-high-condition"
 path = "../../datasets/train/rectangular-high-condition/gaussian-cg50.toml"
 display_name = "Gaussian CG-50 rectangular-high-condition (POD-2G snapshot source)"
 
+[[datasets]]
+id = "gaussian-cg50-2000-rectangular-high-condition"
+path = "../../datasets/train/rectangular-high-condition/gaussian-cg50-2000.toml"
+display_name = "Gaussian CG-50 rectangular-high-condition, 2000 samples (POD-2G snapshot source)"
+
 [[jobs]]
 id = "pod2g-cg1"
 path = "../../jobs/rectangular-high-condition/pod2g-cg1.toml"
@@ -72,6 +77,11 @@ display_name = "POD-2G basis (CG-10)"
 id = "pod2g-cg50"
 path = "../../jobs/rectangular-high-condition/pod2g-cg50.toml"
 display_name = "POD-2G basis (CG-50)"
+
+[[jobs]]
+id = "pod2g-cg50-2000"
+path = "../../jobs/rectangular-high-condition/pod2g-cg50-2000.toml"
+display_name = "POD-2G basis (CG-50, 2000 samples)"
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg50-rectangular-high-condition"
@@ -101,3 +111,7 @@ job = "pod2g-cg10"
 [[assignments]]
 dataset = "gaussian-cg50-rectangular-high-condition"
 job = "pod2g-cg50"
+
+[[assignments]]
+dataset = "gaussian-cg50-2000-rectangular-high-condition"
+job = "pod2g-cg50-2000"

@@ -25,34 +25,34 @@ name = "ic0"
 type = "ic0"
 
 [[comparison_defaults.preconditioners]]
-name = "amg-small-theta"
+name = "amg-dim100"
 type = "amg"
-coarsening = { method = "aggregation", theta = 0.05 }
+coarsening = { method = "target_dim", target_coarse_dim = 100 }
 
 [[comparison_defaults.preconditioners]]
-name = "amg-medium-theta"
+name = "amg-dim200"
 type = "amg"
-coarsening = { method = "aggregation", theta = 0.25 }
+coarsening = { method = "target_dim", target_coarse_dim = 200 }
 
 [[comparison_defaults.preconditioners]]
-name = "amg-target-dim"
+name = "amg-dim300"
 type = "amg"
-coarsening = { method = "target_dim", target_coarse_dim = 700 }
+coarsening = { method = "target_dim", target_coarse_dim = 300 }
 
 [[comparison_defaults.preconditioners]]
 name = "pod2g-cg1"
 type = "amg"
-coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg1-93x31", n_snapshots = -1, rank = 0.9999 }
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg1-93x31", n_snapshots = -1, rank = 100 }
 
 [[comparison_defaults.preconditioners]]
 name = "pod2g-cg10"
 type = "amg"
-coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg10-93x31", n_snapshots = -1, rank = 0.9999 }
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg10-93x31", n_snapshots = -1, rank = 200 }
 
 [[comparison_defaults.preconditioners]]
 name = "pod2g-cg50"
 type = "amg"
-coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg50-93x31", n_snapshots = -1, rank = 0.9999 }
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg50-93x31", n_snapshots = -1, rank = 300 }
 
 [[datasets]]
 id = "gaussian-cg1-93x31"
