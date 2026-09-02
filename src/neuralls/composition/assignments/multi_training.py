@@ -377,6 +377,10 @@ def train_batch(
                     job_registry_id,
                     job_display_name,
                 ) = _resolve_training_entry_metadata(entry=entry, cfg=cfg)
+                logger.info(
+                    f"[{label}] Assignment '{entry.id}': "
+                    f"job={job_display_name}, dataset={dataset_display_name}"
+                )
                 prepared = prepare_training_settings(
                     config_path=job_config_path,
                     data_config_path=data_config,

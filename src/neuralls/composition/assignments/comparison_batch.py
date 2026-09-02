@@ -698,6 +698,7 @@ def run_comparison_batch(
     outcomes: list[ComparisonOutcome] = []
     with mlflow.start_run(run_name=session_run_name, tags=session_tags.as_mlflow_tags()):
         for entry in master_cfg.comparisons:
+            logger.info(f"Comparison [{entry.id}]: {entry.effective_display_name}")
             assignment_entries: list[AssignmentEntry] = (
                 [e for e in master_cfg.assignments if e.id in entry.assignments]
                 if entry.assignments

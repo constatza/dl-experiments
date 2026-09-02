@@ -65,6 +65,7 @@ def _evaluate_preconditioner(
     matrix_path: Path,
     matrix_index: int,
     params: SolverParams,
+    display_name: str | None = None,
 ) -> PreconditionerComparisonEntry:
     """Build one preconditioner, run it, and package its evaluation outcome.
 
@@ -80,10 +81,12 @@ def _evaluate_preconditioner(
         matrix_path: Dataset directory for extra-input binding (may not be a directory).
         matrix_index: Sample index for extra-input extraction.
         params: Solver tolerances and iteration limits.
+        display_name: Optional human-readable comparison label, for logging.
 
     Returns:
         Named result: solve outcome, condition number, and plot label for ``cfg``.
     """
+    logger.info(f"Preconditioner: {cfg.name} (comparison={display_name or 'unnamed'})")
     base_preconditioners = {cfg.name: service.create_preconditioner(matrix, cfg)}
     scheduled = _create_scheduled_preconditioners(
         preconditioner_configs=[cfg],
@@ -267,6 +270,7 @@ def compare_preconditioners(
         matrix_path=paths.matrix,
         matrix_index=resolved_matrix_index,
         params=general_params.params,
+        display_name=display_name,
     )
 
     results: dict[str, CGComparisonResult] = {}
