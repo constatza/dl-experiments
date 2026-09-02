@@ -44,17 +44,14 @@ coarsening = { method = "target_dim", target_coarse_dim = 175 }
 # dataset), fitted once ahead of time and MLflow-tracked.
 
 [[datasets]]
-id = "gaussian-cg1-rectangular-high-condition-2000"
 path = "../../datasets/train/rectangular-high-condition/gaussian-cg1-2000.toml"
 display_name = "Gaussian (plain, 0 CG iterations) rectangular-high-condition, 2000 samples (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-cg10-rectangular-high-condition-2000"
 path = "../../datasets/train/rectangular-high-condition/gaussian-cg10-2000.toml"
 display_name = "Gaussian CG-10 rectangular-high-condition, 2000 samples (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-cg50-rectangular-high-condition-2000"
 path = "../../datasets/train/rectangular-high-condition/gaussian-cg50-2000.toml"
 display_name = "Gaussian CG-50 rectangular-high-condition, 2000 samples (POD-2G snapshot source)"
 

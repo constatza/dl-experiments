@@ -30,7 +30,6 @@ type = "amg"
 coarsening = { method = "aggregation" }
 
 [[datasets]]
-id = "gaussian-cg50-45x15"
 path = "../../datasets/train/45x15/gaussian-cg50.toml"
 display_name = "Gaussian CG-50 45x15"
 

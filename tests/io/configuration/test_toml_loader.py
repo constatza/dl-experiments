@@ -116,6 +116,65 @@ path = "{dataset_cfg.as_posix()}"
     assert config.datasets[0].path == dataset_cfg.resolve()
 
 
+def test_load_case_config_fills_missing_dataset_id_from_dataset_config(
+    tmp_path: Path,
+    neuralls_settings: NeurallsSettings,
+) -> None:
+    """A [[datasets]] entry without an id defaults to the dataset config's own id."""
+    dataset_cfg = tmp_path / "dataset.toml"
+    dataset_cfg.write_text(
+        'id = "dataset-own-id"\n[source]\nmatrix_path = "${NEURALLS_PROCESSED_DIR}/matrix.mtx"\n'
+    )
+    config_file = tmp_path / "experiments.toml"
+    config_file.write_text(
+        f"""
+[[datasets]]
+path = "{dataset_cfg.as_posix()}"
+"""
+    )
+    config = load_case_config(config_file, neuralls_settings)
+    assert config.datasets[0].id == "dataset-own-id"
+
+
+def test_load_case_config_explicit_dataset_id_wins(
+    tmp_path: Path,
+    neuralls_settings: NeurallsSettings,
+) -> None:
+    """An explicit [[datasets]] id is never overridden by the dataset config's own id."""
+    dataset_cfg = tmp_path / "dataset.toml"
+    dataset_cfg.write_text(
+        'id = "dataset-own-id"\n[source]\nmatrix_path = "${NEURALLS_PROCESSED_DIR}/matrix.mtx"\n'
+    )
+    config_file = tmp_path / "experiments.toml"
+    config_file.write_text(
+        f"""
+[[datasets]]
+id = "case-local-alias"
+path = "{dataset_cfg.as_posix()}"
+"""
+    )
+    config = load_case_config(config_file, neuralls_settings)
+    assert config.datasets[0].id == "case-local-alias"
+
+
+def test_load_case_config_requires_dataset_id_when_neither_has_one(
+    tmp_path: Path,
+    neuralls_settings: NeurallsSettings,
+) -> None:
+    """A missing id on both the case entry and the dataset config is a clear error."""
+    dataset_cfg = tmp_path / "dataset.toml"
+    dataset_cfg.write_text('[source]\nmatrix_path = "${NEURALLS_PROCESSED_DIR}/matrix.mtx"\n')
+    config_file = tmp_path / "experiments.toml"
+    config_file.write_text(
+        f"""
+[[datasets]]
+path = "{dataset_cfg.as_posix()}"
+"""
+    )
+    with pytest.raises(ValueError, match="has no 'id'"):
+        load_case_config(config_file, neuralls_settings)
+
+
 def test_load_raw_toml_success(tmp_path: Path) -> None:
     """Raw TOML loading returns a plain dict."""
     config_file = tmp_path / "test.toml"

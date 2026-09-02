@@ -55,17 +55,14 @@ type = "amg"
 coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg50-93x31", n_snapshots = -1, rank = 300 }
 
 [[datasets]]
-id = "gaussian-cg1-93x31"
 path = "../../datasets/train/93x31/gaussian-cg1.toml"
 display_name = "Gaussian (plain, 0 CG iterations) 93x31 (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-cg10-93x31"
 path = "../../datasets/train/93x31/gaussian-cg10.toml"
 display_name = "Gaussian CG-10 93x31 (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-cg50-93x31"
 path = "../../datasets/train/93x31/gaussian-cg50.toml"
 display_name = "Gaussian CG-50 93x31 (POD-2G snapshot source)"
 

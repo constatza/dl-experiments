@@ -6,7 +6,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from neuralls.platform.config.context import ConfigContext
+from neuralls.platform.config.context import ConfigContext, expand_config_path
 from neuralls.platform.config.models.comparison import (
     ComparisonConfig,
     parse_comparison_config,
@@ -39,10 +39,44 @@ def load_comparison_config(path: Path, settings: NeurallsSettings) -> Comparison
     return parse_comparison_config(raw, context=ctx)
 
 
+def _fill_missing_dataset_ids(raw: dict[str, Any], ctx: ConfigContext) -> None:
+    """Default missing [[datasets]] entry ids from their referenced dataset config's own id.
+
+    A [[datasets]] entry's ``id`` is only a case-registry lookup key; the dataset
+    config's own ``id`` is what generation actually names the processed directory
+    with. Reading it here (instead of requiring it hand-typed twice) makes the
+    dataset config the single source of truth for entries that don't need a
+    distinct local alias. Mutates ``raw["datasets"]`` in place; entries with an
+    explicit non-blank id are left untouched.
+    """
+    datasets = raw.get("datasets")
+    if not isinstance(datasets, list):
+        return
+    for entry in datasets:
+        if not isinstance(entry, dict):
+            continue
+        existing_id = entry.get("id")
+        if isinstance(existing_id, str) and existing_id.strip():
+            continue
+        raw_path = entry.get("path")
+        if not isinstance(raw_path, str):
+            continue
+        dataset_path = Path(expand_config_path(raw_path, ctx))
+        dataset_raw = load_raw_toml(dataset_path)
+        dataset_id = dataset_raw.get("id")
+        if not isinstance(dataset_id, str) or not dataset_id.strip():
+            raise ValueError(
+                f"[[datasets]] entry with path '{raw_path}' has no 'id' and its dataset "
+                f"config at '{dataset_path}' also has no 'id'. Set one explicitly."
+            )
+        entry["id"] = dataset_id
+
+
 def load_case_config(path: Path, settings: NeurallsSettings) -> CaseConfig:
     """Load and validate the top-level case TOML."""
     raw = load_raw_toml(path)
     ctx = ConfigContext(config_path=path.resolve(), settings=settings)
+    _fill_missing_dataset_ids(raw, ctx)
     return CaseConfig.model_validate(raw, context=ctx.as_pydantic_context())
 
 

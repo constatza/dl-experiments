@@ -44,27 +44,22 @@ coarsening = { method = "target_dim", target_coarse_dim = 300 }
 # dataset), fitted once ahead of time and MLflow-tracked.
 
 [[datasets]]
-id = "gaussian-cg1-45x15randomE"
 path = "../../datasets/train/45x15randomE/gaussian-cg1.toml"
 display_name = "Gaussian (plain, 0 CG iterations) 45x15randomE (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-cg10-45x15randomE"
 path = "../../datasets/train/45x15randomE/gaussian-cg10.toml"
 display_name = "Gaussian CG-10 45x15randomE (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-cg50-45x15randomE"
 path = "../../datasets/train/45x15randomE/gaussian-cg50.toml"
 display_name = "Gaussian CG-50 45x15randomE (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-cg50-45x15randomE-2000"
 path = "../../datasets/train/45x15randomE/gaussian-cg50-2000.toml"
 display_name = "Gaussian CG-50 45x15randomE, 2000 samples (POD-2G snapshot source)"
 
 [[datasets]]
-id = "gaussian-eval-45x15randomE"
 path = "../../datasets/test/45x15randomE/gaussian-eval.toml"
 display_name = "Gaussian Eval 45x15randomE (matrices excluded from training and POD-2G snapshotting)"
 
