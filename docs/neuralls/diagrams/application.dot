@@ -1,13 +1,11 @@
 digraph {
 "neuralls.application" [label="application" style="bold"];
-"neuralls.application.comparison" [label="comparison"];
 "neuralls.application.inference" [label="inference"];
+"neuralls.application.models" [label="models"];
 "neuralls.domain" [label="domain"];
 "neuralls.shared" [label="shared"];
-"neuralls.application" -> "neuralls.application.comparison" [style="dashed" color="gray50" arrowhead="none"];
 "neuralls.application" -> "neuralls.application.inference" [style="dashed" color="gray50" arrowhead="none"];
-"neuralls.application.comparison" -> "neuralls.domain";
-"neuralls.application.comparison" -> "neuralls.shared";
-"neuralls.application.inference" -> "neuralls.shared";
+"neuralls.application" -> "neuralls.application.models" [style="dashed" color="gray50" arrowhead="none"];
+"neuralls.application.inference" -> "neuralls.domain";
 "neuralls.domain" -> "neuralls.shared";
 }

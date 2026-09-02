@@ -6,7 +6,6 @@ digraph {
 "neuralls.platform" [label="platform"];
 "neuralls.shared" [label="shared"];
 "neuralls.application" -> "neuralls.domain";
-"neuralls.application" -> "neuralls.shared";
 "neuralls.cli" -> "neuralls.composition";
 "neuralls.cli" -> "neuralls.shared";
 "neuralls.composition" -> "neuralls.application";
