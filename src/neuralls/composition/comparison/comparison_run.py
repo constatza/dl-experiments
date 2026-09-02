@@ -239,6 +239,7 @@ def compare_preconditioners(
         figures_root=figures_root,
     )
     _ensure_comparison_directories(paths)
+    _log_solver_device(display_name)
 
     resolved_matrix_index = (
         general_params.data.matrix_index if general_params.data.matrix_index is not None else 0
@@ -305,8 +306,6 @@ def compare_preconditioners(
         atol=general_params.params.atol,
         max_iterations=general_params.params.max_iterations,
     )
-
-    _log_solver_device(display_name)
 
     return ComparisonResult(
         results=results,
