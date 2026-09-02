@@ -200,7 +200,11 @@ def load_assignment(
         raise ValueError(
             "dataset_registry_id is required. Pass it from the case config via load_assignment_batch()."
         )
-    dataset_id = dataset_registry_id
+    # On-disk paths key off the dataset config's own id (what generation used to
+    # name the processed directory), not the case-registry alias, so the two can
+    # never drift apart. dataset_registry_id stays on AssignmentSpec below purely
+    # for tracking which case-config entry produced this run.
+    dataset_id = data_cfg.id
     base_name = _base_name_from_settings(job_cfg, job_config_path)
     spec = AssignmentSpec(
         assignment_id=assignment_id or base_name,

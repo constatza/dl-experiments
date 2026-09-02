@@ -222,7 +222,10 @@ class TestLoadExperiment:
         tmp_path: Path,
         neuralls_settings,
     ) -> None:
-        """Workspace paths remain rooted under the requested output root."""
+        """Workspace paths are rooted under the dataset config's own id, not the
+        case-registry alias — deliberately passing a different alias here
+        (the filename stem, "data") than the dataset config's own id
+        ("test-data") to guard against the two drifting apart on disk."""
         output_root = tmp_path / "output"
         output_root.mkdir()
 
@@ -234,9 +237,9 @@ class TestLoadExperiment:
             dataset_registry_id=sample_data_config.stem,
         )
 
-        assert experiment.workspace.dataset_id == "data"
+        assert experiment.workspace.dataset_id == "test-data"
         assert experiment.workspace.run_id == "test-model"
-        assert experiment.workspace.root_dir.parent == output_root / "data"
+        assert experiment.workspace.root_dir.parent == output_root / "test-data"
         assert experiment.workspace.root_dir.name == "test-model"
         assert experiment.workspace.checkpoint_dir.exists()
         assert experiment.workspace.figures_dir.exists()
