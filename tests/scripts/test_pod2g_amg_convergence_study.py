@@ -2,7 +2,7 @@
 
 Only the argument-free logic (grid parsing, nearest-realized-c matching) is
 covered here — the sweep functions themselves require a real system matrix
-and POD2G snapshot dataset and are exercised by running the script directly
+and POD-2G snapshot dataset and are exercised by running the script directly
 per ``docs/plan.md``'s Verification section, not by a unit test.
 """
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def sweep_points(convergence_study_module: ModuleType):
-    """Three AMG and three POD2G sweep points at distinct realized coarse dimensions.
+    """Three AMG and three POD-2G sweep points at distinct realized coarse dimensions.
 
     Only ``coarse_dim`` is exercised by the functions under test, so
     ``result`` is left as ``None`` rather than building a full

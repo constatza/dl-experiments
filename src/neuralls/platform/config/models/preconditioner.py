@@ -391,7 +391,7 @@ class PODCoarseningConfig(NeuralCheckpointRef):
 
     The prolongation/restriction operator is a POD basis fit to a snapshot
     ensemble of high-fidelity solutions (or, for a sharper coarse space,
-    CG error traces e_k = x* - x_k, which are richer than plain solutions
+    CG error traces e_k = x* - x_k, which are richer than raw solution vectors
     since e_0 == x* and later k emphasize slow-converging directions) —
     read from an already-generated dataset directory, not raw files, so the
     same validation/normalization/manifest guarantees as every other
@@ -411,7 +411,7 @@ class PODCoarseningConfig(NeuralCheckpointRef):
     method: Literal["pod"] = "pod"
     dataset_dir: Path = Field(
         ...,
-        description="Generated dataset directory whose `solutions` array supplies POD snapshots.",
+        description="Generated dataset directory whose `solutions` array supplies POD-2G snapshots.",
     )
     n_snapshots: int = Field(
         default=-1, description="Number of snapshot files to load; -1 means all matched."

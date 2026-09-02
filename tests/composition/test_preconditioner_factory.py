@@ -174,7 +174,7 @@ def mock_checkpoint(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def pod_snapshot_dataset_dir(tmp_path: Path, well_conditioned_matrix: torch.Tensor) -> Path:
-    """Minimal generated dataset directory supplying POD snapshot solutions.
+    """Minimal generated dataset directory supplying POD-2G snapshot solutions.
 
     Builds a manifest-backed dataset (matching the repo's canonical
     generation pipeline) with a handful of solution rows shaped to the 4x4

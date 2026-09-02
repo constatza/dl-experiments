@@ -17,6 +17,10 @@ from neuralls.domain.solver.models.result import CGComparisonResult
 from neuralls.platform.config.models.preconditioner_family import PreconditionerFamilyKey
 from neuralls.shared.types import PreconditionerFamily
 
+DEFAULT_LINE_MARKER_SIZE = 3.0
+DEFAULT_SCATTER_MARKER_AREA = 6.0
+DEFAULT_DIAGNOSTIC_SCATTER_MARKER_AREA = 3.0
+
 
 def plot_parity_and_residuals(
     y_true: np.ndarray,
@@ -24,6 +28,7 @@ def plot_parity_and_residuals(
     sample: int = 0,
     save_path: str | Path | None = None,
     show: bool = False,
+    marker_area: float = DEFAULT_SCATTER_MARKER_AREA,
 ) -> None:
     """Create parity and residuals plots.
 
@@ -33,6 +38,7 @@ def plot_parity_and_residuals(
         sample: Sample number for title
         save_path: Path to save plot
         show: Whether to show plot
+        marker_area: Marker area for scatter points
     """
     y_true = np.asarray(y_true).ravel()
     y_pred = np.asarray(y_pred).ravel()
@@ -55,7 +61,7 @@ def plot_parity_and_residuals(
     pad = 0.02 * (y_max - y_min) if y_max > y_min else 1.0
 
     set1 = matplotlib.colormaps["Set1"]
-    ax.scatter(y_true, y_pred, s=10, alpha=0.7, color=set1(0.0))
+    ax.scatter(y_true, y_pred, s=marker_area, alpha=0.7, color=set1(0.0))
     ax.plot(
         [y_min - pad, y_max + pad],
         [y_min - pad, y_max + pad],
@@ -80,7 +86,7 @@ def plot_parity_and_residuals(
 
     # Residuals plot
     ax = axes[1]
-    ax.scatter(y_pred, residuals, s=10, alpha=0.7, color=set1(0.0))
+    ax.scatter(y_pred, residuals, s=marker_area, alpha=0.7, color=set1(0.0))
     ax.axhline(0.0, color=set1(0.1), linestyle="dashed", label="residual = 0")
     ax.set_xlabel("Predicted")
     ax.set_ylabel("Residual (Pred - True)")
@@ -106,6 +112,7 @@ def plot_residual_history(
     results: dict[str, dict[str, Any]],
     save_path: str | Path | None = None,
     show: bool = False,
+    marker_size: float = DEFAULT_LINE_MARKER_SIZE,
 ) -> None:
     """Plot residual history for different methods.
 
@@ -113,6 +120,7 @@ def plot_residual_history(
         results: Dictionary of method results with 'residuals' key
         save_path: Path to save plot
         show: Whether to show plot
+        marker_size: Marker diameter for residual-history points
     """
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -132,7 +140,7 @@ def plot_residual_history(
 
         if residuals:
             iterations = range(len(residuals))
-            ax.semilogy(iterations, residuals, "o-", label=method_name, markersize=4)
+            ax.semilogy(iterations, residuals, "o-", label=method_name, markersize=marker_size)
 
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Relative Residual $\\|r\\| / \\|b\\|$")
@@ -210,7 +218,7 @@ _FAMILY_STYLES: dict[PreconditionerFamilyKey, tuple[str, str, str]] = {
     PreconditionerFamily.POD2G: ("s", "--", "Blues"),
     PreconditionerFamily.NEURAL: ("^", "-.", "Oranges"),
 }
-"""Known family -> (marker, linestyle, colormap). AMG/POD2G deliberately share a
+"""Known family -> (marker, linestyle, colormap). AMG/POD-2G deliberately share a
 colormap: they're routinely compared side by side, so matched hues let a reader
 scan for "what compares to what" while marker+linestyle still tell the two
 methods apart. Any family not listed here falls back to `_FALLBACK_STYLES`."""
@@ -288,6 +296,7 @@ def plot_convergence_comparison(
     atol: float | None = None,
     max_iterations: int | None = None,
     families: Mapping[str, PreconditionerFamilyKey] | None = None,
+    marker_size: float = DEFAULT_LINE_MARKER_SIZE,
 ) -> None:
     """Plot convergence comparison between preconditioners.
 
@@ -305,6 +314,7 @@ def plot_convergence_comparison(
             same-family lines share a marker/linestyle and a matched
             colormap (e.g. ``amg``/``pod2g``); omitted methods fall back to
             the default style.
+        marker_size: Marker diameter for convergence-history points.
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     metadata = dict(metadata or {})
@@ -325,7 +335,7 @@ def plot_convergence_comparison(
             label = _build_convergence_label(method_name, metadata.get(method_name))
             style = line_styles.get(method_name, {"marker": "o", "linestyle": "-"})
 
-            ax.semilogy(iterations, residuals, label=label, markersize=4, **style)
+            ax.semilogy(iterations, residuals, label=label, markersize=marker_size, **style)
         else:
             # Log warning for methods with no history
             logger.warning(f"Method '{method_name}' has no residual history to plot")
@@ -367,6 +377,7 @@ def plot_noise_robustness(
     noise_results: dict[str, dict[str, dict]],
     save_path: str | Path | None = None,
     show: bool = False,
+    marker_size: float = DEFAULT_LINE_MARKER_SIZE,
 ) -> None:
     """Plot noise robustness analysis results.
 
@@ -374,6 +385,7 @@ def plot_noise_robustness(
         noise_results: Nested dict: noise_level -> method -> results
         save_path: Optional path to save the plot
         show: Whether to show plot
+        marker_size: Marker diameter for noise-series points
     """
     sorted_levels = sorted(noise_results.items(), key=lambda item: float(item[0]))
     methods: set[str] = set()
@@ -416,7 +428,7 @@ def plot_noise_robustness(
                 label=method,
                 color=method_colors[method],
                 linewidth=2,
-                markersize=6,
+                markersize=marker_size,
             )
 
     plt.xlabel("Noise Level (%)")
@@ -662,7 +674,13 @@ def _plot_parity_subplot(
     y_max = float(np.max([y_true.max(), y_pred.max()]))
     pad = 0.05 * (y_max - y_min) if y_max > y_min else 1.0
 
-    ax.scatter(y_true, y_pred, s=5, alpha=0.5, color="purple")
+    ax.scatter(
+        y_true,
+        y_pred,
+        s=DEFAULT_DIAGNOSTIC_SCATTER_MARKER_AREA,
+        alpha=0.5,
+        color="purple",
+    )
     ax.plot(
         [y_min - pad, y_max + pad],
         [y_min - pad, y_max + pad],

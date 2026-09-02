@@ -1,6 +1,6 @@
-r"""POD2G vs AMG-aggregation convergence/wall-time diagnostic (docs/plan.md §D/§Verification).
+r"""POD-2G vs AMG-aggregation convergence/wall-time diagnostic (docs/plan.md §D/§Verification).
 
-Sweeps AMG's ``theta`` and POD2G's ``rank`` independently, records each run's
+Sweeps AMG's ``theta`` and POD-2G's ``rank`` independently, records each run's
 *realized* coarse dimension (never the input hyperparameter — both are
 threshold-driven with an emergent dimension, docs/plan.md §C.1), and reports
 three views, all built from measured wall-clock time on this machine rather
@@ -10,10 +10,10 @@ tell you which preconditioner is actually faster here, today.
 
   (i)   iterations-to-converge vs. realized coarse dimension c
   (ii)  cold-start wall-clock time (setup + solve) vs. realized coarse dim
-  (iii) amortized wall-clock time per solve vs. K, for the AMG/POD2G point
+  (iii) amortized wall-clock time per solve vs. K, for the AMG/POD-2G point
         pair whose realized coarse dimensions are closest to each other
         (docs/plan.md §C.2's "match by measurement, not by construction"),
-        so the POD2G/AMG break-even K is visible
+        so the POD-2G/AMG break-even K is visible
 
 Timing is two composable decorators rather than an ad hoc wrapper: ``timed``
 turns any callable into one returning ``(elapsed_seconds, result)``, and
@@ -72,7 +72,7 @@ if TYPE_CHECKING:
 def _realized_coarse_dimension(coarsening: CoarseningStrategy, matrix: torch.Tensor) -> int:
     """Read back the actual coarse dimension a coarsening strategy produces.
 
-    AMG's `theta` and POD2G's `rank` (often a float energy threshold) are
+    AMG's `theta` and POD-2G's `rank` (often a float energy threshold) are
     only ever emergent dimensions, never directly chosen — this reads the
     built result instead of trusting either hyperparameter.
     """
@@ -85,7 +85,7 @@ class SweepPoint:
     """One (method, hyperparameter) sweep result at its realized coarse dimension.
 
     Attributes:
-        method: Display label, e.g. ``"amg (theta=0.05)"`` or ``"pod2g (rank=20)"``.
+        method: Display label, e.g. ``"amg (theta=0.05)"`` or ``"POD-2G (rank=20)"``.
         coarse_dim: Realized coarse dimension c (never the input hyperparameter).
         result: CG solver outcome (iterations, residual history) for this run.
         setup_seconds: Measured wall-clock time to build/fit the preconditioner.
@@ -188,7 +188,7 @@ def _sweep_pod(
     smoother_omega: float,
     n_levels: int,
 ) -> list[SweepPoint]:
-    """Run one CG comparison per POD2G ``rank``, fit inline from ``snapshot_dir``.
+    """Run one CG comparison per POD-2G ``rank``, fit inline from ``snapshot_dir``.
 
     ``setup_seconds`` measures the real SVD/fit call this script performs —
     it does not include the offline CG-based snapshot-generation cost that
@@ -200,7 +200,7 @@ def _sweep_pod(
     points = []
     for rank in ranks:
         config = AMGPreconditionerConfig(
-            name=f"pod2g (rank={rank})",
+            name=f"POD-2G (rank={rank})",
             n_levels=n_levels,
             pre_smoothing_steps=n_pre,
             post_smoothing_steps=n_post,
@@ -257,7 +257,7 @@ def _plot_iterations_vs_coarse_dim(
         [p.coarse_dim for p in pod_points],
         [p.result.iterations for p in pod_points],
         "s-",
-        label="POD2G",
+        label="POD-2G",
     )
     ax.set_xlabel("Realized coarse dimension c")
     ax.set_ylabel("CG iterations to converge")
@@ -282,7 +282,7 @@ def _plot_time_vs_coarse_dim(
         [p.coarse_dim for p in pod_points],
         [p.setup_seconds + p.solve_seconds for p in pod_points],
         "s-",
-        label="POD2G",
+        label="POD-2G",
     )
     ax.set_xlabel("Realized coarse dimension c")
     ax.set_ylabel("Wall-clock time (seconds): setup + solve, cold start")
@@ -344,7 +344,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--snapshot-dir",
         type=Path,
         required=True,
-        help="Dataset dir whose `solutions` array supplies POD2G training snapshots.",
+        help="Dataset dir whose `solutions` array supplies POD-2G training snapshots.",
     )
     parser.add_argument("--n-snapshots", type=int, default=-1, help="-1 means use all snapshots.")
     parser.add_argument("--theta-grid", type=str, default="0.02,0.05,0.1,0.2,0.35,0.5")
@@ -372,7 +372,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help=(
-            "If set, fit POD2G at this rank, read its realized coarse dimension, "
+            "If set, fit POD-2G at this rank, read its realized coarse dimension, "
             "then use TargetDimensionCoarsening (torchalg) to brute-force search a "
             "theta grid for the AMG-aggregation theta whose realized c is closest, "
             "and print the matched pair."
@@ -443,7 +443,7 @@ def main() -> int:
 
     if args.match_pod_rank is not None:
         pod_config = AMGPreconditionerConfig(
-            name=f"pod2g (rank={args.match_pod_rank})",
+            name=f"POD-2G (rank={args.match_pod_rank})",
             n_levels=args.n_levels,
             pre_smoothing_steps=args.n_pre,
             post_smoothing_steps=args.n_post,
@@ -474,7 +474,7 @@ def main() -> int:
         assert isinstance(matched_coarsening, TargetDimensionCoarsening)
         theta = matched_coarsening._theta
         print(
-            f"Brute-force match: pod2g rank={args.match_pod_rank} (c={target_c}) "
+            f"Brute-force match: POD-2G rank={args.match_pod_rank} (c={target_c}) "
             f"<-> amg theta={theta:g} (c={matched_c})"
         )
 

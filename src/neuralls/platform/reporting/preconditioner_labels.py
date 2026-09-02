@@ -195,7 +195,15 @@ def preconditioner_label(name: str, precond: Preconditioner) -> str:
             (see :func:`describe_preconditioner`), else just ``name``.
     """
     detail = describe_preconditioner(precond)
-    return f"{name} ({detail})" if detail else name
+    display_name = _display_name(name, precond)
+    return f"{display_name} ({detail})" if detail else display_name
+
+
+def _display_name(name: str, precond: Preconditioner) -> str:
+    """Render machine-style preconditioner names as plot-friendly labels."""
+    if isinstance(precond, ScheduledPreconditioner):
+        return _display_name(name, precond._primary)
+    return name.replace("_", " ").upper()
 
 
 def build_preconditioner_labels(

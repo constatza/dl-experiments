@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training = "Train-RectangularHighCondition-POD-CG"
-comparison = "Compare-RectangularHighCondition-POD-CG"
+training = "Train-RectangularHighCondition-POD-2G-CG"
+comparison = "Compare-RectangularHighCondition-POD-2G-CG"
 
 [comparison_defaults]
 rtol = 1.0e-6
@@ -39,45 +39,40 @@ name = "amg-dim300"
 type = "amg"
 coarsening = { method = "target_dim", target_coarse_dim = 300 }
 
-# pod2g-cg1/10/50 are no longer declared here: they are now [[assignments]]
-# bound to [[jobs]] pod2g-cg1/10/50 below (a `run.type = "fit"` job per
+# pod-2g_0-cg/cg10/cg50 are no longer declared here: they are now [[assignments]]
+# bound to [[jobs]] pod-2g_0-cg/cg10/cg50 below (a `run.type = "fit"` job per
 # dataset), fitted once ahead of time and MLflow-tracked.
 
 [[datasets]]
-path = "../../datasets/train/rectangular-high-condition/gaussian-cg1.toml"
-display_name = "Gaussian (plain, 0 CG iterations) rectangular-high-condition (POD-2G snapshot source)"
+path = "../../datasets/train/rectangular-high-condition/gaussian-0cg.toml"
+display_name = "Gaussian 0-CG rectangular-high-condition (POD-2G snapshots)"
 
 [[datasets]]
 path = "../../datasets/train/rectangular-high-condition/gaussian-cg10.toml"
-display_name = "Gaussian CG-10 rectangular-high-condition (POD-2G snapshot source)"
+display_name = "Gaussian CG-10 rectangular-high-condition (POD-2G snapshots)"
 
 [[datasets]]
 path = "../../datasets/train/rectangular-high-condition/gaussian-cg50.toml"
-display_name = "Gaussian CG-50 rectangular-high-condition (POD-2G snapshot source)"
+display_name = "Gaussian CG-50 rectangular-high-condition (POD-2G snapshots)"
 
 [[datasets]]
 path = "../../datasets/train/rectangular-high-condition/gaussian-cg50-2000.toml"
-display_name = "Gaussian CG-50 rectangular-high-condition, 2000 samples (POD-2G snapshot source)"
+display_name = "Gaussian CG-50 rectangular-high-condition, 2000 samples (POD-2G snapshots)"
 
 [[jobs]]
-id = "pod2g-cg1"
-path = "../../jobs/rectangular-high-condition/pod2g-cg1.toml"
-display_name = "POD-2G basis (0 CG iterations)"
+id = "pod-2g_0-cg"
+path = "../../jobs/rectangular-high-condition/pod2g-0cg.toml"
+display_name = "POD-2G (0-CG)"
 
 [[jobs]]
-id = "pod2g-cg10"
+id = "pod-2g_cg-10"
 path = "../../jobs/rectangular-high-condition/pod2g-cg10.toml"
-display_name = "POD-2G basis (CG-10)"
+display_name = "POD-2G (CG-10)"
 
 [[jobs]]
-id = "pod2g-cg50"
+id = "pod-2g_cg-50"
 path = "../../jobs/rectangular-high-condition/pod2g-cg50.toml"
-display_name = "POD-2G basis (CG-50)"
-
-[[jobs]]
-id = "pod2g-cg50-2000"
-path = "../../jobs/rectangular-high-condition/pod2g-cg50-2000.toml"
-display_name = "POD-2G basis (CG-50, 2000 samples)"
+display_name = "POD-2G (CG-50)"
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg50-rectangular-high-condition"
@@ -97,17 +92,17 @@ rhs_source = { kind = "sparse", indices = [
 ] }
 
 [[assignments]]
-dataset = "gaussian-cg1-rectangular-high-condition"
-job = "pod2g-cg1"
+dataset = "gaussian-0cg-rectangular-high-condition"
+job = "pod-2g_0-cg"
 
 [[assignments]]
 dataset = "gaussian-cg10-rectangular-high-condition"
-job = "pod2g-cg10"
+job = "pod-2g_cg-10"
 
 [[assignments]]
 dataset = "gaussian-cg50-rectangular-high-condition"
-job = "pod2g-cg50"
+job = "pod-2g_cg-50"
 
 [[assignments]]
 dataset = "gaussian-cg50-rectangular-high-condition-2000"
-job = "pod2g-cg50-2000"
+job = "pod-2g_cg-50"

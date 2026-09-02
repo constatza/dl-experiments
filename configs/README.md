@@ -151,15 +151,15 @@ identity/Jacobi/IC0, AMG, and dataset-backed POD-2G preconditioners. Neural
 network jobs are kept in explicit training/search variants, not the default
 cases. The 45x15randomE `default.toml` case is parametric — the underlying
 problem is a family of ~100 stiffness matrices with randomized Young's moduli
-(E1-E4), not one fixed matrix. These CG cases use `gaussian-cg1`,
-`gaussian-cg10`, and `gaussian-cg50` datasets as POD snapshot sources, with
+(E1-E4), not one fixed matrix. These CG cases use `gaussian-0cg`,
+`gaussian-cg10`, and `gaussian-cg50` datasets as POD-2G snapshot inputs, with
 `gaussian-cg50` also serving as the default matrix dataset where a train dataset
 backs comparisons. Every randomE dataset uses the matrix glob
 `45x15randomE/stiffness/*_subdomain_1_Kaa.txt`, `enumerate_by = "name"`, and
 the matching Young-modulus parameter glob.
 
 **45x15randomE train/eval matrix split**: because the same ~100-matrix family
-would otherwise back both training (and the pod2g-\* POD snapshot datasets)
+would otherwise back both training and POD-2G snapshot-input datasets
 and the comparisons, every train dataset in `datasets/train/45x15randomE/` sets
 `[source].exclude_indices` to the last 15 matrix ids (85-99, by
 `enumerate_by = "name"` order), and `datasets/test/45x15randomE/gaussian-eval.toml`

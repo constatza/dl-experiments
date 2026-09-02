@@ -257,14 +257,14 @@ def test_preconditioner_label_includes_amg_detail(
     """A label combines the config name with whatever describe_preconditioner reports."""
     detail = describe_preconditioner(aggregation_amg_preconditioner)
 
-    assert preconditioner_label("amg", aggregation_amg_preconditioner) == f"amg ({detail})"
+    assert preconditioner_label("amg", aggregation_amg_preconditioner) == f"AMG ({detail})"
 
 
 def test_preconditioner_label_falls_back_to_bare_name_without_detail() -> None:
     """Labels fall back to the bare name when there is no structural detail."""
     label = preconditioner_label("identity", Identity())
 
-    assert label == "identity"
+    assert label == "IDENTITY"
 
 
 @pytest.mark.parametrize(
@@ -289,9 +289,27 @@ def test_preconditioner_label_stays_within_length_budget_for_pod(
     pod_amg_preconditioner: AMGPreconditioner,
 ) -> None:
     """POD-2G legend entries stay within the same length budget as AMG's."""
-    label = preconditioner_label("pod2g-cg50", pod_amg_preconditioner)
+    label = preconditioner_label("pod-2g_cg-50", pod_amg_preconditioner)
 
     assert len(label) <= MAX_LABEL_LENGTH
+
+
+@pytest.mark.parametrize(
+    ("name", "prefix"),
+    [
+        ("pod-2g_0-cg", "POD-2G 0-CG "),
+        ("pod-2g_cg-50", "POD-2G CG-50 "),
+    ],
+)
+def test_preconditioner_label_formats_display_ready_ids(
+    name: str,
+    prefix: str,
+    pod_amg_preconditioner: AMGPreconditioner,
+) -> None:
+    """Display-ready config ids render without source-level special cases."""
+    label = preconditioner_label(name, pod_amg_preconditioner)
+
+    assert label.startswith(prefix)
 
 
 def test_preconditioner_label_stays_within_length_budget_for_target_dim(

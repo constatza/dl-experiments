@@ -2,8 +2,8 @@
 tracking_uri = "http://localhost:5000"
 
 [names]
-training = "Train-93x31-POD-CG-2000"
-comparison = "Compare-93x31-POD-CG-2000"
+training = "Train-93x31-POD-2G-CG-2000"
+comparison = "Compare-93x31-POD-2G-CG-2000"
 
 [comparison_defaults]
 rtol = 1.0e-6
@@ -40,31 +40,31 @@ type = "amg"
 coarsening = { method = "target_dim", target_coarse_dim = 700 }
 
 [[comparison_defaults.preconditioners]]
-name = "pod2g-cg1"
+name = "pod-2g_0-cg"
 type = "amg"
-coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg1-93x31-2000", n_snapshots = -1, rank = 0.9999 }
+coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-0cg-93x31-2000", n_snapshots = -1, rank = 0.9999 }
 
 [[comparison_defaults.preconditioners]]
-name = "pod2g-cg10"
+name = "pod-2g_cg-10"
 type = "amg"
 coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg10-93x31-2000", n_snapshots = -1, rank = 0.9999 }
 
 [[comparison_defaults.preconditioners]]
-name = "pod2g-cg50"
+name = "pod-2g_cg-50"
 type = "amg"
 coarsening = { method = "pod", dataset_dir = "${NEURALLS_PROCESSED_DIR}/gaussian-cg50-93x31-2000", n_snapshots = -1, rank = 0.9999 }
 
 [[datasets]]
-path = "../../datasets/train/93x31/gaussian-cg1-2000.toml"
-display_name = "Gaussian (plain, 0 CG iterations) 93x31, 2000 samples (POD-2G snapshot source)"
+path = "../../datasets/train/93x31/gaussian-0cg-2000.toml"
+display_name = "Gaussian 0-CG 93x31, 2000 samples (POD-2G snapshots)"
 
 [[datasets]]
 path = "../../datasets/train/93x31/gaussian-cg10-2000.toml"
-display_name = "Gaussian CG-10 93x31, 2000 samples (POD-2G snapshot source)"
+display_name = "Gaussian CG-10 93x31, 2000 samples (POD-2G snapshots)"
 
 [[datasets]]
 path = "../../datasets/train/93x31/gaussian-cg50-2000.toml"
-display_name = "Gaussian CG-50 93x31, 2000 samples (POD-2G snapshot source)"
+display_name = "Gaussian CG-50 93x31, 2000 samples (POD-2G snapshots)"
 
 [[comparisons]]
 matrix_dataset = "gaussian-cg50-93x31-2000"
