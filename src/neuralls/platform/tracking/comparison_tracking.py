@@ -72,6 +72,25 @@ def log_comparison_result_metrics(
         mlflow.log_param("best_preconditioner", result.recommendations.overall_best.label)
 
 
+def log_linear_system_params(result: ComparisonResult) -> None:
+    """Log matrix/rhs shape, RHS provenance, and the raw condition number.
+
+    A matrix may be paired with several different RHS sources (gaussian,
+    sparse, raw, dataset, ...) across sibling ``[[comparisons]]`` entries,
+    each its own MLflow run — ``rhs_source_kind`` disambiguates which one
+    this particular run used.
+    """
+    if result.matrix_shape is not None:
+        mlflow.log_param("matrix_rows", result.matrix_shape[0])
+        mlflow.log_param("matrix_cols", result.matrix_shape[1])
+    if result.rhs_shape is not None:
+        mlflow.log_param("rhs_dim", result.rhs_shape[0])
+    if result.rhs_source_kind is not None:
+        mlflow.log_param("rhs_source_kind", str(result.rhs_source_kind))
+    if result.condition_number_raw is not None:
+        mlflow.log_metric("condition_number_raw", result.condition_number_raw)
+
+
 def log_comparison_run_params(
     *,
     comp_run_id: str,

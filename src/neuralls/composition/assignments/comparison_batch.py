@@ -77,6 +77,7 @@ from neuralls.platform.tracking.comparison_tracking import (
     log_comparison_input_artifacts,
     log_comparison_result_metrics,
     log_comparison_run_params,
+    log_linear_system_params,
     log_skipped_preconditioners,
     setup_comparison_tracking,
 )
@@ -547,6 +548,7 @@ def _execute_comparison_in_run(
                     for name in raw_result.results
                 }
                 log_comparison_result_metrics(raw_result, child_run_tags=child_run_tags)
+                log_linear_system_params(raw_result)
 
         log_comparison_run_params(
             comp_run_id=comp_run_id,

@@ -24,6 +24,8 @@ import numpy as np
 import torch
 
 if TYPE_CHECKING:
+    from neuralls.shared.types import ComparisonRhsSourceKind
+
     from .config import ComparisonGeneral
 
 
@@ -359,6 +361,13 @@ class ComparisonResult:
         condition_numbers: Condition numbers keyed by preconditioner name.
         recommendations: Ranked recommendations.
         output_dir: Root output directory for comparison artifacts.
+        matrix_shape: Shape of the system matrix A, e.g. ``(n, n)``.
+        rhs_shape: Shape of the right-hand side vector b, e.g. ``(n,)``.
+        condition_number_raw: Condition number of the raw (unpreconditioned) matrix.
+        rhs_source_kind: Provenance of the RHS (e.g. gaussian, sparse, raw_lhs,
+            raw_rhs, dataset) — a matrix may be paired with several different
+            RHS sources across sibling ``[[comparisons]]`` entries, each its
+            own MLflow run, so this disambiguates which one a given run used.
     """
 
     results: dict[str, Any]
@@ -369,3 +378,7 @@ class ComparisonResult:
     condition_numbers: dict[str, float] = field(default_factory=dict)
     recommendations: ComparisonRecommendations = field(default_factory=ComparisonRecommendations)
     output_dir: Path | None = None
+    matrix_shape: tuple[int, int] | None = None
+    rhs_shape: tuple[int, ...] | None = None
+    condition_number_raw: float | None = None
+    rhs_source_kind: ComparisonRhsSourceKind | None = None

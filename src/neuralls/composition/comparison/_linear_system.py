@@ -215,13 +215,16 @@ def _log_matrix_condition_number(
     *,
     matrix_path: Path,
     display_name: str | None,
-) -> None:
+) -> float:
     """Log the matrix condition number once per comparison.
 
     Args:
         matrix: System matrix to evaluate.
         matrix_path: Source path (used for log labels).
         display_name: Optional human-readable comparison label.
+
+    Returns:
+        The computed condition number, or NaN if it could not be computed.
     """
     label = display_name or matrix_path.stem or matrix_path.name
     try:
@@ -231,7 +234,8 @@ def _log_matrix_condition_number(
             f"Matrix condition number unavailable: comparison={label} "
             f"matrix={matrix_path.name} error={exc}"
         )
-        return
+        return float("nan")
     logger.info(
         f"Matrix condition number: comparison={label} matrix={matrix_path.name} value={value:.4e}"
     )
+    return value

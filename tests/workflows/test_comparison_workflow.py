@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -54,6 +55,7 @@ from neuralls.platform.reporting.artifacts import (
 )
 from neuralls.platform.tracking.comparison_tracking import (
     log_comparison_result_metrics,
+    log_linear_system_params,
 )
 from neuralls.platform.tracking.mlflow import sanitize_metric_key_segment
 from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
@@ -1245,6 +1247,27 @@ def test_log_comparison_metrics_logs_scalar_metrics_per_preconditioner(
     assert metric_calls["final_residual/none"] == pytest.approx(1.0e-8)
     assert metric_calls["converged/none"] == 1
     mock_mlflow.log_param.assert_called_once_with("best_preconditioner", "none")
+
+
+def test_log_linear_system_params_logs_matrix_and_rhs_shape(tmp_path: Path) -> None:
+    """log_linear_system_params must log matrix/rhs shape, RHS kind, and raw condition number."""
+    result = replace(
+        _typed_comparison_result(tmp_path / "conv.png"),
+        matrix_shape=(10, 10),
+        rhs_shape=(10,),
+        condition_number_raw=42.0,
+        rhs_source_kind=ComparisonRhsSourceKind.SPARSE,
+    )
+
+    with patch(_COMPARISON_TRACKING_MLFLOW_MODULE) as mock_mlflow:
+        log_linear_system_params(result)
+
+    param_calls = {call.args[0]: call.args[1] for call in mock_mlflow.log_param.call_args_list}
+    assert param_calls["matrix_rows"] == 10
+    assert param_calls["matrix_cols"] == 10
+    assert param_calls["rhs_dim"] == 10
+    assert param_calls["rhs_source_kind"] == "sparse"
+    mock_mlflow.log_metric.assert_called_once_with("condition_number_raw", 42.0)
 
 
 def test_run_comparison_logs_scalar_metrics_to_mlflow(tmp_path: Path) -> None:

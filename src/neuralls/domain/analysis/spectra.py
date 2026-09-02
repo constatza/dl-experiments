@@ -9,43 +9,100 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from loguru import logger
-from numpy import linalg
 
 PreconditionerCallable = Callable[[torch.Tensor], torch.Tensor]
 
 
-def precondition_matrix(
-    preconditioner: PreconditionerCallable,
-    matrix: np.ndarray,
-) -> np.ndarray:
-    """Precondition a matrix by applying preconditioner to each column.
+def _power_iterate(
+    apply: Callable[[torch.Tensor], torch.Tensor],
+    x0: torch.Tensor,
+    *,
+    maxiter: int,
+    tol: float,
+) -> float:
+    """Estimate the dominant eigenvalue magnitude of ``apply`` via power iteration.
+
+    Forward-only: only ever calls ``apply``, no inverse or transpose needed.
+    Valid for operators with a real, positive spectrum (e.g. an
+    SPD-preconditioned SPD system), where ``‖apply(v)‖ -> lambda`` as ``v``
+    converges to the dominant eigenvector.
+    """
+    v = x0 / x0.norm()
+    eigenvalue = 0.0
+    for _ in range(maxiter):
+        w = apply(v)
+        eigenvalue_new = float(w.norm())
+        if eigenvalue_new == 0.0:
+            return 0.0
+        v = w / eigenvalue_new
+        converged = abs(eigenvalue_new - eigenvalue) <= tol * max(eigenvalue_new, 1.0)
+        eigenvalue = eigenvalue_new
+        if converged:
+            break
+    return eigenvalue
+
+
+def _power_iteration_extremes(
+    apply: Callable[[torch.Tensor], torch.Tensor],
+    x0: torch.Tensor,
+    *,
+    maxiter: int = 1000,
+    tol: float = 1e-6,
+) -> tuple[float, float]:
+    """Estimate the largest and smallest eigenvalues of a linear operator.
+
+    Assumes ``apply`` has a real, positive spectrum — true for any
+    SPD-preconditioned SPD system, which is similar to the symmetric
+    ``M^{-1/2} A M^{-1/2}``. The smallest eigenvalue comes from a second,
+    shifted power iteration (``shift * I - apply``, folded-spectrum trick) —
+    still forward-only, no inverse or transpose required.
 
     Args:
-        preconditioner: Callable that applies preconditioning (function or Preconditioner)
-        matrix: Matrix to precondition
+        apply: Linear operator, shape ``(n,) -> (n,)``.
+        x0: Starting vector, shape ``(n,)``.
+        maxiter: Maximum power-iteration steps per extreme.
+        tol: Relative convergence tolerance.
 
     Returns:
-        Preconditioned matrix
-
-    Note:
-        All Preconditioner objects are callable via __call__, so this function
-        works with both bare functions and Preconditioner objects uniformly.
+        ``(lambda_max, lambda_min)`` eigenvalue estimates.
     """
-    matrix_tensor = torch.as_tensor(matrix, dtype=torch.float64)
-    columns = [preconditioner(matrix_tensor[:, idx]) for idx in range(matrix.shape[1])]
-    return torch.stack(columns, dim=1).detach().cpu().numpy().astype(np.float64, copy=False)
+    lambda_max = _power_iterate(apply, x0, maxiter=maxiter, tol=tol)
+    shift = lambda_max * 1.01 + 1e-12
+    lambda_min = shift - _power_iterate(
+        lambda x: shift * x - apply(x), x0, maxiter=maxiter, tol=tol
+    )
+    return lambda_max, lambda_min
 
 
 def compute_condition_numbers(
     matrix: np.ndarray,
     preconditioners: dict[str, PreconditionerCallable],
 ) -> dict[str, float]:
+    """Estimate the 2-norm condition number of each preconditioned system.
+
+    Matrix-free: never materializes the dense preconditioned matrix and
+    never computes an inverse, via (shifted) power iteration on
+    ``x -> preconditioner(matrix @ x)``.
+
+    Args:
+        matrix: System matrix A, shape ``(n, n)``.
+        preconditioners: Preconditioner callables keyed by name.
+
+    Returns:
+        Condition number estimate per preconditioner name (NaN on failure).
+    """
+    matrix_tensor = torch.as_tensor(matrix, dtype=torch.float64)
+    x0 = torch.ones(matrix_tensor.shape[1], dtype=torch.float64, device=matrix_tensor.device)
     cond_numbers: dict[str, float] = {}
     for name, preconditioner in preconditioners.items():
         try:
-            precond_matrix = precondition_matrix(preconditioner, matrix)
-            cond_numbers[name] = float(linalg.cond(precond_matrix))
-        except (ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
+            lambda_max, lambda_min = _power_iteration_extremes(
+                lambda x, p=preconditioner: p(matrix_tensor @ x), x0
+            )
+            if lambda_min <= 0:
+                raise ValueError(f"non-positive smallest eigenvalue estimate: {lambda_min}")
+            cond_numbers[name] = lambda_max / lambda_min
+        except (ValueError, RuntimeError) as exc:
             cond_numbers[name] = float("nan")
             logger.warning("Could not compute condition number for '{}': {}", name, exc)
     return cond_numbers
@@ -88,7 +145,7 @@ def plot_condition_numbers(
 
     bars = ax.barh(labels, values)
     ax.set_xscale("log")
-    ax.set_xlabel("Condition number (2-norm)")
+    ax.set_xlabel("Condition number (λ_max/λ_min)")
 
     # Build subtitle from non-None parameters
     subtitle_parts = []

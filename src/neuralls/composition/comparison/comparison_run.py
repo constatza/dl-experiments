@@ -252,7 +252,7 @@ def compare_preconditioners(
         normalize_system=general_params.data.normalize_system,
         resolved_input=resolved_input,
     )
-    _log_matrix_condition_number(
+    condition_number_raw = _log_matrix_condition_number(
         _to_numpy(system.matrix),
         matrix_path=paths.matrix,
         display_name=display_name,
@@ -316,4 +316,8 @@ def compare_preconditioners(
         solver_params=general_params,
         recommendations=recommendations,
         output_dir=paths.output,
+        matrix_shape=(system.matrix.shape[0], system.matrix.shape[1]),
+        rhs_shape=tuple(system.rhs.shape),
+        condition_number_raw=condition_number_raw,
+        rhs_source_kind=resolved_input.rhs_source_kind if resolved_input is not None else None,
     )
