@@ -48,6 +48,7 @@ import matplotlib
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 import torch
+from torchalg.preconditioners.implementations.amg import TargetDimensionCoarsening
 
 from neuralls.composition.preconditioners.factory import create_preconditioner_with_coarsening
 from neuralls.domain.solver.comparison import run_cg_comparison
@@ -470,6 +471,7 @@ def main() -> int:
         _, matched_coarsening = create_preconditioner_with_coarsening(A, target_dim_config)
         assert matched_coarsening is not None
         matched_c = _realized_coarse_dimension(matched_coarsening, A)
+        assert isinstance(matched_coarsening, TargetDimensionCoarsening)
         theta = matched_coarsening._theta
         print(
             f"Brute-force match: pod2g rank={args.match_pod_rank} (c={target_c}) "

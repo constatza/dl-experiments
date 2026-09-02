@@ -36,7 +36,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run ty
-        run: uv run ty check
+        run: uv run ty check src/ tests/ scripts/
 
       - name: Run pytest fast smoke
         run: uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q
@@ -67,7 +67,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Run ty
-        run: uv run ty check
+        run: uv run ty check src/ tests/ scripts/
 
       - name: Run pytest
         run: uv run pytest tests -m "not slow" --maxfail=1 --disable-warnings -q

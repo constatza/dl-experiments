@@ -24,7 +24,7 @@ repos:
         files: ^(src/|tests/|scripts/|configs/|pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml|\.github/workflows/|README\.md)
       - id: ty
         name: "ty: src, tests, and scripts"
-        entry: bash -c 'uv run ty check --output-format concise --no-progress $(git ls-files src/ tests/ | grep "\.py$")'
+        entry: bash -c 'uv run ty check --output-format concise --no-progress $(git ls-files src/ tests/ scripts/ | grep "\.py$")'
         language: system
         pass_filenames: false
         stages: [pre-commit]
