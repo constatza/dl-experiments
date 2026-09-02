@@ -1,0 +1,103 @@
+[mlflow]
+tracking_uri = "http://localhost:5000"
+
+[names]
+training = "Train-SpheresRveHighCondition-POD-CG-2000"
+comparison = "Compare-SpheresRveHighCondition-POD-CG-2000"
+
+[comparison_defaults]
+rtol = 1.0e-6
+atol = 1.0e-14
+max_iterations = 200
+stopping_criterion = "residual_norm"
+m_max = 20
+
+[[comparison_defaults.preconditioners]]
+name = "none"
+type = "identity"
+
+[[comparison_defaults.preconditioners]]
+name = "jacobi"
+type = "jacobi"
+
+[[comparison_defaults.preconditioners]]
+name = "ic0"
+type = "ic0"
+
+[[comparison_defaults.preconditioners]]
+name = "amg-small-theta"
+type = "amg"
+coarsening = { method = "aggregation", theta = 0.05 }
+
+[[comparison_defaults.preconditioners]]
+name = "amg-medium-theta"
+type = "amg"
+coarsening = { method = "aggregation", theta = 0.25 }
+
+[[comparison_defaults.preconditioners]]
+name = "amg-target-dim"
+type = "amg"
+coarsening = { method = "target_dim", target_coarse_dim = 175 }
+
+# pod2g-cg1/10/50 are no longer declared here: they are now [[assignments]]
+# bound to [[jobs]] pod2g-cg1/10/50 below (a `run.type = "fit"` job per
+# dataset), fitted once ahead of time and MLflow-tracked.
+
+[[datasets]]
+id = "gaussian-cg1-spheres-rve-high-condition-2000"
+path = "../../datasets/train/spheres-rve-high-condition/gaussian-cg1-2000.toml"
+display_name = "Gaussian (plain, 0 CG iterations) spheres-rve-high-condition, 2000 samples (POD-2G snapshot source)"
+
+[[datasets]]
+id = "gaussian-cg10-spheres-rve-high-condition-2000"
+path = "../../datasets/train/spheres-rve-high-condition/gaussian-cg10-2000.toml"
+display_name = "Gaussian CG-10 spheres-rve-high-condition, 2000 samples (POD-2G snapshot source)"
+
+[[datasets]]
+id = "gaussian-cg50-spheres-rve-high-condition-2000"
+path = "../../datasets/train/spheres-rve-high-condition/gaussian-cg50-2000.toml"
+display_name = "Gaussian CG-50 spheres-rve-high-condition, 2000 samples (POD-2G snapshot source)"
+
+[[jobs]]
+id = "pod2g-cg1"
+path = "../../jobs/spheres-rve-high-condition/pod2g-cg1.toml"
+display_name = "POD-2G basis (0 CG iterations)"
+
+[[jobs]]
+id = "pod2g-cg10"
+path = "../../jobs/spheres-rve-high-condition/pod2g-cg10.toml"
+display_name = "POD-2G basis (CG-10)"
+
+[[jobs]]
+id = "pod2g-cg50"
+path = "../../jobs/spheres-rve-high-condition/pod2g-cg50.toml"
+display_name = "POD-2G basis (CG-50)"
+
+[[comparisons]]
+matrix_dataset = "gaussian-cg50-spheres-rve-high-condition-2000"
+rhs_source = { kind = "gaussian" }
+seed = 42
+
+[[comparisons]]
+matrix_dataset = "gaussian-cg50-spheres-rve-high-condition-2000"
+rhs_source = { kind = "sparse", indices = [
+    0,
+    1,
+    -1,
+], values = [
+    90.0,
+    100.0,
+    -100.0,
+] }
+
+[[assignments]]
+dataset = "gaussian-cg1-spheres-rve-high-condition-2000"
+job = "pod2g-cg1"
+
+[[assignments]]
+dataset = "gaussian-cg10-spheres-rve-high-condition-2000"
+job = "pod2g-cg10"
+
+[[assignments]]
+dataset = "gaussian-cg50-spheres-rve-high-condition-2000"
+job = "pod2g-cg50"

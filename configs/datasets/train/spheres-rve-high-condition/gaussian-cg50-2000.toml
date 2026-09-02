@@ -1,0 +1,17 @@
+id = "gaussian-cg50-spheres-rve-high-condition-2000"
+
+[source]
+matrix_path = "${NEURALLS_RAW_DIR}/matrices/spheres-rve-high-condition.txt"
+
+[generation]
+normalize = "matrix"
+shuffle = true
+seed = 42
+
+[[generation.strategy]]
+name = "gaussian_residuals"
+samples = 2000
+cg_iters = 50
+
+[output]
+data_dir = "${NEURALLS_PROCESSED_DIR}"
