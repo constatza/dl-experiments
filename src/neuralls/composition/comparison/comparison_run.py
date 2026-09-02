@@ -36,7 +36,11 @@ from neuralls.domain.solver.models.result import (
     ComparisonResult,
 )
 from neuralls.platform.config.models.comparison import ComparisonGeneral
-from neuralls.platform.config.models.preconditioner import PreconditionerConfig
+from neuralls.platform.config.models.preconditioner import PreconditionerConfig, PreconditionerType
+from neuralls.platform.config.models.preconditioner_family import (
+    PreconditionerFamilyKey,
+    preconditioner_family,
+)
 from neuralls.platform.config.resolution import resolve_user_path
 from neuralls.platform.reporting.preconditioner_labels import build_preconditioner_labels
 from neuralls.platform.storage.filesystem import ensure_dir
@@ -102,7 +106,11 @@ def _evaluate_preconditioner(
         breakdown_tol=params.breakdown_tol,
     )[cfg.name]
     return PreconditionerComparisonEntry(
-        name=cfg.name, result=result, condition_number=condition_number, label=label
+        name=cfg.name,
+        result=result,
+        condition_number=condition_number,
+        label=label,
+        family=preconditioner_family(cfg),
     )
 
 
@@ -251,10 +259,12 @@ def compare_preconditioners(
     results: dict[str, CGComparisonResult] = {}
     cond_numbers: dict[str, float] = {}
     labels: dict[str, str] = {}
+    families: dict[str, PreconditionerFamilyKey] = {}
     for entry in evaluation_mapper(evaluate_one, preconditioner_configs):
         results[entry.name] = entry.result
         cond_numbers[entry.name] = entry.condition_number
         labels[entry.name] = entry.label
+        families[entry.name] = entry.family
 
     if "none" not in results:
         baseline = run_cg_comparison(
@@ -268,6 +278,7 @@ def compare_preconditioners(
             breakdown_tol=general_params.params.breakdown_tol,
         )
         results["none"] = baseline["none"]
+        families.setdefault("none", PreconditionerType.NONE)
 
     recommendations = ComparisonRecommendations()
 
@@ -276,6 +287,7 @@ def compare_preconditioners(
         cond_numbers,
         paths,
         labels,
+        families,
         display_name=display_name,
         rtol=general_params.params.rtol,
         atol=general_params.params.atol,

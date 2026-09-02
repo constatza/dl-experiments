@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from neuralls.domain.solver.models.result import CGComparisonResult, ComparisonResult
+from neuralls.platform.config.models.preconditioner_family import PreconditionerFamilyKey
 from neuralls.platform.config.models.workspace import AssignmentWorkspace
 from neuralls.platform.storage.manifest import DatasetNormalization
 from neuralls.shared.types import ComparisonRhsSourceKind, RowKind
@@ -98,12 +99,15 @@ class PreconditionerComparisonEntry:
         result: CG solver outcome for this preconditioner.
         condition_number: Effective condition number of the preconditioned system.
         label: Descriptive plot label built from the constructed preconditioner instance.
+        family: Plot-style family key (see ``preconditioner_family.preconditioner_family``),
+            grouping same-family preconditioners under a shared marker/linestyle/colormap.
     """
 
     name: str
     result: CGComparisonResult
     condition_number: float
     label: str
+    family: PreconditionerFamilyKey
 
 
 @dataclass(frozen=True)

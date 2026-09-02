@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from neuralls.composition.comparison.models import ComparisonPaths
 from neuralls.domain.analysis.spectra import plot_condition_numbers
 from neuralls.domain.solver.models.result import CGComparisonResult, PlotPaths
+from neuralls.platform.config.models.preconditioner_family import PreconditionerFamilyKey
 from neuralls.platform.reporting.plots import plot_convergence_comparison, plot_metric_comparison
 
 
@@ -15,6 +16,7 @@ def _generate_comparison_plots(
     cond_numbers: dict[str, float],
     paths: ComparisonPaths,
     labels: Mapping[str, str],
+    families: Mapping[str, PreconditionerFamilyKey] | None = None,
     display_name: str | None = None,
     rtol: float | None = None,
     atol: float | None = None,
@@ -30,6 +32,9 @@ def _generate_comparison_plots(
             levels/cycle/coarsening, POD-2G fitted rank), typically built via
             ``build_preconditioner_labels`` while the preconditioner is still
             constructed.
+        families: Plot-style family per preconditioner name (see
+            ``preconditioner_family.preconditioner_family``), used to give
+            same-family convergence lines a shared marker/linestyle/colormap.
         display_name: Optional title shown on all plots.
         rtol: Relative tolerance displayed as a reference line.
         atol: Absolute tolerance displayed as a reference line.
@@ -39,6 +44,7 @@ def _generate_comparison_plots(
         Typed PlotPaths with paths to all generated figures.
     """
     suffix = paths.matrix.stem or "comparison"
+    families = families or {}
 
     cond_path = plot_condition_numbers(
         {labels.get(name, name): value for name, value in cond_numbers.items()},
@@ -58,6 +64,7 @@ def _generate_comparison_plots(
         rtol=rtol,
         atol=atol,
         max_iterations=max_iterations,
+        families={labels.get(name, name): family for name, family in families.items()},
     )
 
     iter_path = paths.figures / f"preconditioner_iterations_{suffix}.png"

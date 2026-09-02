@@ -57,6 +57,23 @@ class ComparisonRhsSourceKind(StrEnum):
     DATASET = "dataset"
 
 
+class PreconditionerFamily(StrEnum):
+    """Plot-style grouping for preconditioner variants that share a config `type`.
+
+    ``PreconditionerType.AMG`` covers both classical AMG and POD-2G coarsening,
+    and ``NEURAL``/``NEURAL_AMG`` are both "neural" for comparison-plot
+    purposes — these three names give those merged groups a real, checkable
+    identity instead of ad hoc strings. Every other preconditioner type is
+    already its own distinct group, so it uses its own `PreconditionerType`
+    member directly rather than duplicating it here (see
+    ``platform.config.models.preconditioner_family.preconditioner_family``).
+    """
+
+    AMG = "amg"
+    POD2G = "pod2g"
+    NEURAL = "neural"
+
+
 class GenerationStrategyKind(StrEnum):
     """Canonical generation strategy identifiers used after config validation."""
 

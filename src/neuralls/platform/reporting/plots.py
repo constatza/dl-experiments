@@ -14,6 +14,8 @@ import numpy as np
 from loguru import logger
 
 from neuralls.domain.solver.models.result import CGComparisonResult
+from neuralls.platform.config.models.preconditioner_family import PreconditionerFamilyKey
+from neuralls.shared.types import PreconditionerFamily
 
 
 def plot_parity_and_residuals(
@@ -203,6 +205,79 @@ def _build_convergence_label(method_name: str, meta: Any | None) -> str:
     return f"{method_name} ({', '.join(details)})"
 
 
+_FAMILY_STYLES: dict[PreconditionerFamilyKey, tuple[str, str, str]] = {
+    PreconditionerFamily.AMG: ("o", "-", "Blues"),
+    PreconditionerFamily.POD2G: ("s", "--", "Blues"),
+    PreconditionerFamily.NEURAL: ("^", "-.", "Oranges"),
+}
+"""Known family -> (marker, linestyle, colormap). AMG/POD2G deliberately share a
+colormap: they're routinely compared side by side, so matched hues let a reader
+scan for "what compares to what" while marker+linestyle still tell the two
+methods apart. Any family not listed here falls back to `_FALLBACK_STYLES`."""
+
+_FALLBACK_STYLES: tuple[tuple[str, str, str], ...] = (
+    ("D", ":", "Greens"),
+    ("v", "-", "Purples"),
+    ("P", "--", "Greys"),
+    ("X", "-.", "Reds"),
+    ("*", ":", "PuBuGn"),
+    ("h", "-", "YlOrBr"),
+)
+"""Cycled, one entry per unlisted family (every `PreconditionerType` other than
+AMG/NEURAL/NEURAL_AMG) in first-seen order, so a new preconditioner type added
+later gets a distinct look for free."""
+
+
+def _family_style(
+    family: PreconditionerFamilyKey, fallback_order: dict[PreconditionerFamilyKey, int]
+) -> tuple[str, str, str]:
+    """Resolve (marker, linestyle, colormap) for a family, assigning fallbacks as needed.
+
+    Args:
+        family: Family key (see ``preconditioner_family.preconditioner_family``).
+        fallback_order: Mutable map tracking which unlisted families have
+            already claimed a fallback slot, keyed by family and filled in
+            first-seen order.
+
+    Returns:
+        tuple[str, str, str]: Marker, linestyle, and colormap name for the family.
+    """
+    if family in _FAMILY_STYLES:
+        return _FAMILY_STYLES[family]
+    slot = fallback_order.setdefault(family, len(fallback_order))
+    return _FALLBACK_STYLES[slot % len(_FALLBACK_STYLES)]
+
+
+def _line_styles_by_family(
+    families: Mapping[str, PreconditionerFamilyKey],
+) -> dict[str, dict[str, Any]]:
+    """Build a per-method matplotlib style dict, grouped and colored by family.
+
+    Every method in the same family shares a marker and linestyle; within a
+    family, methods are shaded across that family's colormap so individual
+    lines stay distinguishable.
+
+    Args:
+        families: Family key per method name (plot label).
+
+    Returns:
+        dict[str, dict[str, Any]]: Method name -> ``{"marker", "linestyle", "color"}``.
+    """
+    members_by_family: dict[PreconditionerFamilyKey, list[str]] = {}
+    for name, family in families.items():
+        members_by_family.setdefault(family, []).append(name)
+
+    fallback_order: dict[PreconditionerFamilyKey, int] = {}
+    styles: dict[str, dict[str, Any]] = {}
+    for family, members in members_by_family.items():
+        marker, linestyle, cmap_name = _family_style(family, fallback_order)
+        cmap = matplotlib.colormaps[cmap_name]
+        shades = np.linspace(0.85, 0.4, len(members)) if len(members) > 1 else [0.6]
+        for member, shade in zip(members, shades):
+            styles[member] = {"marker": marker, "linestyle": linestyle, "color": cmap(shade)}
+    return styles
+
+
 def plot_convergence_comparison(
     results: Mapping[str, CGComparisonResult | Mapping[str, Any]],
     metadata: Mapping[str, Any] | None = None,
@@ -212,6 +287,7 @@ def plot_convergence_comparison(
     rtol: float | None = None,
     atol: float | None = None,
     max_iterations: int | None = None,
+    families: Mapping[str, PreconditionerFamilyKey] | None = None,
 ) -> None:
     """Plot convergence comparison between preconditioners.
 
@@ -224,9 +300,15 @@ def plot_convergence_comparison(
         rtol: Optional relative tolerance parameter to display
         atol: Optional absolute tolerance parameter to display
         max_iterations: Optional max iterations parameter to display
+        families: Optional plot-style family per method name (see
+            ``preconditioner_family.preconditioner_family``). When given,
+            same-family lines share a marker/linestyle and a matched
+            colormap (e.g. ``amg``/``pod2g``); omitted methods fall back to
+            the default style.
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     metadata = dict(metadata or {})
+    line_styles = _line_styles_by_family(families) if families else {}
 
     for method_name, result in results.items():
         # Handle both dict and dataclass results
@@ -241,8 +323,9 @@ def plot_convergence_comparison(
             iterations = range(len(residuals))
 
             label = _build_convergence_label(method_name, metadata.get(method_name))
+            style = line_styles.get(method_name, {"marker": "o", "linestyle": "-"})
 
-            ax.semilogy(iterations, residuals, "o-", label=label, markersize=4)
+            ax.semilogy(iterations, residuals, label=label, markersize=4, **style)
         else:
             # Log warning for methods with no history
             logger.warning(f"Method '{method_name}' has no residual history to plot")
