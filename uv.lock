@@ -3457,7 +3457,7 @@ wheels = [
 [[package]]
 name = "torchalg"
 version = "0.1.0"
-source = { git = "https://github.com/constatza/torchalg.git#a53fcd1eb5c8ee51645ae059da02929ecb616312" }
+source = { git = "https://github.com/constatza/torchalg.git#991621b7c8f69a093b38aa3439dc33b0b7c6d4d3" }
 dependencies = [
     { name = "torch" },
 ]
