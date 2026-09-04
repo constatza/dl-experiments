@@ -19,8 +19,7 @@ This checkout is pinned to CUDA 13.0. To change backends later, edit
 ## What You Need
 
 - Python managed with [`uv`](https://docs.astral.sh/uv/)
-- CUDA 13.0 available on the machine for the pinned PyTorch build
-- access to your own raw matrix data, processed dataset root, and output root
+- Access to your own raw matrix data, processed dataset root, and output root
 
 Install the project environment:
 
